@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aelika-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aelika
+      POSTGRES_PASSWORD: aelika
+      POSTGRES_DB: aelika
+    ports:
+      - "5432:5432"
+    volumes:
+      - aelika_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aelika -d aelika"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aelika-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - aelika_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aelika_postgres_data:
+  aelika_redis_data:

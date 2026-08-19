@@ -1,0 +1,32 @@
+import type { EstadoPedido } from "@/lib/api";
+
+export const ESTADO_LABEL: Record<EstadoPedido, string> = {
+  PENDIENTE_CONFIRMACION: "Pendiente de confirmación",
+  CONFIRMADO_SURTIENDO: "Confirmado y surtiendo",
+  LISTO_ENTREGA: "Listo para entrega",
+  DESPACHADO: "Despachado",
+};
+
+// Solid pill badges, white bold text — gris/ámbar/verde per the mockup;
+// DESPACHADO isn't specified there, so it uses admin-ink (dark neutral =
+// done/archived, consistent with the rest of the palette). LISTO_ENTREGA
+// uses the darker admin-green-dark rather than the bright accent green —
+// white text on the bright #25D366 accent doesn't meet contrast at this
+// badge's text size, admin-green-dark does.
+export const ESTADO_COLOR: Record<EstadoPedido, string> = {
+  PENDIENTE_CONFIRMACION: "bg-gray-500",
+  CONFIRMADO_SURTIENDO: "bg-amber-700",
+  LISTO_ENTREGA: "bg-admin-green-dark",
+  DESPACHADO: "bg-admin-ink",
+};
+
+export const ESTADOS: EstadoPedido[] = ["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "LISTO_ENTREGA", "DESPACHADO"];
+
+// Display-only mirror of the server's fixed sequence (see CLAUDE.md) — used
+// just to label the "Avanzar a: {siguiente}" button. The actual transition
+// is still entirely server-computed by PATCH /orders/:id/avanzar.
+export const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, EstadoPedido>> = {
+  PENDIENTE_CONFIRMACION: "CONFIRMADO_SURTIENDO",
+  CONFIRMADO_SURTIENDO: "LISTO_ENTREGA",
+  LISTO_ENTREGA: "DESPACHADO",
+};

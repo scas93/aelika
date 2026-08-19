@@ -1,0 +1,264 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OPERADOR
+  GERENTE
+  DUENO
+}
+
+// Governs whether/how PublicService.createOrder requires the factura* fields
+// on Order — see PublicService for the actual per-mode validation.
+enum FacturacionModo {
+  OBLIGATORIO
+  OPCIONAL
+  DESACTIVADO
+}
+
+model Tenant {
+  id                String          @id @default(uuid())
+  slug              String          @unique
+  nombre            String
+  logoUrl           String?
+  // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
+  // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
+  horarioAtencion   Json?
+  ubicacion         String?
+  // No DB default on purpose — null means "not set yet". TenantService applies
+  // a sensible default when reading, so we never need to backfill this column.
+  mensajeBienvenida String?
+  // Bot (Botpress) auth key against the Aelika API — generated once at
+  // register time (crypto.randomBytes, see AuthService), regenerable via
+  // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the
+  // general PATCH /tenant/me.
+  botApiKey         String          @unique
+  // Whether/how factura* fields on Order are required at checkout — see
+  // FacturacionModo and PublicService.createOrder.
+  facturacionModo   FacturacionModo @default(DESACTIVADO)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  users       User[]
+  categories  Category[]
+  products    Product[]
+  promotions  Promotion[]
+  orders      Order[]
+  orderItems  OrderItem[]
+  puntosEnvio PuntoEnvio[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  nombre       String
+  email        String   @unique
+  passwordHash String
+  rol          Role
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nombre    String
+  orden     Int      @default(0)
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([tenantId])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  categoryId  String
+  nombre      String
+  descripcion String?
+  precio      Decimal  @db.Decimal(10, 2)
+  fotoUrl     String?
+  disponible  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([tenantId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+enum PromotionTipo {
+  DESCUENTO_PRODUCTO
+  COMBO
+}
+
+// `config` shape depends on `tipo` (validated at the application layer, not by Postgres):
+//   DESCUENTO_PRODUCTO -> { productId, tipoDescuento: 'porcentaje' | 'monto_fijo', valor }
+//   COMBO              -> { productIds: string[], precioCombo }
+// `valor`/`precioCombo` are money and must be validated as Decimal-shaped (2 decimal places)
+// at the DTO layer, same convention as Product.precio — JSON itself has no Decimal type.
+model Promotion {
+  id        String        @id @default(uuid())
+  tenantId  String
+  tipo      PromotionTipo
+  config    Json
+  activa    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("promotions")
+}
+
+enum EstadoPedido {
+  PENDIENTE_CONFIRMACION
+  CONFIRMADO_SURTIENDO
+  LISTO_ENTREGA
+  DESPACHADO
+}
+
+enum CanalOrigen {
+  WEB
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+}
+
+enum HoraRecogidaTipo {
+  LO_ANTES_POSIBLE
+  HORA_ESPECIFICA
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  // Not implemented yet (see PublicService, matches TRANSFERENCIA) — both
+  // exist now so we don't need another migration when Stripe lands in Fase 3.
+  TARJETA
+}
+
+enum MetodoEntrega {
+  RECOGER
+  DOMICILIO
+}
+
+// Simple named delivery zones — NOT real multi-branch/store logic (no own
+// catalog, hours, or inventory). Just a name + address a customer picks for
+// DOMICILIO orders, with an optional minimum order amount.
+model PuntoEnvio {
+  id           String   @id @default(uuid())
+  tenantId     String
+  nombre       String
+  direccion    String
+  pedidoMinimo Decimal? @db.Decimal(10, 2)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tenantId])
+  @@map("puntos_envio")
+}
+
+model Order {
+  id                   String           @id @default(uuid())
+  tenantId             String
+  folio                String
+  clienteNombre        String
+  clienteTelefono      String
+  notas                String?
+  horaRecogidaTipo     HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
+  // "HH:mm", same-day only (no date picker yet). Only set when
+  // horaRecogidaTipo = HORA_ESPECIFICA; null otherwise. Meaningless (and
+  // ignored) when metodoEntrega = DOMICILIO — see PublicService.
+  horaRecogida         String?
+  metodoPago           MetodoPago       @default(EFECTIVO)
+  metodoEntrega        MetodoEntrega    @default(RECOGER)
+  // Required (and validated as belonging to this tenant + activo) only when
+  // metodoEntrega = DOMICILIO; null for RECOGER. onDelete: Restrict — unlike
+  // OrderItem.productId there's no snapshot of the zone's nombre/direccion on
+  // Order, so deleting a PuntoEnvio referenced by orders is blocked (409, see
+  // PuntosEnvioService) rather than silently orphaning that history.
+  puntoEnvioId         String?
+  // Factura (CFDI-style) fields. Whether they're required at all depends on
+  // Tenant.facturacionModo at the time of the order — see PublicService.
+  requiereFactura      Boolean          @default(false)
+  facturaRazonSocial   String?
+  facturaRfc           String?
+  facturaRegimenFiscal String?
+  facturaUsoCfdi       String?
+  facturaCodigoPostal  String?
+  facturaCorreo        String?
+  estadoPedido         EstadoPedido     @default(PENDIENTE_CONFIRMACION)
+  canalOrigen          CanalOrigen      @default(WEB)
+  // Sum of every discount applied at checkout (combos + descuento_producto).
+  descuentoTotal       Decimal          @default(0) @db.Decimal(10, 2)
+  // Human-readable summary of what was applied, e.g. "Combo Pizza+Refresco x1".
+  notasDescuento       String?
+  total                Decimal          @db.Decimal(10, 2)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
+  items      OrderItem[]
+
+  // folio is short and human-facing (read over the phone/counter), so it only
+  // needs to be unique within a tenant, not globally.
+  @@unique([tenantId, folio])
+  @@index([tenantId])
+  @@index([puntoEnvioId])
+  @@map("orders")
+}
+
+// Snapshots nombreProducto/precioUnitario at order time (see CLAUDE.md) so a
+// later catalog edit — or even deleting the product — never changes historical
+// order data. productId is therefore nullable with onDelete: SetNull: losing
+// the live link to the product loses nothing the snapshot doesn't already have.
+model OrderItem {
+  id             String  @id @default(uuid())
+  tenantId       String
+  orderId        String
+  productId      String?
+  nombreProducto String
+  precioUnitario Decimal @db.Decimal(10, 2)
+  cantidad       Int
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("order_items")
+}

@@ -1,0 +1,414 @@
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
+import { round2 } from '../common/money';
+import {
+  CanalOrigen,
+  EstadoPedido,
+  FacturacionModo,
+  HoraRecogidaTipo,
+  MetodoEntrega,
+  MetodoPago,
+  Prisma,
+  PromotionTipo,
+} from '../../generated/prisma/client';
+import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import type { DescuentoProductoConfigDto } from '../promotions/dto/descuento-producto-config.dto';
+import type { ComboConfigDto } from '../promotions/dto/combo-config.dto';
+
+// All Order.factura* fields, plus requiereFactura — grouped because they're
+// always resolved (and stored) together as one unit, never individually.
+interface FacturaFields {
+  requiereFactura: boolean;
+  facturaRazonSocial: string | null;
+  facturaRfc: string | null;
+  facturaRegimenFiscal: string | null;
+  facturaUsoCfdi: string | null;
+  facturaCodigoPostal: string | null;
+  facturaCorreo: string | null;
+}
+
+const FACTURA_VACIA: FacturaFields = {
+  requiereFactura: false,
+  facturaRazonSocial: null,
+  facturaRfc: null,
+  facturaRegimenFiscal: null,
+  facturaUsoCfdi: null,
+  facturaCodigoPostal: null,
+  facturaCorreo: null,
+};
+
+// Pickup needs lead time for the kitchen — a specific pickup time can't be
+// requested for right now or for a time that's already passed.
+const MARGEN_MINIMO_MINUTOS = 15;
+
+@Injectable()
+export class PublicService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getTenantInfo(slug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+      select: { nombre: true, logoUrl: true, horarioAtencion: true, ubicacion: true, facturacionModo: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    const horario = tenant.horarioAtencion as HorarioSemana | null;
+    return {
+      nombre: tenant.nombre,
+      logoUrl: tenant.logoUrl,
+      horarioAtencion: horario,
+      ubicacion: tenant.ubicacion,
+      abierto: isAbiertoAhora(horario),
+      // Exposed so the storefront checkout can decide, without a second
+      // fetch, whether to show/require the factura fields — see
+      // resolverFacturacion below for the same logic re-enforced server-side.
+      facturacionModo: tenant.facturacionModo,
+    };
+  }
+
+  async getCatalog(slug: string) {
+    // Resolve the tenant from the slug first — everything below filters by
+    // this resolved tenantId, never by a JWT (there isn't one on public
+    // routes). Same isolation guarantee as the authenticated app, just with
+    // the tenantId coming from the URL instead of the session.
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    if (!tenant) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    const [categories, promotions] = await Promise.all([
+      this.prisma.category.findMany({
+        where: { tenantId: tenant.id, activa: true },
+        orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+        select: {
+          id: true,
+          nombre: true,
+          products: {
+            // No filtra por disponible: el storefront necesita mostrar los
+            // productos agotados (badge "Sin existencia", sin botón de
+            // agregar) en vez de ocultarlos por completo. La validación de
+            // disponibilidad real sigue viviendo, sin cambios, en
+            // createOrder más abajo — este query nunca alimenta el checkout.
+            where: { tenantId: tenant.id },
+            orderBy: { nombre: 'asc' },
+            select: { id: true, nombre: true, descripcion: true, precio: true, fotoUrl: true, disponible: true },
+          },
+        },
+      }),
+      this.prisma.promotion.findMany({
+        where: { tenantId: tenant.id, activa: true },
+        select: { id: true, tipo: true, config: true },
+      }),
+    ]);
+
+    return { categories, promotions };
+  }
+
+  async getPuntosEnvio(slug: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    if (!tenant) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    // Only activo=true — an inactive point isn't offered to customers at
+    // all, same rationale as resolverPuntoEnvio treating it as 404 below.
+    return this.prisma.puntoEnvio.findMany({
+      where: { tenantId: tenant.id, activo: true },
+      orderBy: { nombre: 'asc' },
+      select: { id: true, nombre: true, direccion: true, pedidoMinimo: true },
+    });
+  }
+
+  async createOrder(slug: string, dto: CreatePublicOrderDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+      select: { id: true, horarioAtencion: true, facturacionModo: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    const horario = tenant.horarioAtencion as HorarioSemana | null;
+
+    // 1. Closed right now? This can't depend on the client's own "abierto"
+    // banner staying in sync — re-check server-side no matter what the
+    // frontend showed.
+    if (!isAbiertoAhora(horario)) {
+      throw new ConflictException('El negocio está cerrado en este momento');
+    }
+
+    // 2. Pickup time — meaningless for DOMICILIO orders (no time slot for
+    // delivery yet), so horaRecogidaTipo/horaRecogida are ignored entirely
+    // and forced to their RECOGER defaults whenever metodoEntrega = DOMICILIO,
+    // no matter what the client sent for them.
+    const metodoEntrega = dto.metodoEntrega ?? MetodoEntrega.RECOGER;
+    let horaRecogidaTipo: HoraRecogidaTipo;
+    let horaRecogida: string | null;
+    if (metodoEntrega === MetodoEntrega.DOMICILIO) {
+      horaRecogidaTipo = HoraRecogidaTipo.LO_ANTES_POSIBLE;
+      horaRecogida = null;
+    } else {
+      if (!dto.horaRecogidaTipo) {
+        throw new BadRequestException('horaRecogidaTipo es obligatorio');
+      }
+      horaRecogidaTipo = dto.horaRecogidaTipo;
+      horaRecogida = this.resolverHoraRecogida(dto, horario);
+    }
+
+    // 3. Payment method.
+    if (dto.metodoPago !== MetodoPago.EFECTIVO) {
+      throw new ConflictException('Ese método de pago no está disponible todavía');
+    }
+
+    // 4. Delivery method / punto de envío — structural checks only (existence,
+    // ownership, activo). The pedidoMinimo check needs the calculated total,
+    // so it happens later, right before the order is created.
+    const puntoEnvio = await this.resolverPuntoEnvio(tenant.id, metodoEntrega, dto.puntoEnvioId);
+
+    // 5. Facturación — whether/which factura* fields are required depends on
+    // Tenant.facturacionModo, resolved independently of pricing.
+    const factura = this.resolverFacturacion(tenant.facturacionModo, dto);
+
+    // Defensive: dedupe repeated productId entries instead of trusting the
+    // client sent each product at most once.
+    const cantidadPorProducto = new Map<string, number>();
+    for (const item of dto.items) {
+      cantidadPorProducto.set(item.productId, (cantidadPorProducto.get(item.productId) ?? 0) + item.cantidad);
+    }
+    const productIds = [...cantidadPorProducto.keys()];
+
+    const products = await this.prisma.product.findMany({
+      where: { tenantId: tenant.id, id: { in: productIds } },
+      include: { category: { select: { activa: true } } },
+    });
+    if (products.length !== productIds.length) {
+      throw new NotFoundException('Uno o más productos no existen en este negocio');
+    }
+    const noDisponible = products.find((p) => !p.disponible || !p.category.activa);
+    if (noDisponible) {
+      throw new ConflictException(`"${noDisponible.nombre}" ya no está disponible`);
+    }
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    const activePromotions = await this.prisma.promotion.findMany({
+      where: { tenantId: tenant.id, activa: true },
+    });
+
+    // remaining[productId] = units still not covered by a combo. Combos are
+    // applied first (greedily; overlap between promotions is prevented at
+    // the /promotions write endpoints, so no product can be claimed by two
+    // promotions at once — order of application can't double-count).
+    const remaining = new Map(cantidadPorProducto);
+    let descuentoTotal = 0;
+    const resumenDescuentos: string[] = [];
+
+    for (const promo of activePromotions.filter((p) => p.tipo === PromotionTipo.COMBO)) {
+      const config = promo.config as unknown as ComboConfigDto;
+      const vecesAplica = Math.min(...config.productIds.map((id) => remaining.get(id) ?? 0));
+      if (vecesAplica <= 0) continue;
+
+      for (const id of config.productIds) {
+        remaining.set(id, (remaining.get(id) ?? 0) - vecesAplica);
+      }
+
+      const precioLista = config.productIds.reduce((sum, id) => sum + Number(productMap.get(id)!.precio), 0);
+      const descuentoPorSet = Math.max(0, precioLista - config.precioCombo);
+      descuentoTotal += descuentoPorSet * vecesAplica;
+
+      const nombres = config.productIds.map((id) => productMap.get(id)!.nombre).join(' + ');
+      resumenDescuentos.push(`Combo ${nombres} x${vecesAplica}`);
+    }
+
+    for (const promo of activePromotions.filter((p) => p.tipo === PromotionTipo.DESCUENTO_PRODUCTO)) {
+      const config = promo.config as unknown as DescuentoProductoConfigDto;
+      const cantidad = remaining.get(config.productId) ?? 0;
+      if (cantidad <= 0) continue;
+
+      const product = productMap.get(config.productId)!;
+      const precioUnitario = Number(product.precio);
+      const descuentoUnitario =
+        config.tipoDescuento === 'porcentaje' ? precioUnitario * (config.valor / 100) : Math.min(precioUnitario, config.valor);
+      descuentoTotal += descuentoUnitario * cantidad;
+
+      const etiquetaDescuento = config.tipoDescuento === 'porcentaje' ? `${config.valor}%` : `$${config.valor}`;
+      resumenDescuentos.push(`${product.nombre} x${cantidad} (-${etiquetaDescuento})`);
+    }
+
+    descuentoTotal = round2(descuentoTotal);
+
+    const subtotal = round2(
+      [...cantidadPorProducto.entries()].reduce((sum, [id, cantidad]) => sum + cantidad * Number(productMap.get(id)!.precio), 0),
+    );
+    const total = Math.max(0, round2(subtotal - descuentoTotal));
+
+    // 6. pedidoMinimo — needs the calculated total (with discounts, no
+    // taxes — there are none), so it can only be checked here.
+    if (puntoEnvio?.pedidoMinimo != null) {
+      const minimo = Number(puntoEnvio.pedidoMinimo);
+      if (total < minimo) {
+        const faltante = round2(minimo - total);
+        throw new ConflictException(
+          `El pedido mínimo para "${puntoEnvio.nombre}" es $${minimo.toFixed(2)} — te faltan $${faltante.toFixed(2)}`,
+        );
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const folio = await this.nextFolio(tx, tenant.id);
+
+      return tx.order.create({
+        data: {
+          tenantId: tenant.id,
+          folio,
+          clienteNombre: dto.clienteNombre,
+          clienteTelefono: dto.clienteTelefono,
+          notas: dto.notas,
+          horaRecogidaTipo,
+          horaRecogida,
+          metodoPago: dto.metodoPago,
+          metodoEntrega,
+          puntoEnvioId: puntoEnvio?.id,
+          ...factura,
+          estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION,
+          canalOrigen: CanalOrigen.WEB,
+          descuentoTotal,
+          notasDescuento: resumenDescuentos.length > 0 ? resumenDescuentos.join('; ') : undefined,
+          total,
+          items: {
+            create: [...cantidadPorProducto.entries()].map(([productId, cantidad]) => {
+              const product = productMap.get(productId)!;
+              return {
+                tenantId: tenant.id,
+                productId,
+                nombreProducto: product.nombre,
+                precioUnitario: product.precio,
+                cantidad,
+              };
+            }),
+          },
+        },
+        include: { items: true },
+      });
+    });
+  }
+
+  /**
+   * Returns the "HH:mm" to store, or null. LO_ANTES_POSIBLE always stores
+   * null — whatever the client sent in `horaRecogida` is discarded, not
+   * validated. HORA_ESPECIFICA requires a value that's both inside today's
+   * schedule and at least MARGEN_MINIMO_MINUTOS from now.
+   */
+  private resolverHoraRecogida(dto: CreatePublicOrderDto, horario: HorarioSemana | null): string | null {
+    if (dto.horaRecogidaTipo === HoraRecogidaTipo.LO_ANTES_POSIBLE) {
+      return null;
+    }
+
+    if (!dto.horaRecogida) {
+      throw new BadRequestException('Elige una hora de recogida');
+    }
+
+    const horarioHoy = horarioDeHoy(horario);
+    if (!horarioHoy?.abierto || !horarioHoy.apertura || !horarioHoy.cierre) {
+      throw new ConflictException('El negocio no tiene horario disponible hoy');
+    }
+
+    const horaMinima = sumarMinutos(horaActualMexico(), MARGEN_MINIMO_MINUTOS);
+    const cotaInferior = horaMinima > horarioHoy.apertura ? horaMinima : horarioHoy.apertura;
+
+    if (dto.horaRecogida < cotaInferior || dto.horaRecogida >= horarioHoy.cierre) {
+      throw new BadRequestException(`Elige una hora de recogida entre ${cotaInferior} y ${horarioHoy.cierre}`);
+    }
+
+    return dto.horaRecogida;
+  }
+
+  /**
+   * DOMICILIO requires a puntoEnvioId that belongs to this tenant and is
+   * activo — 404 for both "doesn't exist" and "belongs to another tenant"
+   * (same convention as everywhere else: never confirm another tenant's
+   * resource exists) and also for "inactive" (inactive points are never
+   * exposed via the public list either, so from the client's perspective an
+   * inactive point isn't observably different from a nonexistent one).
+   * RECOGER ignores puntoEnvioId entirely even if the client sent one.
+   */
+  private async resolverPuntoEnvio(tenantId: string, metodoEntrega: MetodoEntrega, puntoEnvioId: string | undefined) {
+    if (metodoEntrega !== MetodoEntrega.DOMICILIO) {
+      return null;
+    }
+
+    if (!puntoEnvioId) {
+      throw new BadRequestException('Elige un punto de envío');
+    }
+
+    const puntoEnvio = await this.prisma.puntoEnvio.findUnique({ where: { id: puntoEnvioId } });
+    if (!puntoEnvio || puntoEnvio.tenantId !== tenantId || !puntoEnvio.activo) {
+      throw new NotFoundException('Punto de envío no encontrado');
+    }
+
+    return puntoEnvio;
+  }
+
+  /**
+   * Resolves the factura* fields to actually store, based on
+   * Tenant.facturacionModo:
+   *  - DESACTIVADO: whatever the client sent is ignored outright (whitelist).
+   *  - OBLIGATORIO: requiereFactura must be true, and then every factura*
+   *    field is required.
+   *  - OPCIONAL: requiereFactura may be true or false; true requires every
+   *    field just like OBLIGATORIO, false ignores them like DESACTIVADO.
+   */
+  private resolverFacturacion(modo: FacturacionModo, dto: CreatePublicOrderDto): FacturaFields {
+    if (modo === FacturacionModo.DESACTIVADO) {
+      return FACTURA_VACIA;
+    }
+
+    if (modo === FacturacionModo.OBLIGATORIO && dto.requiereFactura !== true) {
+      throw new BadRequestException('Este negocio requiere factura para todos los pedidos');
+    }
+
+    if (modo === FacturacionModo.OPCIONAL && dto.requiereFactura !== true) {
+      return FACTURA_VACIA;
+    }
+
+    // From here on: OBLIGATORIO, or OPCIONAL with requiereFactura = true —
+    // every factura* field is required.
+    const campos = {
+      facturaRazonSocial: dto.facturaRazonSocial,
+      facturaRfc: dto.facturaRfc,
+      facturaRegimenFiscal: dto.facturaRegimenFiscal,
+      facturaUsoCfdi: dto.facturaUsoCfdi,
+      facturaCodigoPostal: dto.facturaCodigoPostal,
+      facturaCorreo: dto.facturaCorreo,
+    };
+    const faltantes = Object.entries(campos)
+      .filter(([, valor]) => !valor?.trim())
+      .map(([campo]) => campo);
+    if (faltantes.length > 0) {
+      throw new BadRequestException(`Faltan datos de factura: ${faltantes.join(', ')}`);
+    }
+
+    // Every field above is confirmed non-empty by the check just above —
+    // the cast just reflects that to the type checker.
+    return { requiereFactura: true, ...campos } as FacturaFields;
+  }
+
+  /**
+   * Per-tenant sequential folio ("#1", "#2", ...), safe under concurrent
+   * checkouts: a Postgres advisory lock scoped to the tenant id serializes
+   * concurrent transactions racing for the same folio, so a plain
+   * MAX(folio)+1 read can't be read twice before either write commits.
+   * Must run inside the same transaction as the Order insert.
+   */
+  private async nextFolio(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
+    const rows = await tx.$queryRaw<{ max: number | null }[]>`
+      SELECT MAX(CAST(folio AS INTEGER)) AS max FROM orders WHERE "tenantId" = ${tenantId}
+    `;
+    const next = (rows[0]?.max ?? 0) + 1;
+    return String(next);
+  }
+}

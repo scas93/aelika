@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* /tienda/[slug] redesign ("vista embebida en WhatsApp") — single accent
+     color + chat-style neutrals. All custom colors for that redesign go
+     through this one convention (theme tokens -> generated utility
+     classes), never Tailwind arbitrary bg-[#...] syntax, so it's not mixed
+     within the redesign. See CLAUDE.md. */
+  --color-whatsapp: #25d366;
+  --color-chat-bg: #f0f2f5;
+  --color-chat-bg-dark: #0b141a;
+  --color-chat-card-dark: #1f2c34;
+  --font-chat: -apple-system, system-ui, sans-serif;
+
+  /* /dashboard/* (panel admin) redesign — a separate, fixed-light palette
+     with a permanently-dark sidebar (not a light/dark mode pair; the admin
+     panel doesn't support dark mode). Named admin-* on purpose so nothing
+     here couples to the storefront tokens above, even where a hex value
+     happens to coincide (#25D366 is WhatsApp's green in both mockups, but
+     each redesign owns its own token so they can diverge independently
+     later). See CLAUDE.md. */
+  --color-admin-green: #25d366;
+  --color-admin-green-dark: #128c7e;
+  --color-admin-bg: #f0f2f5;
+  --color-admin-ink: #111b21;
+  --color-admin-sidebar: #1f2c33;
+  --font-admin: -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.input {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(0 0 0 / 0.15);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input:focus {
+  border-color: var(--color-whatsapp);
+  box-shadow: 0 0 0 3px rgb(37 211 102 / 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  .input {
+    border-color: rgb(255 255 255 / 0.2);
+  }
+
+  .input:focus {
+    border-color: var(--color-whatsapp);
+    box-shadow: 0 0 0 3px rgb(37 211 102 / 0.25);
+  }
+}
+
+/* Print only the comanda ticket (see app/dashboard/pedidos/page.tsx) —
+   80mm thermal printer, no local agent/bridge (Fase 1, see CLAUDE.md). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #comanda-imprimible,
+  #comanda-imprimible * {
+    visibility: visible;
+  }
+
+  #comanda-imprimible {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+    color: #000;
+    padding: 2mm;
+  }
+}
+
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
