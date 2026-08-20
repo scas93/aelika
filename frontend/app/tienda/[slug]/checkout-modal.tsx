@@ -114,6 +114,7 @@ export default function CheckoutModal({
   const zonaSeleccionada = puntosEnvio?.find((p) => p.id === puntoEnvioId) ?? null;
   const minimoZona = zonaSeleccionada?.pedidoMinimo != null ? Number(zonaSeleccionada.pedidoMinimo) : null;
   const faltantePorMinimo = minimoZona != null ? Math.max(0, minimoZona - total) : 0;
+  const avisoMinimoVisible = Boolean(zonaSeleccionada) && faltantePorMinimo > 0;
 
   const canContinueEntrega =
     metodoEntrega === "RECOGER"
@@ -361,17 +362,28 @@ export default function CheckoutModal({
                     {zonaSeleccionada.direccion}
                   </span>
                 )}
-                {zonaSeleccionada && faltantePorMinimo > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-normal text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-                    Te faltan ${faltantePorMinimo.toFixed(2)} para el pedido mínimo de esta zona (${minimoZona!.toFixed(2)}).
-                  </div>
-                )}
+                <div
+                  className={`overflow-hidden rounded-xl border text-xs font-normal transition-all duration-300 ease-in-out ${
+                    avisoMinimoVisible
+                      ? "mt-0 max-h-24 border-amber-200 bg-amber-50 p-3 text-amber-800 opacity-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                      : "max-h-0 border-transparent p-0 text-amber-800 opacity-0 dark:text-amber-300"
+                  }`}
+                >
+                  Te faltan ${faltantePorMinimo.toFixed(2)} para el pedido mínimo de esta zona (${(minimoZona ?? 0).toFixed(2)}).
+                </div>
               </div>
             )}
 
-            <button type="button" onClick={() => setStep("datos")} disabled={!canContinueEntrega} className={BTN_PRIMARY}>
-              Continuar
-            </button>
+            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-xl border-t border-black/10 bg-white px-6 pb-6 pt-3 dark:border-white/10 dark:bg-chat-card-dark">
+              <button
+                type="button"
+                onClick={() => setStep("datos")}
+                disabled={!canContinueEntrega}
+                className={BTN_PRIMARY}
+              >
+                Continuar
+              </button>
+            </div>
           </>
         )}
 
