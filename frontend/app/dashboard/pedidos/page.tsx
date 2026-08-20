@@ -12,6 +12,7 @@ import {
   type Order,
 } from "@/lib/api";
 import { entregaLinea, isWebUsbSupported, printComandaWebUsb } from "@/lib/thermal-printer";
+import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 
 const POLL_INTERVAL_MS = 25000;
@@ -269,9 +270,9 @@ function OrderCard({
                 <span className="text-admin-ink/55">RFC</span>
                 <span className="font-medium">{order.facturaRfc}</span>
                 <span className="text-admin-ink/55">Régimen fiscal</span>
-                <span className="font-medium">{order.facturaRegimenFiscal}</span>
+                <span className="font-medium">{regimenFiscalLabel(order.facturaRegimenFiscal)}</span>
                 <span className="text-admin-ink/55">Uso de CFDI</span>
-                <span className="font-medium">{order.facturaUsoCfdi}</span>
+                <span className="font-medium">{usoCfdiLabel(order.facturaUsoCfdi)}</span>
                 <span className="text-admin-ink/55">C.P. fiscal</span>
                 <span className="font-medium">{order.facturaCodigoPostal}</span>
                 <span className="text-admin-ink/55">Correo</span>
@@ -370,8 +371,8 @@ function ComandaImprimible({ order, nombrePuntoEnvio }: { order: Order; nombrePu
           <p className="text-xs font-bold uppercase">Datos fiscales</p>
           <p className="text-sm">Razón social: {order.facturaRazonSocial}</p>
           <p className="text-sm">RFC: {order.facturaRfc}</p>
-          <p className="text-sm">Régimen fiscal: {order.facturaRegimenFiscal}</p>
-          <p className="text-sm">Uso de CFDI: {order.facturaUsoCfdi}</p>
+          <p className="text-sm">Régimen fiscal: {regimenFiscalLabel(order.facturaRegimenFiscal)}</p>
+          <p className="text-sm">Uso de CFDI: {usoCfdiLabel(order.facturaUsoCfdi)}</p>
           <p className="text-sm">C.P. fiscal: {order.facturaCodigoPostal}</p>
           <p className="text-sm">Correo: {order.facturaCorreo}</p>
         </div>

@@ -1,5 +1,6 @@
 import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
 import { METODO_PAGO_LABEL, type Order } from "./api";
+import { regimenFiscalLabel, usoCfdiLabel } from "./catalogos-sat";
 
 // GHIA GTP801, 80mm — Font A fits ~42-48 chars at this width; 42 is the
 // conservative choice so lines don't wrap unexpectedly on narrower printers.
@@ -125,8 +126,8 @@ function buildComandaBytes(order: Order, nombreNegocio: string, nombrePuntoEnvio
       .invert(false)
       .line(`Razón social: ${order.facturaRazonSocial ?? ""}`)
       .line(`RFC: ${order.facturaRfc ?? ""}`)
-      .line(`Régimen fiscal: ${order.facturaRegimenFiscal ?? ""}`)
-      .line(`Uso de CFDI: ${order.facturaUsoCfdi ?? ""}`)
+      .line(`Régimen fiscal: ${regimenFiscalLabel(order.facturaRegimenFiscal)}`)
+      .line(`Uso de CFDI: ${usoCfdiLabel(order.facturaUsoCfdi)}`)
       .line(`C.P. fiscal: ${order.facturaCodigoPostal ?? ""}`)
       .line(`Correo: ${order.facturaCorreo ?? ""}`);
   }

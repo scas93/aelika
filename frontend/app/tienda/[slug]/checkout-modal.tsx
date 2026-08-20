@@ -13,6 +13,7 @@ import {
   type PublicPuntoEnvio,
 } from "@/lib/api";
 import { horaActualMexico, horarioDeHoy, generarOpcionesHora, sumarMinutos } from "@/lib/horario";
+import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
 export interface CartItem {
   productId: string;
@@ -524,21 +525,39 @@ export default function CheckoutModal({
                       </label>
                       <label className="flex flex-col gap-1.5 text-sm font-medium">
                         Régimen fiscal
-                        <input
+                        <select
                           required
                           value={facturaRegimenFiscal}
                           onChange={(e) => setFacturaRegimenFiscal(e.target.value)}
                           className="input"
-                        />
+                        >
+                          <option value="" disabled>
+                            Selecciona tu régimen...
+                          </option>
+                          {REGIMEN_FISCAL.map((item) => (
+                            <option key={item.clave} value={item.clave}>
+                              {item.clave} - {item.descripcion}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="flex flex-col gap-1.5 text-sm font-medium">
                         Uso de CFDI
-                        <input
+                        <select
                           required
                           value={facturaUsoCfdi}
                           onChange={(e) => setFacturaUsoCfdi(e.target.value)}
                           className="input"
-                        />
+                        >
+                          <option value="" disabled>
+                            Selecciona el uso...
+                          </option>
+                          {USO_CFDI.map((item) => (
+                            <option key={item.clave} value={item.clave}>
+                              {item.clave} - {item.descripcion}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="flex flex-col gap-1.5 text-sm font-medium">
                         Código postal fiscal
