@@ -202,7 +202,17 @@ export default function CheckoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="flex max-h-[85vh] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-xl bg-white p-6 shadow-lg dark:bg-chat-card-dark">
+      <div
+        className={`flex max-h-[85vh] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-xl bg-white p-6 shadow-lg dark:bg-chat-card-dark ${
+          step === "entrega" ? "pb-24" : ""
+        }`}
+      >
+        {/* El paso "entrega" agrega pb-24 aquí (encima del p-6 normal) porque
+            su botón "Continuar" es sticky bottom-0: cuando el contenido no
+            cabe en max-h-[85vh], el sticky se clampa dentro del área visible
+            del scroll respetando este padding-bottom como "zona segura"
+            debajo de él. Sin este padding extra, el sticky se recalcula más
+            arriba de lo esperado y tapa el último texto/aviso del paso. */}
         {step === "cart" && (
           <>
             <div className="flex items-center justify-between">
@@ -374,7 +384,7 @@ export default function CheckoutModal({
               </div>
             )}
 
-            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-xl border-t border-black/10 bg-white px-6 pb-6 pt-3 dark:border-white/10 dark:bg-chat-card-dark">
+            <div className="sticky bottom-0 bg-white pb-1 pt-3 dark:bg-chat-card-dark">
               <button
                 type="button"
                 onClick={() => setStep("datos")}
