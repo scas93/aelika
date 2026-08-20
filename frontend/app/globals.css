@@ -67,6 +67,17 @@ body {
   box-shadow: 0 0 0 3px rgb(37 211 102 / 0.15);
 }
 
+/* Safari on iOS auto-zooms the page on focus for any input with a
+   font-size under 16px. Scoped to the /tienda/[slug] search box only
+   (via the extra .search-input class, not a change to .input itself,
+   which is shared by every other input in the app) — a plain Tailwind
+   utility like text-[16px] can't win here since .input lives outside
+   any @layer and unlayered CSS always beats Tailwind's layered
+   utilities regardless of source order. */
+.input.search-input {
+  font-size: 1rem;
+}
+
 @media (prefers-color-scheme: dark) {
   .input {
     border-color: rgb(255 255 255 / 0.2);

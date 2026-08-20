@@ -201,7 +201,7 @@ export default function TiendaPage() {
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Busca en el menú..."
-          className="input"
+          className="input search-input"
         />
 
         {!buscando && combos.length > 0 && (
