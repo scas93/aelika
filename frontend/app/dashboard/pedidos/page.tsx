@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -11,7 +12,14 @@ import {
   METODO_PAGO_LABEL,
   type Order,
 } from "@/lib/api";
-import { entregaLinea, isWebUsbSupported, printComandaWebUsb } from "@/lib/thermal-printer";
+import {
+  entregaLinea,
+  formatFechaHora,
+  isWebUsbSupported,
+  printComandaWebUsb,
+  ROLE_LABEL,
+  type ComandaContext,
+} from "@/lib/thermal-printer";
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 
@@ -35,6 +43,7 @@ export default function PedidosPage() {
   const [tab, setTab] = useState<Tab>("activos");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nombreNegocio, setNombreNegocio] = useState("");
+  const [ubicacionNegocio, setUbicacionNegocio] = useState<string | null>(null);
   const [puntosEnvioMap, setPuntosEnvioMap] = useState<Record<string, string>>({});
 
   async function load() {
@@ -66,9 +75,12 @@ export default function PedidosPage() {
   }, []);
 
   useEffect(() => {
-    // Needed to print the business name on the comanda.
+    // Needed to print the business name and address on the comanda.
     fetchTenantSettings(token)
-      .then((settings) => setNombreNegocio(settings.nombre))
+      .then((settings) => {
+        setNombreNegocio(settings.nombre);
+        setUbicacionNegocio(settings.ubicacion);
+      })
       .catch(() => {});
   }, [token]);
 
@@ -112,6 +124,7 @@ export default function PedidosPage() {
               expanded={expandedId === order.id}
               onToggle={() => setExpandedId((current) => (current === order.id ? null : order.id))}
               nombreNegocio={nombreNegocio}
+              ubicacionNegocio={ubicacionNegocio}
               nombrePuntoEnvio={order.puntoEnvioId ? puntosEnvioMap[order.puntoEnvioId] : undefined}
               onAdvanced={load}
             />
@@ -150,6 +163,7 @@ function OrderCard({
   expanded,
   onToggle,
   nombreNegocio,
+  ubicacionNegocio,
   nombrePuntoEnvio,
   onAdvanced,
 }: {
@@ -157,10 +171,11 @@ function OrderCard({
   expanded: boolean;
   onToggle: () => void;
   nombreNegocio: string;
+  ubicacionNegocio: string | null;
   nombrePuntoEnvio: string | undefined;
   onAdvanced: () => void;
 }) {
-  const { token } = useSession();
+  const { token, user } = useSession();
   const [advancing, setAdvancing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -168,6 +183,19 @@ function OrderCard({
   // Defaults to true so SSR and the first client render match (navigator.usb
   // isn't available during SSR) — the effect below corrects it right after.
   const [webUsbSupported, setWebUsbSupported] = useState(true);
+  // Updated via flushSync right before window.print() (see the "Imprimir con
+  // el navegador" button below) so the hidden ComandaImprimible reflects the
+  // actual moment of printing, not whenever this card last happened to
+  // re-render — window.print() reads the DOM synchronously, before React's
+  // normal (batched, async) re-render would otherwise land.
+  const [fechaImpresion, setFechaImpresion] = useState<Date>(() => new Date());
+
+  const comandaCtx: ComandaContext = {
+    nombreNegocio,
+    ubicacionNegocio,
+    nombrePuntoEnvio,
+    impresoPor: { nombre: user.nombre, rol: user.rol },
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
@@ -191,7 +219,7 @@ function OrderCard({
     setPrinting(true);
     setPrintError(null);
     try {
-      await printComandaWebUsb(order, nombreNegocio, nombrePuntoEnvio);
+      await printComandaWebUsb(order, comandaCtx);
     } catch (err) {
       setPrintError(err instanceof Error ? err.message : "No se pudo imprimir la comanda");
     } finally {
@@ -310,7 +338,10 @@ function OrderCard({
                 {printing ? "Imprimiendo..." : "Imprimir ticket"}
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  flushSync(() => setFechaImpresion(new Date()));
+                  window.print();
+                }}
                 className="rounded-full px-3 py-1.5 text-xs font-medium text-admin-ink/55 underline-offset-2 transition hover:underline"
               >
                 Imprimir con el navegador
@@ -326,25 +357,37 @@ function OrderCard({
         </div>
       )}
 
-      {expanded && <ComandaImprimible order={order} nombrePuntoEnvio={nombrePuntoEnvio} />}
+      {expanded && <ComandaImprimible order={order} ctx={comandaCtx} fechaImpresion={fechaImpresion} />}
     </li>
   );
 }
 
-function ComandaImprimible({ order, nombrePuntoEnvio }: { order: Order; nombrePuntoEnvio: string | undefined }) {
+function ComandaImprimible({
+  order,
+  ctx,
+  fechaImpresion,
+}: {
+  order: Order;
+  ctx: ComandaContext;
+  fechaImpresion: Date;
+}) {
   const horaRecogidaDisplay =
     order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida ? `Recoge: ${order.horaRecogida}` : "Lo antes posible";
 
   return (
     <div id="comanda-imprimible" className="hidden print:block">
-      <p className="text-center text-3xl font-bold">#{order.folio}</p>
+      <p className="text-center text-lg font-bold">{ctx.nombreNegocio}</p>
+      {ctx.ubicacionNegocio && <p className="text-center text-sm">{ctx.ubicacionNegocio}</p>}
+      <p className="mt-3 text-center text-3xl font-bold">#{order.folio}</p>
       <p className="text-center text-xl font-semibold">
         {order.metodoEntrega === "DOMICILIO" ? "A domicilio" : horaRecogidaDisplay}
       </p>
-      <p className="text-center text-lg font-bold">{entregaLinea(order, nombrePuntoEnvio)}</p>
       <hr className="my-2 border-black" />
+      <p className="text-sm font-bold">{entregaLinea(order, ctx.nombrePuntoEnvio)}</p>
       <p className="text-sm">{order.clienteNombre}</p>
       <p className="text-sm">{order.clienteTelefono}</p>
+      <hr className="my-2 border-black" />
+      <p className="text-sm">Pedido: {formatFechaHora(new Date(order.createdAt))}</p>
       <hr className="my-2 border-black" />
       <ul className="flex flex-col gap-1.5">
         {order.items.map((item) => (
@@ -377,6 +420,13 @@ function ComandaImprimible({ order, nombrePuntoEnvio }: { order: Order; nombrePu
           <p className="text-sm">Correo: {order.facturaCorreo}</p>
         </div>
       )}
+
+      <hr className="my-2 border-black" />
+      <p className="text-xs">
+        Impreso por: {ctx.impresoPor.nombre} ({ROLE_LABEL[ctx.impresoPor.rol]})
+      </p>
+      <p className="text-xs">Fecha de impresión: {formatFechaHora(fechaImpresion)}</p>
+      <p className="mt-3 text-center text-sm font-semibold">Gracias por su preferencia</p>
     </div>
   );
 }
