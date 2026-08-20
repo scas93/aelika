@@ -21,7 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:seed": "prisma db seed",
     "prisma:migrate": "prisma migrate dev",
-    "seed:banetto": "tsx prisma/seed-banetto.ts"
+    "seed:banetto": "tsx prisma/seed-banetto.ts",
+    "seed:reynoso": "tsx prisma/seed-reynoso.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

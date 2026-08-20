@@ -1,0 +1,62 @@
+{
+  "tenant": {
+    "nombre": "Envases Reynoso",
+    "slug": "envases-reynoso",
+    "logoUrl": "https://irp.cdn-website.com/9f3d27a7/dms3rep/multi/opt/NUEVO+LOGO+REYSO-1920w.png",
+    "ubicacion": "Colmena 1175, Comercial Abastos, 44530, Guadalajara, Jalisco",
+    "mensajeBienvenida": "¡Hola! Bienvenido a Envases Reynoso 📦 Tu proveedor de desechables y envases para tu negocio. ¿Qué necesitas hoy?",
+    "facturacionModo": "OPCIONAL",
+    "horarioAtencion": {
+      "lunes":     { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "martes":    { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "miercoles": { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "jueves":    { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "viernes":   { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "sabado":    { "abierto": true, "apertura": "09:00", "cierre": "18:00" },
+      "domingo":   { "abierto": true, "apertura": "09:00", "cierre": "15:00" }
+    },
+    "equipo": [
+      { "email": "dueno@reynoso.com", "nombre": "Dueño Reynoso", "password": "reynoso1234", "rol": "DUENO" },
+      { "email": "gerente@reynoso.com", "nombre": "Gerente Reynoso", "password": "gerente1234", "rol": "GERENTE" },
+      { "email": "operador@reynoso.com", "nombre": "Operador Reynoso", "password": "operador1234", "rol": "OPERADOR" }
+    ],
+    "puntosEnvio": [
+      { "nombre": "Zona Cercana (Guadalajara Centro)", "direccion": "Zona centro, Guadalajara, Jalisco", "pedidoMinimo": 3000 },
+      { "nombre": "Zona Lejana (Zona Metropolitana)", "direccion": "Zona metropolitana de Guadalajara, Jalisco", "pedidoMinimo": 4500 }
+    ]
+  },
+  "categorias": [
+    { "nombre": "Bolsas", "orden": 1, "productos": [
+      { "nombre": "Bolsa de papel kraft chica", "descripcion": "Paquete de 100 pzas", "precio": 95, "fotoUrl": null },
+      { "nombre": "Bolsa de papel kraft grande", "descripcion": "Paquete de 100 pzas", "precio": 145, "fotoUrl": null },
+      { "nombre": "Bolsa camiseta chica", "descripcion": "Paquete de 500 pzas", "precio": 180, "fotoUrl": null },
+      { "nombre": "Bolsa camiseta grande", "descripcion": "Paquete de 500 pzas", "precio": 250, "fotoUrl": null },
+      { "nombre": "Bolsa para pan", "descripcion": "Paquete de 200 pzas", "precio": 110, "fotoUrl": null }
+    ]},
+    { "nombre": "Caja de Cartón para Comida", "orden": 2, "productos": [
+      { "nombre": "Caja para pizza 30cm", "descripcion": "Paquete de 50 pzas", "precio": 320, "fotoUrl": null },
+      { "nombre": "Caja para pizza 35cm", "descripcion": "Paquete de 50 pzas", "precio": 380, "fotoUrl": null },
+      { "nombre": "Caja para hamburguesa", "descripcion": "Paquete de 100 pzas", "precio": 260, "fotoUrl": null },
+      { "nombre": "Caja kraft para alimentos chica", "descripcion": "Paquete de 100 pzas", "precio": 210, "fotoUrl": null },
+      { "nombre": "Caja kraft para alimentos grande", "descripcion": "Paquete de 100 pzas", "precio": 290, "fotoUrl": null }
+    ]},
+    { "nombre": "Charolas", "orden": 3, "productos": [
+      { "nombre": "Charola de unicel chica", "descripcion": "Paquete de 100 pzas", "precio": 130, "fotoUrl": null },
+      { "nombre": "Charola de unicel grande", "descripcion": "Paquete de 100 pzas", "precio": 190, "fotoUrl": null },
+      { "nombre": "Charola de cartón biodegradable", "descripcion": "Paquete de 50 pzas", "precio": 240, "fotoUrl": null },
+      { "nombre": "Charola rectangular grande", "descripcion": "Paquete de 50 pzas", "precio": 275, "fotoUrl": null }
+    ]},
+    { "nombre": "Contenedores de Comida", "orden": 4, "productos": [
+      { "nombre": "Contenedor de unicel con tapa", "descripcion": "Paquete de 100 pzas", "precio": 220, "fotoUrl": null },
+      { "nombre": "Contenedor de plástico con tapa 16oz", "descripcion": "Paquete de 50 pzas", "precio": 310, "fotoUrl": null },
+      { "nombre": "Contenedor de plástico con tapa 32oz", "descripcion": "Paquete de 50 pzas", "precio": 380, "fotoUrl": null },
+      { "nombre": "Contenedor biodegradable con tapa", "descripcion": "Paquete de 50 pzas", "precio": 350, "fotoUrl": null }
+    ]},
+    { "nombre": "Cubiertos Desechables", "orden": 5, "productos": [
+      { "nombre": "Tenedor desechable", "descripcion": "Paquete de 100 pzas", "precio": 65, "fotoUrl": null },
+      { "nombre": "Cuchara desechable", "descripcion": "Paquete de 100 pzas", "precio": 65, "fotoUrl": null },
+      { "nombre": "Cuchillo desechable", "descripcion": "Paquete de 100 pzas", "precio": 70, "fotoUrl": null },
+      { "nombre": "Kit cubiertos individual", "descripcion": "Tenedor + cuchillo + servilleta, paquete de 50 kits", "precio": 150, "fotoUrl": null }
+    ]}
+  ]
+}
