@@ -13,9 +13,12 @@ import {
   type Order,
 } from "@/lib/api";
 import {
+  cabeEnUnaLinea,
+  COLUMNS_BODY,
   entregaLinea,
   formatFechaHora,
   isWebUsbSupported,
+  precioLineaItem,
   printComandaWebUsb,
   ROLE_LABEL,
   type ComandaContext,
@@ -378,7 +381,7 @@ function ComandaImprimible({
     <div id="comanda-imprimible" className="hidden print:block">
       <p className="text-center text-lg font-bold">{ctx.nombreNegocio}</p>
       {ctx.ubicacionNegocio && <p className="text-center text-sm">{ctx.ubicacionNegocio}</p>}
-      <p className="mt-3 text-center text-3xl font-bold">#{order.folio}</p>
+      <p className="text-center text-3xl font-bold">#{order.folio}</p>
       <p className="text-center text-xl font-semibold">
         {order.metodoEntrega === "DOMICILIO" ? "A domicilio" : horaRecogidaDisplay}
       </p>
@@ -389,28 +392,45 @@ function ComandaImprimible({
       <hr className="my-2 border-black" />
       <p className="text-sm">Pedido: {formatFechaHora(new Date(order.createdAt))}</p>
       <hr className="my-2 border-black" />
-      <ul className="flex flex-col gap-1.5">
-        {order.items.map((item) => (
-          <li key={item.id} className="text-2xl font-bold leading-tight">
-            {item.cantidad}× {item.nombreProducto}
-          </li>
-        ))}
+      <ul className="flex flex-col gap-1">
+        {order.items.map((item) => {
+          const nombreLinea = `${item.cantidad}× ${item.nombreProducto}`;
+          const precioTexto = precioLineaItem(item);
+          return (
+            <li key={item.id} className="text-sm font-bold">
+              {cabeEnUnaLinea(nombreLinea, precioTexto, COLUMNS_BODY) ? (
+                <div className="flex justify-between gap-2">
+                  <span>{nombreLinea}</span>
+                  <span>{precioTexto}</span>
+                </div>
+              ) : (
+                <>
+                  <p>{nombreLinea}</p>
+                  <p className="text-right">{precioTexto}</p>
+                </>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {order.notas && (
-        <div className="mt-3 border-2 border-black p-2">
+        <div className="mt-1 border-2 border-black p-2">
           <p className="text-xs font-bold uppercase">Notas</p>
           <p className="text-lg font-bold">{order.notas}</p>
         </div>
       )}
       <hr className="my-2 border-black" />
-      <p className="text-sm">{METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago}</p>
+      <div className="flex justify-between text-sm">
+        <span>{METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago}</span>
+        <span>${Number(order.total).toFixed(2)}</span>
+      </div>
       {Number(order.descuentoTotal) > 0 && (
         <p className="text-sm">Descuento: -${Number(order.descuentoTotal).toFixed(2)}</p>
       )}
       <p className="text-lg font-bold">Total: ${Number(order.total).toFixed(2)}</p>
 
       {order.requiereFactura && (
-        <div className="mt-3 border-2 border-black p-2">
+        <div className="mt-1 border-2 border-black p-2">
           <p className="text-xs font-bold uppercase">Datos fiscales</p>
           <p className="text-sm">Razón social: {order.facturaRazonSocial}</p>
           <p className="text-sm">RFC: {order.facturaRfc}</p>
@@ -426,7 +446,7 @@ function ComandaImprimible({
         Impreso por: {ctx.impresoPor.nombre} ({ROLE_LABEL[ctx.impresoPor.rol]})
       </p>
       <p className="text-xs">Fecha de impresión: {formatFechaHora(fechaImpresion)}</p>
-      <p className="mt-3 text-center text-sm font-semibold">Gracias por su preferencia</p>
+      <p className="text-center text-sm font-semibold">Gracias por su preferencia</p>
     </div>
   );
 }

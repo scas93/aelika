@@ -1,10 +1,23 @@
 import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
-import { METODO_PAGO_LABEL, type Order, type Role } from "./api";
+import { METODO_PAGO_LABEL, type Order, type PublicOrderItem, type Role } from "./api";
 import { regimenFiscalLabel, usoCfdiLabel } from "./catalogos-sat";
 
 // GHIA GTP801, 80mm — Font A fits ~42-48 chars at this width; 42 is the
 // conservative choice so lines don't wrap unexpectedly on narrower printers.
+// Used only for the header (business name, folio, delivery timing).
 const COLUMNS = 42;
+
+// Font B (condensed) — used for all body text below the header, denser like
+// a traditional POS ticket. The encoder has no printerModel configured, so
+// it falls back to its default capability profile: Font A = 42 columns,
+// Font B = 56, and it scales Font B's width proportionally to whatever
+// `columns` was passed at construction (which equals Font A's own width
+// here) — see the font() implementation in receipt-printer-encoder. That
+// makes 56 the real, exact usable width once .font("B") is active, not an
+// approximation — verified by decoding real encoder output at that width.
+// Exported so ComandaImprimible can feed the same budget into
+// cabeEnUnaLinea() and make the identical one-line-vs-two-lines call.
+export const COLUMNS_BODY = 56;
 
 // Same timezone convention as backend/src/common/horario.ts and
 // lib/horario.ts — Fase 1 pilots all operate in Mexico City.
@@ -95,6 +108,26 @@ export function entregaLinea(order: Order, nombrePuntoEnvio: string | undefined)
     : "Recoger en tienda";
 }
 
+export function precioLineaItem(item: PublicOrderItem): string {
+  return `$${(item.cantidad * Number(item.precioUnitario)).toFixed(2)}`;
+}
+
+// Shared with ComandaImprimible so both surfaces make the exact same
+// line-or-two-lines decision for every item — same reasoning as
+// entregaLinea() above, so a long product name never lands on one line in
+// WebUSB and two lines in the browser fallback (or vice versa).
+export function cabeEnUnaLinea(izquierda: string, derecha: string, columns: number): boolean {
+  return izquierda.length + 1 + derecha.length <= columns;
+}
+
+// Encoder-only: raw text has no CSS, so the right-aligned column has to be
+// built by hand with literal spaces. ComandaImprimible doesn't need this —
+// it right-aligns with flexbox instead.
+function padColumnas(izquierda: string, derecha: string, columns: number): string {
+  const espacio = Math.max(1, columns - izquierda.length - derecha.length);
+  return izquierda + " ".repeat(espacio) + derecha;
+}
+
 function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayBuffer> {
   const horaRecogidaDisplay =
     order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
@@ -103,14 +136,17 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
 
   const encoder = new ReceiptPrinterEncoder({ language: "esc-pos", columns: COLUMNS });
 
-  encoder.initialize().align("center").bold(true).line(ctx.nombreNegocio).bold(false);
+  // Header stays in Font A (wide/normal) — business name and folio are the
+  // only "destacado" elements on the ticket. Everything else below switches
+  // to Font B (condensed) for a denser, traditional-POS-ticket look.
+  encoder.initialize().align("center").font("A").bold(true).line(ctx.nombreNegocio).bold(false).font("B");
 
   if (ctx.ubicacionNegocio) {
     encoder.line(ctx.ubicacionNegocio);
   }
 
   encoder
-    .newline()
+    .font("A")
     .size(2, 2)
     .bold(true)
     .line(`#${order.folio}`)
@@ -119,31 +155,40 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
     .bold(true)
     .line(order.metodoEntrega === "DOMICILIO" ? "A domicilio" : horaRecogidaDisplay)
     .bold(false)
+    .font("B")
     .align("left")
-    .rule()
+    .rule({ width: COLUMNS_BODY })
     .bold(true)
     .line(entregaLinea(order, ctx.nombrePuntoEnvio))
     .bold(false)
     .line(order.clienteNombre)
     .line(order.clienteTelefono)
-    .rule()
+    .rule({ width: COLUMNS_BODY })
     .line(`Pedido: ${formatFechaHora(new Date(order.createdAt))}`)
-    .rule();
+    .rule({ width: COLUMNS_BODY });
 
   for (const item of order.items) {
-    encoder
-      .bold(true)
-      .size(1, 2)
-      .line(`${item.cantidad}x ${item.nombreProducto}`)
-      .size(1, 1)
-      .bold(false);
+    const nombreLinea = `${item.cantidad}x ${item.nombreProducto}`;
+    const precioTexto = precioLineaItem(item);
+    encoder.bold(true);
+    if (cabeEnUnaLinea(nombreLinea, precioTexto, COLUMNS_BODY)) {
+      encoder.line(padColumnas(nombreLinea, precioTexto, COLUMNS_BODY));
+    } else {
+      // Name alone can still wrap further if it doesn't fit COLUMNS_BODY —
+      // .line() wraps automatically. The price always gets its own line
+      // right below, never squeezed next to the name's last wrapped line.
+      encoder.line(nombreLinea).align("right").line(precioTexto).align("left");
+    }
+    encoder.bold(false);
   }
 
   if (order.notas) {
-    encoder.newline().invert(true).bold(true).line(" NOTAS ").line(order.notas).bold(false).invert(false);
+    encoder.invert(true).bold(true).line(" NOTAS ").line(order.notas).bold(false).invert(false);
   }
 
-  encoder.rule().line(METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago);
+  encoder
+    .rule({ width: COLUMNS_BODY })
+    .line(padColumnas(METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago, `$${Number(order.total).toFixed(2)}`, COLUMNS_BODY));
 
   if (Number(order.descuentoTotal) > 0) {
     encoder.line(`Descuento: -$${Number(order.descuentoTotal).toFixed(2)}`);
@@ -155,12 +200,11 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
     .bold(false);
 
   // Full fiscal data, one field per line — deliberately not compressed onto
-  // fewer lines. 80mm paper at 42 columns has plenty of width; the risk here
+  // fewer lines. Font B at 56 columns has plenty of width; the risk here
   // is fields running together and becoming unreadable, not running out of
   // paper.
   if (order.requiereFactura) {
     encoder
-      .newline()
       .invert(true)
       .bold(true)
       .line(" DATOS FISCALES ")
@@ -175,7 +219,7 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
   }
 
   encoder
-    .rule()
+    .rule({ width: COLUMNS_BODY })
     .line(`Impreso por: ${ctx.impresoPor.nombre} (${ROLE_LABEL[ctx.impresoPor.rol]})`)
     .line(`Fecha de impresión: ${formatFechaHora(new Date())}`)
     .align("center")
