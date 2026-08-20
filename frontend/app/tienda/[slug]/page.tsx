@@ -451,7 +451,7 @@ function ProductoCard({
     </span>
   );
 
-  const media = product.fotoUrl && (
+  const media = product.fotoUrl ? (
     <div
       className={`relative overflow-hidden rounded-xl ${layout === "grid" ? "aspect-square w-full" : "h-16 w-16 shrink-0"}`}
     >
@@ -463,6 +463,14 @@ function ProductoCard({
       />
       {badgePill && <div className="absolute left-1 top-1">{badgePill}</div>}
     </div>
+  ) : (
+    // Sin fotoUrl, layout "grid" necesita igual un contenedor con el tamaño
+    // real de la imagen (aspect-square) para que el pill de cantidad, que se
+    // posiciona absolute respecto a este bloque, tenga de dónde anclarse en
+    // la esquina — sin esto, el contenedor colapsa a altura 0 y el pill
+    // termina flotando fuera de la card. En "list" el control no es
+    // absolute sobre media, así que no hace falta placeholder ahí.
+    layout === "grid" && <div className="aspect-square w-full rounded-xl bg-black/5 dark:bg-white/10" />
   );
 
   const descuentoConfig = promo && (promo.config as DescuentoProductoConfig);
