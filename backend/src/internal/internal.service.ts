@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Role } from '../../generated/prisma/enums';
 import type { Tenant } from '../../generated/prisma/client';
 import { isAbiertoAhora, HorarioSemana } from '../common/horario';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
@@ -30,11 +31,13 @@ export class InternalService {
   }
 
   /**
-   * Creates a Stripe Connect account for this tenant (Express-dashboard
-   * equivalent via `controller`, not the deprecated `type: 'express'`
-   * shorthand — see CLAUDE.md), stores its id, and returns a hosted
-   * onboarding link. 409 if the tenant already has one — this never replaces
-   * an existing stripeAccountId.
+   * Creates a Stripe Connect account for this tenant via the v2 Core
+   * Accounts API (v1 account creation is rejected outright on this Stripe
+   * account — "Accounts v1 no longer recommended for new Connect
+   * integrations" — confirmed against the real API, not just SDK docs; see
+   * CLAUDE.md), stores its id, and returns a hosted onboarding link. 409 if
+   * the tenant already has one — this never replaces an existing
+   * stripeAccountId.
    */
   async createStripeAccount(slug: string) {
     const tenant = await this.resolverTenant(slug);
@@ -42,17 +45,51 @@ export class InternalService {
       throw new ConflictException('Este negocio ya tiene una cuenta de Stripe conectada');
     }
 
-    const account = await this.stripeService.client.accounts.create({
-      country: 'mx',
-      controller: {
-        stripe_dashboard: { type: 'express' },
-        fees: { payer: 'application' },
-        losses: { payments: 'application' },
-        requirement_collection: 'stripe',
+    // configuration.recipient requires a contact email on the account —
+    // confirmed by testing (400 naming exactly this requirement). Tenant has
+    // no email of its own, so this uses the tenant's Dueño — the only
+    // Tenant-scoped user role guaranteed to exist (AuthService/UsersService
+    // never let a tenant end up without an active Dueño).
+    const dueno = await this.prisma.user.findFirst({ where: { tenantId: tenant.id, rol: Role.DUENO } });
+    if (!dueno) {
+      throw new NotFoundException('Este negocio no tiene un Dueño activo para usar como contacto de Stripe');
+    }
+
+    // Two separate configurations, each with its own capability namespace:
+    // `merchant` (card_payments — charging the customer) and `recipient`
+    // (stripe_balance.stripe_transfers — receiving that money into the
+    // account's own Stripe balance, a prerequisite for payouts). Confirmed
+    // against the actual v2 Accounts API types — stripe_balance is NOT under
+    // merchant.capabilities, it's exclusively under recipient.capabilities.
+    // "payouts" itself (balance -> the tenant's bank) isn't a requestable
+    // capability in either configuration — it activates on its own once
+    // identity/bank requirements are satisfied — see getStripeStatus.
+    const account = await this.stripeService.client.v2.core.accounts.create({
+      dashboard: 'express',
+      contact_email: dueno.email,
+      identity: { country: 'mx' },
+      // v2's equivalent of v1's controller.fees.payer/controller.losses.payments
+      // ("application" = the platform pays Stripe's fees / absorbs losses, not
+      // the connected account) — required by the API as soon as a merchant or
+      // a recipient with stripe_transfers is configured (confirmed by testing:
+      // omitting this returns a 400 naming exactly these two fields).
+      defaults: {
+        responsibilities: {
+          fees_collector: 'application_express',
+          losses_collector: 'application',
+        },
       },
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
+      configuration: {
+        merchant: {
+          capabilities: {
+            card_payments: { requested: true },
+          },
+        },
+        recipient: {
+          capabilities: {
+            stripe_balance: { stripe_transfers: { requested: true } },
+          },
+        },
       },
     });
 
@@ -62,11 +99,16 @@ export class InternalService {
     });
 
     const apiBaseUrl = this.configService.get<string>('API_BASE_URL') ?? API_BASE_URL_DEFAULT;
-    const accountLink = await this.stripeService.client.accountLinks.create({
+    const accountLink = await this.stripeService.client.v2.core.accountLinks.create({
       account: account.id,
-      type: 'account_onboarding',
-      return_url: `${apiBaseUrl}/internal/stripe/onboarding-complete`,
-      refresh_url: `${apiBaseUrl}/internal/stripe/onboarding-refresh`,
+      use_case: {
+        type: 'account_onboarding',
+        account_onboarding: {
+          configurations: ['merchant', 'recipient'],
+          return_url: `${apiBaseUrl}/internal/stripe/onboarding-complete`,
+          refresh_url: `${apiBaseUrl}/internal/stripe/onboarding-refresh`,
+        },
+      },
     });
 
     return { url: accountLink.url };
@@ -75,8 +117,12 @@ export class InternalService {
   /**
    * Live status straight from Stripe (never trusts only what's stored),
    * refreshing Tenant.stripeChargesEnabled/stripePayoutsEnabled with
-   * whatever it finds — same fields the account.updated webhook keeps in
-   * sync going forward.
+   * whatever it finds. card_payments.status (merchant) and
+   * stripe_balance.payouts.status (recipient) are v2's per-capability status
+   * ('active'|'pending'|'restricted'|'unsupported') — mapped to the same two
+   * booleans v1's charges_enabled/payouts_enabled gave us, so the rest of
+   * the app (Tenant schema, webhook handler) doesn't need to know which API
+   * version created the account.
    */
   async getStripeStatus(slug: string) {
     const tenant = await this.resolverTenant(slug);
@@ -84,21 +130,26 @@ export class InternalService {
       return { estado: 'sin_cuenta' as const };
     }
 
-    const account = await this.stripeService.client.accounts.retrieve(tenant.stripeAccountId);
+    const account = await this.stripeService.client.v2.core.accounts.retrieve(tenant.stripeAccountId, {
+      include: ['configuration.merchant', 'configuration.recipient'],
+    });
+
+    const chargesEnabled = account.configuration?.merchant?.capabilities?.card_payments?.status === 'active';
+    const payoutsEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.payouts?.status === 'active';
 
     await this.prisma.tenant.update({
       where: { id: tenant.id },
       data: {
-        stripeChargesEnabled: account.charges_enabled,
-        stripePayoutsEnabled: account.payouts_enabled,
+        stripeChargesEnabled: chargesEnabled,
+        stripePayoutsEnabled: payoutsEnabled,
       },
     });
 
     return {
       estado: 'con_cuenta' as const,
       stripeAccountId: tenant.stripeAccountId,
-      chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled,
+      chargesEnabled,
+      payoutsEnabled,
     };
   }
 
