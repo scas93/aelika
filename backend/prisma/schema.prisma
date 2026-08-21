@@ -214,6 +214,14 @@ model Order {
   // Order, so deleting a PuntoEnvio referenced by orders is blocked (409, see
   // PuntosEnvioService) rather than silently orphaning that history.
   puntoEnvioId         String?
+  // Customer's actual delivery address — required only when metodoEntrega =
+  // DOMICILIO (see PublicService.resolverDireccionEntrega), null for RECOGER.
+  // Distinct from PuntoEnvio.direccion, which is the zone's own fixed
+  // address, not the customer's.
+  direccionCalle       String?
+  direccionNumero      String?
+  direccionColonia     String?
+  direccionReferencias String?
   // Factura (CFDI-style) fields. Whether they're required at all depends on
   // Tenant.facturacionModo at the time of the order — see PublicService.
   requiereFactura      Boolean          @default(false)

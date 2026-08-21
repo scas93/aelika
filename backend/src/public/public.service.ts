@@ -39,6 +39,24 @@ const FACTURA_VACIA: FacturaFields = {
   facturaCorreo: null,
 };
 
+// Order.direccion* — the customer's actual delivery address, distinct from
+// PuntoEnvio.direccion (the zone's own fixed address). Required only when
+// metodoEntrega = DOMICILIO; null for RECOGER — same shape/pattern as
+// FacturaFields above.
+interface DireccionFields {
+  direccionCalle: string | null;
+  direccionNumero: string | null;
+  direccionColonia: string | null;
+  direccionReferencias: string | null;
+}
+
+const DIRECCION_VACIA: DireccionFields = {
+  direccionCalle: null,
+  direccionNumero: null,
+  direccionColonia: null,
+  direccionReferencias: null,
+};
+
 // Pickup needs lead time for the kitchen — a specific pickup time can't be
 // requested for right now or for a time that's already passed.
 const MARGEN_MINIMO_MINUTOS = 15;
@@ -206,6 +224,10 @@ export class PublicService {
     // so it happens later, right before the order is created.
     const puntoEnvio = await this.resolverPuntoEnvio(tenant.id, metodoEntrega, dto.puntoEnvioId);
 
+    // 4b. Customer's delivery address — required only for DOMICILIO, same
+    // convention as puntoEnvioId just above.
+    const direccionEntrega = this.resolverDireccionEntrega(metodoEntrega, dto);
+
     // 5. Facturación — whether/which factura* fields are required depends on
     // Tenant.facturacionModo, resolved independently of pricing.
     const factura = this.resolverFacturacion(tenant.facturacionModo, dto);
@@ -319,6 +341,7 @@ export class PublicService {
           metodoPago: dto.metodoPago,
           metodoEntrega,
           puntoEnvioId: puntoEnvio?.id,
+          ...direccionEntrega,
           ...factura,
           estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION,
           canalOrigen: CanalOrigen.WEB,
@@ -418,6 +441,37 @@ export class PublicService {
     }
 
     return puntoEnvio;
+  }
+
+  /**
+   * direccionCalle/Numero/Colonia are required only when metodoEntrega =
+   * DOMICILIO — RECOGER forces all four fields to null regardless of what
+   * the client sent, same convention as horaRecogida/horaRecogidaTipo above.
+   * direccionReferencias is always optional, even for DOMICILIO.
+   */
+  private resolverDireccionEntrega(metodoEntrega: MetodoEntrega, dto: CreatePublicOrderDto): DireccionFields {
+    if (metodoEntrega !== MetodoEntrega.DOMICILIO) {
+      return DIRECCION_VACIA;
+    }
+
+    const campos = {
+      direccionCalle: dto.direccionCalle,
+      direccionNumero: dto.direccionNumero,
+      direccionColonia: dto.direccionColonia,
+    };
+    const faltantes = Object.entries(campos)
+      .filter(([, valor]) => !valor?.trim())
+      .map(([campo]) => campo);
+    if (faltantes.length > 0) {
+      throw new BadRequestException(`Faltan datos de dirección: ${faltantes.join(', ')}`);
+    }
+
+    return {
+      direccionCalle: dto.direccionCalle!.trim(),
+      direccionNumero: dto.direccionNumero!.trim(),
+      direccionColonia: dto.direccionColonia!.trim(),
+      direccionReferencias: dto.direccionReferencias?.trim() || null,
+    };
   }
 
   /**

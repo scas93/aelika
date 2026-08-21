@@ -64,6 +64,29 @@ export class CreatePublicOrderDto {
   @IsUUID()
   puntoEnvioId?: string;
 
+  // direccionCalle/Numero/Colonia are required only when metodoEntrega =
+  // DOMICILIO — enforced in PublicService, not here (same convention as
+  // puntoEnvioId above). direccionReferencias is always optional.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  direccionCalle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  direccionNumero?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  direccionColonia?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  direccionReferencias?: string;
+
   @IsOptional()
   @IsBoolean()
   requiereFactura?: boolean;
