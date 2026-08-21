@@ -15,6 +15,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { InternalModule } from './internal/internal.module';
 import { PuntosEnvioModule } from './puntos-envio/puntos-envio.module';
 import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
     InternalModule,
     PuntosEnvioModule,
     ModifierGroupsModule,
+    WebhooksModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],
