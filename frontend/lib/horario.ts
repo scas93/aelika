@@ -51,6 +51,16 @@ export function sumarMinutos(hhmm: string, minutos: number): string {
   return `${String(horas).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
+/** Next "HH:mm" that's a multiple of 30 minutes (:00 or :30) strictly after `hhmm`. */
+export function siguienteMultiploDe30(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const totalMin = Math.min(h * 60 + m, 23 * 60 + 59);
+  const siguiente = Math.min(Math.floor(totalMin / 30) * 30 + 30, 23 * 60 + 59);
+  const horas = Math.floor(siguiente / 60);
+  const mins = siguiente % 60;
+  return `${String(horas).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
 /** 15-minute-interval time options in [desde, hasta). */
 export function generarOpcionesHora(desde: string, hasta: string, pasoMinutos = 15): string[] {
   const opciones: string[] = [];

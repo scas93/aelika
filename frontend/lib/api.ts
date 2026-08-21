@@ -300,6 +300,12 @@ export interface CreatePublicOrderPayload {
   metodoPago: MetodoPago;
   metodoEntrega?: MetodoEntrega;
   puntoEnvioId?: string;
+  // Required (enforced in PublicService, not here) only when metodoEntrega =
+  // DOMICILIO. direccionReferencias is always optional.
+  direccionCalle?: string;
+  direccionNumero?: string;
+  direccionColonia?: string;
+  direccionReferencias?: string;
   requiereFactura?: boolean;
   facturaRazonSocial?: string;
   facturaRfc?: string;
@@ -331,6 +337,10 @@ export interface PublicOrder {
   metodoPago: MetodoPago;
   metodoEntrega: MetodoEntrega;
   puntoEnvioId: string | null;
+  direccionCalle: string | null;
+  direccionNumero: string | null;
+  direccionColonia: string | null;
+  direccionReferencias: string | null;
   requiereFactura: boolean;
   facturaRazonSocial: string | null;
   facturaRfc: string | null;

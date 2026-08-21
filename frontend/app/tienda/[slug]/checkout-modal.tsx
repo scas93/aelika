@@ -6,13 +6,18 @@ import {
   createPublicOrder,
   fetchPublicPuntosEnvio,
   type FacturacionModo,
-  type HoraRecogidaTipo,
   type HorarioSemana,
   type MetodoEntrega,
   type PublicOrder,
   type PublicPuntoEnvio,
 } from "@/lib/api";
-import { horaActualMexico, horarioDeHoy, generarOpcionesHora, sumarMinutos } from "@/lib/horario";
+import {
+  horaActualMexico,
+  horarioDeHoy,
+  generarOpcionesHora,
+  siguienteMultiploDe30,
+  sumarMinutos,
+} from "@/lib/horario";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
 export interface CartItemModifier {
@@ -89,10 +94,18 @@ export default function CheckoutModal({
 
   // "entrega"
   const [metodoEntrega, setMetodoEntrega] = useState<MetodoEntrega>("RECOGER");
-  const [horaRecogidaTipo, setHoraRecogidaTipo] = useState<HoraRecogidaTipo>("LO_ANTES_POSIBLE");
+  // Which of the 4 pickup-time buttons is active — null before the customer
+  // picks one. horaRecogidaTipo is always HORA_ESPECIFICA once any of these
+  // is chosen (LO_ANTES_POSIBLE is no longer offered as its own option; "En
+  // 15 min o menos" already covers that case with a concrete time).
+  const [opcionRecogida, setOpcionRecogida] = useState<"15" | "30" | "60" | "otra" | null>(null);
   const [horaRecogida, setHoraRecogida] = useState("");
   const [puntosEnvio, setPuntosEnvio] = useState<PublicPuntoEnvio[] | null>(null);
   const [puntoEnvioId, setPuntoEnvioId] = useState("");
+  const [direccionCalle, setDireccionCalle] = useState("");
+  const [direccionNumero, setDireccionNumero] = useState("");
+  const [direccionColonia, setDireccionColonia] = useState("");
+  const [direccionReferencias, setDireccionReferencias] = useState("");
 
   // "datos"
   const [clienteNombre, setClienteNombre] = useState("");
@@ -119,15 +132,56 @@ export default function CheckoutModal({
   }, [slug]);
 
   const horarioHoy = horarioDeHoy(horario);
-  const cotaInferior =
-    horarioHoy?.abierto && horarioHoy.apertura && horarioHoy.cierre
-      ? (() => {
-          const minima = sumarMinutos(horaActualMexico(), MARGEN_MINIMO_MINUTOS);
-          return minima > horarioHoy.apertura ? minima : horarioHoy.apertura;
-        })()
-      : null;
-  const opcionesHora =
-    cotaInferior && horarioHoy?.cierre ? generarOpcionesHora(cotaInferior, horarioHoy.cierre) : [];
+  const horarioAbiertoHoy = Boolean(horarioHoy?.abierto && horarioHoy.apertura && horarioHoy.cierre);
+
+  /** max(horaActual + minutos, apertura) — same calc as the old cotaInferior, generalized. */
+  function horaRapida(minutos: number): string | null {
+    if (!horarioAbiertoHoy) return null;
+    const candidata = sumarMinutos(horaActualMexico(), minutos);
+    return candidata > horarioHoy!.apertura! ? candidata : horarioHoy!.apertura!;
+  }
+
+  // The 3 quick buttons, in order. Since horaRapida(minutos) is
+  // non-decreasing as minutos grows, a later button can only equal (never
+  // precede) an earlier one — that's the "apertura is more than N minutes
+  // away" edge case, where several buttons collapse onto the same apertura
+  // time. Disabled whenever: not computable, >= cierre, or identical to the
+  // immediately preceding (already-shown) button's time — no point in 3
+  // buttons doing the same thing.
+  const opcionesRapidas = (
+    [
+      { key: "15" as const, label: "En 15 min o menos", minutos: MARGEN_MINIMO_MINUTOS },
+      { key: "30" as const, label: "En 30 min o menos", minutos: 30 },
+      { key: "60" as const, label: "En 1 hora o menos", minutos: 60 },
+    ] satisfies { key: "15" | "30" | "60"; label: string; minutos: number }[]
+  ).map((opcion, index, arr) => {
+    const hora = horaRapida(opcion.minutos);
+    const anterior = index > 0 ? horaRapida(arr[index - 1].minutos) : null;
+    const disabled = !hora || !horarioHoy?.cierre || hora >= horarioHoy.cierre || hora === anterior;
+    return { ...opcion, hora, disabled };
+  });
+
+  // "Otra hora": starts strictly after the 1-hour-or-less option, on the next
+  // 30-min boundary, so it never overlaps that option's range.
+  const calc60 = horaRapida(60);
+  const otraDesde = calc60 ? siguienteMultiploDe30(calc60) : null;
+  const opcionesOtraHora =
+    otraDesde && horarioHoy?.cierre ? generarOpcionesHora(otraDesde, horarioHoy.cierre, 30) : [];
+  const otraHoraDisabled = opcionesOtraHora.length === 0;
+
+  const sinOpcionesDeHora = opcionesRapidas.every((o) => o.disabled) && otraHoraDisabled;
+
+  function elegirHoraRapida(opcion: (typeof opcionesRapidas)[number]) {
+    if (opcion.disabled || !opcion.hora) return;
+    setOpcionRecogida(opcion.key);
+    setHoraRecogida(opcion.hora);
+  }
+
+  function elegirOtraHora() {
+    if (otraHoraDisabled) return;
+    setOpcionRecogida("otra");
+    setHoraRecogida("");
+  }
 
   const zonaSeleccionada = puntosEnvio?.find((p) => p.id === puntoEnvioId) ?? null;
   const minimoZona = zonaSeleccionada?.pedidoMinimo != null ? Number(zonaSeleccionada.pedidoMinimo) : null;
@@ -136,8 +190,12 @@ export default function CheckoutModal({
 
   const canContinueEntrega =
     metodoEntrega === "RECOGER"
-      ? horaRecogidaTipo === "LO_ANTES_POSIBLE" || horaRecogida !== ""
-      : puntoEnvioId !== "" && faltantePorMinimo <= 0;
+      ? horaRecogida !== ""
+      : puntoEnvioId !== "" &&
+        faltantePorMinimo <= 0 &&
+        direccionCalle.trim() !== "" &&
+        direccionNumero.trim() !== "" &&
+        direccionColonia.trim() !== "";
 
   const canContinueDatos = clienteNombre.trim().length >= 2 && clienteTelefono.trim().length >= 7;
 
@@ -183,12 +241,19 @@ export default function CheckoutModal({
         clienteNombre,
         clienteTelefono,
         notas: notas.trim() || undefined,
-        horaRecogidaTipo: metodoEntrega === "RECOGER" ? horaRecogidaTipo : undefined,
-        horaRecogida:
-          metodoEntrega === "RECOGER" && horaRecogidaTipo === "HORA_ESPECIFICA" ? horaRecogida : undefined,
+        // horaRecogidaTipo is always HORA_ESPECIFICA now — LO_ANTES_POSIBLE
+        // isn't offered as its own UI option anymore ("En 15 min o menos"
+        // already covers that case with a concrete time).
+        horaRecogidaTipo: metodoEntrega === "RECOGER" ? "HORA_ESPECIFICA" : undefined,
+        horaRecogida: metodoEntrega === "RECOGER" ? horaRecogida : undefined,
         metodoPago: "EFECTIVO",
         metodoEntrega,
         puntoEnvioId: metodoEntrega === "DOMICILIO" ? puntoEnvioId : undefined,
+        direccionCalle: metodoEntrega === "DOMICILIO" ? direccionCalle.trim() : undefined,
+        direccionNumero: metodoEntrega === "DOMICILIO" ? direccionNumero.trim() : undefined,
+        direccionColonia: metodoEntrega === "DOMICILIO" ? direccionColonia.trim() : undefined,
+        direccionReferencias:
+          metodoEntrega === "DOMICILIO" ? direccionReferencias.trim() || undefined : undefined,
         requiereFactura: facturaRequerida || undefined,
         facturaRazonSocial: facturaRequerida ? facturaRazonSocial.trim() : undefined,
         facturaRfc: facturaRequerida ? facturaRfc.trim() : undefined,
@@ -353,29 +418,33 @@ export default function CheckoutModal({
             {metodoEntrega === "RECOGER" ? (
               <div className="flex flex-col gap-1.5 text-sm font-medium">
                 Hora de recogida
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {opcionesRapidas.map((opcion) => (
+                    <button
+                      key={opcion.key}
+                      type="button"
+                      disabled={opcion.disabled}
+                      onClick={() => elegirHoraRapida(opcion)}
+                      className={opcionRecogida === opcion.key ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
+                    >
+                      {opcion.label}
+                    </button>
+                  ))}
                   <button
                     type="button"
-                    onClick={() => setHoraRecogidaTipo("LO_ANTES_POSIBLE")}
-                    className={horaRecogidaTipo === "LO_ANTES_POSIBLE" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
+                    disabled={otraHoraDisabled}
+                    onClick={elegirOtraHora}
+                    className={opcionRecogida === "otra" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
                   >
-                    Lo antes posible
-                  </button>
-                  <button
-                    type="button"
-                    disabled={opcionesHora.length === 0}
-                    onClick={() => setHoraRecogidaTipo("HORA_ESPECIFICA")}
-                    className={horaRecogidaTipo === "HORA_ESPECIFICA" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
-                  >
-                    Elegir hora
+                    Otra hora
                   </button>
                 </div>
-                {opcionesHora.length === 0 && (
+                {sinOpcionesDeHora && (
                   <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    Ya no queda margen para elegir una hora hoy — solo puedes pedir lo antes posible.
+                    Ya no queda margen para elegir una hora hoy.
                   </span>
                 )}
-                {horaRecogidaTipo === "HORA_ESPECIFICA" && opcionesHora.length > 0 && (
+                {opcionRecogida === "otra" && (
                   <select
                     required
                     value={horaRecogida}
@@ -383,7 +452,7 @@ export default function CheckoutModal({
                     className="input"
                   >
                     <option value="">Selecciona...</option>
-                    {opcionesHora.map((hora) => (
+                    {opcionesOtraHora.map((hora) => (
                       <option key={hora} value={hora}>
                         {hora}
                       </option>
@@ -422,6 +491,45 @@ export default function CheckoutModal({
                 >
                   Te faltan ${faltantePorMinimo.toFixed(2)} para el pedido mínimo de esta zona (${(minimoZona ?? 0).toFixed(2)}).
                 </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1.5 text-sm font-medium">
+                    Calle
+                    <input
+                      required
+                      value={direccionCalle}
+                      onChange={(e) => setDireccionCalle(e.target.value)}
+                      className="input"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-sm font-medium">
+                    Número
+                    <input
+                      required
+                      value={direccionNumero}
+                      onChange={(e) => setDireccionNumero(e.target.value)}
+                      className="input"
+                    />
+                  </label>
+                </div>
+                <label className="flex flex-col gap-1.5 text-sm font-medium">
+                  Colonia
+                  <input
+                    required
+                    value={direccionColonia}
+                    onChange={(e) => setDireccionColonia(e.target.value)}
+                    className="input"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-medium">
+                  Referencias (opcional)
+                  <input
+                    value={direccionReferencias}
+                    onChange={(e) => setDireccionReferencias(e.target.value)}
+                    placeholder="Portón negro, entre calles, etc."
+                    className="input"
+                  />
+                </label>
               </div>
             )}
 
@@ -539,6 +647,25 @@ export default function CheckoutModal({
                   El precio de combos se ajusta al finalizar tu pedido.
                 </p>
               </div>
+
+              {metodoEntrega === "DOMICILIO" && zonaSeleccionada && (
+                <div className={RESUMEN_BOX}>
+                  <span className={RESUMEN_LABEL}>Entrega</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-black/60 dark:text-white/60">Zona</span>
+                    <span className="font-medium">{zonaSeleccionada.nombre}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-sm">
+                    <span className="text-black/60 dark:text-white/60">Dirección</span>
+                    <span className="font-medium">
+                      {direccionCalle} {direccionNumero}, {direccionColonia}
+                    </span>
+                    {direccionReferencias.trim() !== "" && (
+                      <span className="text-xs text-black/50 dark:text-white/50">{direccionReferencias}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1.5 text-sm font-medium">
                 Método de pago
@@ -692,6 +819,17 @@ export default function CheckoutModal({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-black/60 dark:text-white/60">Zona</span>
                   <span className="font-medium">{zonaOrden.nombre}</span>
+                </div>
+              )}
+              {order.metodoEntrega === "DOMICILIO" && (
+                <div className="flex flex-col gap-0.5 text-sm">
+                  <span className="text-black/60 dark:text-white/60">Dirección</span>
+                  <span className="font-medium">
+                    {order.direccionCalle} {order.direccionNumero}, {order.direccionColonia}
+                  </span>
+                  {order.direccionReferencias && (
+                    <span className="text-xs text-black/50 dark:text-white/50">{order.direccionReferencias}</span>
+                  )}
                 </div>
               )}
             </div>
