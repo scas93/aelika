@@ -14,6 +14,7 @@ import { OrdersModule } from './orders/orders.module';
 import { TenantModule } from './tenant/tenant.module';
 import { InternalModule } from './internal/internal.module';
 import { PuntosEnvioModule } from './puntos-envio/puntos-envio.module';
+import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PuntosEnvioModule } from './puntos-envio/puntos-envio.module';
     TenantModule,
     InternalModule,
     PuntosEnvioModule,
+    ModifierGroupsModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

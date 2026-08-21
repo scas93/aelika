@@ -14,6 +14,11 @@ export class ProductsController {
     return this.productsService.findAll(categoryId);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.productsService.findOne(id);
+  }
+
   @Roles(Role.GERENTE, Role.DUENO)
   @Post()
   create(@Body() dto: CreateProductDto) {

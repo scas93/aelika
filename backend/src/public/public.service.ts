@@ -11,6 +11,7 @@ import {
   MetodoPago,
   Prisma,
   PromotionTipo,
+  TipoSeleccion,
 } from '../../generated/prisma/client';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import type { DescuentoProductoConfigDto } from '../promotions/dto/descuento-producto-config.dto';
@@ -79,7 +80,7 @@ export class PublicService {
       throw new NotFoundException('Negocio no encontrado');
     }
 
-    const [categories, promotions] = await Promise.all([
+    const [rawCategories, promotions] = await Promise.all([
       this.prisma.category.findMany({
         where: { tenantId: tenant.id, activa: true },
         orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
@@ -94,7 +95,36 @@ export class PublicService {
             // createOrder más abajo — este query nunca alimenta el checkout.
             where: { tenantId: tenant.id },
             orderBy: { nombre: 'asc' },
-            select: { id: true, nombre: true, descripcion: true, precio: true, fotoUrl: true, disponible: true },
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+              precio: true,
+              fotoUrl: true,
+              disponible: true,
+              // ProductModifierGroup (join rows) filtradas por
+              // modifierGroup.activo y ordenadas por `orden` — se aplanan a
+              // ModifierGroup[] justo abajo, el join row en sí no le importa
+              // al cliente.
+              modifierGroups: {
+                where: { modifierGroup: { activo: true } },
+                orderBy: { orden: 'asc' },
+                select: {
+                  modifierGroup: {
+                    select: {
+                      id: true,
+                      nombre: true,
+                      tipoSeleccion: true,
+                      obligatorio: true,
+                      opciones: {
+                        where: { activo: true },
+                        select: { id: true, nombre: true, precioAdicional: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       }),
@@ -103,6 +133,14 @@ export class PublicService {
         select: { id: true, tipo: true, config: true },
       }),
     ]);
+
+    const categories = rawCategories.map((category) => ({
+      ...category,
+      products: category.products.map((product) => ({
+        ...product,
+        modifierGroups: product.modifierGroups.map((asignacion) => asignacion.modifierGroup),
+      })),
+    }));
 
     return { categories, promotions };
   }
@@ -243,7 +281,16 @@ export class PublicService {
     const subtotal = round2(
       [...cantidadPorProducto.entries()].reduce((sum, [id, cantidad]) => sum + cantidad * Number(productMap.get(id)!.precio), 0),
     );
-    const total = Math.max(0, round2(subtotal - descuentoTotal));
+
+    // Modifiers are resolved per raw cart line (dto.items, not the deduped
+    // cantidadPorProducto used above) because two lines for the same product
+    // can carry different modifier selections — they can't be merged into a
+    // single quantity the way plain product counts can. Deliberately kept
+    // out of the combo/descuento math above: modifiers are never discounted,
+    // they're added in full on top of the already-discounted subtotal.
+    const { modificadoresPorItem, modifiersExtraTotal } = await this.resolverModificadores(tenant.id, productIds, dto.items);
+
+    const total = Math.max(0, round2(subtotal + modifiersExtraTotal - descuentoTotal));
 
     // 6. pedidoMinimo — needs the calculated total (with discounts, no
     // taxes — there are none), so it can only be checked here.
@@ -279,14 +326,29 @@ export class PublicService {
           notasDescuento: resumenDescuentos.length > 0 ? resumenDescuentos.join('; ') : undefined,
           total,
           items: {
-            create: [...cantidadPorProducto.entries()].map(([productId, cantidad]) => {
-              const product = productMap.get(productId)!;
+            // One OrderItem per raw cart line (not per distinct product) —
+            // see the comment above modifiersExtraTotal for why lines can't
+            // be merged once modifiers are involved.
+            create: dto.items.map((item, index) => {
+              const product = productMap.get(item.productId)!;
+              const modificadores = modificadoresPorItem[index];
               return {
                 tenantId: tenant.id,
-                productId,
+                productId: item.productId,
                 nombreProducto: product.nombre,
                 precioUnitario: product.precio,
-                cantidad,
+                cantidad: item.cantidad,
+                modificadores:
+                  modificadores.length > 0
+                    ? {
+                        create: modificadores.map((m) => ({
+                          tenantId: tenant.id,
+                          modifierOptionId: m.modifierOptionId,
+                          nombre: m.nombre,
+                          precioAdicional: m.precioAdicional,
+                        })),
+                      }
+                    : undefined,
               };
             }),
           },
@@ -350,6 +412,105 @@ export class PublicService {
     }
 
     return puntoEnvio;
+  }
+
+  /**
+   * Validates each cart line's modifierOptionIds against the ModifierGroups
+   * actually assigned to that line's product, and returns the snapshot data
+   * (nombre/precioAdicional) needed to create each OrderItem's
+   * OrderItemModifier rows, plus the total extra to add to the order.
+   *
+   * No TenantPrismaService here — same reason as the rest of this method:
+   * this is a public, unauthenticated endpoint (tenant resolved from the
+   * slug, not a JWT), so tenantId is passed explicitly into every where.
+   */
+  private async resolverModificadores(
+    tenantId: string,
+    productIds: string[],
+    items: CreatePublicOrderDto['items'],
+  ): Promise<{
+    modificadoresPorItem: { modifierOptionId: string; nombre: string; precioAdicional: number }[][];
+    modifiersExtraTotal: number;
+  }> {
+    const asignaciones = await this.prisma.productModifierGroup.findMany({
+      where: {
+        productId: { in: productIds },
+        modifierGroup: { tenantId, activo: true },
+      },
+      include: {
+        modifierGroup: {
+          include: { opciones: { where: { activo: true } } },
+        },
+      },
+    });
+
+    type GrupoConOpciones = (typeof asignaciones)[number]['modifierGroup'];
+    const gruposPorProducto = new Map<string, GrupoConOpciones[]>();
+    for (const asignacion of asignaciones) {
+      const lista = gruposPorProducto.get(asignacion.productId) ?? [];
+      lista.push(asignacion.modifierGroup);
+      gruposPorProducto.set(asignacion.productId, lista);
+    }
+
+    const modificadoresPorItem: { modifierOptionId: string; nombre: string; precioAdicional: number }[][] = [];
+    let modifiersExtraTotal = 0;
+
+    for (const item of items) {
+      const grupos = gruposPorProducto.get(item.productId) ?? [];
+      const optionIds = item.modifierOptionIds ?? [];
+
+      // a) Every selected option must belong to a group assigned to this
+      // product — 404 for anything else, same "never confirm a foreign
+      // resource exists" principle as the rest of this service.
+      const optionIndex = new Map<string, { grupo: GrupoConOpciones; opcion: GrupoConOpciones['opciones'][number] }>();
+      for (const grupo of grupos) {
+        for (const opcion of grupo.opciones) {
+          optionIndex.set(opcion.id, { grupo, opcion });
+        }
+      }
+
+      const seleccionPorGrupo = new Map<string, string[]>();
+      for (const optionId of optionIds) {
+        const found = optionIndex.get(optionId);
+        if (!found) {
+          throw new NotFoundException('Una opción seleccionada no está disponible para este producto');
+        }
+        const seleccionadas = seleccionPorGrupo.get(found.grupo.id) ?? [];
+        seleccionadas.push(optionId);
+        seleccionPorGrupo.set(found.grupo.id, seleccionadas);
+      }
+
+      // b) obligatorio + UNICA needs exactly 1; obligatorio + MULTIPLE needs
+      // at least 1; !obligatorio allows 0.
+      // c) UNICA never allows more than 1, even when the group is optional.
+      for (const grupo of grupos) {
+        const seleccionadas = seleccionPorGrupo.get(grupo.id) ?? [];
+        if (grupo.tipoSeleccion === TipoSeleccion.UNICA && seleccionadas.length > 1) {
+          throw new BadRequestException(`"${grupo.nombre}" solo admite una opción`);
+        }
+        if (grupo.obligatorio && grupo.tipoSeleccion === TipoSeleccion.UNICA && seleccionadas.length !== 1) {
+          throw new BadRequestException(`Elige una opción de "${grupo.nombre}"`);
+        }
+        if (grupo.obligatorio && grupo.tipoSeleccion === TipoSeleccion.MULTIPLE && seleccionadas.length < 1) {
+          throw new BadRequestException(`Elige al menos una opción de "${grupo.nombre}"`);
+        }
+      }
+
+      const snapshots = optionIds.map((optionId) => {
+        const { opcion } = optionIndex.get(optionId)!;
+        return {
+          modifierOptionId: opcion.id,
+          nombre: opcion.nombre,
+          precioAdicional: Number(opcion.precioAdicional),
+        };
+      });
+      modificadoresPorItem.push(snapshots);
+
+      const extraPorUnidad = snapshots.reduce((sum, s) => sum + s.precioAdicional, 0);
+      modifiersExtraTotal += extraPorUnidad * item.cantidad;
+    }
+
+    return { modificadoresPorItem, modifiersExtraTotal: round2(modifiersExtraTotal) };
   }
 
   /**

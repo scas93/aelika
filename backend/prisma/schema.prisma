@@ -48,13 +48,16 @@ model Tenant {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  users       User[]
-  categories  Category[]
-  products    Product[]
-  promotions  Promotion[]
-  orders      Order[]
-  orderItems  OrderItem[]
-  puntosEnvio PuntoEnvio[]
+  users              User[]
+  categories         Category[]
+  products           Product[]
+  promotions         Promotion[]
+  orders             Order[]
+  orderItems         OrderItem[]
+  puntosEnvio        PuntoEnvio[]
+  modifierGroups     ModifierGroup[]
+  modifierOptions    ModifierOption[]
+  orderItemModifiers OrderItemModifier[]
 
   @@map("tenants")
 }
@@ -104,9 +107,10 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  orderItems OrderItem[]
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category       Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems     OrderItem[]
+  modifierGroups ProductModifierGroup[]
 
   @@index([tenantId])
   @@index([categoryId])
@@ -254,11 +258,105 @@ model OrderItem {
   precioUnitario Decimal @db.Decimal(10, 2)
   cantidad       Int
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order         Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  modificadores OrderItemModifier[]
 
   @@index([tenantId])
   @@index([orderId])
   @@map("order_items")
+}
+
+enum TipoSeleccion {
+  UNICA
+  MULTIPLE
+}
+
+// First many-to-many relation in the schema (Product <-> ModifierGroup via
+// ProductModifierGroup). Unlike Promotion, which deliberately references
+// products through a JSON blob instead of a real FK (see Promotion's
+// comment above) because it never needs to be joined/queried by product,
+// modifier groups do need real joins (e.g. "which groups apply to this
+// product") — so this uses actual FKs + a join table instead.
+model ModifierGroup {
+  id            String        @id @default(uuid())
+  tenantId      String
+  nombre        String
+  tipoSeleccion TipoSeleccion
+  obligatorio   Boolean       @default(false)
+  activo        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant    Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  opciones  ModifierOption[]
+  productos ProductModifierGroup[]
+
+  @@index([tenantId])
+  @@map("modifier_groups")
+}
+
+// tenantId is denormalized from modifierGroup.tenantId — same convention as
+// OrderItem (denormalized from order.tenantId) — so this model can be
+// registered directly in TenantPrismaService's tenantScopedQuery like every
+// other tenant-owned model, instead of needing a join through ModifierGroup
+// on every query.
+model ModifierOption {
+  id              String  @id @default(uuid())
+  tenantId        String
+  modifierGroupId String
+  nombre          String
+  precioAdicional Decimal @default(0) @db.Decimal(10, 2)
+  activo          Boolean @default(true)
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  modifierGroup ModifierGroup       @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  orderItems    OrderItemModifier[]
+
+  @@index([tenantId])
+  @@index([modifierGroupId])
+  @@map("modifier_options")
+}
+
+// Join table for the Product <-> ModifierGroup many-to-many. No tenantId of
+// its own — both sides (product, modifierGroup) are already tenant-owned,
+// and every write here is validated against the authenticated tenant via
+// ModifierGroupsService before touching this table (see assertGroupBelongsToTenant/
+// assertProductBelongsToTenant), so it isn't registered in TenantPrismaService's
+// tenantScopedQuery. onDelete: Restrict on modifierGroup (unlike Cascade on
+// product) so a ModifierGroup still assigned to a product can't be deleted
+// silently — ModifierGroupsService.remove catches that FK violation (P2003)
+// and returns 409, same pattern as CategoriesService/PuntosEnvioService.
+model ProductModifierGroup {
+  productId       String
+  modifierGroupId String
+  orden           Int    @default(0)
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Restrict)
+
+  @@id([productId, modifierGroupId])
+  @@map("product_modifier_groups")
+}
+
+// Snapshots nombre/precioAdicional at order time (same principle as
+// OrderItem snapshotting nombreProducto/precioUnitario) so a later edit —or
+// deletion— of the ModifierOption never changes historical order data.
+// modifierOptionId is therefore nullable with onDelete: SetNull.
+model OrderItemModifier {
+  id               String  @id @default(uuid())
+  tenantId         String
+  orderItemId      String
+  modifierOptionId String?
+  nombre           String
+  precioAdicional  Decimal @db.Decimal(10, 2)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderItem      OrderItem       @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifierOption ModifierOption? @relation(fields: [modifierOptionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([orderItemId])
+  @@map("order_item_modifiers")
 }

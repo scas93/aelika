@@ -70,6 +70,12 @@ export class TenantPrismaService {
           puntoEnvio: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          modifierGroup: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          modifierOption: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

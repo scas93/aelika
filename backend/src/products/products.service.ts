@@ -16,6 +16,29 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Includes `category` (for the read-only header on the product detail
+   * page) and `modifierGroups` — the ProductModifierGroup join rows for this
+   * product, each with its ModifierGroup nested — ordered by `orden`, so the
+   * "modificadores asignados" list doesn't need a second request.
+   */
+  async findOne(id: string) {
+    const product = await this.tenantPrisma.client.product.findUnique({
+      where: { id },
+      include: {
+        category: { select: { id: true, nombre: true } },
+        modifierGroups: {
+          orderBy: { orden: 'asc' },
+          include: { modifierGroup: { include: { opciones: true } } },
+        },
+      },
+    });
+    if (!product) {
+      throw new NotFoundException('Producto no encontrado');
+    }
+    return product;
+  }
+
   async create(dto: CreateProductDto) {
     await this.assertCategoryBelongsToTenant(dto.categoryId);
 
