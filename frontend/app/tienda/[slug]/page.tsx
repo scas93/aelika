@@ -238,15 +238,15 @@ export default function TiendaPage() {
         ) : (
           categoriaActiva && (
             <>
-              <nav className="sticky top-16 z-20 -mx-4 flex gap-1 overflow-x-auto border-b border-black/10 bg-chat-bg px-4 py-2 dark:border-white/10 dark:bg-chat-bg-dark">
+              <nav className="sticky top-16 z-20 -mx-4 flex gap-2 overflow-x-auto bg-chat-bg px-4 py-2 dark:bg-chat-bg-dark">
                 {catalog.categories.map((category) => (
                   <button
                     key={category.id}
                     onClick={() => setTabActiva(category.id)}
                     className={
                       category.id === categoriaActiva.id
-                        ? "shrink-0 border-b-2 border-black px-3 py-2 text-sm font-semibold text-black dark:border-white dark:text-white"
-                        : "shrink-0 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-black/40 dark:text-white/40"
+                        ? "shrink-0 rounded-full bg-black px-3.5 py-1.5 text-sm font-semibold text-white dark:bg-white dark:text-black"
+                        : "shrink-0 rounded-full border border-black/10 bg-black/5 px-3.5 py-1.5 text-sm font-medium text-black/60 dark:border-white/10 dark:bg-white/10 dark:text-white/60"
                     }
                   >
                     {category.nombre}
