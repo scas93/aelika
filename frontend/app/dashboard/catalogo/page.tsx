@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -15,8 +16,9 @@ import {
   type Product,
 } from "@/lib/api";
 import PromotionsSection from "./promotions-section";
+import ModifiersSection from "./modifiers-section";
 
-type Tab = "catalogo" | "promociones";
+type Tab = "catalogo" | "promociones" | "modificadores";
 
 const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
 const BTN_PRIMARY =
@@ -114,10 +116,15 @@ export default function CatalogoPage() {
         <TabButton active={tab === "promociones"} onClick={() => setTab("promociones")}>
           Promociones
         </TabButton>
+        <TabButton active={tab === "modificadores"} onClick={() => setTab("modificadores")}>
+          Modificadores
+        </TabButton>
       </div>
 
       {tab === "promociones" ? (
         <PromotionsSection token={token} canWrite={canWrite} />
+      ) : tab === "modificadores" ? (
+        <ModifiersSection token={token} canWrite={canWrite} />
       ) : (
         <>
           <section className="flex flex-col gap-3">
@@ -401,18 +408,23 @@ function ProductsSection({
                   </span>
                   <span className="text-sm text-admin-ink/55">${product.precio}</span>
                 </div>
-                {canWrite && (
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setEditingId(product.id)} className={BTN_SECONDARY}>
-                      Editar
-                    </button>
-                    <ToggleSwitch
-                      checked={product.disponible}
-                      onChange={() => handleToggleDisponible(product)}
-                      label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
-                    />
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  <Link href={`/dashboard/catalogo/productos/${product.id}`} className={BTN_SECONDARY}>
+                    Ver detalle
+                  </Link>
+                  {canWrite && (
+                    <>
+                      <button onClick={() => setEditingId(product.id)} className={BTN_SECONDARY}>
+                        Editar
+                      </button>
+                      <ToggleSwitch
+                        checked={product.disponible}
+                        onChange={() => handleToggleDisponible(product)}
+                        label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
+                      />
+                    </>
+                  )}
+                </div>
               </li>
             ),
           )}

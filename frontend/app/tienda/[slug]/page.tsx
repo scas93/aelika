@@ -13,7 +13,19 @@ import {
   type PublicPromotion,
   type PublicTenantInfo,
 } from "@/lib/api";
-import CheckoutModal, { type CartItem, type ResumenItem } from "./checkout-modal";
+import CheckoutModal, { type CartItem, type CartItemModifier, type ResumenItem } from "./checkout-modal";
+import ProductModifiersModal from "./product-modifiers-modal";
+
+// Two lines are "the same" (mergeable by incrementing cantidad) when they're
+// the same product AND carry the exact same set of selected modifiers,
+// regardless of order. A product with no modifierGroups is always called
+// with modifiers = [] (there's nothing to select), so this single rule
+// already covers both cases from the prompt — no separate branch needed.
+function mismaSeleccion(a: CartItemModifier[], b: CartItemModifier[]) {
+  if (a.length !== b.length) return false;
+  const idsA = new Set(a.map((m) => m.modifierOptionId));
+  return b.every((m) => idsA.has(m.modifierOptionId));
+}
 
 function precioConDescuento(product: PublicProduct, promotions: PublicPromotion[]) {
   const precioOriginal = Number(product.precio);
@@ -53,6 +65,9 @@ export default function TiendaPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [tabActiva, setTabActiva] = useState("");
+  const [modifierTarget, setModifierTarget] = useState<{ product: PublicProduct; precioUnitario: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     async function load() {
@@ -71,21 +86,28 @@ export default function TiendaPage() {
     load();
   }, [slug]);
 
-  function addToCart(productId: string, nombre: string, precioUnitario: number) {
+  function addToCart(
+    productId: string,
+    nombre: string,
+    precioUnitario: number,
+    modifiers: CartItemModifier[] = [],
+    cantidad = 1,
+  ) {
     setCart((prev) => {
-      const existing = prev.find((item) => item.productId === productId);
+      const existing = prev.find((item) => item.productId === productId && mismaSeleccion(item.modifiers, modifiers));
       if (existing) {
-        return prev.map((item) => (item.productId === productId ? { ...item, cantidad: item.cantidad + 1 } : item));
+        return prev.map((item) => (item.id === existing.id ? { ...item, cantidad: item.cantidad + cantidad } : item));
       }
-      return [...prev, { productId, nombre, precioUnitario, cantidad: 1 }];
+      return [...prev, { id: crypto.randomUUID(), productId, nombre, precioUnitario, cantidad, modifiers }];
     });
   }
 
-  function changeQty(productId: string, delta: number) {
+  // Keyed by CartItem.id (the line), not productId — see CheckoutModal's
+  // onChangeQty prop for why productId alone stopped being enough once a
+  // product can have multiple lines with different modifiers.
+  function changeQty(id: string, delta: number) {
     setCart((prev) =>
-      prev
-        .map((item) => (item.productId === productId ? { ...item, cantidad: item.cantidad + delta } : item))
-        .filter((item) => item.cantidad > 0),
+      prev.map((item) => (item.id === id ? { ...item, cantidad: item.cantidad + delta } : item)).filter((item) => item.cantidad > 0),
     );
   }
 
@@ -98,17 +120,49 @@ export default function TiendaPage() {
         const category = catalog.categories.find((c) => c.products.some((p) => p.id === productId));
         const product = category?.products.find((p) => p.id === productId);
         const precioUnitario = product ? Number(product.precio) : 0;
-        const existing = next.find((item) => item.productId === productId);
+        const existing = next.find((item) => item.productId === productId && item.modifiers.length === 0);
         next = existing
-          ? next.map((item) => (item.productId === productId ? { ...item, cantidad: item.cantidad + 1 } : item))
-          : [...next, { productId, nombre, precioUnitario, cantidad: 1 }];
+          ? next.map((item) => (item.id === existing.id ? { ...item, cantidad: item.cantidad + 1 } : item))
+          : [...next, { id: crypto.randomUUID(), productId, nombre, precioUnitario, cantidad: 1, modifiers: [] }];
       }
       return next;
     });
   }
 
+  /**
+   * Shared onAdd/onIncrement/onDecrement/cantidad wiring for a ProductoCard.
+   * A product with modifierGroups always shows the plain "+" (never the
+   * inline -/+ pill, cantidad forced to 0 here) because once it can have
+   * multiple cart lines with different modifier selections, a single pill on
+   * the grid card can't unambiguously represent "the" quantity for that
+   * product — adjusting a specific line's quantity happens in the cart step
+   * instead, where each line is addressed by its own id.
+   */
+  function cardProps(product: PublicProduct, precioFinal: number) {
+    const tieneModificadores = product.modifierGroups.length > 0;
+    const cartItem = cart.find((i) => i.productId === product.id);
+    return {
+      cantidad: tieneModificadores ? 0 : (cartItem?.cantidad ?? 0),
+      onAdd: () => {
+        if (tieneModificadores) {
+          setModifierTarget({ product, precioUnitario: precioFinal });
+        } else {
+          addToCart(product.id, product.nombre, precioFinal);
+        }
+      },
+      onIncrement: () => cartItem && changeQty(cartItem.id, 1),
+      onDecrement: () => cartItem && changeQty(cartItem.id, -1),
+    };
+  }
+
   const totalItems = cart.reduce((sum, item) => sum + item.cantidad, 0);
-  const total = cart.reduce((sum, item) => sum + item.cantidad * item.precioUnitario, 0);
+  // Includes each line's modifiers extra — same formula as the backend
+  // (subtotal + modifiersExtra - descuento), so this estimate and the
+  // eventual real total from createOrder don't diverge once modifiers exist.
+  const total = cart.reduce((sum, item) => {
+    const extraPorUnidad = item.modifiers.reduce((s, m) => s + m.precioAdicional, 0);
+    return sum + item.cantidad * (item.precioUnitario + extraPorUnidad);
+  }, 0);
 
   if (notFound) {
     return (
@@ -216,7 +270,7 @@ export default function TiendaPage() {
                 ))}
                 {productosFiltrados.map((product) => {
                   const { precioFinal, precioOriginal, promo } = precioConDescuento(product, catalog.promotions);
-                  const cantidad = cart.find((i) => i.productId === product.id)?.cantidad ?? 0;
+                  const { cantidad, onAdd, onIncrement, onDecrement } = cardProps(product, precioFinal);
                   return (
                     <ProductoCard
                       key={product.id}
@@ -226,9 +280,9 @@ export default function TiendaPage() {
                       promo={promo}
                       cantidad={cantidad}
                       layout="list"
-                      onAdd={() => addToCart(product.id, product.nombre, precioFinal)}
-                      onIncrement={() => changeQty(product.id, 1)}
-                      onDecrement={() => changeQty(product.id, -1)}
+                      onAdd={onAdd}
+                      onIncrement={onIncrement}
+                      onDecrement={onDecrement}
                     />
                   );
                 })}
@@ -262,7 +316,7 @@ export default function TiendaPage() {
                   <ul className="grid grid-cols-2 gap-3">
                     {categoriaActiva.products.map((product) => {
                       const { precioFinal, precioOriginal, promo } = precioConDescuento(product, catalog.promotions);
-                      const cantidad = cart.find((i) => i.productId === product.id)?.cantidad ?? 0;
+                      const { cantidad, onAdd, onIncrement, onDecrement } = cardProps(product, precioFinal);
                       return (
                         <ProductoCard
                           key={product.id}
@@ -272,9 +326,9 @@ export default function TiendaPage() {
                           promo={promo}
                           cantidad={cantidad}
                           layout="grid"
-                          onAdd={() => addToCart(product.id, product.nombre, precioFinal)}
-                          onIncrement={() => changeQty(product.id, 1)}
-                          onDecrement={() => changeQty(product.id, -1)}
+                          onAdd={onAdd}
+                          onIncrement={onIncrement}
+                          onDecrement={onDecrement}
                         />
                       );
                     })}
@@ -310,6 +364,24 @@ export default function TiendaPage() {
           onChangeQty={changeQty}
           onClose={() => setCartOpen(false)}
           onSuccess={() => setCart([])}
+        />
+      )}
+
+      {modifierTarget && (
+        <ProductModifiersModal
+          product={modifierTarget.product}
+          precioUnitario={modifierTarget.precioUnitario}
+          onClose={() => setModifierTarget(null)}
+          onConfirm={(modifiers, cantidad) => {
+            addToCart(
+              modifierTarget.product.id,
+              modifierTarget.product.nombre,
+              modifierTarget.precioUnitario,
+              modifiers,
+              cantidad,
+            );
+            setModifierTarget(null);
+          }}
         />
       )}
     </div>

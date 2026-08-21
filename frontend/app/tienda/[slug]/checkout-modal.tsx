@@ -15,11 +15,26 @@ import {
 import { horaActualMexico, horarioDeHoy, generarOpcionesHora, sumarMinutos } from "@/lib/horario";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
+export interface CartItemModifier {
+  modifierOptionId: string;
+  nombre: string;
+  precioAdicional: number;
+}
+
 export interface CartItem {
+  // Line id, independent of productId — two lines for the same product with
+  // different modifier selections can't be merged into one by summing
+  // cantidad the way plain products (no modifiers) can, so each line needs
+  // its own identity. Generated client-side (crypto.randomUUID()) when the
+  // line is created; never sent to the backend.
+  id: string;
   productId: string;
   nombre: string;
   precioUnitario: number;
   cantidad: number;
+  // Snapshot of the selected options (nombre/precioAdicional), so the cart
+  // summary can render them without looking the product back up.
+  modifiers: CartItemModifier[];
 }
 
 // Same shape as CartItem, plus the pre-discount list price — used to render
@@ -63,7 +78,10 @@ export default function CheckoutModal({
   abierto: boolean;
   horario: HorarioSemana | null;
   facturacionModo: FacturacionModo;
-  onChangeQty: (productId: string, delta: number) => void;
+  // Keyed by CartItem.id (the line), not productId — two lines can share a
+  // productId once modifiers are involved, so productId alone can't identify
+  // which one to adjust.
+  onChangeQty: (id: string, delta: number) => void;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -138,7 +156,16 @@ export default function CheckoutModal({
   // feeds back into the createPublicOrder payload below.
   const totalUnidades = items.reduce((sum, item) => sum + item.cantidad, 0);
   const subtotalOriginal = resumenItems.reduce((sum, item) => sum + item.cantidad * item.precioOriginal, 0);
-  const descuentoProductos = Math.max(0, subtotalOriginal - total);
+  // `total` (prop, computed in page.tsx) already includes modifiers' extra —
+  // same formula the backend uses: subtotal + modifiersExtra - descuento.
+  // Modifiers are never discounted, so they have to be added back before
+  // subtracting `total` to isolate the discount alone; otherwise this would
+  // misreport modifiers as if they were part of the discount.
+  const modifiersExtraTotal = resumenItems.reduce(
+    (sum, item) => sum + item.cantidad * item.modifiers.reduce((s, m) => s + m.precioAdicional, 0),
+    0,
+  );
+  const descuentoProductos = Math.max(0, subtotalOriginal + modifiersExtraTotal - total);
 
   // The order response only stores puntoEnvioId (no name snapshot on Order —
   // see CLAUDE.md), so the confirmation step resolves the zone name from the
@@ -169,7 +196,11 @@ export default function CheckoutModal({
         facturaUsoCfdi: facturaRequerida ? facturaUsoCfdi.trim() : undefined,
         facturaCodigoPostal: facturaRequerida ? facturaCodigoPostal.trim() : undefined,
         facturaCorreo: facturaRequerida ? facturaCorreo.trim() : undefined,
-        items: items.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+        items: items.map((item) => ({
+          productId: item.productId,
+          cantidad: item.cantidad,
+          modifierOptionIds: item.modifiers.length > 0 ? item.modifiers.map((m) => m.modifierOptionId) : undefined,
+        })),
       });
       setOrder(created);
       setStep("confirmation");
@@ -226,18 +257,27 @@ export default function CheckoutModal({
             </div>
 
             <ul className="flex flex-col gap-2">
-              {items.map((item) => (
+              {items.map((item) => {
+                const extraPorUnidad = item.modifiers.reduce((sum, m) => sum + m.precioAdicional, 0);
+                return (
                 <li
-                  key={item.productId}
+                  key={item.id}
                   className="flex items-center justify-between gap-2 rounded-xl bg-black/[0.03] p-3 dark:bg-white/5"
                 >
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">{item.nombre}</span>
-                    <span className="text-xs text-black/50 dark:text-white/50">${item.precioUnitario.toFixed(2)} c/u</span>
+                    {item.modifiers.length > 0 && (
+                      <span className="text-xs text-black/50 dark:text-white/50">
+                        {item.modifiers.map((m) => `+ ${m.nombre}`).join(", ")}
+                      </span>
+                    )}
+                    <span className="text-xs text-black/50 dark:text-white/50">
+                      ${(item.precioUnitario + extraPorUnidad).toFixed(2)} c/u
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-black px-1.5 py-1 text-white dark:bg-white dark:text-black">
                     <button
-                      onClick={() => onChangeQty(item.productId, -1)}
+                      onClick={() => onChangeQty(item.id, -1)}
                       aria-label="Quitar uno"
                       className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-medium"
                     >
@@ -245,7 +285,7 @@ export default function CheckoutModal({
                     </button>
                     <span className="w-4 text-center text-sm font-semibold">{item.cantidad}</span>
                     <button
-                      onClick={() => onChangeQty(item.productId, 1)}
+                      onClick={() => onChangeQty(item.id, 1)}
                       aria-label="Agregar uno"
                       className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-medium"
                     >
@@ -253,7 +293,8 @@ export default function CheckoutModal({
                     </button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
 
             <div className="flex items-center justify-between border-t border-black/10 pt-3 text-sm font-semibold dark:border-white/10">
@@ -459,14 +500,24 @@ export default function CheckoutModal({
               <div className={RESUMEN_BOX}>
                 <span className={RESUMEN_LABEL}>Resumen</span>
                 <ul className="flex flex-col gap-1">
-                  {resumenItems.map((item) => (
-                    <li key={item.productId} className="flex items-center justify-between text-sm">
-                      <span>
-                        {item.cantidad}× {item.nombre}
-                      </span>
-                      <span>${(item.cantidad * item.precioUnitario).toFixed(2)}</span>
-                    </li>
-                  ))}
+                  {resumenItems.map((item) => {
+                    const extraPorUnidad = item.modifiers.reduce((sum, m) => sum + m.precioAdicional, 0);
+                    return (
+                      <li key={item.id} className="flex flex-col gap-0.5 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span>
+                            {item.cantidad}× {item.nombre}
+                          </span>
+                          <span>${(item.cantidad * (item.precioUnitario + extraPorUnidad)).toFixed(2)}</span>
+                        </div>
+                        {item.modifiers.length > 0 && (
+                          <span className="text-xs text-black/50 dark:text-white/50">
+                            {item.modifiers.map((m) => `+ ${m.nombre}`).join(", ")}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <div className="flex flex-col gap-1 border-t border-black/10 pt-2 text-sm dark:border-white/10">
                   <div className="flex items-center justify-between text-black/60 dark:text-white/60">

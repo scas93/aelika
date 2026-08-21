@@ -162,6 +162,68 @@ export interface UpdatePromotionPayload {
   config?: DescuentoProductoConfig | ComboConfig;
 }
 
+export type TipoSeleccion = "UNICA" | "MULTIPLE";
+
+export interface ModifierOption {
+  id: string;
+  tenantId: string;
+  modifierGroupId: string;
+  nombre: string;
+  precioAdicional: string;
+  activo: boolean;
+}
+
+export interface ModifierGroup {
+  id: string;
+  tenantId: string;
+  nombre: string;
+  tipoSeleccion: TipoSeleccion;
+  obligatorio: boolean;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  opciones: ModifierOption[];
+}
+
+export interface CreateModifierOptionPayload {
+  nombre: string;
+  precioAdicional?: number;
+  activo?: boolean;
+}
+
+export interface CreateModifierGroupPayload {
+  nombre: string;
+  tipoSeleccion: TipoSeleccion;
+  obligatorio?: boolean;
+  activo?: boolean;
+  opciones?: CreateModifierOptionPayload[];
+}
+
+export interface UpdateModifierGroupPayload {
+  nombre?: string;
+  tipoSeleccion?: TipoSeleccion;
+  obligatorio?: boolean;
+  activo?: boolean;
+}
+
+export interface UpdateModifierOptionPayload {
+  nombre?: string;
+  precioAdicional?: number;
+  activo?: boolean;
+}
+
+export interface ProductModifierGroupAssignment {
+  productId: string;
+  modifierGroupId: string;
+  orden: number;
+  modifierGroup: ModifierGroup;
+}
+
+export interface ProductDetail extends Product {
+  category: { id: string; nombre: string };
+  modifierGroups: ProductModifierGroupAssignment[];
+}
+
 export interface PublicTenantInfo {
   nombre: string;
   logoUrl: string | null;
@@ -171,6 +233,20 @@ export interface PublicTenantInfo {
   facturacionModo: FacturacionModo;
 }
 
+export interface PublicModifierOption {
+  id: string;
+  nombre: string;
+  precioAdicional: string;
+}
+
+export interface PublicModifierGroup {
+  id: string;
+  nombre: string;
+  tipoSeleccion: TipoSeleccion;
+  obligatorio: boolean;
+  opciones: PublicModifierOption[];
+}
+
 export interface PublicProduct {
   id: string;
   nombre: string;
@@ -178,6 +254,7 @@ export interface PublicProduct {
   precio: string;
   fotoUrl: string | null;
   disponible: boolean;
+  modifierGroups: PublicModifierGroup[];
 }
 
 export interface PublicCategory {
@@ -230,7 +307,7 @@ export interface CreatePublicOrderPayload {
   facturaUsoCfdi?: string;
   facturaCodigoPostal?: string;
   facturaCorreo?: string;
-  items: { productId: string; cantidad: number }[];
+  items: { productId: string; cantidad: number; modifierOptionIds?: string[] }[];
 }
 
 export interface PublicOrderItem {
@@ -410,6 +487,10 @@ export function fetchProducts(token: string, categoryId?: string) {
   return request<Product[]>(`/products${query}`, { headers: authHeaders(token) });
 }
 
+export function fetchProduct(token: string, id: string) {
+  return request<ProductDetail>(`/products/${id}`, { headers: authHeaders(token) });
+}
+
 export function createProduct(token: string, payload: CreateProductPayload) {
   return request<Product>("/products", {
     method: "POST",
@@ -476,6 +557,71 @@ export function updatePromotion(token: string, id: string, payload: UpdatePromot
 
 export function deletePromotion(token: string, id: string) {
   return request<void>(`/promotions/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchModifierGroups(token: string) {
+  return request<ModifierGroup[]>("/modifier-groups", { headers: authHeaders(token) });
+}
+
+export function createModifierGroup(token: string, payload: CreateModifierGroupPayload) {
+  return request<ModifierGroup>("/modifier-groups", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateModifierGroup(token: string, id: string, payload: UpdateModifierGroupPayload) {
+  return request<ModifierGroup>(`/modifier-groups/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteModifierGroup(token: string, id: string) {
+  return request<void>(`/modifier-groups/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function createModifierOption(token: string, modifierGroupId: string, payload: CreateModifierOptionPayload) {
+  return request<ModifierOption>(`/modifier-groups/${modifierGroupId}/opciones`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateModifierOption(token: string, optionId: string, payload: UpdateModifierOptionPayload) {
+  return request<ModifierOption>(`/modifier-groups/opciones/${optionId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteModifierOption(token: string, optionId: string) {
+  return request<void>(`/modifier-groups/opciones/${optionId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function assignModifierGroupToProduct(token: string, modifierGroupId: string, productId: string, orden?: number) {
+  return request<ProductModifierGroupAssignment>(`/modifier-groups/${modifierGroupId}/products/${productId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(orden !== undefined ? { orden } : {}),
+  });
+}
+
+export function unassignModifierGroupFromProduct(token: string, modifierGroupId: string, productId: string) {
+  return request<void>(`/modifier-groups/${modifierGroupId}/products/${productId}`, {
     method: "DELETE",
     headers: authHeaders(token),
   });
