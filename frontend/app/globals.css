@@ -76,6 +76,7 @@ body {
    utilities regardless of source order. */
 .input.search-input {
   font-size: 1rem;
+  background: white;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,6 +87,10 @@ body {
   .input:focus {
     border-color: var(--color-whatsapp);
     box-shadow: 0 0 0 3px rgb(37 211 102 / 0.25);
+  }
+
+  .input.search-input {
+    background: var(--color-chat-card-dark);
   }
 }
 
