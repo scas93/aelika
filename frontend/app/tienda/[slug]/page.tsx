@@ -4,29 +4,16 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ApiError,
-  DIAS_SEMANA,
   fetchPublicCatalog,
   fetchPublicTenant,
   type ComboConfig,
   type DescuentoProductoConfig,
-  type DiaSemana,
-  type HorarioSemana,
   type PublicCatalog,
   type PublicProduct,
   type PublicPromotion,
   type PublicTenantInfo,
 } from "@/lib/api";
 import CheckoutModal, { type CartItem, type ResumenItem } from "./checkout-modal";
-
-const DIA_LABELS: Record<DiaSemana, string> = {
-  lunes: "Lunes",
-  martes: "Martes",
-  miercoles: "Miércoles",
-  jueves: "Jueves",
-  viernes: "Viernes",
-  sabado: "Sábado",
-  domingo: "Domingo",
-};
 
 function precioConDescuento(product: PublicProduct, promotions: PublicPromotion[]) {
   const precioOriginal = Number(product.precio);
@@ -187,16 +174,6 @@ export default function TiendaPage() {
       <main className="flex flex-1 flex-col gap-4 px-4 pb-24 pt-4">
         <h1 className="text-xl font-bold">Hola, ¿qué necesitas hoy?</h1>
 
-        <div className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow-sm dark:bg-chat-card-dark">
-          {tenant.ubicacion && <p className="text-sm text-black/60 dark:text-white/60">{tenant.ubicacion}</p>}
-          {!tenant.abierto && (
-            <span className="w-fit rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
-              Cerrado en este momento
-            </span>
-          )}
-          <HorarioList horario={tenant.horarioAtencion} />
-        </div>
-
         <input
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
@@ -336,27 +313,6 @@ export default function TiendaPage() {
         />
       )}
     </div>
-  );
-}
-
-function HorarioList({ horario }: { horario: HorarioSemana | null }) {
-  if (!horario) return null;
-
-  return (
-    <details className="text-sm text-black/60 dark:text-white/60">
-      <summary className="cursor-pointer font-medium">Horario</summary>
-      <ul className="mt-1 flex flex-col gap-0.5">
-        {DIAS_SEMANA.map((dia) => {
-          const info = horario[dia];
-          return (
-            <li key={dia} className="flex justify-between gap-4">
-              <span>{DIA_LABELS[dia]}</span>
-              <span>{info.abierto && info.apertura && info.cierre ? `${info.apertura} – ${info.cierre}` : "Cerrado"}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </details>
   );
 }
 
