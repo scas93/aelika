@@ -353,7 +353,13 @@ export class PublicService {
             }),
           },
         },
-        include: { items: true },
+        include: {
+          items: {
+            include: {
+              modificadores: { select: { nombre: true, precioAdicional: true } },
+            },
+          },
+        },
       });
     });
   }
