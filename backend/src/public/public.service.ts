@@ -428,7 +428,7 @@ export class PublicService {
     // connected account, no application_fee_amount) — Aelika takes 0% per
     // order (subscription-only), and already pays Stripe's own fees/losses
     // per the account's `defaults.responsibilities` (see
-    // InternalService.createStripeAccount), so nothing is deducted here.
+    // TenantService.createOrContinueStripeAccount), so nothing is deducted here.
     if (dto.metodoPago === MetodoPago.TARJETA) {
       try {
         const paymentIntent = await this.stripeService.client.paymentIntents.create({

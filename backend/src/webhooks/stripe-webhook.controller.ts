@@ -9,8 +9,8 @@ import { StripeService } from '../stripe/stripe.service';
 import { EstadoPago } from '../../generated/prisma/client';
 
 // Capability-status events for both configurations we request on account
-// creation (see InternalService.createStripeAccount) — card_payments lives
-// under `merchant`, stripe_balance (transfers/payouts) lives under
+// creation (see TenantService.createOrContinueStripeAccount) — card_payments
+// lives under `merchant`, stripe_balance (transfers/payouts) lives under
 // `recipient`. Any other thin event type is ignored.
 const RELEVANT_THIN_EVENT_TYPES = new Set([
   'v2.core.account[configuration.merchant].capability_status_updated',
@@ -103,7 +103,7 @@ export class StripeWebhookController {
 
     // v2 notifications are "thin" — related_object only carries id/type/url,
     // never the updated fields themselves. Re-fetching with `include` (same
-    // fields InternalService.getStripeStatus reads) is what actually gets
+    // fields TenantService.getStripeStatus reads) is what actually gets
     // us the new capability statuses, not related_object or fetchEvent().
     // Cast needed: EventNotification is a union over every v2 event kind,
     // most of which (e.g. billing meter events) carry no related_object at

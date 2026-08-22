@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { StripeService } from '../stripe/stripe.service';
 import { normalizarHorarioSemana } from '../common/horario';
 import { generateApiKey } from '../common/api-key';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
@@ -14,11 +16,24 @@ const SETTINGS_SELECT = {
   botApiKey: true,
   facturacionModo: true,
   correoNegocio: true,
+  // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
+  // set by createOrContinueStripeAccount; charges/payoutsEnabled are only
+  // ever refreshed from Stripe itself (getStripeStatus, the webhook), never
+  // written by a settings save.
+  stripeAccountId: true,
+  stripeChargesEnabled: true,
+  stripePayoutsEnabled: true,
 } as const;
+
+const API_BASE_URL_DEFAULT = 'http://localhost:3001';
 
 @Injectable()
 export class TenantService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stripeService: StripeService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async getMine(tenantId: string) {
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
@@ -59,6 +74,123 @@ export class TenantService {
     return this.present(tenant);
   }
 
+  /**
+   * POST /tenant/me/stripe-account. Same account-creation logic that used to
+   * live in InternalService.createStripeAccount (moved here now that it's a
+   * Dueño-initiated action, not a server-to-server call — see CLAUDE.md),
+   * plus the "onboarding got left half-done" case that endpoint didn't
+   * handle: if the tenant already has a stripeAccountId but isn't fully
+   * enabled yet, this generates a fresh account link for that *same* account
+   * instead of erroring — no separate "resume onboarding" endpoint needed.
+   */
+  async createOrContinueStripeAccount(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+
+    if (tenant.stripeAccountId && tenant.stripeChargesEnabled && tenant.stripePayoutsEnabled) {
+      throw new ConflictException('Este negocio ya está completamente conectado con Stripe');
+    }
+
+    let accountId = tenant.stripeAccountId;
+
+    if (!accountId) {
+      // configuration.recipient requires a contact email on the account —
+      // confirmed by testing (400 naming exactly this requirement). No
+      // default/backfill exists on purpose, so this 400 is what forces
+      // correoNegocio to be filled in (via PATCH /tenant/me) before
+      // onboarding can start.
+      if (!tenant.correoNegocio) {
+        throw new BadRequestException(
+          'Configura primero el correo de negocio, requerido para crear la cuenta de Stripe',
+        );
+      }
+
+      // Two separate configurations, each with its own capability namespace:
+      // `merchant` (card_payments — charging the customer) and `recipient`
+      // (stripe_balance.stripe_transfers — receiving that money into the
+      // account's own Stripe balance, a prerequisite for payouts). See
+      // CLAUDE.md for why stripe_balance lives under recipient, not merchant.
+      const account = await this.stripeService.client.v2.core.accounts.create({
+        dashboard: 'express',
+        contact_email: tenant.correoNegocio,
+        identity: { country: 'mx' },
+        // v2's equivalent of v1's controller.fees.payer/controller.losses.payments
+        // ("application" = the platform pays Stripe's fees / absorbs losses,
+        // not the connected account).
+        defaults: {
+          responsibilities: {
+            fees_collector: 'application_express',
+            losses_collector: 'application',
+          },
+        },
+        configuration: {
+          merchant: {
+            capabilities: {
+              card_payments: { requested: true },
+            },
+          },
+          recipient: {
+            capabilities: {
+              stripe_balance: { stripe_transfers: { requested: true } },
+            },
+          },
+        },
+      });
+
+      await this.prisma.tenant.update({ where: { id: tenant.id }, data: { stripeAccountId: account.id } });
+      accountId = account.id;
+    }
+
+    const apiBaseUrl = this.configService.get<string>('API_BASE_URL') ?? API_BASE_URL_DEFAULT;
+    const accountLink = await this.stripeService.client.v2.core.accountLinks.create({
+      account: accountId,
+      use_case: {
+        type: 'account_onboarding',
+        account_onboarding: {
+          configurations: ['merchant', 'recipient'],
+          return_url: `${apiBaseUrl}/internal/stripe/onboarding-complete`,
+          refresh_url: `${apiBaseUrl}/internal/stripe/onboarding-refresh`,
+        },
+      },
+    });
+
+    return { url: accountLink.url };
+  }
+
+  /**
+   * GET /tenant/me/stripe-status. Same logic that used to live in
+   * InternalService.getStripeStatus, adapted to tenantId instead of slug —
+   * live status straight from Stripe (never trusted as stale), refreshing
+   * Tenant.stripeChargesEnabled/stripePayoutsEnabled with whatever it finds.
+   */
+  async getStripeStatus(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { id: true, stripeAccountId: true },
+    });
+    if (!tenant.stripeAccountId) {
+      return { estado: 'sin_cuenta' as const };
+    }
+
+    const account = await this.stripeService.client.v2.core.accounts.retrieve(tenant.stripeAccountId, {
+      include: ['configuration.merchant', 'configuration.recipient'],
+    });
+
+    const chargesEnabled = account.configuration?.merchant?.capabilities?.card_payments?.status === 'active';
+    const payoutsEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.payouts?.status === 'active';
+
+    await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { stripeChargesEnabled: chargesEnabled, stripePayoutsEnabled: payoutsEnabled },
+    });
+
+    return {
+      estado: 'con_cuenta' as const,
+      stripeAccountId: tenant.stripeAccountId,
+      chargesEnabled,
+      payoutsEnabled,
+    };
+  }
+
   private present(tenant: {
     nombre: string;
     mensajeBienvenida: string | null;
@@ -67,6 +199,9 @@ export class TenantService {
     botApiKey: string;
     facturacionModo: FacturacionModo;
     correoNegocio: string | null;
+    stripeAccountId: string | null;
+    stripeChargesEnabled: boolean;
+    stripePayoutsEnabled: boolean;
   }) {
     return {
       nombre: tenant.nombre,
@@ -76,6 +211,9 @@ export class TenantService {
       correoNegocio: tenant.correoNegocio,
       botApiKey: tenant.botApiKey,
       facturacionModo: tenant.facturacionModo,
+      stripeAccountId: tenant.stripeAccountId,
+      stripeChargesEnabled: tenant.stripeChargesEnabled,
+      stripePayoutsEnabled: tenant.stripePayoutsEnabled,
     };
   }
 }

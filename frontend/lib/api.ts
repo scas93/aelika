@@ -388,6 +388,18 @@ export interface TenantSettings {
   botApiKey: string;
   facturacionModo: FacturacionModo;
   correoNegocio: string | null;
+  // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
+  // createTenantStripeAccount/fetchTenantStripeStatus instead.
+  stripeAccountId: string | null;
+  stripeChargesEnabled: boolean;
+  stripePayoutsEnabled: boolean;
+}
+
+export interface TenantStripeStatus {
+  estado: "sin_cuenta" | "con_cuenta";
+  stripeAccountId?: string;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
 }
 
 export interface UpdateTenantSettingsPayload {
@@ -705,6 +717,17 @@ export function regenerateBotApiKey(token: string) {
     method: "POST",
     headers: authHeaders(token),
   });
+}
+
+export function createTenantStripeAccount(token: string) {
+  return request<{ url: string }>("/tenant/me/stripe-account", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchTenantStripeStatus(token: string) {
+  return request<TenantStripeStatus>("/tenant/me/stripe-status", { headers: authHeaders(token) });
 }
 
 export function fetchPuntosEnvio(token: string) {

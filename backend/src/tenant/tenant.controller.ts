@@ -26,4 +26,14 @@ export class TenantController {
   regenerateBotKey(@CurrentUser() user: JwtPayload) {
     return this.tenantService.regenerateBotKey(user.tenantId);
   }
+
+  @Post('me/stripe-account')
+  createStripeAccount(@CurrentUser() user: JwtPayload) {
+    return this.tenantService.createOrContinueStripeAccount(user.tenantId);
+  }
+
+  @Get('me/stripe-status')
+  getStripeStatus(@CurrentUser() user: JwtPayload) {
+    return this.tenantService.getStripeStatus(user.tenantId);
+  }
 }

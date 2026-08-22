@@ -14,6 +14,7 @@ import HorarioEditor from "@/components/horario-editor";
 import BotApiKeySection from "./bot-api-key-section";
 import FacturacionSection from "./facturacion-section";
 import PuntosEnvioSection from "./puntos-envio-section";
+import StripeSection from "./stripe-section";
 
 const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
 const BTN_PRIMARY =
@@ -36,6 +37,9 @@ function ConfiguracionForm({ token }: { token: string }) {
   const [botApiKey, setBotApiKey] = useState("");
   const [facturacionModo, setFacturacionModo] = useState<FacturacionModo>("DESACTIVADO");
   const [correoNegocio, setCorreoNegocio] = useState<string | null>(null);
+  const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
+  const [stripeChargesEnabled, setStripeChargesEnabled] = useState(false);
+  const [stripePayoutsEnabled, setStripePayoutsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -51,6 +55,9 @@ function ConfiguracionForm({ token }: { token: string }) {
         setBotApiKey(settings.botApiKey);
         setFacturacionModo(settings.facturacionModo);
         setCorreoNegocio(settings.correoNegocio);
+        setStripeAccountId(settings.stripeAccountId);
+        setStripeChargesEnabled(settings.stripeChargesEnabled);
+        setStripePayoutsEnabled(settings.stripePayoutsEnabled);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración");
       } finally {
@@ -139,6 +146,18 @@ function ConfiguracionForm({ token }: { token: string }) {
       />
 
       <PuntosEnvioSection token={token} />
+
+      <StripeSection
+        token={token}
+        stripeAccountId={stripeAccountId}
+        stripeChargesEnabled={stripeChargesEnabled}
+        stripePayoutsEnabled={stripePayoutsEnabled}
+        onUpdated={(fields) => {
+          setStripeAccountId(fields.stripeAccountId);
+          setStripeChargesEnabled(fields.stripeChargesEnabled);
+          setStripePayoutsEnabled(fields.stripePayoutsEnabled);
+        }}
+      />
 
       <BotApiKeySection token={token} botApiKey={botApiKey} onRegenerated={setBotApiKey} />
     </div>

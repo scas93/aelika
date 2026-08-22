@@ -1,19 +1,19 @@
-import { Controller, Get, Header, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, UseGuards } from '@nestjs/common';
 import { InternalService } from './internal.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { BotAuthGuard } from '../auth/guards/bot-auth.guard';
-import { InternalApiKeyGuard } from '../auth/guards/internal-api-key.guard';
 import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
 import type { Tenant } from '../../generated/prisma/client';
 
 // @Public() (class-level) skips the global JwtAuthGuard/RolesGuard for every
-// route here — none of them have a user/rol, all server-to-server or a
-// tenant's own browser redirect. Guards are applied per-method instead of at
-// the class level because different routes need different ones: BotAuthGuard
-// (per-tenant botApiKey) for bot-config, InternalApiKeyGuard (single global
-// secret) for the Stripe account endpoints, and no guard at all for the
-// onboarding redirect routes — Stripe sends the tenant's own browser there,
-// not an API client, so there's no key to check.
+// route here — bot-config is server-to-server (BotAuthGuard, per-tenant
+// botApiKey), and the onboarding redirect routes have no guard at all —
+// Stripe sends the tenant's own browser there, not an API client, so
+// there's no key to check. Stripe Connect account creation/status now live
+// under TenantController (POST/GET /tenant/me/stripe-account,
+// .../stripe-status) — JWT + @Roles(DUENO), like the rest of tenant
+// settings — since it's a Dueño-initiated action, not a server-to-server
+// call. See CLAUDE.md.
 @Public()
 @Controller('internal')
 export class InternalController {
@@ -23,18 +23,6 @@ export class InternalController {
   @Get('bot-config')
   getBotConfig(@CurrentTenant() tenant: Tenant) {
     return this.internalService.getBotConfig(tenant);
-  }
-
-  @UseGuards(InternalApiKeyGuard)
-  @Post('tenants/:slug/stripe-account')
-  createStripeAccount(@Param('slug') slug: string) {
-    return this.internalService.createStripeAccount(slug);
-  }
-
-  @UseGuards(InternalApiKeyGuard)
-  @Get('tenants/:slug/stripe-status')
-  getStripeStatus(@Param('slug') slug: string) {
-    return this.internalService.getStripeStatus(slug);
   }
 
   @Get('stripe/onboarding-complete')
