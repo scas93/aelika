@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Headers, HttpCode, Post, Req } from '@nestjs/common';
+import { BadRequestException, Controller, Headers, HttpCode, Logger, Post, Req } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
@@ -29,6 +29,8 @@ export class StripeWebhookController {
     private readonly stripeService: StripeService,
   ) {}
 
+  private readonly logger = new Logger(StripeWebhookController.name);
+
   /**
    * Needs the raw (unparsed) request body to verify Stripe's signature — see
    * `rawBody: true` in main.ts, which preserves it as `req.rawBody` without
@@ -41,11 +43,11 @@ export class StripeWebhookController {
    * `webhooks.constructEventAsync` throws on a v2 thin payload by design
    * ("You passed a thin event notification to a function that expects a
    * webhook"), and `parseEventNotificationAsync` is the mirror image for v1
-   * payloads — so classic is tried first and thin is the fallback, both
-   * against the same signature/secret (true for the shared `stripe listen`
-   * session used locally — see CLAUDE.md; a split secret in production just
-   * means trying the right one first still isn't guaranteed, but a genuinely
-   * invalid signature fails both and 400s either way).
+   * payloads — so classic is tried first and thin is the fallback. Each is a
+   * separate Event Destination in Stripe with its own signing secret
+   * (STRIPE_WEBHOOK_SECRET for classic, STRIPE_WEBHOOK_SECRET_V2 for thin) —
+   * they are never interchangeable outside of a shared `stripe listen`
+   * session in local dev.
    */
   @Post('stripe')
   @HttpCode(200)
@@ -55,24 +57,29 @@ export class StripeWebhookController {
     }
 
     const webhookSecret = this.configService.getOrThrow<string>('STRIPE_WEBHOOK_SECRET');
+    const webhookSecretV2 = this.configService.getOrThrow<string>('STRIPE_WEBHOOK_SECRET_V2');
 
     try {
       const event = await this.stripeService.client.webhooks.constructEventAsync(req.rawBody, signature, webhookSecret);
       await this.handleClassicEvent(event);
       return { received: true };
-    } catch {
-      // Falls through to the thin-event attempt below.
+    } catch (error) {
+      // Expected for a v2 thin payload (wrong shape for this verifier) as
+      // much as for an actually-wrong secret — logged so the two are
+      // distinguishable if the thin attempt below also ends up failing.
+      this.logger.debug(`Classic (v1) webhook verification failed, trying thin (v2): ${(error as Error).message}`);
     }
 
     try {
       const notification = await this.stripeService.client.parseEventNotificationAsync(
         req.rawBody,
         signature,
-        webhookSecret,
+        webhookSecretV2,
       );
       await this.handleThinEvent(notification);
       return { received: true };
-    } catch {
+    } catch (error) {
+      this.logger.warn(`Thin (v2) webhook verification also failed: ${(error as Error).message}`);
       throw new BadRequestException('Firma de webhook inválida');
     }
   }
