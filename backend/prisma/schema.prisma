@@ -26,42 +26,42 @@ enum FacturacionModo {
 }
 
 model Tenant {
-  id                String          @id @default(uuid())
-  slug              String          @unique
-  nombre            String
-  logoUrl           String?
+  id                   String          @id @default(uuid())
+  slug                 String          @unique
+  nombre               String
+  logoUrl              String?
   // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
   // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
-  horarioAtencion   Json?
-  ubicacion         String?
+  horarioAtencion      Json?
+  ubicacion            String?
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.
-  mensajeBienvenida String?
+  mensajeBienvenida    String?
   // Business contact email — required as Stripe Connect's contact_email when
   // creating the tenant's connected account (see InternalService.createStripeAccount).
   // No default/backfill: stays null until the Dueño fills it in via PATCH
   // /tenant/me, which is exactly what forces it to be set before Stripe
   // onboarding can start for a given tenant.
-  correoNegocio     String?
+  correoNegocio        String?
   // Bot (Botpress) auth key against the Aelika API — generated once at
   // register time (crypto.randomBytes, see AuthService), regenerable via
   // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the
   // general PATCH /tenant/me.
-  botApiKey         String          @unique
+  botApiKey            String          @unique
   // Whether/how factura* fields on Order are required at checkout — see
   // FacturacionModo and PublicService.createOrder.
-  facturacionModo   FacturacionModo @default(DESACTIVADO)
+  facturacionModo      FacturacionModo @default(DESACTIVADO)
   // Stripe Connect connected account for this tenant (platform = Aelika).
   // Null until POST /internal/tenants/:slug/stripe-account is called — see
   // InternalService. chargesEnabled/payoutsEnabled mirror the connected
   // account's own fields of the same name, refreshed from Stripe (never
   // trusted as stale) by GET /internal/tenants/:slug/stripe-status and by
   // the account.updated webhook event.
-  stripeAccountId      String?  @unique
-  stripeChargesEnabled Boolean  @default(false)
-  stripePayoutsEnabled Boolean  @default(false)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  stripeAccountId      String?         @unique
+  stripeChargesEnabled Boolean         @default(false)
+  stripePayoutsEnabled Boolean         @default(false)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   users              User[]
   categories         Category[]
@@ -178,10 +178,21 @@ enum HoraRecogidaTipo {
 
 enum MetodoPago {
   EFECTIVO
+  // Not implemented yet (see PublicService) — kept so we don't need another
+  // migration whenever this gets built.
   TRANSFERENCIA
-  // Not implemented yet (see PublicService, matches TRANSFERENCIA) — both
-  // exist now so we don't need another migration when Stripe lands in Fase 3.
   TARJETA
+}
+
+// Whether money has actually moved for this order. EFECTIVO/TRANSFERENCIA
+// default to PAGADO at creation time (nothing for Aelika's system to track —
+// the exchange happens in person). TARJETA starts PENDIENTE and only becomes
+// PAGADO/FALLIDO once the Stripe webhook confirms the PaymentIntent — see
+// PublicService.createOrder and StripeWebhookController.
+enum EstadoPago {
+  PENDIENTE
+  PAGADO
+  FALLIDO
 }
 
 enum MetodoEntrega {
@@ -210,51 +221,58 @@ model PuntoEnvio {
 }
 
 model Order {
-  id                   String           @id @default(uuid())
-  tenantId             String
-  folio                String
-  clienteNombre        String
-  clienteTelefono      String
-  notas                String?
-  horaRecogidaTipo     HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
+  id                    String           @id @default(uuid())
+  tenantId              String
+  folio                 String
+  clienteNombre         String
+  clienteTelefono       String
+  notas                 String?
+  horaRecogidaTipo      HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
   // "HH:mm", same-day only (no date picker yet). Only set when
   // horaRecogidaTipo = HORA_ESPECIFICA; null otherwise. Meaningless (and
   // ignored) when metodoEntrega = DOMICILIO — see PublicService.
-  horaRecogida         String?
-  metodoPago           MetodoPago       @default(EFECTIVO)
-  metodoEntrega        MetodoEntrega    @default(RECOGER)
+  horaRecogida          String?
+  metodoPago            MetodoPago       @default(EFECTIVO)
+  // See EstadoPago. Only meaningful for TARJETA — EFECTIVO/TRANSFERENCIA
+  // are created as PAGADO and never transition.
+  estadoPago            EstadoPago       @default(PAGADO)
+  // Set only for metodoPago = TARJETA, right after the PaymentIntent is
+  // created (same request, second write — see PublicService.createOrder).
+  // Unique so the webhook can look up the order by PaymentIntent id.
+  stripePaymentIntentId String?          @unique
+  metodoEntrega         MetodoEntrega    @default(RECOGER)
   // Required (and validated as belonging to this tenant + activo) only when
   // metodoEntrega = DOMICILIO; null for RECOGER. onDelete: Restrict — unlike
   // OrderItem.productId there's no snapshot of the zone's nombre/direccion on
   // Order, so deleting a PuntoEnvio referenced by orders is blocked (409, see
   // PuntosEnvioService) rather than silently orphaning that history.
-  puntoEnvioId         String?
+  puntoEnvioId          String?
   // Customer's actual delivery address — required only when metodoEntrega =
   // DOMICILIO (see PublicService.resolverDireccionEntrega), null for RECOGER.
   // Distinct from PuntoEnvio.direccion, which is the zone's own fixed
   // address, not the customer's.
-  direccionCalle       String?
-  direccionNumero      String?
-  direccionColonia     String?
-  direccionReferencias String?
+  direccionCalle        String?
+  direccionNumero       String?
+  direccionColonia      String?
+  direccionReferencias  String?
   // Factura (CFDI-style) fields. Whether they're required at all depends on
   // Tenant.facturacionModo at the time of the order — see PublicService.
-  requiereFactura      Boolean          @default(false)
-  facturaRazonSocial   String?
-  facturaRfc           String?
-  facturaRegimenFiscal String?
-  facturaUsoCfdi       String?
-  facturaCodigoPostal  String?
-  facturaCorreo        String?
-  estadoPedido         EstadoPedido     @default(PENDIENTE_CONFIRMACION)
-  canalOrigen          CanalOrigen      @default(WEB)
+  requiereFactura       Boolean          @default(false)
+  facturaRazonSocial    String?
+  facturaRfc            String?
+  facturaRegimenFiscal  String?
+  facturaUsoCfdi        String?
+  facturaCodigoPostal   String?
+  facturaCorreo         String?
+  estadoPedido          EstadoPedido     @default(PENDIENTE_CONFIRMACION)
+  canalOrigen           CanalOrigen      @default(WEB)
   // Sum of every discount applied at checkout (combos + descuento_producto).
-  descuentoTotal       Decimal          @default(0) @db.Decimal(10, 2)
+  descuentoTotal        Decimal          @default(0) @db.Decimal(10, 2)
   // Human-readable summary of what was applied, e.g. "Combo Pizza+Refresco x1".
-  notasDescuento       String?
-  total                Decimal          @db.Decimal(10, 2)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  notasDescuento        String?
+  total                 Decimal          @db.Decimal(10, 2)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
@@ -281,9 +299,9 @@ model OrderItem {
   precioUnitario Decimal @db.Decimal(10, 2)
   cantidad       Int
 
-  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order         Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product       Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
   modificadores OrderItemModifier[]
 
   @@index([tenantId])

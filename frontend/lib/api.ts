@@ -231,6 +231,9 @@ export interface PublicTenantInfo {
   ubicacion: string | null;
   abierto: boolean;
   facturacionModo: FacturacionModo;
+  // Whether metodoPago = TARJETA can be offered at checkout — the server
+  // re-checks this independently at order creation, this is only a UI hint.
+  aceptaTarjeta: boolean;
 }
 
 export interface PublicModifierOption {
@@ -325,6 +328,7 @@ export interface PublicOrderItem {
 }
 
 export type EstadoPedido = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "LISTO_ENTREGA" | "DESPACHADO";
+export type EstadoPago = "PENDIENTE" | "PAGADO" | "FALLIDO";
 
 export interface PublicOrder {
   id: string;
@@ -335,6 +339,12 @@ export interface PublicOrder {
   horaRecogidaTipo: HoraRecogidaTipo;
   horaRecogida: string | null;
   metodoPago: MetodoPago;
+  // Only meaningful for TARJETA — EFECTIVO/TRANSFERENCIA are always PAGADO.
+  estadoPago: EstadoPago;
+  // Present only for metodoPago = TARJETA, right after creating the order —
+  // needed to confirm the payment client-side with Stripe.js. Absent (not
+  // just undefined-in-practice, actually never sent) for any other method.
+  clientSecret?: string | null;
   metodoEntrega: MetodoEntrega;
   puntoEnvioId: string | null;
   direccionCalle: string | null;

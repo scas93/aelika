@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import {
   ApiError,
   createPublicOrder,
@@ -8,9 +9,11 @@ import {
   type FacturacionModo,
   type HorarioSemana,
   type MetodoEntrega,
+  type MetodoPago,
   type PublicOrder,
   type PublicPuntoEnvio,
 } from "@/lib/api";
+import { getStripe } from "@/lib/stripe";
 import {
   horaActualMexico,
   horarioDeHoy,
@@ -50,7 +53,7 @@ export interface ResumenItem extends CartItem {
   precioOriginal: number;
 }
 
-type Step = "cart" | "entrega" | "datos" | "pago" | "confirmation";
+type Step = "cart" | "entrega" | "datos" | "pago" | "pago-tarjeta" | "confirmation";
 
 const MARGEN_MINIMO_MINUTOS = 15;
 
@@ -72,6 +75,7 @@ export default function CheckoutModal({
   abierto,
   horario,
   facturacionModo,
+  aceptaTarjeta,
   onChangeQty,
   onClose,
   onSuccess,
@@ -83,6 +87,7 @@ export default function CheckoutModal({
   abierto: boolean;
   horario: HorarioSemana | null;
   facturacionModo: FacturacionModo;
+  aceptaTarjeta: boolean;
   // Keyed by CartItem.id (the line), not productId — two lines can share a
   // productId once modifiers are involved, so productId alone can't identify
   // which one to adjust.
@@ -113,6 +118,7 @@ export default function CheckoutModal({
   const [notas, setNotas] = useState("");
 
   // "pago"
+  const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
   const [requiereFactura, setRequiereFactura] = useState(false);
   const [facturaRazonSocial, setFacturaRazonSocial] = useState("");
   const [facturaRfc, setFacturaRfc] = useState("");
@@ -246,7 +252,7 @@ export default function CheckoutModal({
         // already covers that case with a concrete time).
         horaRecogidaTipo: metodoEntrega === "RECOGER" ? "HORA_ESPECIFICA" : undefined,
         horaRecogida: metodoEntrega === "RECOGER" ? horaRecogida : undefined,
-        metodoPago: "EFECTIVO",
+        metodoPago,
         metodoEntrega,
         puntoEnvioId: metodoEntrega === "DOMICILIO" ? puntoEnvioId : undefined,
         direccionCalle: metodoEntrega === "DOMICILIO" ? direccionCalle.trim() : undefined,
@@ -268,8 +274,16 @@ export default function CheckoutModal({
         })),
       });
       setOrder(created);
-      setStep("confirmation");
-      onSuccess();
+      // TARJETA: the order exists (folio assigned, PENDIENTE) but nothing has
+      // been charged yet — created.clientSecret is what lets the "pago-tarjeta"
+      // step actually collect and confirm the card. onSuccess() (clears the
+      // cart) only fires once payment is confirmed there, not here.
+      if (metodoPago === "TARJETA" && created.clientSecret) {
+        setStep("pago-tarjeta");
+      } else {
+        setStep("confirmation");
+        onSuccess();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo crear tu pedido");
     } finally {
@@ -670,25 +684,60 @@ export default function CheckoutModal({
               <div className="flex flex-col gap-1.5 text-sm font-medium">
                 Método de pago
                 <div className="flex flex-col gap-1.5">
-                  <span className="flex items-center gap-2 rounded-lg border-2 border-black bg-black/5 px-3 py-2 text-xs font-semibold text-black dark:border-white dark:bg-white/10 dark:text-white">
-                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-black dark:border-white">
-                      <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />
+                  <button
+                    type="button"
+                    onClick={() => setMetodoPago("EFECTIVO")}
+                    className={
+                      metodoPago === "EFECTIVO"
+                        ? "flex items-center gap-2 rounded-lg border-2 border-black bg-black/5 px-3 py-2 text-xs font-semibold text-black dark:border-white dark:bg-white/10 dark:text-white"
+                        : "flex items-center gap-2 rounded-lg border-2 border-black/15 px-3 py-2 text-xs font-medium text-black/60 dark:border-white/20 dark:text-white/60"
+                    }
+                  >
+                    <span
+                      className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                        metodoPago === "EFECTIVO" ? "border-black dark:border-white" : "border-black/30 dark:border-white/30"
+                      }`}
+                    >
+                      {metodoPago === "EFECTIVO" && <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />}
                     </span>
                     Efectivo
-                  </span>
+                  </button>
+
+                  {aceptaTarjeta ? (
+                    <button
+                      type="button"
+                      onClick={() => setMetodoPago("TARJETA")}
+                      className={
+                        metodoPago === "TARJETA"
+                          ? "flex items-center gap-2 rounded-lg border-2 border-black bg-black/5 px-3 py-2 text-xs font-semibold text-black dark:border-white dark:bg-white/10 dark:text-white"
+                          : "flex items-center gap-2 rounded-lg border-2 border-black/15 px-3 py-2 text-xs font-medium text-black/60 dark:border-white/20 dark:text-white/60"
+                      }
+                    >
+                      <span
+                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                          metodoPago === "TARJETA" ? "border-black dark:border-white" : "border-black/30 dark:border-white/30"
+                        }`}
+                      >
+                        {metodoPago === "TARJETA" && <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />}
+                      </span>
+                      Tarjeta
+                    </button>
+                  ) : (
+                    <span
+                      aria-disabled="true"
+                      className="flex cursor-not-allowed items-center gap-2 rounded-lg border-2 border-black/10 px-3 py-2 text-xs font-medium text-black/30 dark:border-white/10 dark:text-white/30"
+                    >
+                      <span className="h-3.5 w-3.5 rounded-full border-2 border-black/15 dark:border-white/15" />
+                      Tarjeta — próximamente
+                    </span>
+                  )}
+
                   <span
                     aria-disabled="true"
                     className="flex cursor-not-allowed items-center gap-2 rounded-lg border-2 border-black/10 px-3 py-2 text-xs font-medium text-black/30 dark:border-white/10 dark:text-white/30"
                   >
                     <span className="h-3.5 w-3.5 rounded-full border-2 border-black/15 dark:border-white/15" />
                     Transferencia — próximamente
-                  </span>
-                  <span
-                    aria-disabled="true"
-                    className="flex cursor-not-allowed items-center gap-2 rounded-lg border-2 border-black/10 px-3 py-2 text-xs font-medium text-black/30 dark:border-white/10 dark:text-white/30"
-                  >
-                    <span className="h-3.5 w-3.5 rounded-full border-2 border-black/15 dark:border-white/15" />
-                    Tarjeta — próximamente
                   </span>
                 </div>
               </div>
@@ -790,10 +839,22 @@ export default function CheckoutModal({
                 disabled={!canSubmit}
                 className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
               >
-                {submitting ? "Enviando..." : "Confirmar pedido"}
+                {submitting ? "Enviando..." : metodoPago === "TARJETA" ? "Continuar al pago" : "Confirmar pedido"}
               </button>
             </form>
           </>
+        )}
+
+        {step === "pago-tarjeta" && order && order.clientSecret && (
+          <TarjetaPagoStep
+            order={order}
+            total={total}
+            onAtras={() => setStep("pago")}
+            onPagado={() => {
+              setStep("confirmation");
+              onSuccess();
+            }}
+          />
         )}
 
         {step === "confirmation" && order && (
@@ -888,5 +949,102 @@ export default function CheckoutModal({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Wraps the actual card form in <Elements>, scoped to this one order's
+ * clientSecret. Kept as its own component (not inline in CheckoutModal)
+ * because useStripe()/useElements() only work inside an <Elements> provider —
+ * they can't be called from the parent that renders it.
+ */
+function TarjetaPagoStep({
+  order,
+  total,
+  onAtras,
+  onPagado,
+}: {
+  order: PublicOrder;
+  total: number;
+  onAtras: () => void;
+  onPagado: () => void;
+}) {
+  return (
+    <Elements stripe={getStripe()} options={{ clientSecret: order.clientSecret! }}>
+      <TarjetaPagoForm order={order} total={total} onAtras={onAtras} onPagado={onPagado} />
+    </Elements>
+  );
+}
+
+function TarjetaPagoForm({
+  order,
+  total,
+  onAtras,
+  onPagado,
+}: {
+  order: PublicOrder;
+  total: number;
+  onAtras: () => void;
+  onPagado: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePagar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setPaying(true);
+    setError(null);
+
+    // redirect: 'if_required' — card payments resolve synchronously; only
+    // redirect-based methods (if the tenant's Stripe account has any enabled)
+    // would leave this page, hence still needing a return_url.
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+
+    if (confirmError) {
+      setError(confirmError.message ?? "No se pudo procesar el pago");
+      setPaying(false);
+      return;
+    }
+
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+      onPagado();
+      return;
+    }
+
+    setError("El pago no se completó — intenta de nuevo");
+    setPaying(false);
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Pago con tarjeta</h2>
+        <button onClick={onAtras} className={BACK_LINK}>
+          Atrás
+        </button>
+      </div>
+
+      <p className="text-sm text-black/60 dark:text-white/60">
+        Folio <span className="font-semibold text-black dark:text-white">#{order.folio}</span> — Total ${total.toFixed(2)}
+      </p>
+
+      <form onSubmit={handlePagar} className="flex flex-col gap-3">
+        <PaymentElement />
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <button type="submit" disabled={!stripe || paying} className={BTN_PRIMARY}>
+          {paying ? "Procesando..." : `Pagar $${total.toFixed(2)}`}
+        </button>
+      </form>
+    </>
   );
 }

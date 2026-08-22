@@ -1,9 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StripeService } from '../stripe/stripe.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
 import { round2 } from '../common/money';
 import {
   CanalOrigen,
+  EstadoPago,
   EstadoPedido,
   FacturacionModo,
   HoraRecogidaTipo,
@@ -63,12 +65,23 @@ const MARGEN_MINIMO_MINUTOS = 15;
 
 @Injectable()
 export class PublicService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stripeService: StripeService,
+  ) {}
 
   async getTenantInfo(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
-      select: { nombre: true, logoUrl: true, horarioAtencion: true, ubicacion: true, facturacionModo: true },
+      select: {
+        nombre: true,
+        logoUrl: true,
+        horarioAtencion: true,
+        ubicacion: true,
+        facturacionModo: true,
+        stripeAccountId: true,
+        stripeChargesEnabled: true,
+      },
     });
     if (!tenant) {
       throw new NotFoundException('Negocio no encontrado');
@@ -85,6 +98,10 @@ export class PublicService {
       // fetch, whether to show/require the factura fields — see
       // resolverFacturacion below for the same logic re-enforced server-side.
       facturacionModo: tenant.facturacionModo,
+      // Whether metodoPago = TARJETA can be offered at checkout — mirrors the
+      // same re-check createOrder does server-side (see step 3 below), so the
+      // storefront never shows an option the server would 409 anyway.
+      aceptaTarjeta: Boolean(tenant.stripeAccountId) && tenant.stripeChargesEnabled,
     };
   }
 
@@ -181,7 +198,13 @@ export class PublicService {
   async createOrder(slug: string, dto: CreatePublicOrderDto) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
-      select: { id: true, horarioAtencion: true, facturacionModo: true },
+      select: {
+        id: true,
+        horarioAtencion: true,
+        facturacionModo: true,
+        stripeAccountId: true,
+        stripeChargesEnabled: true,
+      },
     });
     if (!tenant) {
       throw new NotFoundException('Negocio no encontrado');
@@ -214,9 +237,15 @@ export class PublicService {
       horaRecogida = this.resolverHoraRecogida(dto, horario);
     }
 
-    // 3. Payment method.
-    if (dto.metodoPago !== MetodoPago.EFECTIVO) {
+    // 3. Payment method. TARJETA requires a connected Stripe account with
+    // card_payments actually active — same check exposed to the client as
+    // `aceptaTarjeta` in getTenantInfo, re-enforced here since that's only a
+    // UI hint. TRANSFERENCIA has no implementation at all yet.
+    if (dto.metodoPago === MetodoPago.TRANSFERENCIA) {
       throw new ConflictException('Ese método de pago no está disponible todavía');
+    }
+    if (dto.metodoPago === MetodoPago.TARJETA && !(tenant.stripeAccountId && tenant.stripeChargesEnabled)) {
+      throw new ConflictException('Este negocio no acepta pagos con tarjeta todavía');
     }
 
     // 4. Delivery method / punto de envío — structural checks only (existence,
@@ -326,7 +355,7 @@ export class PublicService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       const folio = await this.nextFolio(tx, tenant.id);
 
       return tx.order.create({
@@ -339,6 +368,11 @@ export class PublicService {
           horaRecogidaTipo,
           horaRecogida,
           metodoPago: dto.metodoPago,
+          // EFECTIVO/TRANSFERENCIA are settled in person — nothing for this
+          // system to track, so they're born PAGADO. TARJETA starts
+          // PENDIENTE and is flipped by the Stripe webhook once the
+          // PaymentIntent created just below actually resolves.
+          estadoPago: dto.metodoPago === MetodoPago.TARJETA ? EstadoPago.PENDIENTE : EstadoPago.PAGADO,
           metodoEntrega,
           puntoEnvioId: puntoEnvio?.id,
           ...direccionEntrega,
@@ -385,6 +419,45 @@ export class PublicService {
         },
       });
     });
+
+    // TARJETA: the order already exists (folio assigned, PENDIENTE) — now
+    // create the PaymentIntent and attach its id/clientSecret. Deliberately
+    // outside the transaction above: a network call to Stripe has no
+    // business holding the advisory lock/row locks that folio assignment
+    // needs. A destination charge (transfer_data.destination = the tenant's
+    // connected account, no application_fee_amount) — Aelika takes 0% per
+    // order (subscription-only), and already pays Stripe's own fees/losses
+    // per the account's `defaults.responsibilities` (see
+    // InternalService.createStripeAccount), so nothing is deducted here.
+    if (dto.metodoPago === MetodoPago.TARJETA) {
+      try {
+        const paymentIntent = await this.stripeService.client.paymentIntents.create({
+          amount: Math.round(Number(order.total) * 100),
+          currency: 'mxn',
+          transfer_data: { destination: tenant.stripeAccountId! },
+          automatic_payment_methods: { enabled: true },
+          metadata: { orderId: order.id, tenantId: tenant.id, slug, folio: order.folio },
+        });
+
+        const orderConPago = await this.prisma.order.update({
+          where: { id: order.id },
+          data: { stripePaymentIntentId: paymentIntent.id },
+          include: {
+            items: { include: { modificadores: { select: { nombre: true, precioAdicional: true } } } },
+          },
+        });
+
+        return { ...orderConPago, clientSecret: paymentIntent.client_secret };
+      } catch (err) {
+        // The order stays on record as FALLIDO rather than silently
+        // disappearing — same "never lose a real customer action" principle
+        // as everywhere else in this service.
+        await this.prisma.order.update({ where: { id: order.id }, data: { estadoPago: EstadoPago.FALLIDO } });
+        throw err;
+      }
+    }
+
+    return order;
   }
 
   /**
