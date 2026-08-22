@@ -37,12 +37,13 @@ model Tenant {
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.
   mensajeBienvenida    String?
-  // Business contact email — required as Stripe Connect's contact_email when
-  // creating the tenant's connected account (see InternalService.createStripeAccount).
+  // Contact email used specifically as Stripe Connect's contact_email when
+  // creating the tenant's connected account (see TenantService.createOrContinueStripeAccount)
+  // — not a general business/support email, deliberately scoped to Stripe.
   // No default/backfill: stays null until the Dueño fills it in via PATCH
   // /tenant/me, which is exactly what forces it to be set before Stripe
   // onboarding can start for a given tenant.
-  correoNegocio        String?
+  stripeContactEmail   String?
   // Bot (Botpress) auth key against the Aelika API — generated once at
   // register time (crypto.randomBytes, see AuthService), regenerable via
   // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the

@@ -36,7 +36,7 @@ function ConfiguracionForm({ token }: { token: string }) {
   const [ubicacion, setUbicacion] = useState("");
   const [botApiKey, setBotApiKey] = useState("");
   const [facturacionModo, setFacturacionModo] = useState<FacturacionModo>("DESACTIVADO");
-  const [correoNegocio, setCorreoNegocio] = useState<string | null>(null);
+  const [stripeContactEmail, setStripeContactEmail] = useState<string | null>(null);
   const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
   const [stripeChargesEnabled, setStripeChargesEnabled] = useState(false);
   const [stripePayoutsEnabled, setStripePayoutsEnabled] = useState(false);
@@ -54,7 +54,7 @@ function ConfiguracionForm({ token }: { token: string }) {
         setUbicacion(settings.ubicacion ?? "");
         setBotApiKey(settings.botApiKey);
         setFacturacionModo(settings.facturacionModo);
-        setCorreoNegocio(settings.correoNegocio);
+        setStripeContactEmail(settings.stripeContactEmail);
         setStripeAccountId(settings.stripeAccountId);
         setStripeChargesEnabled(settings.stripeChargesEnabled);
         setStripePayoutsEnabled(settings.stripePayoutsEnabled);
@@ -137,18 +137,14 @@ function ConfiguracionForm({ token }: { token: string }) {
         </button>
       </form>
 
-      <FacturacionSection
-        token={token}
-        facturacionModo={facturacionModo}
-        onUpdated={setFacturacionModo}
-        correoNegocio={correoNegocio}
-        onCorreoNegocioUpdated={setCorreoNegocio}
-      />
+      <FacturacionSection token={token} facturacionModo={facturacionModo} onUpdated={setFacturacionModo} />
 
       <PuntosEnvioSection token={token} />
 
       <StripeSection
         token={token}
+        stripeContactEmail={stripeContactEmail}
+        onStripeContactEmailUpdated={setStripeContactEmail}
         stripeAccountId={stripeAccountId}
         stripeChargesEnabled={stripeChargesEnabled}
         stripePayoutsEnabled={stripePayoutsEnabled}

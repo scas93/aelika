@@ -7,26 +7,16 @@ const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
 const BTN_PRIMARY =
   "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
 
-// Basic shape check only ("algo@algo.algo") — the backend (@IsEmail, class-validator)
-// is the real source of truth, this is just to catch obvious typos before a
-// round trip to the server.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export default function FacturacionSection({
   token,
   facturacionModo,
   onUpdated,
-  correoNegocio,
-  onCorreoNegocioUpdated,
 }: {
   token: string;
   facturacionModo: FacturacionModo;
   onUpdated: (modo: FacturacionModo) => void;
-  correoNegocio: string | null;
-  onCorreoNegocioUpdated: (correo: string | null) => void;
 }) {
   const [selected, setSelected] = useState<FacturacionModo>(facturacionModo);
-  const [correo, setCorreo] = useState(correoNegocio ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,21 +25,10 @@ export default function FacturacionSection({
     e.preventDefault();
     setError(null);
     setSaved(false);
-
-    const correoTrimmed = correo.trim();
-    if (correoTrimmed !== "" && !EMAIL_PATTERN.test(correoTrimmed)) {
-      setError("El correo de negocio no tiene un formato válido");
-      return;
-    }
-
     setSaving(true);
     try {
-      const settings = await updateTenantSettings(token, {
-        facturacionModo: selected,
-        correoNegocio: correoTrimmed || undefined,
-      });
+      const settings = await updateTenantSettings(token, { facturacionModo: selected });
       onUpdated(settings.facturacionModo);
-      onCorreoNegocioUpdated(settings.correoNegocio);
       setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar la facturación");
@@ -81,23 +60,6 @@ export default function FacturacionSection({
           <option value="OPCIONAL">Opcional — el cliente elige si quiere factura</option>
           <option value="OBLIGATORIO">Obligatoria — todos los pedidos deben incluirla</option>
         </select>
-      </label>
-
-      <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-        Correo de negocio
-        <input
-          type="email"
-          value={correo}
-          onChange={(e) => {
-            setCorreo(e.target.value);
-            setSaved(false);
-          }}
-          placeholder="contacto@tunegocio.com"
-          className="input"
-        />
-        <span className="text-xs font-normal text-admin-ink/55">
-          Requerido para conectar cobros con tarjeta (Stripe).
-        </span>
       </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

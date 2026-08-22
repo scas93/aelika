@@ -15,7 +15,7 @@ const SETTINGS_SELECT = {
   ubicacion: true,
   botApiKey: true,
   facturacionModo: true,
-  correoNegocio: true,
+  stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
   // set by createOrContinueStripeAccount; charges/payoutsEnabled are only
   // ever refreshed from Stripe itself (getStripeStatus, the webhook), never
@@ -58,7 +58,7 @@ export class TenantService {
         horarioAtencion: dto.horarioAtencion ? (normalizarHorarioSemana(dto.horarioAtencion) as any) : undefined,
         ubicacion: dto.ubicacion,
         facturacionModo: dto.facturacionModo,
-        correoNegocio: dto.correoNegocio,
+        stripeContactEmail: dto.stripeContactEmail,
       },
       select: SETTINGS_SELECT,
     });
@@ -96,11 +96,11 @@ export class TenantService {
       // configuration.recipient requires a contact email on the account —
       // confirmed by testing (400 naming exactly this requirement). No
       // default/backfill exists on purpose, so this 400 is what forces
-      // correoNegocio to be filled in (via PATCH /tenant/me) before
+      // stripeContactEmail to be filled in (via PATCH /tenant/me) before
       // onboarding can start.
-      if (!tenant.correoNegocio) {
+      if (!tenant.stripeContactEmail) {
         throw new BadRequestException(
-          'Configura primero el correo de negocio, requerido para crear la cuenta de Stripe',
+          'Configura primero el correo de contacto para Stripe, requerido para crear la cuenta',
         );
       }
 
@@ -111,7 +111,7 @@ export class TenantService {
       // CLAUDE.md for why stripe_balance lives under recipient, not merchant.
       const account = await this.stripeService.client.v2.core.accounts.create({
         dashboard: 'express',
-        contact_email: tenant.correoNegocio,
+        contact_email: tenant.stripeContactEmail,
         identity: { country: 'mx' },
         // v2's equivalent of v1's controller.fees.payer/controller.losses.payments
         // ("application" = the platform pays Stripe's fees / absorbs losses,
@@ -198,7 +198,7 @@ export class TenantService {
     ubicacion: string | null;
     botApiKey: string;
     facturacionModo: FacturacionModo;
-    correoNegocio: string | null;
+    stripeContactEmail: string | null;
     stripeAccountId: string | null;
     stripeChargesEnabled: boolean;
     stripePayoutsEnabled: boolean;
@@ -208,7 +208,7 @@ export class TenantService {
       mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
       horarioAtencion: tenant.horarioAtencion,
       ubicacion: tenant.ubicacion,
-      correoNegocio: tenant.correoNegocio,
+      stripeContactEmail: tenant.stripeContactEmail,
       botApiKey: tenant.botApiKey,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,

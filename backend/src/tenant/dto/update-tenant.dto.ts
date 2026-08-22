@@ -13,7 +13,7 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsEmail()
   @MaxLength(200)
-  correoNegocio?: string;
+  stripeContactEmail?: string;
 
   @IsOptional()
   @ValidateNested()

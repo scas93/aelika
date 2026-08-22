@@ -387,7 +387,7 @@ export interface TenantSettings {
   ubicacion: string | null;
   botApiKey: string;
   facturacionModo: FacturacionModo;
-  correoNegocio: string | null;
+  stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
   // createTenantStripeAccount/fetchTenantStripeStatus instead.
   stripeAccountId: string | null;
@@ -407,7 +407,7 @@ export interface UpdateTenantSettingsPayload {
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
   facturacionModo?: FacturacionModo;
-  correoNegocio?: string;
+  stripeContactEmail?: string;
 }
 
 export interface PuntoEnvio {
