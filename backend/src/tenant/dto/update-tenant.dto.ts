@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
 import { FacturacionModo } from '../../../generated/prisma/enums';
 
@@ -9,6 +9,11 @@ export class UpdateTenantDto {
   @IsString()
   @MaxLength(1000)
   mensajeBienvenida?: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(200)
+  correoNegocio?: string;
 
   @IsOptional()
   @ValidateNested()

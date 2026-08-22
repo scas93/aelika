@@ -35,6 +35,7 @@ function ConfiguracionForm({ token }: { token: string }) {
   const [ubicacion, setUbicacion] = useState("");
   const [botApiKey, setBotApiKey] = useState("");
   const [facturacionModo, setFacturacionModo] = useState<FacturacionModo>("DESACTIVADO");
+  const [correoNegocio, setCorreoNegocio] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,6 +50,7 @@ function ConfiguracionForm({ token }: { token: string }) {
         setUbicacion(settings.ubicacion ?? "");
         setBotApiKey(settings.botApiKey);
         setFacturacionModo(settings.facturacionModo);
+        setCorreoNegocio(settings.correoNegocio);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración");
       } finally {
@@ -128,7 +130,13 @@ function ConfiguracionForm({ token }: { token: string }) {
         </button>
       </form>
 
-      <FacturacionSection token={token} facturacionModo={facturacionModo} onUpdated={setFacturacionModo} />
+      <FacturacionSection
+        token={token}
+        facturacionModo={facturacionModo}
+        onUpdated={setFacturacionModo}
+        correoNegocio={correoNegocio}
+        onCorreoNegocioUpdated={setCorreoNegocio}
+      />
 
       <PuntosEnvioSection token={token} />
 

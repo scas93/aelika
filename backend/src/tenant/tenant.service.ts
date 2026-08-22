@@ -13,6 +13,7 @@ const SETTINGS_SELECT = {
   ubicacion: true,
   botApiKey: true,
   facturacionModo: true,
+  correoNegocio: true,
 } as const;
 
 @Injectable()
@@ -42,6 +43,7 @@ export class TenantService {
         horarioAtencion: dto.horarioAtencion ? (normalizarHorarioSemana(dto.horarioAtencion) as any) : undefined,
         ubicacion: dto.ubicacion,
         facturacionModo: dto.facturacionModo,
+        correoNegocio: dto.correoNegocio,
       },
       select: SETTINGS_SELECT,
     });
@@ -64,12 +66,14 @@ export class TenantService {
     ubicacion: string | null;
     botApiKey: string;
     facturacionModo: FacturacionModo;
+    correoNegocio: string | null;
   }) {
     return {
       nombre: tenant.nombre,
       mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
       horarioAtencion: tenant.horarioAtencion,
       ubicacion: tenant.ubicacion,
+      correoNegocio: tenant.correoNegocio,
       botApiKey: tenant.botApiKey,
       facturacionModo: tenant.facturacionModo,
     };

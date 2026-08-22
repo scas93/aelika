@@ -1,6 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Role } from '../../generated/prisma/enums';
 import type { Tenant } from '../../generated/prisma/client';
 import { isAbiertoAhora, HorarioSemana } from '../common/horario';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
@@ -46,13 +45,15 @@ export class InternalService {
     }
 
     // configuration.recipient requires a contact email on the account —
-    // confirmed by testing (400 naming exactly this requirement). Tenant has
-    // no email of its own, so this uses the tenant's Dueño — the only
-    // Tenant-scoped user role guaranteed to exist (AuthService/UsersService
-    // never let a tenant end up without an active Dueño).
-    const dueno = await this.prisma.user.findFirst({ where: { tenantId: tenant.id, rol: Role.DUENO } });
-    if (!dueno) {
-      throw new NotFoundException('Este negocio no tiene un Dueño activo para usar como contacto de Stripe');
+    // confirmed by testing (400 naming exactly this requirement). Uses
+    // Tenant.correoNegocio (set by the Dueño via PATCH /tenant/me), not a
+    // user's own email or any other fallback — no default/backfill exists on
+    // purpose, so this 400 is what forces it to be filled in before
+    // onboarding can start for a given tenant.
+    if (!tenant.correoNegocio) {
+      throw new BadRequestException(
+        'El tenant no tiene correo de negocio configurado, requerido para crear la cuenta de Stripe',
+      );
     }
 
     // Two separate configurations, each with its own capability namespace:
@@ -66,7 +67,7 @@ export class InternalService {
     // identity/bank requirements are satisfied — see getStripeStatus.
     const account = await this.stripeService.client.v2.core.accounts.create({
       dashboard: 'express',
-      contact_email: dueno.email,
+      contact_email: tenant.correoNegocio,
       identity: { country: 'mx' },
       // v2's equivalent of v1's controller.fees.payer/controller.losses.payments
       // ("application" = the platform pays Stripe's fees / absorbs losses, not

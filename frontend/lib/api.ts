@@ -377,6 +377,7 @@ export interface TenantSettings {
   ubicacion: string | null;
   botApiKey: string;
   facturacionModo: FacturacionModo;
+  correoNegocio: string | null;
 }
 
 export interface UpdateTenantSettingsPayload {
@@ -384,6 +385,7 @@ export interface UpdateTenantSettingsPayload {
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
   facturacionModo?: FacturacionModo;
+  correoNegocio?: string;
 }
 
 export interface PuntoEnvio {
