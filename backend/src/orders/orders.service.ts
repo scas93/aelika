@@ -3,10 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { EstadoPedido } from '../../generated/prisma/enums';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
+import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
+import { ExportOrdersHistoricoQueryDto } from './dto/export-orders-historico-query.dto';
+import { toCsv } from '../common/csv';
 
 // Sequential, one-way status flow (see CLAUDE.md) — no arbitrary jumps, no
 // going back. DESPACHADO has no next step.
@@ -94,6 +98,83 @@ export class OrdersService {
         (o) => o.createdAt >= desde && o.createdAt <= hasta,
       ).length,
     }));
+  }
+
+  private buildHistoricoWhere(query: {
+    estadoPedido?: EstadoPedido;
+    metodoPago?: ListOrdersHistoricoQueryDto['metodoPago'];
+    desde?: string;
+    hasta?: string;
+  }): Prisma.OrderWhereInput {
+    return {
+      estadoPedido: query.estadoPedido,
+      metodoPago: query.metodoPago,
+      createdAt:
+        query.desde || query.hasta
+          ? {
+              gte: query.desde ? new Date(query.desde) : undefined,
+              lte: query.hasta ? new Date(query.hasta) : undefined,
+            }
+          : undefined,
+    };
+  }
+
+  async findAllHistorico(query: ListOrdersHistoricoQueryDto) {
+    const where = this.buildHistoricoWhere(query);
+    const skip = (query.page - 1) * query.limit;
+
+    const [data, total] = await Promise.all([
+      this.tenantPrisma.client.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: query.limit,
+        select: {
+          id: true,
+          folio: true,
+          clienteNombre: true,
+          createdAt: true,
+          estadoPedido: true,
+          metodoPago: true,
+          total: true,
+        },
+      }),
+      this.tenantPrisma.client.order.count({ where }),
+    ]);
+
+    return {
+      data,
+      total,
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
+    };
+  }
+
+  async exportHistoricoCsv(query: ExportOrdersHistoricoQueryDto): Promise<string> {
+    const where = this.buildHistoricoWhere(query);
+
+    const orders = await this.tenantPrisma.client.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        folio: true,
+        clienteNombre: true,
+        createdAt: true,
+        estadoPedido: true,
+        metodoPago: true,
+        total: true,
+      },
+    });
+
+    return toCsv(orders, [
+      { header: 'Folio', value: (o) => o.folio },
+      { header: 'Cliente', value: (o) => o.clienteNombre },
+      { header: 'Fecha', value: (o) => o.createdAt.toISOString() },
+      { header: 'Estado', value: (o) => o.estadoPedido },
+      { header: 'Método de pago', value: (o) => o.metodoPago },
+      { header: 'Total', value: (o) => Number(o.total).toFixed(2) },
+    ]);
   }
 
   async findOne(id: string) {

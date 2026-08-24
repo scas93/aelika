@@ -378,6 +378,23 @@ export interface OrdersFilter {
   hasta?: string;
 }
 
+export interface HistoricoOrdersFilter {
+  estadoPedido?: EstadoPedido;
+  metodoPago?: MetodoPago;
+  desde?: string;
+  hasta?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedOrders {
+  data: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface OrderSummary {
   pedidosHoy: number;
   ingresosHoy: string;
@@ -699,6 +716,45 @@ export function fetchOrders(token: string, filter?: OrdersFilter) {
   if (filter?.hasta) params.set("hasta", filter.hasta);
   const query = params.toString();
   return request<Order[]>(`/orders${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchOrdersHistorico(token: string, filter?: HistoricoOrdersFilter) {
+  const params = new URLSearchParams();
+  if (filter?.estadoPedido) params.set("estadoPedido", filter.estadoPedido);
+  if (filter?.metodoPago) params.set("metodoPago", filter.metodoPago);
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  if (filter?.page) params.set("page", String(filter.page));
+  if (filter?.limit) params.set("limit", String(filter.limit));
+  const query = params.toString();
+  return request<PaginatedOrders>(`/orders/historico${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+// Bypasses request() on purpose — that wrapper always calls res.json(), but
+// this endpoint returns a CSV file, not JSON. Reuses API_URL/authHeaders
+// directly instead.
+export async function exportOrdersHistoricoCsv(
+  token: string,
+  filter?: Omit<HistoricoOrdersFilter, "page" | "limit">,
+): Promise<Blob> {
+  const params = new URLSearchParams();
+  if (filter?.estadoPedido) params.set("estadoPedido", filter.estadoPedido);
+  if (filter?.metodoPago) params.set("metodoPago", filter.metodoPago);
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  const query = params.toString();
+
+  const res = await fetch(`${API_URL}/orders/historico/export${query ? `?${query}` : ""}`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = body?.message ?? "No se pudo exportar el histórico";
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status);
+  }
+
+  return res.blob();
 }
 
 export function fetchOrdersSummary(token: string, range: { desde: string; hasta: string }) {
