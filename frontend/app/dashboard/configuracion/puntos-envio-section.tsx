@@ -9,14 +9,10 @@ import {
   updatePuntoEnvio,
   type PuntoEnvio,
 } from "@/lib/api";
-
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_DANGER =
-  "rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-black/10 disabled:text-admin-ink/40 disabled:hover:bg-transparent";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Modal from "../_components/Modal";
+import ToggleSwitch from "../_components/ToggleSwitch";
 
 export default function PuntosEnvioSection({ token }: { token: string }) {
   const [puntos, setPuntos] = useState<PuntoEnvio[] | null>(null);
@@ -62,10 +58,10 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-3">
+    <Card className="flex flex-col gap-3">
       <div>
         <h2 className="text-sm font-extrabold text-admin-ink">Puntos de envío</h2>
-        <p className="text-sm text-admin-ink/55">
+        <p className="text-sm text-admin-ink-soft">
           Zonas donde ofreces entrega a domicilio, con un pedido mínimo opcional.
         </p>
       </div>
@@ -73,15 +69,17 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {puntos === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {puntos.length === 0 && (
-            <li className={`${CARD} p-4 text-sm text-admin-ink/55`}>Aún no tienes puntos de envío.</li>
+            <li className="rounded-[var(--radius-admin-control)] border border-admin-border p-4 text-sm text-admin-ink-soft">
+              Aún no tienes puntos de envío.
+            </li>
           )}
           {puntos.map((punto) =>
             editingId === punto.id ? (
-              <li key={punto.id} className={`${CARD} p-3`}>
+              <li key={punto.id} className="rounded-[var(--radius-admin-control)] border border-admin-border p-3">
                 <PuntoEnvioForm
                   initial={punto}
                   onCancel={() => setEditingId(null)}
@@ -93,30 +91,39 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
                 />
               </li>
             ) : (
-              <li key={punto.id} className={`${CARD} flex items-center justify-between gap-3 p-3`}>
+              <li
+                key={punto.id}
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-3"
+              >
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className={punto.activo ? "font-bold text-admin-ink" : "font-bold text-admin-ink/40"}>
+                    <span
+                      className={
+                        punto.activo
+                          ? "text-[15px] font-semibold text-admin-ink"
+                          : "text-[15px] font-semibold text-admin-ink/40"
+                      }
+                    >
                       {punto.nombre}
                     </span>
                     {!punto.activo && (
-                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink/55">
+                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
                         Inactivo
                       </span>
                     )}
                   </div>
-                  <span className="text-sm text-admin-ink/55">{punto.direccion}</span>
+                  <span className="text-sm text-admin-ink-soft">{punto.direccion}</span>
                   {punto.pedidoMinimo && (
-                    <span className="text-sm text-admin-ink/55">Pedido mínimo: ${punto.pedidoMinimo}</span>
+                    <span className="text-sm text-admin-ink-soft">Pedido mínimo: ${punto.pedidoMinimo}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setEditingId(punto.id)} className={BTN_SECONDARY}>
+                  <Button variant="secondary" size="sm" onClick={() => setEditingId(punto.id)}>
                     Editar
-                  </button>
-                  <button onClick={() => setDeleteTarget(punto)} className={BTN_DANGER}>
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(punto)}>
                     Eliminar
-                  </button>
+                  </Button>
                   <ToggleSwitch
                     checked={punto.activo}
                     onChange={() => handleToggleActivo(punto)}
@@ -136,59 +143,35 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
         }}
       />
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex w-full max-w-sm flex-col gap-4 rounded-[14px] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-            <h3 className="text-lg font-extrabold text-admin-ink">¿Eliminar &ldquo;{deleteTarget.nombre}&rdquo;?</h3>
-            <p className="text-sm text-admin-ink/55">Esta acción no se puede deshacer.</p>
-            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
-            <div className="flex gap-2">
-              <button type="button" onClick={handleDeleteConfirm} disabled={deleting} className={BTN_PRIMARY}>
-                {deleting ? "Eliminando..." : "Eliminar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteTarget(null);
-                  setDeleteError(null);
-                }}
-                disabled={deleting}
-                className={BTN_SECONDARY}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={`relative h-[22px] w-10 shrink-0 rounded-full transition ${checked ? "bg-admin-green" : "bg-black/15"}`}
-    >
-      <span
-        className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow transition ${
-          checked ? "left-[20px]" : "left-0.5"
-        }`}
-      />
-    </button>
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        title={`¿Eliminar "${deleteTarget?.nombre ?? ""}"?`}
+        footer={
+          <>
+            <Button variant="primary" onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-admin-ink-soft">Esta acción no se puede deshacer.</p>
+        {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+      </Modal>
+    </Card>
   );
 }
 
@@ -236,17 +219,17 @@ function PuntoEnvioForm({
     }
   }
 
-  return (
-    <form onSubmit={handleSubmit} className={initial ? "flex flex-col gap-3" : `${CARD} flex flex-col gap-3 p-4`}>
-      <p className="text-sm font-extrabold text-admin-ink">
+  const form = (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <p className="text-sm font-semibold text-admin-ink">
         {initial ? "Editar punto de envío" : "Nuevo punto de envío"}
       </p>
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Zona Centro" className="input" />
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Zona Centro" className="admin-input" />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Pedido mínimo (opcional)
           <input
             type="number"
@@ -255,32 +238,34 @@ function PuntoEnvioForm({
             value={pedidoMinimo}
             onChange={(e) => setPedidoMinimo(e.target.value)}
             placeholder="200.00"
-            className="input"
+            className="admin-input"
           />
         </label>
       </div>
-      <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
         Dirección
         <input
           value={direccion}
           onChange={(e) => setDireccion(e.target.value)}
           placeholder="Colonia Centro, CDMX"
-          className="input"
+          className="admin-input"
         />
       </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex gap-2">
-        <button type="submit" disabled={submitting} className={BTN_PRIMARY}>
+        <Button type="submit" disabled={submitting}>
           {initial ? "Guardar cambios" : "Agregar punto de envío"}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" onClick={onCancel} className={BTN_SECONDARY}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>
   );
+
+  return initial ? form : <div className="rounded-[var(--radius-admin-control)] border border-admin-border p-4">{form}</div>;
 }

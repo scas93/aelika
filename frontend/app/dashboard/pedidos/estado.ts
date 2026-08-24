@@ -12,12 +12,14 @@ export const ESTADO_LABEL: Record<EstadoPedido, string> = {
 // done/archived, consistent with the rest of the palette). LISTO_ENTREGA
 // uses the darker admin-green-dark rather than the bright accent green —
 // white text on the bright #25D366 accent doesn't meet contrast at this
-// badge's text size, admin-green-dark does.
+// badge's text size, admin-green-dark does. Full "bg-x text-white" class
+// pairs (not just the background) — Badge (_components/Badge.tsx) expects
+// the complete color className since Fase 3.
 export const ESTADO_COLOR: Record<EstadoPedido, string> = {
-  PENDIENTE_CONFIRMACION: "bg-gray-500",
-  CONFIRMADO_SURTIENDO: "bg-amber-700",
-  LISTO_ENTREGA: "bg-admin-green-dark",
-  DESPACHADO: "bg-admin-ink",
+  PENDIENTE_CONFIRMACION: "bg-gray-500 text-white",
+  CONFIRMADO_SURTIENDO: "bg-amber-700 text-white",
+  LISTO_ENTREGA: "bg-admin-green-dark text-white",
+  DESPACHADO: "bg-admin-ink text-white",
 };
 
 export const ESTADOS: EstadoPedido[] = ["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "LISTO_ENTREGA", "DESPACHADO"];

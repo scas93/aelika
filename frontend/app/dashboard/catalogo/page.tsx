@@ -17,16 +17,17 @@ import {
 } from "@/lib/api";
 import PromotionsSection from "./promotions-section";
 import ModifiersSection from "./modifiers-section";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Tabs from "../_components/Tabs";
+import Modal from "../_components/Modal";
+import ToggleSwitch from "../_components/ToggleSwitch";
 
 type Tab = "catalogo" | "promociones" | "modificadores";
 
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_DANGER =
-  "rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-black/10 disabled:text-admin-ink/40 disabled:hover:bg-transparent";
+const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
+const LINK_BTN_SECONDARY =
+  "rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-1.5 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
 
 export default function CatalogoPage() {
   const { user, token } = useSession();
@@ -109,17 +110,15 @@ export default function CatalogoPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex gap-2">
-        <TabButton active={tab === "catalogo"} onClick={() => setTab("catalogo")}>
-          Categorías y productos
-        </TabButton>
-        <TabButton active={tab === "promociones"} onClick={() => setTab("promociones")}>
-          Promociones
-        </TabButton>
-        <TabButton active={tab === "modificadores"} onClick={() => setTab("modificadores")}>
-          Modificadores
-        </TabButton>
-      </div>
+      <Tabs
+        items={[
+          { key: "catalogo", label: "Categorías y productos", icon: "📋" },
+          { key: "promociones", label: "Promociones", icon: "🏷️" },
+          { key: "modificadores", label: "Modificadores", icon: "🧩" },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as Tab)}
+      />
 
       {tab === "promociones" ? (
         <PromotionsSection token={token} canWrite={canWrite} />
@@ -128,64 +127,75 @@ export default function CatalogoPage() {
       ) : (
         <>
           <section className="flex flex-col gap-3">
-            <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">Categorías</h2>
+            <h2 className={SECTION_HEADER}>Categorías</h2>
             {categoriesError && <p className="text-sm text-red-600">{categoriesError}</p>}
             {categories === null ? (
-              <p className="text-sm text-admin-ink/55">Cargando...</p>
+              <p className="text-sm text-admin-ink-soft">Cargando...</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {categories.length === 0 && (
-                  <li className={`${CARD} p-4 text-sm text-admin-ink/55`}>Aún no tienes categorías.</li>
+                  <li>
+                    <Card className="text-sm text-admin-ink-soft">Aún no tienes categorías.</Card>
+                  </li>
                 )}
                 {categories.map((category, index) => (
-                  <li
-                    key={category.id}
-                    className={`${CARD} flex items-center justify-between gap-3 p-3 ${
-                      selectedCategoryId === category.id ? "ring-2 ring-admin-green/40" : ""
-                    }`}
-                  >
-                    <button
-                      onClick={() => setSelectedCategoryId(category.id)}
-                      className="flex flex-1 items-center gap-2 text-left text-sm"
+                  <li key={category.id}>
+                    <Card
+                      padding={12}
+                      className={`flex items-center justify-between gap-3 ${
+                        selectedCategoryId === category.id ? "ring-2 ring-admin-green/40" : ""
+                      }`}
                     >
-                      <span className={category.activa ? "font-bold text-admin-ink" : "font-bold text-admin-ink/40"}>
-                        {category.nombre}
-                      </span>
-                      {!category.activa && (
-                        <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink/55">
-                          Inactiva
+                      <button
+                        onClick={() => setSelectedCategoryId(category.id)}
+                        className="flex flex-1 items-center gap-2 text-left"
+                      >
+                        <span
+                          className={
+                            category.activa
+                              ? "text-[15px] font-semibold text-admin-ink"
+                              : "text-[15px] font-semibold text-admin-ink/40"
+                          }
+                        >
+                          {category.nombre}
                         </span>
-                      )}
-                    </button>
-
-                    {canWrite && (
-                      <div className="flex items-center gap-1.5">
-                        <IconButton label="Subir" disabled={index === 0} onClick={() => handleReorder(index, -1)}>
-                          ↑
-                        </IconButton>
-                        <IconButton
-                          label="Bajar"
-                          disabled={index === categories.length - 1}
-                          onClick={() => handleReorder(index, 1)}
-                        >
-                          ↓
-                        </IconButton>
-                        <button onClick={() => handleToggleActiva(category)} className={BTN_SECONDARY}>
-                          {category.activa ? "Desactivar" : "Activar"}
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(category)}
-                          disabled={category._count.products > 0}
-                          title={category._count.products > 0 ? "Tiene productos" : undefined}
-                          className={BTN_DANGER}
-                        >
-                          Eliminar
-                        </button>
-                        {category._count.products > 0 && (
-                          <span className="text-xs text-admin-ink/40">Tiene productos</span>
+                        {!category.activa && (
+                          <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
+                            Inactiva
+                          </span>
                         )}
-                      </div>
-                    )}
+                      </button>
+
+                      {canWrite && (
+                        <div className="flex items-center gap-1.5">
+                          <IconButton label="Subir" disabled={index === 0} onClick={() => handleReorder(index, -1)}>
+                            ↑
+                          </IconButton>
+                          <IconButton
+                            label="Bajar"
+                            disabled={index === categories.length - 1}
+                            onClick={() => handleReorder(index, 1)}
+                          >
+                            ↓
+                          </IconButton>
+                          <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(category)}>
+                            {category.activa ? "Desactivar" : "Activar"}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setDeleteTarget(category)}
+                            disabled={category._count.products > 0}
+                            title={category._count.products > 0 ? "Tiene productos" : undefined}
+                          >
+                            Eliminar
+                          </Button>
+                          {category._count.products > 0 && (
+                            <span className="text-[13px] text-admin-ink-soft">Tiene productos</span>
+                          )}
+                        </div>
+                      )}
+                    </Card>
                   </li>
                 ))}
               </ul>
@@ -194,31 +204,34 @@ export default function CatalogoPage() {
             {canWrite && <NewCategoryForm onCreate={handleCreateCategory} />}
           </section>
 
-          {deleteTarget && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-              <div className="flex w-full max-w-sm flex-col gap-4 rounded-[14px] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-                <h3 className="text-lg font-extrabold text-admin-ink">¿Eliminar la categoría {deleteTarget.nombre}?</h3>
-                <p className="text-sm text-admin-ink/55">Esta acción no se puede deshacer.</p>
-                {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleDeleteConfirm} disabled={deleting} className={BTN_PRIMARY}>
-                    {deleting ? "Eliminando..." : "Eliminar"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteTarget(null);
-                      setDeleteError(null);
-                    }}
-                    disabled={deleting}
-                    className={BTN_SECONDARY}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <Modal
+            open={deleteTarget !== null}
+            onClose={() => {
+              setDeleteTarget(null);
+              setDeleteError(null);
+            }}
+            title={`¿Eliminar la categoría ${deleteTarget?.nombre ?? ""}?`}
+            footer={
+              <>
+                <Button variant="primary" onClick={handleDeleteConfirm} disabled={deleting}>
+                  {deleting ? "Eliminando..." : "Eliminar"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancelar
+                </Button>
+              </>
+            }
+          >
+            <p className="text-sm text-admin-ink-soft">Esta acción no se puede deshacer.</p>
+            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+          </Modal>
 
           {selectedCategoryId && (
             <ProductsSection key={selectedCategoryId} token={token} categoryId={selectedCategoryId} canWrite={canWrite} />
@@ -226,29 +239,6 @@ export default function CatalogoPage() {
         </>
       )}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        active
-          ? "rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white"
-          : "rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-bold text-admin-ink/70 transition hover:bg-admin-bg"
-      }
-    >
-      {children}
-    </button>
   );
 }
 
@@ -268,36 +258,9 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 text-sm text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-30"
+      className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-bg text-sm text-admin-ink-soft transition hover:bg-admin-border disabled:cursor-not-allowed disabled:opacity-30"
     >
       {children}
-    </button>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={`relative h-[22px] w-10 shrink-0 rounded-full transition ${checked ? "bg-admin-green" : "bg-black/15"}`}
-    >
-      <span
-        className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow transition ${
-          checked ? "left-[20px]" : "left-0.5"
-        }`}
-      />
     </button>
   );
 }
@@ -323,21 +286,23 @@ function NewCategoryForm({ onCreate }: { onCreate: (nombre: string) => Promise<v
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`${CARD} flex items-end gap-2 p-3`}>
-      <label className="flex flex-1 flex-col gap-1.5 text-sm font-bold text-admin-ink">
-        Nueva categoría
-        <input
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          placeholder="Bebidas"
-          className="input"
-        />
-      </label>
-      <button type="submit" disabled={submitting || !nombre.trim()} className={BTN_PRIMARY}>
-        Agregar
-      </button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-    </form>
+    <Card>
+      <form onSubmit={handleSubmit} className="flex items-end gap-2">
+        <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Nueva categoría
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Bebidas"
+            className="admin-input"
+          />
+        </label>
+        <Button type="submit" disabled={submitting || !nombre.trim()}>
+          Agregar
+        </Button>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </form>
+    </Card>
   );
 }
 
@@ -378,57 +343,67 @@ function ProductsSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">Productos</h2>
+      <h2 className={SECTION_HEADER}>Productos</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {products === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
+      ) : products.length === 0 ? (
+        <Card className="text-sm text-admin-ink-soft">Esta categoría no tiene productos.</Card>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {products.length === 0 && (
-            <li className={`${CARD} p-4 text-sm text-admin-ink/55`}>Esta categoría no tiene productos.</li>
-          )}
-          {products.map((product) =>
-            editingId === product.id ? (
-              <li key={product.id} className={`${CARD} p-3`}>
-                <ProductForm
-                  initial={product}
-                  onCancel={() => setEditingId(null)}
-                  onSubmit={async (payload) => {
-                    await updateProduct(token, product.id, payload);
-                    await load();
-                    setEditingId(null);
-                  }}
-                />
-              </li>
-            ) : (
-              <li key={product.id} className={`${CARD} flex items-center justify-between gap-3 p-3`}>
-                <div className="flex flex-col">
-                  <span className={product.disponible ? "font-bold text-admin-ink" : "font-bold text-admin-ink/40"}>
-                    {product.nombre}
-                  </span>
-                  <span className="text-sm text-admin-ink/55">${product.precio}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Link href={`/dashboard/catalogo/productos/${product.id}`} className={BTN_SECONDARY}>
-                    Ver detalle
-                  </Link>
-                  {canWrite && (
-                    <>
-                      <button onClick={() => setEditingId(product.id)} className={BTN_SECONDARY}>
-                        Editar
-                      </button>
-                      <ToggleSwitch
-                        checked={product.disponible}
-                        onChange={() => handleToggleDisponible(product)}
-                        label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
-                      />
-                    </>
-                  )}
-                </div>
-              </li>
-            ),
-          )}
-        </ul>
+        <Card padding={0} className="overflow-hidden">
+          <ul className="flex flex-col divide-y divide-admin-border">
+            {products.map((product) =>
+              editingId === product.id ? (
+                <li key={product.id} className="p-4">
+                  <ProductForm
+                    initial={product}
+                    onCancel={() => setEditingId(null)}
+                    onSubmit={async (payload) => {
+                      await updateProduct(token, product.id, payload);
+                      await load();
+                      setEditingId(null);
+                    }}
+                  />
+                </li>
+              ) : (
+                <li
+                  key={product.id}
+                  className="flex h-16 items-center justify-between gap-3 px-4 transition hover:bg-admin-bg"
+                >
+                  <div className="flex flex-col">
+                    <span
+                      className={
+                        product.disponible
+                          ? "text-[15px] font-semibold text-admin-ink"
+                          : "text-[15px] font-semibold text-admin-ink/40"
+                      }
+                    >
+                      {product.nombre}
+                    </span>
+                    <span className="text-sm text-admin-ink-soft">${product.precio}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Link href={`/dashboard/catalogo/productos/${product.id}`} className={LINK_BTN_SECONDARY}>
+                      Ver detalle
+                    </Link>
+                    {canWrite && (
+                      <>
+                        <Button variant="secondary" size="sm" onClick={() => setEditingId(product.id)}>
+                          Editar
+                        </Button>
+                        <ToggleSwitch
+                          checked={product.disponible}
+                          onChange={() => handleToggleDisponible(product)}
+                          label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
+                        />
+                      </>
+                    )}
+                  </div>
+                </li>
+              ),
+            )}
+          </ul>
+        </Card>
       )}
 
       {canWrite && (
@@ -493,15 +468,20 @@ function ProductForm({
     }
   }
 
-  return (
-    <form onSubmit={handleSubmit} className={initial ? "flex flex-col gap-3" : `${CARD} flex flex-col gap-3 p-4`}>
-      <p className="text-sm font-extrabold text-admin-ink">{initial ? "Editar producto" : "Nuevo producto"}</p>
+  const form = (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <p className="text-[17px] font-bold text-admin-ink">{initial ? "Editar producto" : "Nuevo producto"}</p>
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Pizza Hawaiana" className="input" />
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Pizza Hawaiana"
+            className="admin-input"
+          />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Precio
           <input
             type="number"
@@ -510,31 +490,33 @@ function ProductForm({
             value={precio}
             onChange={(e) => setPrecio(e.target.value)}
             placeholder="129.90"
-            className="input"
+            className="admin-input"
           />
         </label>
       </div>
-      <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
         Descripción (opcional)
-        <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="input" />
+        <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="admin-input" />
       </label>
-      <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
         Foto (URL, opcional)
-        <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} placeholder="https://..." className="input" />
+        <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} placeholder="https://..." className="admin-input" />
       </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex gap-2">
-        <button type="submit" disabled={submitting} className={BTN_PRIMARY}>
+        <Button type="submit" disabled={submitting}>
           {initial ? "Guardar cambios" : "Agregar producto"}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" onClick={onCancel} className={BTN_SECONDARY}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>
   );
+
+  return initial ? form : <Card>{form}</Card>;
 }

@@ -25,6 +25,9 @@ import {
 } from "@/lib/thermal-printer";
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Badge from "../_components/Badge";
 
 const POLL_INTERVAL_MS = 25000;
 
@@ -101,23 +104,25 @@ export default function PedidosPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex gap-2">
-        <TabButton active={tab === "activos"} onClick={() => setTab("activos")}>
+        <Button variant={tab === "activos" ? "primary" : "secondary"} onClick={() => setTab("activos")}>
           Activos {activos ? `(${activos.length})` : ""}
-        </TabButton>
-        <TabButton active={tab === "entregados"} onClick={() => setTab("entregados")}>
+        </Button>
+        <Button variant={tab === "entregados" ? "primary" : "secondary"} onClick={() => setTab("entregados")}>
           Entregados hoy {entregadosHoy ? `(${entregadosHoy.length})` : ""}
-        </TabButton>
+        </Button>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {shown === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {shown.length === 0 && (
-            <li className="rounded-[10px] bg-white p-4 text-sm text-admin-ink/55 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              {tab === "activos" ? "No hay pedidos activos." : "No hay pedidos entregados hoy."}
+            <li>
+              <Card className="text-sm text-admin-ink-soft">
+                {tab === "activos" ? "No hay pedidos activos." : "No hay pedidos entregados hoy."}
+              </Card>
             </li>
           )}
           {shown.map((order) => (
@@ -135,29 +140,6 @@ export default function PedidosPage() {
         </ul>
       )}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        active
-          ? "rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white"
-          : "rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-bold text-admin-ink/70 transition hover:bg-admin-bg"
-      }
-    >
-      {children}
-    </button>
   );
 }
 
@@ -241,124 +223,119 @@ function OrderCard({
   const siguienteEstado = SIGUIENTE_ESTADO[order.estadoPedido];
 
   return (
-    <li className="rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-      <button onClick={onToggle} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
-        <div className="flex items-center gap-3">
-          <span className="text-admin-ink/50">{expanded ? "▼" : "▶"}</span>
-          <span className="text-sm font-bold text-admin-ink">#{order.folio}</span>
-          <span className="text-xs text-admin-ink/55">{fecha}</span>
-        </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-bold text-white ${ESTADO_COLOR[order.estadoPedido]}`}>
-          {ESTADO_LABEL[order.estadoPedido]}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="flex flex-col gap-3 border-t border-black/10 px-4 py-3">
-          <div className="text-sm text-admin-ink">
-            <span className="font-bold">{order.clienteNombre}</span> · {order.clienteTelefono}
+    <li>
+      <Card padding={20}>
+        <button onClick={onToggle} className="flex w-full items-center justify-between gap-3 text-left">
+          <div className="flex items-center gap-3">
+            <span className="text-admin-ink-soft">{expanded ? "▼" : "▶"}</span>
+            <span className="text-base font-bold text-admin-ink">#{order.folio}</span>
+            <span className="text-sm text-admin-ink-soft">{fecha}</span>
           </div>
+          <Badge color={ESTADO_COLOR[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
+        </button>
 
-          {order.notas && (
-            <p className="rounded-md bg-admin-bg px-2.5 py-2 text-sm text-admin-ink">📝 {order.notas}</p>
-          )}
-
-          <ul className="flex flex-col gap-1.5">
-            {order.items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between text-sm text-admin-ink">
-                <span>
-                  {item.cantidad}× {item.nombreProducto}
-                </span>
-                <span>${(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
-              </li>
-            ))}
-          </ul>
-
-          {Number(order.descuentoTotal) > 0 && (
-            <div className="flex items-center justify-between text-sm text-admin-green-dark">
-              <span>{order.notasDescuento ?? "Descuento aplicado"}</span>
-              <span>-${Number(order.descuentoTotal).toFixed(2)}</span>
+        {expanded && (
+          <div className="mt-3 flex flex-col gap-3 border-t border-admin-border pt-3">
+            <div className="text-[15px] text-admin-ink">
+              <span className="font-bold">{order.clienteNombre}</span>{" "}
+              <span className="text-admin-ink-soft">· {order.clienteTelefono}</span>
             </div>
-          )}
 
-          <div className="flex items-center justify-between border-t border-black/10 pt-2 text-sm font-bold text-admin-ink">
-            <span>Total</span>
-            <span>${Number(order.total).toFixed(2)}</span>
-          </div>
-
-          <p className="text-xs text-admin-ink/55">
-            {entregaLinea(order, nombrePuntoEnvio)}
-            {order.metodoEntrega === "RECOGER" && ` · ${horaRecogidaDisplay}`} · Pago:{" "}
-            {METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago}
-          </p>
-
-          {order.requiereFactura && (
-            <div className="flex flex-col gap-1 rounded-md bg-admin-bg px-2.5 py-2 text-sm text-admin-ink">
-              <span className="text-xs font-bold uppercase tracking-wide text-admin-ink/55">Datos fiscales</span>
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                <span className="text-admin-ink/55">Razón social</span>
-                <span className="font-medium">{order.facturaRazonSocial}</span>
-                <span className="text-admin-ink/55">RFC</span>
-                <span className="font-medium">{order.facturaRfc}</span>
-                <span className="text-admin-ink/55">Régimen fiscal</span>
-                <span className="font-medium">{regimenFiscalLabel(order.facturaRegimenFiscal)}</span>
-                <span className="text-admin-ink/55">Uso de CFDI</span>
-                <span className="font-medium">{usoCfdiLabel(order.facturaUsoCfdi)}</span>
-                <span className="text-admin-ink/55">C.P. fiscal</span>
-                <span className="font-medium">{order.facturaCodigoPostal}</span>
-                <span className="text-admin-ink/55">Correo</span>
-                <span className="font-medium">{order.facturaCorreo}</span>
-              </div>
-            </div>
-          )}
-
-          {actionError && <p className="text-sm text-red-600">{actionError}</p>}
-          {printError && (
-            <p className="text-sm text-red-600">
-              {printError}{" "}
-              <button onClick={handleImprimirWebUsb} className="underline">
-                Reintentar
-              </button>
-            </p>
-          )}
-
-          <div className="flex flex-col gap-1.5 border-t border-black/10 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {siguienteEstado && (
-                <button
-                  onClick={handleAvanzar}
-                  disabled={advancing}
-                  className="rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {advancing ? "Avanzando..." : `Avanzar a: ${ESTADO_LABEL[siguienteEstado]}`}
-                </button>
-              )}
-              <button
-                onClick={handleImprimirWebUsb}
-                disabled={printing || !webUsbSupported}
-                className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-bold text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {printing ? "Imprimiendo..." : "Imprimir ticket"}
-              </button>
-              <button
-                onClick={() => {
-                  flushSync(() => setFechaImpresion(new Date()));
-                  window.print();
-                }}
-                className="rounded-full px-3 py-1.5 text-xs font-medium text-admin-ink/55 underline-offset-2 transition hover:underline"
-              >
-                Imprimir con el navegador
-              </button>
-            </div>
-            {!webUsbSupported && (
-              <p className="text-xs text-admin-ink/55">
-                &quot;Imprimir ticket&quot; requiere Chrome o Edge — usa &quot;Imprimir con el navegador&quot; en su
-                lugar.
+            {order.notas && (
+              <p className="rounded-[var(--radius-admin-control)] bg-admin-bg p-3 text-sm text-admin-ink">
+                📝 {order.notas}
               </p>
             )}
+
+            <ul className="flex flex-col">
+              {order.items.map((item) => (
+                <li key={item.id} className="flex items-center justify-between py-2 text-[15px] text-admin-ink">
+                  <span>
+                    {item.cantidad}× {item.nombreProducto}
+                  </span>
+                  <span>${(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
+                </li>
+              ))}
+            </ul>
+
+            {Number(order.descuentoTotal) > 0 && (
+              <div className="flex items-center justify-between text-sm text-admin-green-dark">
+                <span>{order.notasDescuento ?? "Descuento aplicado"}</span>
+                <span>-${Number(order.descuentoTotal).toFixed(2)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-admin-border pt-2">
+              <span className="text-base font-bold text-admin-ink">Total</span>
+              <span className="text-lg font-bold text-admin-ink">${Number(order.total).toFixed(2)}</span>
+            </div>
+
+            <p className="text-sm text-admin-ink-soft">
+              {entregaLinea(order, nombrePuntoEnvio)}
+              {order.metodoEntrega === "RECOGER" && ` · ${horaRecogidaDisplay}`} · Pago:{" "}
+              {METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago}
+            </p>
+
+            {order.requiereFactura && (
+              <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] bg-admin-bg p-3 text-sm text-admin-ink">
+                <span className="text-xs font-bold uppercase tracking-wide text-admin-ink-soft">Datos fiscales</span>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                  <span className="text-admin-ink-soft">Razón social</span>
+                  <span className="font-medium">{order.facturaRazonSocial}</span>
+                  <span className="text-admin-ink-soft">RFC</span>
+                  <span className="font-medium">{order.facturaRfc}</span>
+                  <span className="text-admin-ink-soft">Régimen fiscal</span>
+                  <span className="font-medium">{regimenFiscalLabel(order.facturaRegimenFiscal)}</span>
+                  <span className="text-admin-ink-soft">Uso de CFDI</span>
+                  <span className="font-medium">{usoCfdiLabel(order.facturaUsoCfdi)}</span>
+                  <span className="text-admin-ink-soft">C.P. fiscal</span>
+                  <span className="font-medium">{order.facturaCodigoPostal}</span>
+                  <span className="text-admin-ink-soft">Correo</span>
+                  <span className="font-medium">{order.facturaCorreo}</span>
+                </div>
+              </div>
+            )}
+
+            {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+            {printError && (
+              <p className="text-sm text-red-600">
+                {printError}{" "}
+                <button onClick={handleImprimirWebUsb} className="underline">
+                  Reintentar
+                </button>
+              </p>
+            )}
+
+            <div className="flex flex-col gap-1.5 border-t border-admin-border pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {siguienteEstado && (
+                  <Button variant="primary" onClick={handleAvanzar} disabled={advancing}>
+                    {advancing ? "Avanzando..." : `Avanzar a: ${ESTADO_LABEL[siguienteEstado]}`}
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={handleImprimirWebUsb} disabled={printing || !webUsbSupported}>
+                  {printing ? "Imprimiendo..." : "Imprimir ticket"}
+                </Button>
+                <button
+                  onClick={() => {
+                    flushSync(() => setFechaImpresion(new Date()));
+                    window.print();
+                  }}
+                  className="rounded-full px-3 py-1.5 text-sm font-medium text-admin-ink-soft underline-offset-2 transition hover:underline"
+                >
+                  Imprimir con el navegador
+                </button>
+              </div>
+              {!webUsbSupported && (
+                <p className="text-sm text-admin-ink-soft">
+                  &quot;Imprimir ticket&quot; requiere Chrome o Edge — usa &quot;Imprimir con el navegador&quot; en su
+                  lugar.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Card>
 
       {expanded && <ComandaImprimible order={order} ctx={comandaCtx} fechaImpresion={fechaImpresion} />}
     </li>

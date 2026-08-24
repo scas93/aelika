@@ -2,12 +2,8 @@
 
 import { useState } from "react";
 import { ApiError, createTenantStripeAccount, fetchTenantStripeStatus, updateTenantSettings } from "@/lib/api";
-
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "self-start rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
 
 // Basic shape check only ("algo@algo.algo") — the backend (@IsEmail, class-validator)
 // is the real source of truth, this is just to catch obvious typos before a
@@ -109,16 +105,16 @@ export default function StripeSection({
   }
 
   return (
-    <section className={`${CARD} flex flex-col gap-3 p-5`}>
+    <Card className="flex flex-col gap-3">
       <div>
         <h2 className="text-sm font-extrabold text-admin-ink">Cobros con tarjeta (Stripe)</h2>
-        <p className="text-sm text-admin-ink/55">
+        <p className="text-sm text-admin-ink-soft">
           Conecta tu cuenta de Stripe para poder recibir pagos con tarjeta en tu catálogo web.
         </p>
       </div>
 
       <form onSubmit={handleGuardarCorreo} className="flex flex-col gap-1.5">
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Correo de contacto para Stripe
           <input
             type="email"
@@ -128,9 +124,9 @@ export default function StripeSection({
               setCorreoSaved(false);
             }}
             placeholder="contacto@tunegocio.com"
-            className="input"
+            className="admin-input"
           />
-          <span className="text-xs font-normal text-admin-ink/55">
+          <span className="text-xs font-normal text-admin-ink-soft">
             El correo donde Stripe manda avisos de verificación y pagos de este negocio — no necesariamente el
             correo público del negocio.
           </span>
@@ -139,9 +135,9 @@ export default function StripeSection({
         {correoError && <p className="text-sm text-red-600">{correoError}</p>}
         {correoSaved && !correoError && <p className="text-sm text-admin-green-dark">Guardado.</p>}
 
-        <button type="submit" disabled={savingCorreo} className={`${BTN_SECONDARY} mt-1`}>
+        <Button type="submit" variant="secondary" size="sm" disabled={savingCorreo} className="mt-1 self-start">
           {savingCorreo ? "Guardando..." : "Guardar correo"}
-        </button>
+        </Button>
       </form>
 
       {conectado && (
@@ -151,33 +147,33 @@ export default function StripeSection({
       )}
 
       {verificacionPendiente && (
-        <p className="text-sm font-medium text-admin-ink/70">
+        <p className="text-sm font-medium text-admin-ink-soft">
           Verificación pendiente — termina de completar los datos que Stripe te pidió para poder empezar a cobrar.
         </p>
       )}
 
       {!stripeContactEmail && (
-        <p className="text-sm text-admin-ink/55">Guarda tu correo de contacto para poder conectar con Stripe.</p>
+        <p className="text-sm text-admin-ink-soft">Guarda tu correo de contacto para poder conectar con Stripe.</p>
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!conectado && (
-        <button
+        <Button
           type="button"
           onClick={handleConectar}
           disabled={connecting || !stripeContactEmail}
-          className={BTN_PRIMARY}
+          className="self-start"
         >
           {connecting ? "Redirigiendo..." : verificacionPendiente ? "Continuar verificación" : "Conectar con Stripe"}
-        </button>
+        </Button>
       )}
 
       {(conectado || verificacionPendiente) && (
-        <button type="button" onClick={handleActualizarEstado} disabled={refreshing} className={BTN_SECONDARY}>
+        <Button type="button" variant="secondary" onClick={handleActualizarEstado} disabled={refreshing} className="self-start">
           {refreshing ? "Consultando..." : "Actualizar estado"}
-        </button>
+        </Button>
       )}
-    </section>
+    </Card>
   );
 }

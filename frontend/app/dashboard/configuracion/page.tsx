@@ -15,16 +15,14 @@ import BotApiKeySection from "./bot-api-key-section";
 import FacturacionSection from "./facturacion-section";
 import PuntosEnvioSection from "./puntos-envio-section";
 import StripeSection from "./stripe-section";
-
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-5 py-2.5 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
 
 export default function ConfiguracionPage() {
   const { user, token } = useSession();
 
   if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink/55">Solo el dueño del negocio puede editar la configuración.</p>;
+    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar la configuración.</p>;
   }
 
   return <ConfiguracionForm token={token} />;
@@ -88,53 +86,57 @@ function ConfiguracionForm({ token }: { token: string }) {
   }
 
   if (loading) {
-    return <p className="text-sm text-admin-ink/55">Cargando...</p>;
+    return <p className="text-sm text-admin-ink-soft">Cargando...</p>;
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <form onSubmit={handleSubmit} className={`${CARD} flex flex-col gap-5 p-5`}>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-          Mensaje de bienvenida
-          <textarea
-            value={mensajeBienvenida}
-            onChange={(e) => {
-              setMensajeBienvenida(e.target.value);
+    <div className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Card>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Mensaje de bienvenida
+            <textarea
+              value={mensajeBienvenida}
+              onChange={(e) => {
+                setMensajeBienvenida(e.target.value);
+                setSaved(false);
+              }}
+              rows={3}
+              placeholder="¡Hola! ¿En qué te podemos ayudar?"
+              className="admin-input min-h-[80px] resize-none"
+            />
+          </label>
+        </Card>
+
+        <Card className="flex flex-col gap-5">
+          <HorarioEditor
+            horario={horario}
+            onChange={(value) => {
+              setHorario(value);
               setSaved(false);
             }}
-            rows={3}
-            placeholder="¡Hola! ¿En qué te podemos ayudar?"
-            className="input resize-none"
           />
-        </label>
 
-        <HorarioEditor
-          horario={horario}
-          onChange={(value) => {
-            setHorario(value);
-            setSaved(false);
-          }}
-        />
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Ubicación
+            <input
+              value={ubicacion}
+              onChange={(e) => {
+                setUbicacion(e.target.value);
+                setSaved(false);
+              }}
+              placeholder="Av. Siempre Viva 123"
+              className="admin-input"
+            />
+          </label>
 
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-          Ubicación
-          <input
-            value={ubicacion}
-            onChange={(e) => {
-              setUbicacion(e.target.value);
-              setSaved(false);
-            }}
-            placeholder="Av. Siempre Viva 123"
-            className="input"
-          />
-        </label>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          {saved && !error && <p className="text-sm text-admin-green-dark">Guardado.</p>}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {saved && !error && <p className="text-sm text-admin-green-dark">Guardado.</p>}
-
-        <button type="submit" disabled={saving} className={BTN_PRIMARY}>
-          {saving ? "Guardando..." : "Guardar"}
-        </button>
+          <Button type="submit" disabled={saving} className="self-start">
+            {saving ? "Guardando..." : "Guardar"}
+          </Button>
+        </Card>
       </form>
 
       <FacturacionSection token={token} facturacionModo={facturacionModo} onUpdated={setFacturacionModo} />

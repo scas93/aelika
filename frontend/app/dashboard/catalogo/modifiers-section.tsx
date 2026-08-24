@@ -13,18 +13,23 @@ import {
   type ModifierGroup,
   type TipoSeleccion,
 } from "@/lib/api";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Badge from "../_components/Badge";
+import Modal from "../_components/Modal";
 
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_DANGER =
-  "rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-black/10 disabled:text-admin-ink/40 disabled:hover:bg-transparent";
+const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
 const TIPO_SELECCION_LABEL: Record<TipoSeleccion, string> = {
   UNICA: "Selección única",
   MULTIPLE: "Selección múltiple",
+};
+
+// Soft bg / saturated text pair per selection type, same formula as the
+// promotion-type badges in promotions-section.tsx.
+const TIPO_SELECCION_BADGE_CLASSES: Record<TipoSeleccion, string> = {
+  UNICA: "bg-[#DBEAFE] text-[#3B82F6]",
+  MULTIPLE: "bg-[#FCE7F3] text-[#EC4899]",
 };
 
 interface OpcionRow {
@@ -78,48 +83,58 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">Modificadores</h2>
+      <h2 className={SECTION_HEADER}>Modificadores</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {groups === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {groups.length === 0 && (
-            <li className={`${CARD} p-4 text-sm text-admin-ink/55`}>Aún no tienes grupos de modificadores.</li>
+            <li>
+              <Card className="text-sm text-admin-ink-soft">Aún no tienes grupos de modificadores.</Card>
+            </li>
           )}
           {groups.map((group) =>
             editingId === group.id ? (
-              <li key={group.id} className={`${CARD} p-4`}>
-                <NewModifierGroupForm
-                  initial={group}
-                  onCancel={() => setEditingId(null)}
-                  onSubmit={async () => {
-                    await load();
-                    setEditingId(null);
-                  }}
-                  token={token}
-                />
+              <li key={group.id}>
+                <Card>
+                  <NewModifierGroupForm
+                    initial={group}
+                    onCancel={() => setEditingId(null)}
+                    onSubmit={async () => {
+                      await load();
+                      setEditingId(null);
+                    }}
+                    token={token}
+                  />
+                </Card>
               </li>
             ) : (
-              <li key={group.id} className={`${CARD} flex items-center justify-between gap-3 p-3`}>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-admin-ink">{group.nombre}</span>
-                  <span className="text-xs text-admin-ink/55">
-                    {TIPO_SELECCION_LABEL[group.tipoSeleccion]}
-                    {group.obligatorio ? " · Obligatorio" : " · Opcional"} · {group.opciones.length}{" "}
-                    {group.opciones.length === 1 ? "opción" : "opciones"}
-                  </span>
-                </div>
-                {canWrite && (
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setEditingId(group.id)} className={BTN_SECONDARY}>
-                      Editar
-                    </button>
-                    <button onClick={() => setDeleteTarget(group)} className={BTN_DANGER}>
-                      Eliminar
-                    </button>
+              <li key={group.id}>
+                <Card padding={12} className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold text-admin-ink">{group.nombre}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge color={TIPO_SELECCION_BADGE_CLASSES[group.tipoSeleccion]}>
+                        {TIPO_SELECCION_LABEL[group.tipoSeleccion]}
+                      </Badge>
+                      <span className="text-xs text-admin-ink-soft">
+                        {group.obligatorio ? "Obligatorio" : "Opcional"} · {group.opciones.length}{" "}
+                        {group.opciones.length === 1 ? "opción" : "opciones"}
+                      </span>
+                    </div>
                   </div>
-                )}
+                  {canWrite && (
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setEditingId(group.id)}>
+                        Editar
+                      </Button>
+                      <Button variant="danger" size="sm" onClick={() => setDeleteTarget(group)}>
+                        Eliminar
+                      </Button>
+                    </div>
+                  )}
+                </Card>
               </li>
             ),
           )}
@@ -128,7 +143,7 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
 
       {canWrite &&
         (creating ? (
-          <div className={`${CARD} p-4`}>
+          <Card>
             <NewModifierGroupForm
               token={token}
               onCancel={() => setCreating(false)}
@@ -137,38 +152,41 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
                 setCreating(false);
               }}
             />
-          </div>
+          </Card>
         ) : (
-          <button onClick={() => setCreating(true)} className={BTN_PRIMARY}>
+          <Button onClick={() => setCreating(true)} className="self-start">
             + Nuevo grupo de modificadores
-          </button>
+          </Button>
         ))}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex w-full max-w-sm flex-col gap-4 rounded-[14px] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-            <h3 className="text-lg font-extrabold text-admin-ink">¿Eliminar &ldquo;{deleteTarget.nombre}&rdquo;?</h3>
-            <p className="text-sm text-admin-ink/55">Esta acción no se puede deshacer.</p>
-            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
-            <div className="flex gap-2">
-              <button type="button" onClick={handleDeleteConfirm} disabled={deleting} className={BTN_PRIMARY}>
-                {deleting ? "Eliminando..." : "Eliminar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteTarget(null);
-                  setDeleteError(null);
-                }}
-                disabled={deleting}
-                className={BTN_SECONDARY}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        title={`¿Eliminar "${deleteTarget?.nombre ?? ""}"?`}
+        footer={
+          <>
+            <Button variant="primary" onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-admin-ink-soft">Esta acción no se puede deshacer.</p>
+        {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+      </Modal>
     </section>
   );
 }
@@ -278,21 +296,21 @@ function NewModifierGroupForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <p className="text-sm font-extrabold text-admin-ink">
+      <p className="text-[17px] font-bold text-admin-ink">
         {initial ? "Editar grupo de modificadores" : "Nuevo grupo de modificadores"}
       </p>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tamaño" className="input" />
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tamaño" className="admin-input" />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Tipo de selección
           <select
             value={tipoSeleccion}
             onChange={(e) => setTipoSeleccion(e.target.value as TipoSeleccion)}
-            className="input"
+            className="admin-input"
           >
             <option value="UNICA">Selección única</option>
             <option value="MULTIPLE">Selección múltiple</option>
@@ -300,26 +318,26 @@ function NewModifierGroupForm({
         </label>
       </div>
 
-      <label className="flex items-center gap-2 text-sm font-bold text-admin-ink">
+      <label className="flex items-center gap-2 text-sm font-semibold text-admin-ink">
         <input type="checkbox" checked={obligatorio} onChange={(e) => setObligatorio(e.target.checked)} />
         Obligatorio (el cliente debe elegir al menos una opción)
       </label>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-bold text-admin-ink">Opciones</span>
+        <span className="text-sm font-semibold text-admin-ink">Opciones</span>
         <div className="flex flex-col gap-2">
           {opciones.map((fila, index) => (
             <div key={fila.id ?? `nueva-${index}`} className="flex items-end gap-2">
-              <label className="flex flex-1 flex-col gap-1.5 text-xs font-bold text-admin-ink">
+              <label className="flex flex-1 flex-col gap-1.5 text-xs font-semibold text-admin-ink">
                 Nombre
                 <input
                   value={fila.nombre}
                   onChange={(e) => updateFila(index, { nombre: e.target.value })}
                   placeholder="Chica"
-                  className="input"
+                  className="admin-input"
                 />
               </label>
-              <label className="flex w-32 flex-col gap-1.5 text-xs font-bold text-admin-ink">
+              <label className="flex w-32 flex-col gap-1.5 text-xs font-semibold text-admin-ink">
                 Precio adicional
                 <input
                   type="number"
@@ -328,35 +346,30 @@ function NewModifierGroupForm({
                   value={fila.precioAdicional}
                   onChange={(e) => updateFila(index, { precioAdicional: e.target.value })}
                   placeholder="0.00"
-                  className="input"
+                  className="admin-input"
                 />
               </label>
-              <button
-                type="button"
-                onClick={() => borrarFila(index)}
-                disabled={opciones.length <= 1}
-                className={BTN_SECONDARY}
-              >
+              <Button type="button" variant="secondary" size="sm" onClick={() => borrarFila(index)} disabled={opciones.length <= 1}>
                 Quitar
-              </button>
+              </Button>
             </div>
           ))}
         </div>
-        <button type="button" onClick={agregarFila} className={`${BTN_SECONDARY} self-start`}>
+        <Button type="button" variant="secondary" size="sm" onClick={agregarFila} className="self-start">
           + Agregar opción
-        </button>
+        </Button>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex gap-2">
-        <button type="submit" disabled={submitting} className={BTN_PRIMARY}>
+        <Button type="submit" disabled={submitting}>
           {submitting ? "Guardando..." : initial ? "Guardar cambios" : "Crear grupo"}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" onClick={onCancel} disabled={submitting} className={BTN_SECONDARY}>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>

@@ -25,16 +25,22 @@
   /* /dashboard/* (panel admin) redesign — a separate, fixed-light palette
      with a permanently-dark sidebar (not a light/dark mode pair; the admin
      panel doesn't support dark mode). Named admin-* on purpose so nothing
-     here couples to the storefront tokens above, even where a hex value
-     happens to coincide (#25D366 is WhatsApp's green in both mockups, but
-     each redesign owns its own token so they can diverge independently
-     later). See CLAUDE.md. */
-  --color-admin-green: #25d366;
-  --color-admin-green-dark: #128c7e;
-  --color-admin-bg: #f0f2f5;
-  --color-admin-ink: #111b21;
-  --color-admin-sidebar: #1f2c33;
+     here couples to the storefront tokens above — the green used to
+     coincide by accident with --color-whatsapp (#25D366); it's now its own
+     distinct value so the two palettes can diverge freely. See CLAUDE.md. */
+  --color-admin-green: #1d9a5c;
+  --color-admin-green-dark: #157a48;
+  --color-admin-green-soft: #e4f5ec;
+  --color-admin-bg: #f5f6f8;
+  --color-admin-ink: #0f172a;
+  --color-admin-ink-soft: #64748b;
+  --color-admin-border: #e2e5ea;
+  --color-admin-sidebar: #121a24;
   --font-admin: -apple-system, "Segoe UI", system-ui, sans-serif;
+
+  --radius-admin-card: 16px;
+  --radius-admin-control: 10px;
+  --radius-admin-pill: 999px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -92,6 +98,26 @@ body {
   .input.search-input {
     background: var(--color-chat-card-dark);
   }
+}
+
+/* Scoped input variant for the admin panel redesign (/dashboard/*) — a
+   sibling of .input, not a replacement. .input stays untouched because it's
+   shared with /tienda (its focus glow reads --color-whatsapp, which this
+   redesign must not repurpose). Dashboard screens migrate to this class one
+   at a time in later phases. */
+.admin-input {
+  background: var(--color-admin-bg);
+  border: 1px solid var(--color-admin-border);
+  border-radius: var(--radius-admin-control);
+  padding: 12px 16px;
+  font-size: 15px;
+  color: var(--color-admin-ink);
+}
+
+.admin-input:focus {
+  outline: none;
+  border-color: var(--color-admin-green);
+  box-shadow: 0 0 0 3px var(--color-admin-green-soft);
 }
 
 /* Print only the comanda ticket (see app/dashboard/pedidos/page.tsx) —

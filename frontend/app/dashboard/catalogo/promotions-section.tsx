@@ -14,12 +14,30 @@ import {
   type Promotion,
   type PromotionTipo,
 } from "@/lib/api";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Badge from "../_components/Badge";
 
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg";
+const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
+
+type TipoBadge = "porcentaje" | "monto_fijo" | "combo";
+
+// Soft pastel bg + saturated text, one distinct pair per promotion type —
+// same "soft bg / dark accent text" formula as the admin-green tokens.
+// Reuses the Inicio (blue) and Catálogo (violet) sidebar accents from
+// nav-items.ts for monto_fijo/combo so the palette stays consistent with
+// the rest of the panel instead of inventing unrelated new hues.
+const TIPO_BADGE_CLASSES: Record<TipoBadge, string> = {
+  porcentaje: "bg-admin-green-soft text-admin-green-dark",
+  monto_fijo: "bg-[#DBEAFE] text-[#3B82F6]",
+  combo: "bg-[#EDE9FE] text-[#8B5CF6]",
+};
+
+const TIPO_BADGE_LABEL: Record<TipoBadge, string> = {
+  porcentaje: "Porcentaje",
+  monto_fijo: "Monto fijo",
+  combo: "Combo",
+};
 
 export default function PromotionsSection({ token, canWrite }: { token: string; canWrite: boolean }) {
   const [promotions, setPromotions] = useState<Promotion[] | null>(null);
@@ -46,6 +64,12 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
     return products.find((p) => p.id === id)?.nombre ?? "(producto eliminado)";
   }
 
+  function tipoBadge(promo: Promotion): TipoBadge {
+    if (promo.tipo === "COMBO") return "combo";
+    const config = promo.config as DescuentoProductoConfig;
+    return config.tipoDescuento === "porcentaje" ? "porcentaje" : "monto_fijo";
+  }
+
   function describe(promo: Promotion) {
     if (promo.tipo === "DESCUENTO_PRODUCTO") {
       const config = promo.config as DescuentoProductoConfig;
@@ -53,7 +77,7 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
       return `${productName(config.productId)} — ${monto} de descuento`;
     }
     const config = promo.config as ComboConfig;
-    return `Combo: ${config.productIds.map(productName).join(" + ")} — $${config.precioCombo}`;
+    return `${config.productIds.map(productName).join(" + ")} — $${config.precioCombo}`;
   }
 
   async function handleToggleActiva(promo: Promotion) {
@@ -73,37 +97,44 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">Promociones</h2>
+      <h2 className={SECTION_HEADER}>Promociones</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {promotions === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {promotions.length === 0 && (
-            <li className={`${CARD} p-4 text-sm text-admin-ink/55`}>Aún no tienes promociones.</li>
+            <li>
+              <Card className="text-sm text-admin-ink-soft">Aún no tienes promociones.</Card>
+            </li>
           )}
           {promotions.map((promo) => (
-            <li key={promo.id} className={`${CARD} flex items-center justify-between gap-3 p-3`}>
-              <div className="flex items-center gap-2">
-                <span className={promo.activa ? "text-sm font-bold text-admin-ink" : "text-sm font-bold text-admin-ink/40"}>
-                  {describe(promo)}
-                </span>
-                {!promo.activa && (
-                  <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink/55">
-                    Inactiva
-                  </span>
-                )}
-              </div>
-              {canWrite && (
+            <li key={promo.id}>
+              <Card padding={12} className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleToggleActiva(promo)} className={BTN_SECONDARY}>
-                    {promo.activa ? "Desactivar" : "Activar"}
-                  </button>
-                  <button onClick={() => handleDelete(promo.id)} className={BTN_SECONDARY}>
-                    Eliminar
-                  </button>
+                  <Badge color={TIPO_BADGE_CLASSES[tipoBadge(promo)]}>{TIPO_BADGE_LABEL[tipoBadge(promo)]}</Badge>
+                  <span
+                    className={promo.activa ? "text-sm font-semibold text-admin-ink" : "text-sm font-semibold text-admin-ink/40"}
+                  >
+                    {describe(promo)}
+                  </span>
+                  {!promo.activa && (
+                    <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
+                      Inactiva
+                    </span>
+                  )}
                 </div>
-              )}
+                {canWrite && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(promo)}>
+                      {promo.activa ? "Desactivar" : "Activar"}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleDelete(promo.id)}>
+                      Eliminar
+                    </Button>
+                  </div>
+                )}
+              </Card>
             </li>
           ))}
         </ul>
@@ -172,90 +203,92 @@ function NewPromotionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`${CARD} flex flex-col gap-3 p-4`}>
-      <p className="text-sm font-extrabold text-admin-ink">Nueva promoción</p>
+    <Card>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <p className="text-[17px] font-bold text-admin-ink">Nueva promoción</p>
 
-      <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-        Tipo
-        <select value={tipo} onChange={(e) => setTipo(e.target.value as PromotionTipo)} className="input">
-          <option value="DESCUENTO_PRODUCTO">Descuento en un producto</option>
-          <option value="COMBO">Combo de productos</option>
-        </select>
-      </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Tipo
+          <select value={tipo} onChange={(e) => setTipo(e.target.value as PromotionTipo)} className="admin-input">
+            <option value="DESCUENTO_PRODUCTO">Descuento en un producto</option>
+            <option value="COMBO">Combo de productos</option>
+          </select>
+        </label>
 
-      {tipo === "DESCUENTO_PRODUCTO" ? (
-        <div className="grid grid-cols-3 gap-3">
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Producto
-            <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input">
-              <option value="">Selecciona...</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Tipo de descuento
-            <select
-              value={tipoDescuento}
-              onChange={(e) => setTipoDescuento(e.target.value as "porcentaje" | "monto_fijo")}
-              className="input"
-            >
-              <option value="porcentaje">Porcentaje</option>
-              <option value="monto_fijo">Monto fijo</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Valor
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              placeholder={tipoDescuento === "porcentaje" ? "15" : "20.00"}
-              className="input"
-            />
-          </label>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Productos del combo (elige al menos 2)
-            <div className="flex flex-col gap-1 rounded-lg border border-black/10 p-2">
-              {products.length === 0 && (
-                <span className="text-sm font-normal text-admin-ink/55">No hay productos aún.</span>
-              )}
-              {products.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm font-normal text-admin-ink">
-                  <input type="checkbox" checked={productIds.includes(p.id)} onChange={() => toggleProductId(p.id)} />
-                  {p.nombre}
-                </label>
-              ))}
-            </div>
+        {tipo === "DESCUENTO_PRODUCTO" ? (
+          <div className="grid grid-cols-3 gap-3">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Producto
+              <select value={productId} onChange={(e) => setProductId(e.target.value)} className="admin-input">
+                <option value="">Selecciona...</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Tipo de descuento
+              <select
+                value={tipoDescuento}
+                onChange={(e) => setTipoDescuento(e.target.value as "porcentaje" | "monto_fijo")}
+                className="admin-input"
+              >
+                <option value="porcentaje">Porcentaje</option>
+                <option value="monto_fijo">Monto fijo</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Valor
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder={tipoDescuento === "porcentaje" ? "15" : "20.00"}
+                className="admin-input"
+              />
+            </label>
           </div>
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Precio del combo
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={precioCombo}
-              onChange={(e) => setPrecioCombo(e.target.value)}
-              placeholder="199.00"
-              className="input"
-            />
-          </label>
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Productos del combo (elige al menos 2)
+              <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] border border-admin-border p-2">
+                {products.length === 0 && (
+                  <span className="text-sm font-normal text-admin-ink-soft">No hay productos aún.</span>
+                )}
+                {products.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-sm font-normal text-admin-ink">
+                    <input type="checkbox" checked={productIds.includes(p.id)} onChange={() => toggleProductId(p.id)} />
+                    {p.nombre}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Precio del combo
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={precioCombo}
+                onChange={(e) => setPrecioCombo(e.target.value)}
+                placeholder="199.00"
+                className="admin-input"
+              />
+            </label>
+          </div>
+        )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <button type="submit" disabled={submitting} className={BTN_PRIMARY}>
-        Crear promoción
-      </button>
-    </form>
+        <Button type="submit" disabled={submitting} className="self-start">
+          Crear promoción
+        </Button>
+      </form>
+    </Card>
   );
 }

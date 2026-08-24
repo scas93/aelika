@@ -10,6 +10,9 @@ import {
   type Role,
   type TeamUser,
 } from "@/lib/api";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Modal from "../_components/Modal";
 
 const ROLES: Role[] = ["OPERADOR", "GERENTE", "DUENO"];
 const ROLE_LABEL: Record<Role, string> = {
@@ -18,17 +21,11 @@ const ROLE_LABEL: Record<Role, string> = {
   DUENO: "Dueño",
 };
 
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
-
 export default function EquipoPage() {
   const { user, token } = useSession();
 
   if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink/55">Solo el dueño del negocio puede administrar el equipo.</p>;
+    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar el equipo.</p>;
   }
 
   return <TeamManager currentUserId={user.id} token={token} />;
@@ -75,60 +72,81 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {users === null ? (
-        <p className="text-sm text-admin-ink/55">Cargando...</p>
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
+      ) : users.length === 0 ? (
+        <Card className="text-sm text-admin-ink-soft">Aún no tienes miembros en el equipo.</Card>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {users.map((teamUser) => {
-            const isSelf = teamUser.id === currentUserId;
-            return (
-              <li key={teamUser.id} className={`${CARD} flex items-center justify-between gap-3 p-3`}>
-                <div className="flex flex-col">
-                  <span className={teamUser.activo ? "font-bold text-admin-ink" : "font-bold text-admin-ink/40"}>
-                    {teamUser.nombre} {isSelf && <span className="text-admin-ink/40">(tú)</span>}
-                  </span>
-                  <span className="text-sm text-admin-ink/55">{teamUser.email}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!teamUser.activo && (
-                    <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink/55">
-                      Inactivo
+        <Card padding={0} className="overflow-hidden">
+          <ul className="flex flex-col divide-y divide-admin-border">
+            {users.map((teamUser) => {
+              const isSelf = teamUser.id === currentUserId;
+              return (
+                <li
+                  key={teamUser.id}
+                  className="flex h-16 items-center justify-between gap-3 px-4 transition hover:bg-admin-bg"
+                >
+                  <div className="flex flex-col">
+                    <span
+                      className={
+                        teamUser.activo
+                          ? "text-[15px] font-semibold text-admin-ink"
+                          : "text-[15px] font-semibold text-admin-ink/40"
+                      }
+                    >
+                      {teamUser.nombre} {isSelf && <span className="text-admin-ink-soft">(tú)</span>}
                     </span>
-                  )}
-                  <select
-                    value={teamUser.rol}
-                    disabled={isSelf}
-                    onChange={(e) => handleUpdate(teamUser.id, { rol: e.target.value as Role })}
-                    className="input py-1.5 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {ROLES.map((rol) => (
-                      <option key={rol} value={rol}>
-                        {ROLE_LABEL[rol]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    disabled={isSelf}
-                    onClick={() => handleUpdate(teamUser.id, { activo: !teamUser.activo })}
-                    className={BTN_SECONDARY}
-                  >
-                    {teamUser.activo ? "Desactivar" : "Activar"}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    <span className="text-sm text-admin-ink-soft">{teamUser.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!teamUser.activo && (
+                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
+                        Inactivo
+                      </span>
+                    )}
+                    <select
+                      value={teamUser.rol}
+                      disabled={isSelf}
+                      onChange={(e) => handleUpdate(teamUser.id, { rol: e.target.value as Role })}
+                      className="admin-input py-1.5 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {ROLES.map((rol) => (
+                        <option key={rol} value={rol}>
+                          {ROLE_LABEL[rol]}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={isSelf}
+                      onClick={() => handleUpdate(teamUser.id, { activo: !teamUser.activo })}
+                    >
+                      {teamUser.activo ? "Desactivar" : "Activar"}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
 
       <NewUserForm onCreate={handleCreate} />
 
-      {newPasswordFor && (
-        <TemporaryPasswordModal
-          email={newPasswordFor.email}
-          password={newPasswordFor.password}
-          onClose={() => setNewPasswordFor(null)}
-        />
-      )}
+      <Modal
+        open={newPasswordFor !== null}
+        onClose={() => setNewPasswordFor(null)}
+        title="Usuario creado"
+        footer={
+          <Button variant="primary" onClick={() => setNewPasswordFor(null)}>
+            Entendido
+          </Button>
+        }
+      >
+        {newPasswordFor && (
+          <TemporaryPasswordBody email={newPasswordFor.email} password={newPasswordFor.password} />
+        )}
+      </Modal>
     </div>
   );
 }
@@ -162,53 +180,47 @@ function NewUserForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`${CARD} flex flex-col gap-3 p-4`}>
-      <p className="text-sm font-extrabold text-admin-ink">Agregar a alguien del equipo</p>
-      <div className="grid grid-cols-3 gap-3">
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-          Nombre
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ana Torres" className="input" />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-          Correo
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="ana@negocio.com"
-            className="input"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-          Rol
-          <select value={rol} onChange={(e) => setRol(e.target.value as Role)} className="input">
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <Card>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <p className="text-[17px] font-bold text-admin-ink">Agregar a alguien del equipo</p>
+        <div className="grid grid-cols-3 gap-3">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Nombre
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ana Torres" className="admin-input" />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Correo
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ana@negocio.com"
+              className="admin-input"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Rol
+            <select value={rol} onChange={(e) => setRol(e.target.value as Role)} className="admin-input">
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <button type="submit" disabled={submitting || !nombre.trim() || !email.trim()} className={BTN_PRIMARY}>
-        Crear usuario
-      </button>
-    </form>
+        <Button type="submit" disabled={submitting || !nombre.trim() || !email.trim()} className="self-start">
+          Crear usuario
+        </Button>
+      </form>
+    </Card>
   );
 }
 
-function TemporaryPasswordModal({
-  email,
-  password,
-  onClose,
-}: {
-  email: string;
-  password: string;
-  onClose: () => void;
-}) {
+function TemporaryPasswordBody({ email, password }: { email: string; password: string }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -217,22 +229,16 @@ function TemporaryPasswordModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-[14px] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-        <h2 className="text-lg font-extrabold text-admin-ink">Usuario creado</h2>
-        <p className="text-sm text-admin-ink/55">
-          Comparte esta contraseña temporal con <span className="font-bold text-admin-ink">{email}</span>. No se
-          volverá a mostrar — cuando el usuario entre por primera vez debe cambiarla.
-        </p>
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-black/10 px-3 py-2.5 font-mono text-sm text-admin-ink">
-          {password}
-          <button onClick={handleCopy} className={BTN_SECONDARY}>
-            {copied ? "Copiado" : "Copiar"}
-          </button>
-        </div>
-        <button onClick={onClose} className={`${BTN_PRIMARY} self-end`}>
-          Entendido
-        </button>
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-admin-ink-soft">
+        Comparte esta contraseña temporal con <span className="font-bold text-admin-ink">{email}</span>. No se
+        volverá a mostrar — cuando el usuario entre por primera vez debe cambiarla.
+      </p>
+      <div className="flex items-center justify-between gap-2 rounded-[var(--radius-admin-control)] border border-admin-border px-3 py-2.5 font-mono text-sm text-admin-ink">
+        {password}
+        <Button variant="secondary" size="sm" onClick={handleCopy}>
+          {copied ? "Copiado" : "Copiar"}
+        </Button>
       </div>
     </div>
   );

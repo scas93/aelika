@@ -13,14 +13,12 @@ import {
   type ModifierGroup,
   type ProductDetail,
 } from "@/lib/api";
+import Card from "../../../_components/Card";
+import Button from "../../../_components/Button";
 
-const CARD = "rounded-[10px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
-const BTN_PRIMARY =
-  "self-start rounded-lg bg-admin-green px-4 py-2 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_SECONDARY =
-  "rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-admin-ink/70 transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40";
-const BTN_DANGER =
-  "rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-black/10 disabled:text-admin-ink/40 disabled:hover:bg-transparent";
+const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
+const LINK_BTN_SECONDARY =
+  "rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-1.5 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
 
 export default function ProductoDetallePage() {
   const params = useParams<{ id: string }>();
@@ -67,7 +65,7 @@ export default function ProductoDetallePage() {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-red-600">{error}</p>
-        <Link href="/dashboard/catalogo" className={`${BTN_SECONDARY} self-start`}>
+        <Link href="/dashboard/catalogo" className={`${LINK_BTN_SECONDARY} self-start`}>
           ← Volver al catálogo
         </Link>
       </div>
@@ -75,7 +73,7 @@ export default function ProductoDetallePage() {
   }
 
   if (!product) {
-    return <p className="text-sm text-admin-ink/55">Cargando...</p>;
+    return <p className="text-sm text-admin-ink-soft">Cargando...</p>;
   }
 
   const asignados = product.modifierGroups;
@@ -83,45 +81,45 @@ export default function ProductoDetallePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/dashboard/catalogo" className="text-sm font-bold text-admin-ink/55 hover:text-admin-ink">
+      <Link href="/dashboard/catalogo" className="text-sm font-semibold text-admin-ink-soft hover:text-admin-ink">
         ← Volver al catálogo
       </Link>
 
-      <section className={`${CARD} flex flex-col gap-1 p-4`}>
+      <Card className="flex flex-col gap-1">
         <span className="text-lg font-extrabold text-admin-ink">{product.nombre}</span>
-        <span className="text-sm text-admin-ink/55">
+        <span className="text-sm text-admin-ink-soft">
           ${product.precio} · {product.category.nombre}
         </span>
-      </section>
+      </Card>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">Modificadores asignados</h2>
+        <h2 className={SECTION_HEADER}>Modificadores asignados</h2>
         {unassignError && <p className="text-sm text-red-600">{unassignError}</p>}
         {asignados.length === 0 ? (
-          <p className={`${CARD} p-4 text-sm text-admin-ink/55`}>Este producto no tiene modificadores asignados.</p>
+          <Card className="text-sm text-admin-ink-soft">Este producto no tiene modificadores asignados.</Card>
         ) : (
           <ul className="flex flex-col gap-2">
             {asignados.map((asignacion) => (
-              <li
-                key={asignacion.modifierGroupId}
-                className={`${CARD} flex items-center justify-between gap-3 p-3`}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-admin-ink">{asignacion.modifierGroup.nombre}</span>
-                  <span className="text-xs text-admin-ink/55">
-                    Orden {asignacion.orden} · {asignacion.modifierGroup.opciones.length}{" "}
-                    {asignacion.modifierGroup.opciones.length === 1 ? "opción" : "opciones"}
-                  </span>
-                </div>
-                {canWrite && (
-                  <button
-                    onClick={() => handleUnassign(asignacion.modifierGroupId)}
-                    disabled={unassigningId === asignacion.modifierGroupId}
-                    className={BTN_DANGER}
-                  >
-                    {unassigningId === asignacion.modifierGroupId ? "Desasignando..." : "Desasignar"}
-                  </button>
-                )}
+              <li key={asignacion.modifierGroupId}>
+                <Card padding={12} className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-admin-ink">{asignacion.modifierGroup.nombre}</span>
+                    <span className="text-xs text-admin-ink-soft">
+                      Orden {asignacion.orden} · {asignacion.modifierGroup.opciones.length}{" "}
+                      {asignacion.modifierGroup.opciones.length === 1 ? "opción" : "opciones"}
+                    </span>
+                  </div>
+                  {canWrite && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleUnassign(asignacion.modifierGroupId)}
+                      disabled={unassigningId === asignacion.modifierGroupId}
+                    >
+                      {unassigningId === asignacion.modifierGroupId ? "Desasignando..." : "Desasignar"}
+                    </Button>
+                  )}
+                </Card>
               </li>
             ))}
           </ul>
@@ -130,13 +128,11 @@ export default function ProductoDetallePage() {
 
       {canWrite && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-xs font-extrabold uppercase tracking-wide text-admin-ink/55">
-            Asignar modificador existente
-          </h2>
+          <h2 className={SECTION_HEADER}>Asignar modificador existente</h2>
           {disponibles.length === 0 ? (
-            <p className={`${CARD} p-4 text-sm text-admin-ink/55`}>
+            <Card className="text-sm text-admin-ink-soft">
               No hay más grupos de modificadores disponibles para asignar.
-            </p>
+            </Card>
           ) : (
             <AssignModifierGroupForm
               // Remounts (resetting the internal selection) whenever the
@@ -192,33 +188,35 @@ function AssignModifierGroupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`${CARD} flex items-end gap-3 p-4`}>
-      <label className="flex flex-1 flex-col gap-1.5 text-sm font-bold text-admin-ink">
-        Grupo de modificadores
-        <select value={modifierGroupId} onChange={(e) => setModifierGroupId(e.target.value)} className="input">
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex w-28 flex-col gap-1.5 text-sm font-bold text-admin-ink">
-        Orden (opcional)
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={orden}
-          onChange={(e) => setOrden(e.target.value)}
-          placeholder="0"
-          className="input"
-        />
-      </label>
-      <button type="submit" disabled={submitting} className={BTN_PRIMARY}>
-        {submitting ? "Asignando..." : "Asignar"}
-      </button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-    </form>
+    <Card>
+      <form onSubmit={handleSubmit} className="flex items-end gap-3">
+        <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Grupo de modificadores
+          <select value={modifierGroupId} onChange={(e) => setModifierGroupId(e.target.value)} className="admin-input">
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex w-28 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Orden (opcional)
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={orden}
+            onChange={(e) => setOrden(e.target.value)}
+            placeholder="0"
+            className="admin-input"
+          />
+        </label>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Asignando..." : "Asignar"}
+        </Button>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </form>
+    </Card>
   );
 }

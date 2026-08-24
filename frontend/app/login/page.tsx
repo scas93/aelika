@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, login } from "@/lib/api";
 import { saveSession } from "@/lib/session";
+import Button from "@/app/dashboard/_components/Button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,55 +30,67 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen w-full items-center justify-center bg-admin-sidebar p-4 font-admin">
-      <div className="flex w-full max-w-[320px] flex-col gap-6 rounded-[14px] bg-white p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-        <div>
-          <h1 className="text-xl font-extrabold text-admin-ink">Inicia sesión</h1>
-          <p className="mt-1 text-sm text-admin-ink/55">Entra al panel de tu negocio en Aelika.</p>
+    <main className="flex min-h-screen w-full bg-white font-admin">
+      {/* No hero image asset exists in the project yet — solid admin-green
+          block as the placeholder, per the design spec's fallback. Hidden
+          below md: the panel itself is desktop-only, but login is the
+          entry point and a fixed 45/55 split isn't viable on a phone. */}
+      <div className="hidden shrink-0 basis-[45%] p-4 md:block">
+        <div className="h-full w-full rounded-[var(--radius-admin-card)] bg-admin-green" />
+      </div>
+
+      <div className="flex flex-1 flex-col">
+        <div className="flex justify-end p-6">
+          <span className="text-lg font-extrabold text-admin-ink">Aelika</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Correo
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="luis@negocio.com"
-              className="input"
-            />
-          </label>
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="flex w-full max-w-[440px] flex-col gap-8">
+            <div>
+              <h1 className="text-[32px] font-bold text-admin-ink">Inicia sesión</h1>
+              <p className="mt-1 text-[15px] text-admin-ink-soft">Entra al panel de tu negocio en Aelika.</p>
+            </div>
 
-          <label className="flex flex-col gap-1.5 text-sm font-bold text-admin-ink">
-            Contraseña
-            <input
-              required
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input"
-            />
-          </label>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                Correo
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="luis@negocio.com"
+                  className="admin-input"
+                />
+              </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                Contraseña
+                <input
+                  required
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="admin-input"
+                />
+              </label>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-2 w-full rounded-lg bg-admin-green px-5 py-2.5 text-sm font-bold text-white transition hover:bg-admin-green-dark disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {submitting ? "Entrando..." : "Iniciar sesión"}
-          </button>
-        </form>
+              {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <p className="text-center text-sm text-admin-ink/55">
-          ¿Aún no tienes negocio en Aelika?{" "}
-          <Link href="/register" className="font-bold text-admin-green underline">
-            Regístralo aquí
-          </Link>
-        </p>
+              <Button type="submit" variant="primary" size="lg" fullWidth disabled={submitting} className="mt-2">
+                {submitting ? "Entrando..." : "Iniciar sesión"}
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-admin-ink-soft">
+              ¿Aún no tienes negocio en Aelika?{" "}
+              <Link href="/register" className="font-semibold text-admin-green underline">
+                Regístralo aquí
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );
