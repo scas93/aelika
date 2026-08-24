@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/session-context";
 import {
@@ -22,6 +22,7 @@ import Button from "../_components/Button";
 import Tabs from "../_components/Tabs";
 import Modal from "../_components/Modal";
 import ToggleSwitch from "../_components/ToggleSwitch";
+import SidePanel from "../_components/SidePanel";
 
 type Tab = "catalogo" | "promociones" | "modificadores";
 
@@ -40,6 +41,7 @@ export default function CatalogoPage() {
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [categoryPanelOpen, setCategoryPanelOpen] = useState(false);
 
   async function loadCategories() {
     try {
@@ -127,7 +129,14 @@ export default function CatalogoPage() {
       ) : (
         <>
           <section className="flex flex-col gap-3">
-            <h2 className={SECTION_HEADER}>Categorías</h2>
+            <div className="flex items-center justify-between">
+              <h2 className={SECTION_HEADER}>Categorías</h2>
+              {canWrite && (
+                <Button variant="primary" size="sm" onClick={() => setCategoryPanelOpen(true)}>
+                  + Nueva categoría
+                </Button>
+              )}
+            </div>
             {categoriesError && <p className="text-sm text-red-600">{categoriesError}</p>}
             {categories === null ? (
               <p className="text-sm text-admin-ink-soft">Cargando...</p>
@@ -200,9 +209,13 @@ export default function CatalogoPage() {
                 ))}
               </ul>
             )}
-
-            {canWrite && <NewCategoryForm onCreate={handleCreateCategory} />}
           </section>
+
+          <NewCategoryPanel
+            open={categoryPanelOpen}
+            onClose={() => setCategoryPanelOpen(false)}
+            onCreate={handleCreateCategory}
+          />
 
           <Modal
             open={deleteTarget !== null}
@@ -265,19 +278,42 @@ function IconButton({
   );
 }
 
-function NewCategoryForm({ onCreate }: { onCreate: (nombre: string) => Promise<void> }) {
+function NewCategoryPanel({
+  open,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (nombre: string) => Promise<void>;
+}) {
   const [nombre, setNombre] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nombre.trim()) return;
+  function resetForm() {
+    setNombre("");
+    setError(null);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form each time the panel opens
+    resetForm();
+  }, [open]);
+
+  async function handleSubmit(keepOpen: boolean) {
     setSubmitting(true);
     setError(null);
     try {
       await onCreate(nombre.trim());
       setNombre("");
+      if (keepOpen) {
+        firstFieldRef.current?.focus();
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo crear la categoría");
     } finally {
@@ -285,24 +321,38 @@ function NewCategoryForm({ onCreate }: { onCreate: (nombre: string) => Promise<v
     }
   }
 
+  const canSubmit = nombre.trim().length > 0 && !submitting;
+
   return (
-    <Card>
-      <form onSubmit={handleSubmit} className="flex items-end gap-2">
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Nueva categoría
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      title="Nueva categoría"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={!canSubmit}>
+            Agregar y crear otro
+          </Button>
+          <Button variant="primary" onClick={() => handleSubmit(false)} disabled={!canSubmit}>
+            Agregar categoría
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Nombre
           <input
+            ref={firstFieldRef}
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             placeholder="Bebidas"
             className="admin-input"
           />
         </label>
-        <Button type="submit" disabled={submitting || !nombre.trim()}>
-          Agregar
-        </Button>
         {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
-    </Card>
+      </div>
+    </SidePanel>
   );
 }
 
@@ -318,6 +368,7 @@ function ProductsSection({
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [productPanelOpen, setProductPanelOpen] = useState(false);
 
   async function load() {
     try {
@@ -343,7 +394,14 @@ function ProductsSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={SECTION_HEADER}>Productos</h2>
+      <div className="flex items-center justify-between">
+        <h2 className={SECTION_HEADER}>Productos</h2>
+        {canWrite && (
+          <Button variant="primary" size="sm" onClick={() => setProductPanelOpen(true)}>
+            + Agregar producto
+          </Button>
+        )}
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {products === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
@@ -406,14 +464,14 @@ function ProductsSection({
         </Card>
       )}
 
-      {canWrite && (
-        <ProductForm
-          onSubmit={async (payload) => {
-            await createProduct(token, { ...payload, categoryId });
-            await load();
-          }}
-        />
-      )}
+      <NewProductPanel
+        open={productPanelOpen}
+        onClose={() => setProductPanelOpen(false)}
+        onCreate={async (payload) => {
+          await createProduct(token, { ...payload, categoryId });
+          await load();
+        }}
+      />
     </section>
   );
 }
@@ -519,4 +577,123 @@ function ProductForm({
   );
 
   return initial ? form : <Card>{form}</Card>;
+}
+
+function NewProductPanel({
+  open,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (payload: ProductFormValues) => Promise<void>;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [precio, setPrecio] = useState("");
+  const [fotoUrl, setFotoUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+
+  function resetForm() {
+    setNombre("");
+    setDescripcion("");
+    setPrecio("");
+    setFotoUrl("");
+    setError(null);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form each time the panel opens
+    resetForm();
+  }, [open]);
+
+  const precioNumber = Number(precio);
+  const canSubmit = nombre.trim().length > 0 && Number.isFinite(precioNumber) && precioNumber > 0 && !submitting;
+
+  async function handleSubmit(keepOpen: boolean) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onCreate({
+        nombre: nombre.trim(),
+        descripcion: descripcion.trim() || undefined,
+        precio: precioNumber,
+        fotoUrl: fotoUrl.trim() || undefined,
+      });
+      setNombre("");
+      setDescripcion("");
+      setPrecio("");
+      setFotoUrl("");
+      if (keepOpen) {
+        firstFieldRef.current?.focus();
+      } else {
+        onClose();
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar el producto");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      title="Nuevo producto"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={!canSubmit}>
+            Agregar y crear otro
+          </Button>
+          <Button variant="primary" onClick={() => handleSubmit(false)} disabled={!canSubmit}>
+            Agregar producto
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Nombre
+          <input
+            ref={firstFieldRef}
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Pizza Hawaiana"
+            className="admin-input"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Precio
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={precio}
+            onChange={(e) => setPrecio(e.target.value)}
+            placeholder="129.90"
+            className="admin-input"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Descripción (opcional)
+          <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="admin-input" />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Foto (URL, opcional)
+          <input
+            value={fotoUrl}
+            onChange={(e) => setFotoUrl(e.target.value)}
+            placeholder="https://..."
+            className="admin-input"
+          />
+        </label>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+    </SidePanel>
+  );
 }
