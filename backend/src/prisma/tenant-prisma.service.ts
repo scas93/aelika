@@ -76,6 +76,9 @@ export class TenantPrismaService {
           modifierOption: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          payment: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

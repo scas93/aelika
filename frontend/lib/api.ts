@@ -395,6 +395,36 @@ export interface PaginatedOrders {
   totalPages: number;
 }
 
+export interface Payment {
+  id: string;
+  amount: string;
+  currency: string;
+  status: EstadoPago;
+  paymentMethodType: string | null;
+  cardBrand: string | null;
+  last4: string | null;
+  capturedAt: string | null;
+  createdAt: string;
+  folio: string;
+}
+
+export interface PaymentsFilter {
+  status?: EstadoPago;
+  paymentMethodType?: string;
+  desde?: string;
+  hasta?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedPayments {
+  data: Payment[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface OrderSummary {
   pedidosHoy: number;
   ingresosHoy: string;
@@ -728,6 +758,45 @@ export function fetchOrdersHistorico(token: string, filter?: HistoricoOrdersFilt
   if (filter?.limit) params.set("limit", String(filter.limit));
   const query = params.toString();
   return request<PaginatedOrders>(`/orders/historico${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchPayments(token: string, filter?: PaymentsFilter) {
+  const params = new URLSearchParams();
+  if (filter?.status) params.set("status", filter.status);
+  if (filter?.paymentMethodType) params.set("paymentMethodType", filter.paymentMethodType);
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  if (filter?.page) params.set("page", String(filter.page));
+  if (filter?.limit) params.set("limit", String(filter.limit));
+  const query = params.toString();
+  return request<PaginatedPayments>(`/payments${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+// Bypasses request() on purpose — same reason as exportOrdersHistoricoCsv:
+// that wrapper always calls res.json(), but this endpoint returns a CSV
+// file, not JSON.
+export async function exportPaymentsCsv(
+  token: string,
+  filter?: Omit<PaymentsFilter, "page" | "limit">,
+): Promise<Blob> {
+  const params = new URLSearchParams();
+  if (filter?.status) params.set("status", filter.status);
+  if (filter?.paymentMethodType) params.set("paymentMethodType", filter.paymentMethodType);
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  const query = params.toString();
+
+  const res = await fetch(`${API_URL}/payments/export${query ? `?${query}` : ""}`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = body?.message ?? "No se pudo exportar los pagos";
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status);
+  }
+
+  return res.blob();
 }
 
 // Bypasses request() on purpose — that wrapper always calls res.json(), but

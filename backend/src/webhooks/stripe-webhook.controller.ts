@@ -100,6 +100,48 @@ export class StripeWebhookController {
       where: { stripePaymentIntentId: paymentIntent.id },
       data: { estadoPago },
     });
+
+    // Best-effort audit trail — never let a Payment write fail the webhook.
+    // Stripe expects a fast 200 and retries on anything else, so a broken
+    // insert here must not undo the Order update above.
+    try {
+      await this.createPaymentRecord(paymentIntent, estadoPago);
+    } catch (error) {
+      this.logger.error(
+        `No se pudo crear el registro de Payment para PaymentIntent ${paymentIntent.id}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * order.updateMany above doesn't return the matched row, so tenantId/orderId
+   * are resolved here with a separate findFirst. Not folded into the update
+   * above on purpose — this insert is allowed to fail independently (see
+   * try/catch in the caller) without affecting the Order status update.
+   */
+  private async createPaymentRecord(paymentIntent: Stripe.PaymentIntent, estadoPago: EstadoPago) {
+    const order = await this.prisma.order.findFirst({
+      where: { stripePaymentIntentId: paymentIntent.id },
+      select: { id: true, tenantId: true },
+    });
+    if (!order) {
+      return;
+    }
+
+    await this.prisma.payment.create({
+      data: {
+        tenantId: order.tenantId,
+        orderId: order.id,
+        stripePaymentIntentId: paymentIntent.id,
+        amount: paymentIntent.amount / 100,
+        currency: paymentIntent.currency,
+        status: estadoPago,
+        paymentMethodType: paymentIntent.payment_method_types?.[0] ?? null,
+        cardBrand: null,
+        last4: null,
+        capturedAt: new Date(paymentIntent.created * 1000),
+      },
+    });
   }
 
   /** v2 thin events — Connect account capability updates. */

@@ -74,6 +74,7 @@ model Tenant {
   modifierGroups     ModifierGroup[]
   modifierOptions    ModifierOption[]
   orderItemModifiers OrderItemModifier[]
+  payments           Payment[]
 
   @@map("tenants")
 }
@@ -278,6 +279,7 @@ model Order {
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
   items      OrderItem[]
+  payments   Payment[]
 
   // folio is short and human-facing (read over the phone/counter), so it only
   // needs to be unique within a tenant, not globally.
@@ -314,6 +316,37 @@ model OrderItem {
   @@index([tenantId])
   @@index([orderId])
   @@map("order_items")
+}
+
+// One row per PaymentIntent webhook event (payment_intent.succeeded/.payment_failed)
+// for metodoPago = TARJETA — see StripeWebhookController.handleClassicEvent. Not
+// an upsert: a failed attempt followed by a successful one for the same order
+// leaves two rows, a real attempt history rather than a single mutable status.
+model Payment {
+  id                    String     @id @default(cuid())
+  tenantId              String
+  orderId               String
+  stripePaymentIntentId String
+  amount                Decimal    @db.Decimal(10, 2)
+  currency              String
+  // Reuses EstadoPago (see Order.estadoPago). PENDIENTE never applies here —
+  // a Payment row is only created once the webhook has a final result
+  // (succeeded or failed), never while the PaymentIntent is still in flight.
+  status                EstadoPago
+  paymentMethodType     String?
+  // Requires an extra Stripe fetch (expand latest_charge / retrieve charge)
+  // to populate — out of scope for this phase, left null.
+  cardBrand             String?
+  last4                 String?
+  capturedAt            DateTime?
+  createdAt             DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([stripePaymentIntentId])
+  @@map("payments")
 }
 
 enum TipoSeleccion {
