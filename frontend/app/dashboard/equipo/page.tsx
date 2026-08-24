@@ -83,7 +83,7 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
               return (
                 <li
                   key={teamUser.id}
-                  className="flex h-16 items-center justify-between gap-3 px-4 transition hover:bg-admin-bg"
+                  className="flex flex-col gap-2 px-4 py-3 transition hover:bg-admin-bg md:h-16 md:flex-row md:items-center md:justify-between md:py-0"
                 >
                   <div className="flex flex-col">
                     <span
@@ -97,7 +97,7 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
                     </span>
                     <span className="text-sm text-admin-ink-soft">{teamUser.email}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {!teamUser.activo && (
                       <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
                         Inactivo
@@ -183,7 +183,7 @@ function NewUserForm({
     <Card>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <p className="text-[17px] font-bold text-admin-ink">Agregar a alguien del equipo</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
             Nombre
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ana Torres" className="admin-input" />

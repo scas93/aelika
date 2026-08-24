@@ -224,7 +224,7 @@ function PuntoEnvioForm({
       <p className="text-sm font-semibold text-admin-ink">
         {initial ? "Editar punto de envío" : "Nuevo punto de envío"}
       </p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Zona Centro" className="admin-input" />

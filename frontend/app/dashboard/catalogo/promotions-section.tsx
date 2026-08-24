@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createPromotion,
@@ -17,6 +17,7 @@ import {
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import SidePanel from "../_components/SidePanel";
 
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
@@ -43,6 +44,7 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
   const [promotions, setPromotions] = useState<Promotion[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   async function load() {
     try {
@@ -97,7 +99,14 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={SECTION_HEADER}>Promociones</h2>
+      <div className="flex items-center justify-between">
+        <h2 className={SECTION_HEADER}>Promociones</h2>
+        {canWrite && (
+          <Button variant="primary" size="sm" onClick={() => setPanelOpen(true)}>
+            + Nueva promoción
+          </Button>
+        )}
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {promotions === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
@@ -140,23 +149,27 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
         </ul>
       )}
 
-      {canWrite && (
-        <NewPromotionForm
-          products={products}
-          onCreate={async (payload) => {
-            await createPromotion(token, payload);
-            await load();
-          }}
-        />
-      )}
+      <NewPromotionPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        products={products}
+        onCreate={async (payload) => {
+          await createPromotion(token, payload);
+          await load();
+        }}
+      />
     </section>
   );
 }
 
-function NewPromotionForm({
+function NewPromotionPanel({
+  open,
+  onClose,
   products,
   onCreate,
 }: {
+  open: boolean;
+  onClose: () => void;
   products: Product[];
   onCreate: (payload: { tipo: PromotionTipo; config: DescuentoProductoConfig | ComboConfig }) => Promise<void>;
 }) {
@@ -168,13 +181,40 @@ function NewPromotionForm({
   const [precioCombo, setPrecioCombo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const productSelectRef = useRef<HTMLSelectElement>(null);
+  const firstComboCheckboxRef = useRef<HTMLInputElement>(null);
+
+  // Same reset scope as the pre-panel inline form always used: clears the
+  // type-specific fields but deliberately leaves tipo/tipoDescuento as they
+  // are, both when the panel opens fresh and after a successful "crear
+  // otro" — see CLAUDE.md, Fase 8a/8b.
+  function resetTypeSpecificFields() {
+    setProductId("");
+    setValor("");
+    setProductIds([]);
+    setPrecioCombo("");
+    setError(null);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the type-specific fields each time the panel opens (tipo/tipoDescuento persist on purpose)
+    resetTypeSpecificFields();
+  }, [open]);
 
   function toggleProductId(id: string) {
     setProductIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function focusFirstField() {
+    if (tipo === "DESCUENTO_PRODUCTO") {
+      productSelectRef.current?.focus();
+    } else {
+      firstComboCheckboxRef.current?.focus();
+    }
+  }
+
+  async function handleSubmit(keepOpen: boolean) {
     setError(null);
 
     let config: DescuentoProductoConfig | ComboConfig;
@@ -191,10 +231,12 @@ function NewPromotionForm({
     setSubmitting(true);
     try {
       await onCreate({ tipo, config });
-      setProductId("");
-      setValor("");
-      setProductIds([]);
-      setPrecioCombo("");
+      resetTypeSpecificFields();
+      if (keepOpen) {
+        focusFirstField();
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo crear la promoción");
     } finally {
@@ -202,11 +244,29 @@ function NewPromotionForm({
     }
   }
 
-  return (
-    <Card>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <p className="text-[17px] font-bold text-admin-ink">Nueva promoción</p>
+  const canSubmit =
+    !submitting &&
+    (tipo === "DESCUENTO_PRODUCTO"
+      ? productId !== "" && Number.isFinite(Number(valor)) && Number(valor) > 0
+      : productIds.length >= 2 && Number.isFinite(Number(precioCombo)) && Number(precioCombo) > 0);
 
+  return (
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      title="Nueva promoción"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={!canSubmit}>
+            Agregar y crear otro
+          </Button>
+          <Button variant="primary" onClick={() => handleSubmit(false)} disabled={!canSubmit}>
+            Agregar promoción
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Tipo
           <select value={tipo} onChange={(e) => setTipo(e.target.value as PromotionTipo)} className="admin-input">
@@ -216,10 +276,15 @@ function NewPromotionForm({
         </label>
 
         {tipo === "DESCUENTO_PRODUCTO" ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
               Producto
-              <select value={productId} onChange={(e) => setProductId(e.target.value)} className="admin-input">
+              <select
+                ref={productSelectRef}
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
+                className="admin-input"
+              >
                 <option value="">Selecciona...</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -260,9 +325,14 @@ function NewPromotionForm({
                 {products.length === 0 && (
                   <span className="text-sm font-normal text-admin-ink-soft">No hay productos aún.</span>
                 )}
-                {products.map((p) => (
+                {products.map((p, index) => (
                   <label key={p.id} className="flex items-center gap-2 text-sm font-normal text-admin-ink">
-                    <input type="checkbox" checked={productIds.includes(p.id)} onChange={() => toggleProductId(p.id)} />
+                    <input
+                      ref={index === 0 ? firstComboCheckboxRef : undefined}
+                      type="checkbox"
+                      checked={productIds.includes(p.id)}
+                      onChange={() => toggleProductId(p.id)}
+                    />
                     {p.nombre}
                   </label>
                 ))}
@@ -284,11 +354,7 @@ function NewPromotionForm({
         )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <Button type="submit" disabled={submitting} className="self-start">
-          Crear promoción
-        </Button>
-      </form>
-    </Card>
+      </div>
+    </SidePanel>
   );
 }

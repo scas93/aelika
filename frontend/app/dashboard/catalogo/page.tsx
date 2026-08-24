@@ -151,7 +151,7 @@ export default function CatalogoPage() {
                   <li key={category.id}>
                     <Card
                       padding={12}
-                      className={`flex items-center justify-between gap-3 ${
+                      className={`flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 ${
                         selectedCategoryId === category.id ? "ring-2 ring-admin-green/40" : ""
                       }`}
                     >
@@ -176,7 +176,7 @@ export default function CatalogoPage() {
                       </button>
 
                       {canWrite && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <IconButton label="Subir" disabled={index === 0} onClick={() => handleReorder(index, -1)}>
                             ↑
                           </IconButton>
@@ -426,7 +426,7 @@ function ProductsSection({
               ) : (
                 <li
                   key={product.id}
-                  className="flex h-16 items-center justify-between gap-3 px-4 transition hover:bg-admin-bg"
+                  className="flex flex-col gap-2 px-4 py-3 transition hover:bg-admin-bg md:h-16 md:flex-row md:items-center md:justify-between md:py-0"
                 >
                   <div className="flex flex-col">
                     <span
@@ -529,7 +529,7 @@ function ProductForm({
   const form = (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <p className="text-[17px] font-bold text-admin-ink">{initial ? "Editar producto" : "Nuevo producto"}</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
           <input

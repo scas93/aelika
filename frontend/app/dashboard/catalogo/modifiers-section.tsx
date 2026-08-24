@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createModifierGroup,
@@ -17,6 +17,7 @@ import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import Modal from "../_components/Modal";
+import SidePanel from "../_components/SidePanel";
 
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
@@ -83,7 +84,14 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={SECTION_HEADER}>Modificadores</h2>
+      <div className="flex items-center justify-between">
+        <h2 className={SECTION_HEADER}>Modificadores</h2>
+        {canWrite && (
+          <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+            + Nuevo grupo de modificador
+          </Button>
+        )}
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {groups === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
@@ -95,6 +103,9 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
             </li>
           )}
           {groups.map((group) =>
+            // Edit stays inline, replacing the row — deliberately not moved
+            // to SidePanel, same precedent as ProductForm in Catálogo
+            // (Fase 6/8c-aud). Only creation (below) uses the panel.
             editingId === group.id ? (
               <li key={group.id}>
                 <Card>
@@ -141,23 +152,20 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
         </ul>
       )}
 
-      {canWrite &&
-        (creating ? (
-          <Card>
-            <NewModifierGroupForm
-              token={token}
-              onCancel={() => setCreating(false)}
-              onSubmit={async () => {
-                await load();
-                setCreating(false);
-              }}
-            />
-          </Card>
-        ) : (
-          <Button onClick={() => setCreating(true)} className="self-start">
-            + Nuevo grupo de modificadores
-          </Button>
-        ))}
+      {canWrite && (
+        <SidePanel open={creating} onClose={() => setCreating(false)} title="Nuevo grupo de modificadores">
+          <NewModifierGroupForm
+            token={token}
+            onSubmit={async () => {
+              await load();
+              setCreating(false);
+            }}
+            onSubmitKeepOpen={async () => {
+              await load();
+            }}
+          />
+        </SidePanel>
+      )}
 
       <Modal
         open={deleteTarget !== null}
@@ -195,11 +203,17 @@ function NewModifierGroupForm({
   token,
   initial,
   onSubmit,
+  onSubmitKeepOpen,
   onCancel,
 }: {
   token: string;
   initial?: ModifierGroup;
+  // Called after a successful save when the panel/card should close —
+  // used by both the edit flow and the create flow's "Agregar grupo".
   onSubmit: () => Promise<void>;
+  // Create-only: called after a successful save that keeps the panel open
+  // ("Agregar y crear otro") — just refreshes the list, doesn't close.
+  onSubmitKeepOpen?: () => Promise<void>;
   onCancel?: () => void;
 }) {
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
@@ -212,6 +226,7 @@ function NewModifierGroupForm({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nombreRef = useRef<HTMLInputElement>(null);
 
   function updateFila(index: number, patch: Partial<OpcionRow>) {
     setOpciones((prev) => prev.map((fila, i) => (i === index ? { ...fila, ...patch } : fila)));
@@ -225,8 +240,19 @@ function NewModifierGroupForm({
     setOpciones((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Create-only reset for "Agregar y crear otro" — opciones must land on
+  // exactly one blank row, never [] or undefined, since agregarFila/
+  // borrarFila (and the "Quitar" button's disabled guard) assume there's
+  // always at least one row. See CLAUDE.md, Fase 8c-aud.
+  function resetForm() {
+    setNombre("");
+    setTipoSeleccion("UNICA");
+    setObligatorio(false);
+    setOpciones([nuevaFila()]);
+    setError(null);
+  }
+
+  async function doSubmit(keepOpen: boolean) {
     setError(null);
 
     if (!nombre.trim()) return;
@@ -242,6 +268,9 @@ function NewModifierGroupForm({
     setSubmitting(true);
     try {
       if (!initial) {
+        // Creation always goes through this branch — the reconciliation
+        // diff below (delete/update/create) never runs here, only
+        // createModifierGroup's own nested `opciones` create.
         await createModifierGroup(token, {
           nombre: nombre.trim(),
           tipoSeleccion,
@@ -286,7 +315,13 @@ function NewModifierGroupForm({
         ]);
       }
 
-      await onSubmit();
+      if (keepOpen) {
+        await onSubmitKeepOpen?.();
+        resetForm();
+        nombreRef.current?.focus();
+      } else {
+        await onSubmit();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar el grupo de modificadores");
     } finally {
@@ -294,16 +329,28 @@ function NewModifierGroupForm({
     }
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await doSubmit(false);
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <p className="text-[17px] font-bold text-admin-ink">
-        {initial ? "Editar grupo de modificadores" : "Nuevo grupo de modificadores"}
-      </p>
+      {/* SidePanel already shows "Nuevo grupo de modificadores" as its own
+          title when creating — this heading only renders for edit, where
+          it's the sole title (inline Card has none of its own). */}
+      {initial && <p className="text-[17px] font-bold text-admin-ink">Editar grupo de modificadores</p>}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tamaño" className="admin-input" />
+          <input
+            ref={nombreRef}
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Tamaño"
+            className="admin-input"
+          />
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Tipo de selección
@@ -364,8 +411,13 @@ function NewModifierGroupForm({
 
       <div className="flex gap-2">
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Guardando..." : initial ? "Guardar cambios" : "Crear grupo"}
+          {submitting ? "Guardando..." : initial ? "Guardar cambios" : "Agregar grupo"}
         </Button>
+        {!initial && (
+          <Button type="button" variant="secondary" disabled={submitting} onClick={() => doSubmit(true)}>
+            Agregar y crear otro
+          </Button>
+        )}
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
             Cancelar

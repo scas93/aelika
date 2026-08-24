@@ -51,7 +51,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <SummaryCard label="Pedidos hoy" value={summary?.pedidosHoy} error={summaryError} />
         <SummaryCard label="Ingresos hoy" value={summary ? formatMoney(summary.ingresosHoy) : undefined} error={summaryError} />
         <SummaryCard

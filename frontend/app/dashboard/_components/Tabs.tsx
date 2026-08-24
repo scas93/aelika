@@ -17,7 +17,7 @@ interface TabsProps {
 // yet (see CLAUDE.md phase notes).
 export default function Tabs({ items, active, onChange }: TabsProps) {
   return (
-    <div className="flex gap-6 border-b border-admin-border">
+    <div className="flex gap-6 overflow-x-auto border-b border-admin-border">
       {items.map((item) => {
         const isActive = item.key === active;
         return (
@@ -25,7 +25,7 @@ export default function Tabs({ items, active, onChange }: TabsProps) {
             key={item.key}
             type="button"
             onClick={() => onChange(item.key)}
-            className={`flex items-center gap-1.5 border-b-2 px-1 pb-3 text-sm font-bold transition ${
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-bold transition ${
               isActive
                 ? "border-admin-green text-admin-ink"
                 : "border-transparent text-admin-ink-soft hover:text-admin-ink"
