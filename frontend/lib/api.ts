@@ -378,6 +378,18 @@ export interface OrdersFilter {
   hasta?: string;
 }
 
+export interface OrderSummary {
+  pedidosHoy: number;
+  ingresosHoy: string;
+  ticketPromedioHoy: string;
+  promocionesActivas: number;
+}
+
+export interface OrdersPorDia {
+  fecha: string;
+  pedidos: number;
+}
+
 export type FacturacionModo = "OBLIGATORIO" | "OPCIONAL" | "DESACTIVADO";
 
 export interface TenantSettings {
@@ -687,6 +699,16 @@ export function fetchOrders(token: string, filter?: OrdersFilter) {
   if (filter?.hasta) params.set("hasta", filter.hasta);
   const query = params.toString();
   return request<Order[]>(`/orders${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchOrdersSummary(token: string, range: { desde: string; hasta: string }) {
+  const params = new URLSearchParams({ desde: range.desde, hasta: range.hasta });
+  return request<OrderSummary>(`/orders/summary?${params.toString()}`, { headers: authHeaders(token) });
+}
+
+export function fetchOrdersSummaryDaily(token: string, range: { desde: string; hasta: string }) {
+  const params = new URLSearchParams({ desde: range.desde, hasta: range.hasta });
+  return request<OrdersPorDia[]>(`/orders/summary/daily?${params.toString()}`, { headers: authHeaders(token) });
 }
 
 export function fetchOrder(token: string, id: string) {

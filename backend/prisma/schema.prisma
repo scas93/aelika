@@ -282,7 +282,13 @@ model Order {
   // folio is short and human-facing (read over the phone/counter), so it only
   // needs to be unique within a tenant, not globally.
   @@unique([tenantId, folio])
-  @@index([tenantId])
+  // Composite index replaces the old standalone @@index([tenantId]) — a
+  // Postgres B-tree index on (tenantId, createdAt) already satisfies
+  // tenantId-only lookups via the leftmost-prefix rule, so keeping both
+  // would just be redundant write overhead. Added for the "today" range
+  // queries behind /orders/summary (Fase 9b) and any future date-filtered
+  // listing.
+  @@index([tenantId, createdAt])
   @@index([puntoEnvioId])
   @@map("orders")
 }

@@ -24,6 +24,7 @@ import {
   type ComandaContext,
 } from "@/lib/thermal-printer";
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
+import { rangoHoyISO } from "@/lib/fecha";
 import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
@@ -32,14 +33,6 @@ import Badge from "../_components/Badge";
 const POLL_INTERVAL_MS = 25000;
 
 type Tab = "activos" | "entregados";
-
-function hoyYYYYMMDD(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 export default function PedidosPage() {
   const { token } = useSession();
@@ -54,12 +47,7 @@ export default function PedidosPage() {
 
   async function load() {
     try {
-      // Same desde/hasta construction the old Desde/Hasta date filter used
-      // (a "YYYY-MM-DD" string run through new Date(str).toISOString()),
-      // just auto-filled to today instead of user-picked — see CLAUDE.md.
-      const hoy = hoyYYYYMMDD();
-      const desde = new Date(hoy).toISOString();
-      const hasta = new Date(`${hoy}T23:59:59.999`).toISOString();
+      const { desde, hasta } = rangoHoyISO();
       const [todos, despachadosHoy] = await Promise.all([
         fetchOrders(token, {}),
         fetchOrders(token, { estadoPedido: "DESPACHADO", desde, hasta }),
