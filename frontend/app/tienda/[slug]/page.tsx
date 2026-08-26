@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ApiError,
@@ -237,19 +237,14 @@ export default function TiendaPage() {
 
         {!buscando && combos.length > 0 && (
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">Combos</h2>
-            <ul className="flex flex-col gap-2">
-              {combos.map((combo) => (
-                <ComboRow
-                  key={combo.id}
-                  config={combo.config as ComboConfig}
-                  catalog={catalog}
-                  onAdd={() => addCombo(combo.config as ComboConfig)}
-                />
-              ))}
-            </ul>
+            <h2 className="text-lg font-semibold">Promociones</h2>
+            <PromocionesCarousel
+              combos={combos}
+              catalog={catalog}
+              onAdd={(config) => addCombo(config)}
+            />
             <p className="text-xs text-black/50 dark:text-white/50">
-              El precio de combo se ajusta al finalizar tu pedido.
+              El precio de la promoción se ajusta al finalizar tu pedido.
             </p>
           </section>
         )}
@@ -402,7 +397,89 @@ function ComboRow({ config, catalog, onAdd }: { config: ComboConfig; catalog: Pu
         onClick={onAdd}
         className="shrink-0 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:brightness-95 dark:bg-white dark:text-black"
       >
-        Agregar combo
+        Agregar promoción
+      </button>
+    </li>
+  );
+}
+
+// Horizontal carousel of active promotions: native overflow-x scroll with
+// snap gives free touch-swipe on mobile, and the prev/next buttons cover
+// mouse-only desktop use — both drive the same scrollLeft, no separate state.
+function PromocionesCarousel({
+  combos,
+  catalog,
+  onAdd,
+}: {
+  combos: PublicPromotion[];
+  catalog: PublicCatalog;
+  onAdd: (config: ComboConfig) => void;
+}) {
+  const scrollRef = useRef<HTMLUListElement>(null);
+
+  function scroll(direction: 1 | -1) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const card = el.firstElementChild as HTMLElement | null;
+    const amount = card ? card.getBoundingClientRect().width + 12 : el.clientWidth * 0.8;
+    el.scrollBy({ left: direction * amount, behavior: "smooth" });
+  }
+
+  return (
+    <div className="relative">
+      <ul
+        ref={scrollRef}
+        className={`flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+          combos.length === 1 ? "justify-center" : ""
+        }`}
+      >
+        {combos.map((combo) => (
+          <PromocionCard
+            key={combo.id}
+            config={combo.config as ComboConfig}
+            catalog={catalog}
+            onAdd={() => onAdd(combo.config as ComboConfig)}
+          />
+        ))}
+      </ul>
+      {combos.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => scroll(-1)}
+            aria-label="Ver promoción anterior"
+            className="absolute -left-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white text-sm font-semibold text-black shadow-md dark:bg-chat-card-dark dark:text-white"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => scroll(1)}
+            aria-label="Ver siguiente promoción"
+            className="absolute -right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white text-sm font-semibold text-black shadow-md dark:bg-chat-card-dark dark:text-white"
+          >
+            ›
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PromocionCard({ config, catalog, onAdd }: { config: ComboConfig; catalog: PublicCatalog; onAdd: () => void }) {
+  return (
+    <li className="flex w-[85%] shrink-0 snap-start flex-col justify-between gap-2 rounded-xl bg-white p-3 shadow-sm dark:bg-chat-card-dark">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium">
+          {config.productIds.map((id) => nombreProducto(catalog, id)).join(" + ")}
+        </span>
+        <span className="text-sm font-semibold">${config.precioCombo}</span>
+      </div>
+      <button
+        onClick={onAdd}
+        className="w-full shrink-0 rounded-lg bg-black px-3 py-2 text-sm font-medium text-white transition hover:brightness-95 dark:bg-white dark:text-black"
+      >
+        Agregar
       </button>
     </li>
   );
@@ -474,23 +551,12 @@ function ProductoCard({
 }) {
   const sinExistencia = !product.disponible;
 
-  const badgePill = sinExistencia && (
-    <span className="w-fit rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-      Sin existencia
-    </span>
-  );
-
   const media = product.fotoUrl ? (
     <div
       className={`relative overflow-hidden rounded-xl ${layout === "grid" ? "aspect-square w-full" : "h-16 w-16 shrink-0"}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- external, tenant-provided URLs */}
-      <img
-        src={product.fotoUrl}
-        alt=""
-        className={`h-full w-full object-cover ${sinExistencia ? "opacity-60" : ""}`}
-      />
-      {badgePill && <div className="absolute left-1 top-1">{badgePill}</div>}
+      <img src={product.fotoUrl} alt="" className="h-full w-full object-cover" />
     </div>
   ) : null;
 
@@ -526,10 +592,11 @@ function ProductoCard({
 
   if (layout === "list") {
     return (
-      <li className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm dark:bg-chat-card-dark">
+      <li
+        className={`flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm dark:bg-chat-card-dark ${sinExistencia ? "opacity-50" : ""}`}
+      >
         {media}
         <div className="flex flex-1 flex-col gap-0.5">
-          {!product.fotoUrl && badgePill}
           <span className="text-sm font-medium">{product.nombre}</span>
           {product.descripcion && (
             <span className="text-xs text-black/50 dark:text-white/50">{product.descripcion}</span>
@@ -543,7 +610,9 @@ function ProductoCard({
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-xl bg-white p-2 shadow-sm dark:bg-chat-card-dark">
+    <li
+      className={`flex flex-col gap-2 rounded-xl bg-white p-2 shadow-sm dark:bg-chat-card-dark ${sinExistencia ? "opacity-50" : ""}`}
+    >
       {media && (
         <div className="relative">
           {media}
@@ -551,7 +620,6 @@ function ProductoCard({
         </div>
       )}
       <div className="flex flex-col gap-0.5 px-0.5 pb-1">
-        {!product.fotoUrl && badgePill}
         <span className="text-sm font-medium">{product.nombre}</span>
         {precioTag}
         {descuentoBadge}
