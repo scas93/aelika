@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,12 +45,15 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const horarioAtencion = dto.horarioAtencion ? normalizarHorarioSemana(dto.horarioAtencion) : horarioSemanaVacio();
+    const horarioAtencion = dto.horarioAtencion
+      ? normalizarHorarioSemana(dto.horarioAtencion)
+      : horarioSemanaVacio();
 
     const tenant = await this.prisma.tenant.create({
       data: {
         slug: dto.slug,
         nombre: dto.nombreNegocio,
+        tipoStorefront: dto.tipoStorefront,
         horarioAtencion: horarioAtencion as any,
         ubicacion: dto.ubicacion,
         botApiKey: generateApiKey(),
@@ -67,12 +74,17 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!passwordMatches) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
@@ -84,19 +96,36 @@ export class AuthService {
     return this.buildSession(user.id, user.tenantId, user.email, user.rol);
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
 
-    const passwordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
     if (!passwordMatches) {
       throw new UnauthorizedException('La contraseña actual no es correcta');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
   }
 
-  private buildSession(userId: string, tenantId: string, email: string, rol: Role) {
+  private buildSession(
+    userId: string,
+    tenantId: string,
+    email: string,
+    rol: Role,
+  ) {
     const payload: JwtPayload = { sub: userId, tenantId, email, rol };
     return {
       accessToken: this.jwtService.sign(payload),

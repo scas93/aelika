@@ -2,12 +2,12 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
+import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
 import {
   CanalOrigen,
   EstadoPago,
   EstadoPedido,
-  FacturacionModo,
   HoraRecogidaTipo,
   MetodoEntrega,
   MetodoPago,
@@ -18,28 +18,6 @@ import {
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import type { DescuentoProductoConfigDto } from '../promotions/dto/descuento-producto-config.dto';
 import type { ComboConfigDto } from '../promotions/dto/combo-config.dto';
-
-// All Order.factura* fields, plus requiereFactura — grouped because they're
-// always resolved (and stored) together as one unit, never individually.
-interface FacturaFields {
-  requiereFactura: boolean;
-  facturaRazonSocial: string | null;
-  facturaRfc: string | null;
-  facturaRegimenFiscal: string | null;
-  facturaUsoCfdi: string | null;
-  facturaCodigoPostal: string | null;
-  facturaCorreo: string | null;
-}
-
-const FACTURA_VACIA: FacturaFields = {
-  requiereFactura: false,
-  facturaRazonSocial: null,
-  facturaRfc: null,
-  facturaRegimenFiscal: null,
-  facturaUsoCfdi: null,
-  facturaCodigoPostal: null,
-  facturaCorreo: null,
-};
 
 // Order.direccion* — the customer's actual delivery address, distinct from
 // PuntoEnvio.direccion (the zone's own fixed address). Required only when
@@ -258,8 +236,9 @@ export class PublicService {
     const direccionEntrega = this.resolverDireccionEntrega(metodoEntrega, dto);
 
     // 5. Facturación — whether/which factura* fields are required depends on
-    // Tenant.facturacionModo, resolved independently of pricing.
-    const factura = this.resolverFacturacion(tenant.facturacionModo, dto);
+    // Tenant.facturacionModo, resolved independently of pricing. Shared with
+    // PublicPedidosB2bService.createPedido — see common/facturacion.ts.
+    const factura = resolverFacturacion(tenant.facturacionModo, dto);
 
     // Defensive: dedupe repeated productId entries instead of trusting the
     // client sent each product at most once.
@@ -644,50 +623,6 @@ export class PublicService {
     }
 
     return { modificadoresPorItem, modifiersExtraTotal: round2(modifiersExtraTotal) };
-  }
-
-  /**
-   * Resolves the factura* fields to actually store, based on
-   * Tenant.facturacionModo:
-   *  - DESACTIVADO: whatever the client sent is ignored outright (whitelist).
-   *  - OBLIGATORIO: requiereFactura must be true, and then every factura*
-   *    field is required.
-   *  - OPCIONAL: requiereFactura may be true or false; true requires every
-   *    field just like OBLIGATORIO, false ignores them like DESACTIVADO.
-   */
-  private resolverFacturacion(modo: FacturacionModo, dto: CreatePublicOrderDto): FacturaFields {
-    if (modo === FacturacionModo.DESACTIVADO) {
-      return FACTURA_VACIA;
-    }
-
-    if (modo === FacturacionModo.OBLIGATORIO && dto.requiereFactura !== true) {
-      throw new BadRequestException('Este negocio requiere factura para todos los pedidos');
-    }
-
-    if (modo === FacturacionModo.OPCIONAL && dto.requiereFactura !== true) {
-      return FACTURA_VACIA;
-    }
-
-    // From here on: OBLIGATORIO, or OPCIONAL with requiereFactura = true —
-    // every factura* field is required.
-    const campos = {
-      facturaRazonSocial: dto.facturaRazonSocial,
-      facturaRfc: dto.facturaRfc,
-      facturaRegimenFiscal: dto.facturaRegimenFiscal,
-      facturaUsoCfdi: dto.facturaUsoCfdi,
-      facturaCodigoPostal: dto.facturaCodigoPostal,
-      facturaCorreo: dto.facturaCorreo,
-    };
-    const faltantes = Object.entries(campos)
-      .filter(([, valor]) => !valor?.trim())
-      .map(([campo]) => campo);
-    if (faltantes.length > 0) {
-      throw new BadRequestException(`Faltan datos de factura: ${faltantes.join(', ')}`);
-    }
-
-    // Every field above is confirmed non-empty by the check just above —
-    // the cast just reflects that to the type checker.
-    return { requiereFactura: true, ...campos } as FacturaFields;
   }
 
   /**

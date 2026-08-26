@@ -25,56 +25,93 @@ enum FacturacionModo {
   DESACTIVADO
 }
 
+// Tenant-level config for the PedidoB2b module (see below) — governs when
+// PedidosB2bService enforces Tenant.pedidoB2bMinimoPiezas: AL_INICIO blocks
+// at payment/checkout (PedidosB2bService.marcarPagado), AL_FINAL blocks at
+// order confirmation (PedidosB2bService.confirmar). Snapshotted onto
+// PedidoB2b.modoCobro at creation time so a later config change never
+// retroactively changes an in-flight order's rules.
+enum PedidoB2bModoCobro {
+  AL_INICIO
+  AL_FINAL
+}
+
+// Tipo de storefront del negocio — lista extensible a propósito (no un
+// booleano B2B/B2C): se espera agregar más valores en el futuro, posiblemente
+// ligados a otras verticales de negocio (ver nav-items.ts en el frontend,
+// que filtra la navegación del dashboard según este campo). Agregar un
+// tercer valor es solo una migración que extiende el enum — no requiere
+// rediseñar el campo ni la columna.
+enum TipoStorefront {
+  RETAIL_B2C
+  RETAIL_B2B
+}
+
 model Tenant {
-  id                   String          @id @default(uuid())
-  slug                 String          @unique
-  nombre               String
-  logoUrl              String?
+  id                    String             @id @default(uuid())
+  slug                  String             @unique
+  nombre                String
+  // Elegido explícitamente al registrar el negocio (RegisterDto.tipoStorefront
+  // es obligatorio, sin default a nivel de API) — el @default de aquí es solo
+  // para el backfill de tenants creados antes de este campo, que
+  // históricamente eran todos retail de pickup. Ver TipoStorefront arriba.
+  tipoStorefront        TipoStorefront     @default(RETAIL_B2C)
+  logoUrl               String?
   // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
   // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
-  horarioAtencion      Json?
-  ubicacion            String?
+  horarioAtencion       Json?
+  ubicacion             String?
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.
-  mensajeBienvenida    String?
+  mensajeBienvenida     String?
   // Contact email used specifically as Stripe Connect's contact_email when
   // creating the tenant's connected account (see TenantService.createOrContinueStripeAccount)
   // — not a general business/support email, deliberately scoped to Stripe.
   // No default/backfill: stays null until the Dueño fills it in via PATCH
   // /tenant/me, which is exactly what forces it to be set before Stripe
   // onboarding can start for a given tenant.
-  stripeContactEmail   String?
+  stripeContactEmail    String?
   // Bot (Botpress) auth key against the Aelika API — generated once at
   // register time (crypto.randomBytes, see AuthService), regenerable via
   // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the
   // general PATCH /tenant/me.
-  botApiKey            String          @unique
+  botApiKey             String             @unique
   // Whether/how factura* fields on Order are required at checkout — see
   // FacturacionModo and PublicService.createOrder.
-  facturacionModo      FacturacionModo @default(DESACTIVADO)
+  facturacionModo       FacturacionModo    @default(DESACTIVADO)
   // Stripe Connect connected account for this tenant (platform = Aelika).
   // Null until POST /internal/tenants/:slug/stripe-account is called — see
   // InternalService. chargesEnabled/payoutsEnabled mirror the connected
   // account's own fields of the same name, refreshed from Stripe (never
   // trusted as stale) by GET /internal/tenants/:slug/stripe-status and by
   // the account.updated webhook event.
-  stripeAccountId      String?         @unique
-  stripeChargesEnabled Boolean         @default(false)
-  stripePayoutsEnabled Boolean         @default(false)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  stripeAccountId       String?            @unique
+  stripeChargesEnabled  Boolean            @default(false)
+  stripePayoutsEnabled  Boolean            @default(false)
+  // Config del módulo de pedidos B2B a crédito (ver PedidoB2b) — a nivel
+  // tenant, no por pedido/cliente. modoCobro/minimoPiezas se snapshotean en
+  // cada PedidoB2b al crearse, así que cambiar esto no afecta pedidos ya
+  // creados.
+  pedidoB2bModoCobro    PedidoB2bModoCobro @default(AL_FINAL)
+  pedidoB2bMinimoPiezas Int                @default(100)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  users              User[]
-  categories         Category[]
-  products           Product[]
-  promotions         Promotion[]
-  orders             Order[]
-  orderItems         OrderItem[]
-  puntosEnvio        PuntoEnvio[]
-  modifierGroups     ModifierGroup[]
-  modifierOptions    ModifierOption[]
-  orderItemModifiers OrderItemModifier[]
-  payments           Payment[]
+  users                     User[]
+  categories                Category[]
+  products                  Product[]
+  promotions                Promotion[]
+  orders                    Order[]
+  orderItems                OrderItem[]
+  puntosEnvio               PuntoEnvio[]
+  modifierGroups            ModifierGroup[]
+  modifierOptions           ModifierOption[]
+  orderItemModifiers        OrderItemModifier[]
+  payments                  Payment[]
+  pedidosB2b                PedidoB2b[]
+  pedidoB2bItems            PedidoB2bItem[]
+  pedidoB2bItemsDia         PedidoB2bItemDia[]
+  pedidoB2bCodigosDescuento PedidoB2bCodigoDescuento[]
 
   @@map("tenants")
 }
@@ -128,6 +165,7 @@ model Product {
   category       Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   orderItems     OrderItem[]
   modifierGroups ProductModifierGroup[]
+  pedidoB2bItems PedidoB2bItem[]
 
   @@index([tenantId])
   @@index([categoryId])
@@ -440,4 +478,184 @@ model OrderItemModifier {
   @@index([tenantId])
   @@index([orderItemId])
   @@map("order_item_modifiers")
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos B2B a crédito (pedido semanal con distribución por día, sin cuenta
+// de cliente). Entidad deliberadamente separada de Order/OrderItem — no una
+// extensión — porque: (1) la distribución por día necesita una tabla hija de
+// cualquier forma; (2) EstadoPedido de Order es una máquina de estados
+// lineal que no representa cumplimiento parcial por día; (3) el ciclo de
+// pago a crédito (confirmación manual, potencialmente al final de la
+// semana) es distinto al de Order.estadoPago (inmediato / webhook de
+// Stripe); y (4) mezclarlos arriesgaría los agregados de OrdersService.summary
+// /summaryDaily, que asumen que cada Order.createdAt es un ingreso resuelto
+// en el momento. Ver CLAUDE.md.
+// ---------------------------------------------------------------------------
+
+enum PedidoB2bEstado {
+  PENDIENTE_CONFIRMACION
+  CONFIRMADO_SURTIENDO
+  DESPACHADO
+}
+
+// Independiente de Order.estadoPago — ver PedidoB2bModoCobro arriba. PENDIENTE
+// es el único estado inicial posible: incluso en modoCobro = AL_INICIO, el
+// pedido nace sin pagar y PedidosB2bService.marcarPagado es lo que lo mueve a
+// PAGADO (y, en ese modo, confirma el pedido en el mismo paso).
+enum PedidoB2bEstadoPago {
+  PENDIENTE
+  PAGADO
+}
+
+enum DiaSemana {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}
+
+model PedidoB2b {
+  id                          String              @id @default(uuid())
+  tenantId                    String
+  // Folio propio, independiente de Order.folio — mismo patrón de advisory
+  // lock por tenant (ver PedidosB2bService.nextFolio) pero con su propia
+  // clave de lock, para no compartir namespace con el advisory lock de Order
+  // (PublicService.nextFolio) ni serializarse contra él.
+  folio                       String
+  negocioNombre               String
+  contactoNombre              String
+  contactoTelefono            String
+  contactoCorreo              String
+  // Lunes de la semana que cubre el pedido (fecha, sin hora) — cada
+  // PedidoB2bItemDia.dia es relativo a esta semana. Validado como lunes real
+  // en PedidosB2bService, no a nivel de columna/DB.
+  semanaInicio                DateTime            @db.Date
+  // Snapshot de Tenant.pedidoB2bModoCobro al crear el pedido — un cambio
+  // posterior en la config del tenant no debe alterar retroactivamente las
+  // reglas de un pedido ya en curso.
+  modoCobro                   PedidoB2bModoCobro
+  estado                      PedidoB2bEstado     @default(PENDIENTE_CONFIRMACION)
+  estadoPago                  PedidoB2bEstadoPago @default(PENDIENTE)
+  // Cancelación es un flag ortogonal a `estado`, no un estado más de la
+  // secuencia — `estado` sigue siendo estrictamente lineal y sin marcha
+  // atrás; cancelar puede pasar en cualquier momento antes de DESPACHADO sin
+  // "gastar" un paso de esa secuencia.
+  cancelado                   Boolean             @default(false)
+  canceladoAt                 DateTime?
+  // Snapshot de Tenant.pedidoB2bMinimoPiezas al crear el pedido — mismo
+  // motivo que modoCobro. Solo se valida contra totalPiezas al confirmar/
+  // pagar (ver PedidosB2bService); nunca se revalida en ediciones
+  // posteriores a la confirmación.
+  minimoPiezasAplicado        Int
+  // Suma de PedidoB2bItem.cantidadTotal — denormalizado y recalculado en
+  // cada creación/edición de items, para no sumar en cada lectura y para que
+  // el listado/reporte (ver abajo) lo tenga disponible sin un join extra.
+  totalPiezas                 Int                 @default(0)
+  codigoDescuentoId           String?
+  // Snapshot del código y % aplicados al momento del pedido — independiente
+  // de codigoDescuentoId (que es opcional y onDelete: SetNull) para que el
+  // pedido conserve esta información aunque el código se borre o desactive
+  // después. Mismo principio de snapshot que nombreProducto/precioUnitario
+  // en OrderItem.
+  codigoDescuentoTexto        String?
+  descuentoPorcentajeAplicado Decimal?            @db.Decimal(5, 2)
+  subtotal                    Decimal             @default(0) @db.Decimal(10, 2)
+  descuentoTotal              Decimal             @default(0) @db.Decimal(10, 2)
+  total                       Decimal             @default(0) @db.Decimal(10, 2)
+  // Mismos 6 campos + requiereFactura que Order, resueltos con la misma
+  // lógica (ver backend/src/common/facturacion.ts) según el
+  // Tenant.facturacionModo compartido por ambos storefronts — no hay CFDI
+  // real en este módulo, solo se capturan los datos fiscales para que el
+  // negocio facture por fuera del sistema.
+  requiereFactura             Boolean             @default(false)
+  facturaRazonSocial          String?
+  facturaRfc                  String?
+  facturaRegimenFiscal        String?
+  facturaUsoCfdi              String?
+  facturaCodigoPostal         String?
+  facturaCorreo               String?
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
+
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  codigoDescuento PedidoB2bCodigoDescuento? @relation(fields: [codigoDescuentoId], references: [id], onDelete: SetNull)
+  items           PedidoB2bItem[]
+
+  // folio es corto y de cara al negocio, igual que Order.folio — único por
+  // tenant, no globalmente.
+  @@unique([tenantId, folio])
+  @@index([tenantId, semanaInicio])
+  @@index([codigoDescuentoId])
+  @@map("pedidos_b2b")
+}
+
+// Snapshotea nombreProducto/precioUnitario al momento del pedido — mismo
+// principio que OrderItem — así un cambio posterior de catálogo nunca altera
+// un pedido ya creado. productId es nullable con onDelete: SetNull por la
+// misma razón que en OrderItem.
+model PedidoB2bItem {
+  id             String  @id @default(uuid())
+  tenantId       String
+  pedidoB2bId    String
+  productId      String?
+  nombreProducto String
+  precioUnitario Decimal @db.Decimal(10, 2)
+  // Suma de PedidoB2bItemDia.cantidad para este item — denormalizado, ver
+  // PedidoB2b.totalPiezas.
+  cantidadTotal  Int
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidoB2b    PedidoB2b          @relation(fields: [pedidoB2bId], references: [id], onDelete: Cascade)
+  product      Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  distribucion PedidoB2bItemDia[]
+
+  @@index([tenantId])
+  @@index([pedidoB2bId])
+  @@map("pedido_b2b_items")
+}
+
+// Cantidad pedida de un item en un día específico lunes-domingo de la semana
+// del pedido — la pieza que no cabe en OrderItem, que solo tiene una
+// `cantidad` por línea sin dimensión de día.
+model PedidoB2bItemDia {
+  id              String    @id @default(uuid())
+  tenantId        String
+  pedidoB2bItemId String
+  dia             DiaSemana
+  cantidad        Int
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidoB2bItem PedidoB2bItem @relation(fields: [pedidoB2bItemId], references: [id], onDelete: Cascade)
+
+  @@unique([pedidoB2bItemId, dia])
+  @@index([tenantId])
+  @@map("pedido_b2b_items_dia")
+}
+
+// Catálogo de códigos de descuento propio de este módulo — deliberadamente
+// no reutiliza Promotion, que hoy son descuentos automáticos sobre el
+// carrito del storefront de pickup, no cupones de texto que alguien ingresa.
+// Ver CLAUDE.md. onDelete: SetNull en PedidoB2b.codigoDescuento — el pedido
+// ya snapshotea texto/porcentaje, así que borrar el código no pierde nada
+// del histórico (mismo principio que ModifierOption, sin Restrict).
+model PedidoB2bCodigoDescuento {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  // Normalizado a mayúsculas por PedidosB2bService antes de guardar/buscar.
+  codigo              String
+  descuentoPorcentaje Decimal  @db.Decimal(5, 2)
+  activo              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidos PedidoB2b[]
+
+  @@unique([tenantId, codigo])
+  @@index([tenantId])
+  @@map("pedido_b2b_codigos_descuento")
 }

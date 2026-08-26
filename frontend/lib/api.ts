@@ -31,12 +31,32 @@ export interface Session {
   };
 }
 
+// Lista extensible a propósito (no un booleano B2B/B2C) — se espera agregar
+// más valores en el futuro, ligados a otras verticales de negocio. Ver
+// TipoStorefront en el schema de Prisma y dashboard/nav-items.ts, que filtra
+// la navegación según este valor.
+export type TipoStorefront = "RETAIL_B2C" | "RETAIL_B2B";
+
+export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripcion: string }[] = [
+  {
+    value: "RETAIL_B2C",
+    label: "Retail (B2C)",
+    descripcion: "Catálogo público con carrito y pago inmediato al recoger o en línea.",
+  },
+  {
+    value: "RETAIL_B2B",
+    label: "Retail (B2B)",
+    descripcion: "Pedidos semanales a crédito para negocios que te compran a ti (cafeterías, restaurantes).",
+  },
+];
+
 export interface RegisterPayload {
   nombreNegocio: string;
   slug: string;
   nombreDueno: string;
   email: string;
   password: string;
+  tipoStorefront: TipoStorefront;
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
 }
@@ -52,7 +72,7 @@ export interface CurrentUser {
   email: string;
   rol: Role;
   tenantId: string;
-  tenant: { nombre: string };
+  tenant: { nombre: string; tipoStorefront: TipoStorefront };
 }
 
 export interface Category {
@@ -902,6 +922,334 @@ export function deletePuntoEnvio(token: string, id: string) {
     method: "DELETE",
     headers: authHeaders(token),
   });
+}
+
+// --- Storefront público de pedidos B2B (/mayoreo/[slug]) ---
+// Deliberadamente separado de los tipos Public*/PedidoB2b* de arriba, aunque
+// el nombre "Dia" choque en concepto con DiaSemana (horario) — ese tipo es
+// para Tenant.horarioAtencion (minúsculas), este es el enum de Prisma
+// DiaSemana del pedido B2B (mayúsculas), así que se nombra distinto para no
+// confundir ambos.
+
+export type DiaSemanaPedidoB2b = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO";
+
+export const DIAS_SEMANA_PEDIDO_B2B: { value: DiaSemanaPedidoB2b; label: string }[] = [
+  { value: "LUNES", label: "Lunes" },
+  { value: "MARTES", label: "Martes" },
+  { value: "MIERCOLES", label: "Miércoles" },
+  { value: "JUEVES", label: "Jueves" },
+  { value: "VIERNES", label: "Viernes" },
+  { value: "SABADO", label: "Sábado" },
+  { value: "DOMINGO", label: "Domingo" },
+];
+
+export type PedidoB2bModoCobro = "AL_INICIO" | "AL_FINAL";
+export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "DESPACHADO";
+export type PedidoB2bEstadoPago = "PENDIENTE" | "PAGADO";
+
+export interface PublicPedidoB2bTenantInfo {
+  nombre: string;
+  logoUrl: string | null;
+  pedidoB2bModoCobro: PedidoB2bModoCobro;
+  pedidoB2bMinimoPiezas: number;
+  // Mismo mecanismo que PublicTenantInfo.abierto (B2C) — el storefront lo usa
+  // para bloquear el checkout mientras el negocio está cerrado; el backend
+  // vuelve a revisarlo server-side en createPedido.
+  abierto: boolean;
+  horarioAtencion: HorarioSemana | null;
+  // Mismo Tenant.facturacionModo que ya usa /tienda — controla si el
+  // checkbox "Quiero factura" del resumen se muestra/exige.
+  facturacionModo: FacturacionModo;
+}
+
+export interface PublicPedidoB2bProduct {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  precio: string;
+  fotoUrl: string | null;
+  disponible: boolean;
+}
+
+export interface PublicPedidoB2bCategory {
+  id: string;
+  nombre: string;
+  products: PublicPedidoB2bProduct[];
+}
+
+export interface PublicPedidoB2bCatalog {
+  categories: PublicPedidoB2bCategory[];
+}
+
+export interface PedidoB2bItemDiaInput {
+  dia: DiaSemanaPedidoB2b;
+  cantidad: number;
+}
+
+export interface PedidoB2bItemInput {
+  productId: string;
+  distribucion: PedidoB2bItemDiaInput[];
+}
+
+export interface CreatePublicPedidoB2bPayload {
+  negocioNombre: string;
+  contactoNombre: string;
+  contactoTelefono: string;
+  contactoCorreo: string;
+  semanaInicio: string;
+  codigoDescuento?: string;
+  // Mismos 6 campos + requiereFactura que CreatePublicOrderPayload (B2C) —
+  // solo se mandan cuando aplica según facturacionModo, ver pedido-flow.tsx.
+  requiereFactura?: boolean;
+  facturaRazonSocial?: string;
+  facturaRfc?: string;
+  facturaRegimenFiscal?: string;
+  facturaUsoCfdi?: string;
+  facturaCodigoPostal?: string;
+  facturaCorreo?: string;
+  items: PedidoB2bItemInput[];
+}
+
+export interface PublicPedidoB2bItem {
+  id: string;
+  productId: string | null;
+  nombreProducto: string;
+  precioUnitario: string;
+  cantidadTotal: number;
+  distribucion: { id: string; dia: DiaSemanaPedidoB2b; cantidad: number }[];
+}
+
+export interface PublicPedidoB2b {
+  id: string;
+  folio: string;
+  negocioNombre: string;
+  contactoNombre: string;
+  contactoTelefono: string;
+  contactoCorreo: string;
+  semanaInicio: string;
+  modoCobro: PedidoB2bModoCobro;
+  estado: PedidoB2bEstado;
+  estadoPago: PedidoB2bEstadoPago;
+  totalPiezas: number;
+  codigoDescuentoTexto: string | null;
+  descuentoPorcentajeAplicado: string | null;
+  subtotal: string;
+  descuentoTotal: string;
+  total: string;
+  requiereFactura: boolean;
+  facturaRazonSocial: string | null;
+  facturaRfc: string | null;
+  facturaRegimenFiscal: string | null;
+  facturaUsoCfdi: string | null;
+  facturaCodigoPostal: string | null;
+  facturaCorreo: string | null;
+  items: PublicPedidoB2bItem[];
+}
+
+export function fetchPublicPedidoB2bTenant(slug: string) {
+  return request<PublicPedidoB2bTenantInfo>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}`);
+}
+
+export function fetchPublicPedidoB2bCatalog(slug: string) {
+  return request<PublicPedidoB2bCatalog>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/catalog`);
+}
+
+export function previewPedidoB2bCodigoDescuento(slug: string, codigo: string) {
+  return request<{ descuentoPorcentaje: number }>(
+    `/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/codigos-descuento/${encodeURIComponent(codigo)}`,
+  );
+}
+
+export function createPublicPedidoB2b(slug: string, payload: CreatePublicPedidoB2bPayload) {
+  return request<PublicPedidoB2b>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/pedidos`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Pedidos B2B — panel autenticado (/dashboard/pedidos-b2b) ---
+
+// Forma reportable (listado/export) — ver PedidosB2bService.REPORTABLE_SELECT
+// en el backend. No trae items/distribución, solo lo necesario para la
+// tarjeta de la lista.
+export interface PedidoB2bReportable {
+  id: string;
+  folio: string;
+  negocioNombre: string;
+  contactoNombre: string;
+  semanaInicio: string;
+  estado: PedidoB2bEstado;
+  estadoPago: PedidoB2bEstadoPago;
+  modoCobro: PedidoB2bModoCobro;
+  cancelado: boolean;
+  totalPiezas: number;
+  total: string;
+  createdAt: string;
+}
+
+export interface PaginatedPedidosB2b {
+  data: PedidoB2bReportable[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+// Detalle completo (GET /pedidos-b2b/:id) — mismos campos que PublicPedidoB2b
+// más los que solo tienen sentido del lado autenticado (cancelado,
+// minimoPiezasAplicado, etc.).
+export interface PedidoB2bDetalle extends PublicPedidoB2b {
+  cancelado: boolean;
+  canceladoAt: string | null;
+  minimoPiezasAplicado: number;
+}
+
+export interface ListPedidosB2bFilter {
+  estado?: PedidoB2bEstado;
+  cancelado?: boolean;
+  desde?: string;
+  hasta?: string;
+  // Coincidencia parcial, case-insensitive (ver ListPedidosB2bQueryDto en el
+  // backend) — usado por "Históricos", que pagina de verdad y por lo tanto
+  // necesita resolver este filtro en el servidor (a diferencia de "Pedidos
+  // activos", que trae todo sin paginar y filtra en el cliente).
+  negocioNombre?: string;
+  page?: number;
+  limit?: number;
+}
+
+export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
+  const params = new URLSearchParams();
+  if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.cancelado !== undefined) params.set("cancelado", String(filter.cancelado));
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  if (filter?.page) params.set("page", String(filter.page));
+  if (filter?.limit) params.set("limit", String(filter.limit));
+  const query = params.toString();
+  return request<PaginatedPedidosB2b>(`/pedidos-b2b${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}`, { headers: authHeaders(token) });
+}
+
+export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[]) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/items`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ items }),
+  });
+}
+
+export function avanzarPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/avanzar`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export function marcarPagadoPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/marcar-pagado`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export function cancelarPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/cancelar`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export interface ExportPedidosB2bFilter {
+  estado?: PedidoB2bEstado;
+  // Multi-valor — solo lo usa "Pedidos activos" para exportar
+  // "Pendiente + Confirmado" en una sola llamada (ver
+  // ExportPedidosB2bQueryDto en el backend). Si ambos llegan, el backend
+  // prioriza `estados`.
+  estados?: PedidoB2bEstado[];
+  // Cancelación es un flag ortogonal a `estado` (no lo cambia, ver
+  // schema.prisma) — un pedido cancelado conserva el estado que tenía al
+  // cancelarse, así que sin `cancelado` explícito también se colaría en un
+  // export que solo filtra por estado.
+  cancelado?: boolean;
+  desde?: string;
+  hasta?: string;
+  negocioNombre?: string;
+}
+
+// Bypasses request() on purpose, igual que exportOrdersHistoricoCsv — este
+// endpoint regresa un CSV, no JSON.
+export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB2bFilter): Promise<Blob> {
+  const params = new URLSearchParams();
+  if (filter?.estados && filter.estados.length > 0) params.set("estados", filter.estados.join(","));
+  else if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.cancelado !== undefined) params.set("cancelado", String(filter.cancelado));
+  if (filter?.desde) params.set("desde", filter.desde);
+  if (filter?.hasta) params.set("hasta", filter.hasta);
+  if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  const query = params.toString();
+
+  const res = await fetch(`${API_URL}/pedidos-b2b/export${query ? `?${query}` : ""}`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = body?.message ?? "No se pudo exportar los pedidos";
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status);
+  }
+
+  return res.blob();
+}
+
+// --- Pedidos B2B — "Pedidos del día" (/dashboard/pedidos-b2b/dia) ---
+
+export interface PedidoB2bEntregaDiaItem {
+  productId: string | null;
+  nombreProducto: string;
+  precioUnitario: string;
+  cantidad: number;
+}
+
+// Un pedido activo con sus items ya recortados a un solo día — nunca el
+// pedido completo. Ver PedidosB2bService.findEntregasDia en el backend.
+export interface PedidoB2bEntregaDia {
+  id: string;
+  folio: string;
+  negocioNombre: string;
+  contactoNombre: string;
+  contactoTelefono: string;
+  estado: PedidoB2bEstado;
+  items: PedidoB2bEntregaDiaItem[];
+}
+
+// `fecha` es "YYYY-MM-DD" — el backend resuelve a qué semana/DiaSemana
+// pertenece (PedidoB2bItemDia no guarda una fecha real, ver
+// resolverSemanaYDia en pedidos-b2b-logica.ts).
+export function fetchPedidosB2bDia(token: string, fecha: string) {
+  return request<PedidoB2bEntregaDia[]>(`/pedidos-b2b/dia/${encodeURIComponent(fecha)}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Bypasses request() on purpose, mismo motivo que exportPedidosB2bCsv — CSV,
+// no JSON.
+export async function exportPedidosB2bDiaCsv(token: string, fecha: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}/pedidos-b2b/dia/${encodeURIComponent(fecha)}/export`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = body?.message ?? "No se pudo exportar las entregas del día";
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status);
+  }
+
+  return res.blob();
 }
 
 export { ApiError };

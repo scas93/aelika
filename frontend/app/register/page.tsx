@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ApiError, checkSlugAvailability, horarioSemanaVacio, register, type HorarioSemana } from "@/lib/api";
+import {
+  ApiError,
+  checkSlugAvailability,
+  horarioSemanaVacio,
+  register,
+  TIPOS_STOREFRONT,
+  type HorarioSemana,
+  type TipoStorefront,
+} from "@/lib/api";
 import { saveSession } from "@/lib/session";
 import { slugify } from "@/lib/slug";
 import HorarioEditor from "@/components/horario-editor";
@@ -20,6 +28,10 @@ export default function RegisterPage() {
   const [nombreDueno, setNombreDueno] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Sin default a propósito — quien registra debe elegirlo explícitamente
+  // (ver CLAUDE.md), así que arranca sin selección en vez de preseleccionar
+  // "Retail (B2C)" en silencio.
+  const [tipoStorefront, setTipoStorefront] = useState<TipoStorefront | null>(null);
   const [horario, setHorario] = useState<HorarioSemana>(() => horarioSemanaVacio());
   const [ubicacion, setUbicacion] = useState("");
 
@@ -66,11 +78,12 @@ export default function RegisterPage() {
     nombreDueno.trim().length > 1 &&
     email.trim().length > 3 &&
     password.length >= 8 &&
+    tipoStorefront !== null &&
     !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || !tipoStorefront) return;
 
     setSubmitting(true);
     setError(null);
@@ -81,6 +94,7 @@ export default function RegisterPage() {
         nombreDueno,
         email,
         password,
+        tipoStorefront,
         horarioAtencion: horario,
         ubicacion: ubicacion || undefined,
       });
@@ -174,6 +188,36 @@ export default function RegisterPage() {
             className="input"
           />
         </Field>
+
+        <fieldset className="flex flex-col gap-1.5 text-sm font-medium">
+          <legend className="mb-0.5">Tipo de negocio</legend>
+          <div className="flex flex-col gap-2">
+            {TIPOS_STOREFRONT.map((opcion) => (
+              <label
+                key={opcion.value}
+                className={`flex cursor-pointer flex-col gap-0.5 rounded-lg border p-3 text-sm transition ${
+                  tipoStorefront === opcion.value
+                    ? "border-black bg-black/5 dark:border-white dark:bg-white/10"
+                    : "border-black/15 hover:border-black/30 dark:border-white/20 dark:hover:border-white/40"
+                }`}
+              >
+                <span className="flex items-center gap-2 font-semibold">
+                  <input
+                    required
+                    type="radio"
+                    name="tipoStorefront"
+                    checked={tipoStorefront === opcion.value}
+                    onChange={() => setTipoStorefront(opcion.value)}
+                  />
+                  {opcion.label}
+                </span>
+                <span className="pl-5 text-xs font-normal text-black/60 dark:text-white/60">
+                  {opcion.descripcion}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <HorarioEditor horario={horario} onChange={setHorario} />
 

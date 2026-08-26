@@ -1,5 +1,5 @@
 import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
-import { METODO_PAGO_LABEL, type Order, type PublicOrderItem, type Role } from "./api";
+import { METODO_PAGO_LABEL, type Order, type PedidoB2bEntregaDia, type PublicOrderItem, type Role } from "./api";
 import { regimenFiscalLabel, usoCfdiLabel } from "./catalogos-sat";
 
 // GHIA GTP801, 80mm — Font A fits ~42-48 chars at this width; 42 is the
@@ -231,7 +231,12 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
   return encoder.encode();
 }
 
-export async function printComandaWebUsb(order: Order, ctx: ComandaContext): Promise<void> {
+// Extraído de lo que antes era el cuerpo de printComandaWebUsb — el plan de
+// bytes ESC/POS es lo único que cambia entre un ticket de Order y uno de
+// "Pedidos del día" (PedidoB2bEntregaDia); el mecanismo de transporte
+// (conseguir el dispositivo, reclamar el endpoint, transferOut, cerrar) es
+// idéntico y se reutiliza tal cual para no duplicar la conexión WebUSB.
+async function enviarBytesWebUsb(data: Uint8Array<ArrayBuffer>): Promise<void> {
   if (!isWebUsbSupported()) {
     throw new Error("Esta función requiere Chrome o Edge.");
   }
@@ -240,7 +245,6 @@ export async function printComandaWebUsb(order: Order, ctx: ComandaContext): Pro
 
   try {
     const endpointNumber = await claimOutEndpoint(device);
-    const data = buildComandaBytes(order, ctx);
     await device.transferOut(endpointNumber, data);
   } catch (err) {
     if (err instanceof Error && err.message.includes("endpoint de salida")) {
@@ -252,4 +256,70 @@ export async function printComandaWebUsb(order: Order, ctx: ComandaContext): Pro
   } finally {
     await device.close().catch(() => {});
   }
+}
+
+export async function printComandaWebUsb(order: Order, ctx: ComandaContext): Promise<void> {
+  const data = buildComandaBytes(order, ctx);
+  await enviarBytesWebUsb(data);
+}
+
+// Contexto para el ticket de "Pedidos del día" — distinto de ComandaContext
+// (Order): no hay hora de recogida/punto de envío/factura, solo el negocio
+// del tenant (quien imprime) y la fecha/día que se está despachando.
+export interface ComandaB2bDiaContext {
+  nombreNegocioTenant: string;
+  fechaLabel: string;
+  impresoPor: { nombre: string; rol: Role };
+}
+
+// Ticket de picking/entrega para un solo día de un PedidoB2b — nunca el
+// pedido semanal completo (entrega.items ya viene recortado a un día desde
+// el backend, ver PedidosB2bService.findEntregasDia). Sin precios: es una
+// lista de qué empacar/entregar, no un recibo — el cobro de PedidoB2b es a
+// crédito y se resuelve al final de la semana, no en este ticket.
+function buildComandaB2bDiaBytes(entrega: PedidoB2bEntregaDia, ctx: ComandaB2bDiaContext): Uint8Array<ArrayBuffer> {
+  const encoder = new ReceiptPrinterEncoder({ language: "esc-pos", columns: COLUMNS });
+
+  encoder.initialize().align("center").font("A").bold(true).line(ctx.nombreNegocioTenant).bold(false).font("B");
+
+  encoder
+    .font("A")
+    .size(2, 2)
+    .bold(true)
+    .line(`#${entrega.folio}`)
+    .bold(false)
+    .size(1, 1)
+    .bold(true)
+    .line(`Entrega: ${ctx.fechaLabel}`)
+    .bold(false)
+    .font("B")
+    .align("left")
+    .rule({ width: COLUMNS_BODY })
+    .bold(true)
+    .line(entrega.negocioNombre)
+    .bold(false)
+    .line(entrega.contactoNombre)
+    .line(entrega.contactoTelefono)
+    .rule({ width: COLUMNS_BODY });
+
+  for (const item of entrega.items) {
+    encoder.bold(true).line(`${item.cantidad}x ${item.nombreProducto}`).bold(false);
+  }
+
+  encoder
+    .rule({ width: COLUMNS_BODY })
+    .line(`Impreso por: ${ctx.impresoPor.nombre} (${ROLE_LABEL[ctx.impresoPor.rol]})`)
+    .line(`Fecha de impresión: ${formatFechaHora(new Date())}`)
+    .align("center")
+    .line("Gracias por su preferencia")
+    .align("left");
+
+  encoder.newline(3).cut();
+
+  return encoder.encode();
+}
+
+export async function printComandaB2bDiaWebUsb(entrega: PedidoB2bEntregaDia, ctx: ComandaB2bDiaContext): Promise<void> {
+  const data = buildComandaB2bDiaBytes(entrega, ctx);
+  await enviarBytesWebUsb(data);
 }

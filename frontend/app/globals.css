@@ -41,6 +41,31 @@
   --radius-admin-card: 16px;
   --radius-admin-control: 10px;
   --radius-admin-pill: 999px;
+
+  /* /mayoreo/[slug] — storefront público del módulo de pedidos B2B a
+     crédito, deliberadamente separado del wrapper de /tienda (verde
+     WhatsApp) y del panel admin (verde admin): acento cálido/pan (ámbar),
+     mismo principio de "un token nuevo por superficie" ya establecido para
+     admin-* vs whatsapp/chat-*. Nunca Tailwind arbitrario bg-[#...] dentro
+     de esta ruta.
+     mayoreo-bg/mayoreo-ink/mayoreo-ink-soft son, a propósito, el mismo valor
+     que usa /tienda en modo claro (chat-bg #f0f2f5, --foreground #171717, y
+     el equivalente sólido de su text-black/60 más frecuente) — mismo look,
+     tokens separados (nunca compartir la variable en sí, ver convención
+     admin-* arriba). mayoreo-card ya coincidía con las cards bg-white de
+     /tienda, sin cambios. mayoreo-button es nuevo, para botones de acción
+     negros/oscuros como en /tienda (bg-black), separado del acento (que
+     sigue siendo el color de precios/indicadores, no de botones). */
+  --color-mayoreo-accent: #c2410c;
+  --color-mayoreo-accent-dark: #9a3412;
+  --color-mayoreo-accent-soft: #fdf0e7;
+  --color-mayoreo-bg: #f0f2f5;
+  --color-mayoreo-card: #ffffff;
+  --color-mayoreo-ink: #171717;
+  --color-mayoreo-ink-soft: #666666;
+  --color-mayoreo-border: #e4e1da;
+  --color-mayoreo-button: #1a1613;
+  --font-mayoreo: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -118,6 +143,49 @@ body {
   outline: none;
   border-color: var(--color-admin-green);
   box-shadow: 0 0 0 3px var(--color-admin-green-soft);
+}
+
+/* Scoped input variant for /mayoreo/[slug] — sibling of .input/.admin-input,
+   same reasoning: this route's focus glow must not repurpose --color-whatsapp
+   nor --color-admin-green. */
+.mayoreo-input {
+  background: var(--color-mayoreo-card);
+  border: 1px solid var(--color-mayoreo-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.9375rem;
+  color: var(--color-mayoreo-ink);
+}
+
+.mayoreo-input:focus {
+  outline: none;
+  border-color: var(--color-mayoreo-accent);
+  box-shadow: 0 0 0 3px var(--color-mayoreo-accent-soft);
+}
+
+/* Campos numéricos angostos de "día" en la pantalla de distribución semanal
+   de /mayoreo/[slug] (7 en una sola fila, ~50px c/u) — las flechas nativas
+   de spin de type=number no caben en ese ancho y se superponen al dígito
+   centrado, recortándolo visualmente. Se ocultan solo aquí (clase aparte,
+   no en .mayoreo-input en general) porque el selector de cantidad del modal
+   de producto también usa .mayoreo-input pero es mucho más ancho y no tiene
+   este problema — no hace falta tocarlo. */
+.mayoreo-input.dia-input {
+  -moz-appearance: textfield;
+}
+
+.mayoreo-input.dia-input::-webkit-outer-spin-button,
+.mayoreo-input.dia-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Same iOS auto-zoom fix as .input.search-input in /tienda (font-size under
+   16px triggers it) — scoped to the /mayoreo/[slug] search box the same way,
+   via the extra .search-input class rather than touching .mayoreo-input
+   itself, which is shared by every other input in this route. */
+.mayoreo-input.search-input {
+  font-size: 1rem;
 }
 
 /* Print only the comanda ticket (see app/dashboard/pedidos/page.tsx) —

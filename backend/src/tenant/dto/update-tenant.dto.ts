@@ -1,7 +1,19 @@
 import { Type } from 'class-transformer';
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
-import { FacturacionModo } from '../../../generated/prisma/enums';
+import {
+  FacturacionModo,
+  PedidoB2bModoCobro,
+} from '../../../generated/prisma/enums';
 
 // slug/nombre are intentionally absent — out of scope for now (see CLAUDE.md).
 export class UpdateTenantDto {
@@ -28,4 +40,13 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsEnum(FacturacionModo)
   facturacionModo?: FacturacionModo;
+
+  @IsOptional()
+  @IsEnum(PedidoB2bModoCobro)
+  pedidoB2bModoCobro?: PedidoB2bModoCobro;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  pedidoB2bMinimoPiezas?: number;
 }

@@ -15,7 +15,7 @@ interface DashboardNavProps {
 export default function DashboardNav({ open, onClose }: DashboardNavProps) {
   const { user, logout } = useSession();
   const pathname = usePathname();
-  const items = getNavItems(user.rol);
+  const items = getNavItems(user.rol, user.tenant.tipoStorefront);
   const tenantInitial = user.tenant.nombre.trim().charAt(0).toUpperCase();
 
   // Below md this is a left-edge drawer (fixed, off-canvas via

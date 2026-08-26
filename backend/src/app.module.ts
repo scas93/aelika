@@ -17,6 +17,7 @@ import { PuntosEnvioModule } from './puntos-envio/puntos-envio.module';
 import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PedidosB2bModule } from './pedidos-b2b/pedidos-b2b.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { PaymentsModule } from './payments/payments.module';
     ModifierGroupsModule,
     WebhooksModule,
     PaymentsModule,
+    PedidosB2bModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

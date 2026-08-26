@@ -18,7 +18,9 @@ export class AuthController {
   @Public()
   @Get('slug-availability')
   async slugAvailability(@Query('slug') slug: string) {
-    const available = await this.authService.isSlugAvailable((slug ?? '').toLowerCase());
+    const available = await this.authService.isSlugAvailable(
+      (slug ?? '').toLowerCase(),
+    );
     return { slug, available };
   }
 
@@ -47,15 +49,22 @@ export class AuthController {
         email: true,
         rol: true,
         tenantId: true,
-        tenant: { select: { nombre: true } },
+        tenant: { select: { nombre: true, tipoStorefront: true } },
       },
     });
     return record;
   }
 
   @Patch('change-password')
-  async changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto) {
-    await this.authService.changePassword(user.sub, dto.currentPassword, dto.newPassword);
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
     return { success: true };
   }
 }

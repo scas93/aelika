@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -17,7 +22,9 @@ export class BotAuthGuard implements CanActivate {
       throw new UnauthorizedException('Falta el header X-Api-Key');
     }
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { botApiKey: apiKey } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { botApiKey: apiKey },
+    });
     if (!tenant) {
       throw new UnauthorizedException('Llave de bot inválida');
     }

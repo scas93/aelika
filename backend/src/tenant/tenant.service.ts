@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
@@ -6,7 +10,10 @@ import { normalizarHorarioSemana } from '../common/horario';
 import { generateApiKey } from '../common/api-key';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import type { FacturacionModo } from '../../generated/prisma/enums';
+import type {
+  FacturacionModo,
+  PedidoB2bModoCobro,
+} from '../../generated/prisma/enums';
 
 const SETTINGS_SELECT = {
   nombre: true,
@@ -23,6 +30,8 @@ const SETTINGS_SELECT = {
   stripeAccountId: true,
   stripeChargesEnabled: true,
   stripePayoutsEnabled: true,
+  pedidoB2bModoCobro: true,
+  pedidoB2bMinimoPiezas: true,
 } as const;
 
 const API_BASE_URL_DEFAULT = 'http://localhost:3001';
@@ -54,11 +63,18 @@ export class TenantService {
       data: {
         // Normalize a cleared textarea back to null instead of storing "",
         // so getMine() re-applies the default next time instead of showing blank.
-        mensajeBienvenida: dto.mensajeBienvenida !== undefined ? dto.mensajeBienvenida.trim() || null : undefined,
-        horarioAtencion: dto.horarioAtencion ? (normalizarHorarioSemana(dto.horarioAtencion) as any) : undefined,
+        mensajeBienvenida:
+          dto.mensajeBienvenida !== undefined
+            ? dto.mensajeBienvenida.trim() || null
+            : undefined,
+        horarioAtencion: dto.horarioAtencion
+          ? (normalizarHorarioSemana(dto.horarioAtencion) as any)
+          : undefined,
         ubicacion: dto.ubicacion,
         facturacionModo: dto.facturacionModo,
         stripeContactEmail: dto.stripeContactEmail,
+        pedidoB2bModoCobro: dto.pedidoB2bModoCobro,
+        pedidoB2bMinimoPiezas: dto.pedidoB2bMinimoPiezas,
       },
       select: SETTINGS_SELECT,
     });
@@ -84,10 +100,18 @@ export class TenantService {
    * instead of erroring — no separate "resume onboarding" endpoint needed.
    */
   async createOrContinueStripeAccount(tenantId: string) {
-    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
 
-    if (tenant.stripeAccountId && tenant.stripeChargesEnabled && tenant.stripePayoutsEnabled) {
-      throw new ConflictException('Este negocio ya está completamente conectado con Stripe');
+    if (
+      tenant.stripeAccountId &&
+      tenant.stripeChargesEnabled &&
+      tenant.stripePayoutsEnabled
+    ) {
+      throw new ConflictException(
+        'Este negocio ya está completamente conectado con Stripe',
+      );
     }
 
     let accountId = tenant.stripeAccountId;
@@ -136,22 +160,27 @@ export class TenantService {
         },
       });
 
-      await this.prisma.tenant.update({ where: { id: tenant.id }, data: { stripeAccountId: account.id } });
+      await this.prisma.tenant.update({
+        where: { id: tenant.id },
+        data: { stripeAccountId: account.id },
+      });
       accountId = account.id;
     }
 
-    const apiBaseUrl = this.configService.get<string>('API_BASE_URL') ?? API_BASE_URL_DEFAULT;
-    const accountLink = await this.stripeService.client.v2.core.accountLinks.create({
-      account: accountId,
-      use_case: {
-        type: 'account_onboarding',
-        account_onboarding: {
-          configurations: ['merchant', 'recipient'],
-          return_url: `${apiBaseUrl}/internal/stripe/onboarding-complete`,
-          refresh_url: `${apiBaseUrl}/internal/stripe/onboarding-refresh`,
+    const apiBaseUrl =
+      this.configService.get<string>('API_BASE_URL') ?? API_BASE_URL_DEFAULT;
+    const accountLink =
+      await this.stripeService.client.v2.core.accountLinks.create({
+        account: accountId,
+        use_case: {
+          type: 'account_onboarding',
+          account_onboarding: {
+            configurations: ['merchant', 'recipient'],
+            return_url: `${apiBaseUrl}/internal/stripe/onboarding-complete`,
+            refresh_url: `${apiBaseUrl}/internal/stripe/onboarding-refresh`,
+          },
         },
-      },
-    });
+      });
 
     return { url: accountLink.url };
   }
@@ -171,16 +200,26 @@ export class TenantService {
       return { estado: 'sin_cuenta' as const };
     }
 
-    const account = await this.stripeService.client.v2.core.accounts.retrieve(tenant.stripeAccountId, {
-      include: ['configuration.merchant', 'configuration.recipient'],
-    });
+    const account = await this.stripeService.client.v2.core.accounts.retrieve(
+      tenant.stripeAccountId,
+      {
+        include: ['configuration.merchant', 'configuration.recipient'],
+      },
+    );
 
-    const chargesEnabled = account.configuration?.merchant?.capabilities?.card_payments?.status === 'active';
-    const payoutsEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.payouts?.status === 'active';
+    const chargesEnabled =
+      account.configuration?.merchant?.capabilities?.card_payments?.status ===
+      'active';
+    const payoutsEnabled =
+      account.configuration?.recipient?.capabilities?.stripe_balance?.payouts
+        ?.status === 'active';
 
     await this.prisma.tenant.update({
       where: { id: tenant.id },
-      data: { stripeChargesEnabled: chargesEnabled, stripePayoutsEnabled: payoutsEnabled },
+      data: {
+        stripeChargesEnabled: chargesEnabled,
+        stripePayoutsEnabled: payoutsEnabled,
+      },
     });
 
     return {
@@ -202,6 +241,8 @@ export class TenantService {
     stripeAccountId: string | null;
     stripeChargesEnabled: boolean;
     stripePayoutsEnabled: boolean;
+    pedidoB2bModoCobro: PedidoB2bModoCobro;
+    pedidoB2bMinimoPiezas: number;
   }) {
     return {
       nombre: tenant.nombre,
@@ -214,6 +255,8 @@ export class TenantService {
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,
       stripePayoutsEnabled: tenant.stripePayoutsEnabled,
+      pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
+      pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
     };
   }
 }

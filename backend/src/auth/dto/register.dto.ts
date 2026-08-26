@@ -1,6 +1,16 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
+import { TipoStorefront } from '../../../generated/prisma/enums';
 
 export class RegisterDto {
   @IsString()
@@ -20,6 +30,13 @@ export class RegisterDto {
   @MinLength(2)
   @MaxLength(120)
   nombreDueno: string;
+
+  // Obligatorio y sin default a nivel de API a propósito — quien registra el
+  // negocio debe elegirlo explícitamente (ver CLAUDE.md). El @default a
+  // nivel de columna en Tenant existe solo para el backfill de tenants
+  // creados antes de este campo, no para cubrir este DTO.
+  @IsEnum(TipoStorefront)
+  tipoStorefront: TipoStorefront;
 
   @IsEmail()
   email: string;
