@@ -528,6 +528,39 @@ export interface UpdatePuntoEnvioPayload {
   activo?: boolean;
 }
 
+// --- Códigos de descuento B2B (/dashboard/ajustes/codigos-descuento) ---
+// usosActuales es derivado por el backend (conteo de PedidoB2b vinculados,
+// incluyendo cancelados) en cada GET — nunca se manda al crear/editar, solo
+// se muestra. usosMaximos/fechaLimite null = ilimitado/sin fecha límite.
+export interface CodigoDescuentoB2b {
+  id: string;
+  tenantId: string;
+  codigo: string;
+  descuentoPorcentaje: string;
+  activo: boolean;
+  usosMaximos: number | null;
+  fechaLimite: string | null;
+  usosActuales: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCodigoDescuentoB2bPayload {
+  codigo: string;
+  descuentoPorcentaje: number;
+  activo?: boolean;
+  usosMaximos?: number | null;
+  fechaLimite?: string | null;
+}
+
+export interface UpdateCodigoDescuentoB2bPayload {
+  codigo?: string;
+  descuentoPorcentaje?: number;
+  activo?: boolean;
+  usosMaximos?: number | null;
+  fechaLimite?: string | null;
+}
+
 class ApiError extends Error {
   constructor(
     message: string,
@@ -935,6 +968,33 @@ export function updatePuntoEnvio(token: string, id: string, payload: UpdatePunto
 
 export function deletePuntoEnvio(token: string, id: string) {
   return request<void>(`/puntos-envio/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchCodigosDescuentoB2b(token: string) {
+  return request<CodigoDescuentoB2b[]>("/codigos-descuento-b2b", { headers: authHeaders(token) });
+}
+
+export function createCodigoDescuentoB2b(token: string, payload: CreateCodigoDescuentoB2bPayload) {
+  return request<CodigoDescuentoB2b>("/codigos-descuento-b2b", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCodigoDescuentoB2b(token: string, id: string, payload: UpdateCodigoDescuentoB2bPayload) {
+  return request<CodigoDescuentoB2b>(`/codigos-descuento-b2b/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteCodigoDescuentoB2b(token: string, id: string) {
+  return request<void>(`/codigos-descuento-b2b/${id}`, {
     method: "DELETE",
     headers: authHeaders(token),
   });

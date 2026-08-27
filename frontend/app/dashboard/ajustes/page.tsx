@@ -15,6 +15,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/bot": "Conecta el bot de WhatsApp con tu catálogo",
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
   "/dashboard/ajustes/pedidos-b2b": "Rango semanal en el que aceptas pedidos de mayoreo",
+  "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
 };
 
 interface Grupo {
@@ -33,7 +34,10 @@ const GRUPOS: Grupo[] = [
 
 // Solo se agrega si el tenant es RETAIL_B2B — mismo gate que ya usaba la
 // sección de ventana de recepción dentro de la página vieja de Configuración.
-const GRUPO_PEDIDOS_B2B: Grupo = { titulo: "Pedidos B2B", hrefs: ["/dashboard/ajustes/pedidos-b2b"] };
+const GRUPO_PEDIDOS_B2B: Grupo = {
+  titulo: "Pedidos B2B",
+  hrefs: ["/dashboard/ajustes/pedidos-b2b", "/dashboard/ajustes/codigos-descuento"],
+};
 
 export default function AjustesPage() {
   const { user } = useSession();

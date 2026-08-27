@@ -1,5 +1,7 @@
 import {
   IsBoolean,
+  IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -28,4 +30,16 @@ export class CreateCodigoDescuentoB2bDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  // Omitido o null = ilimitado.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  usosMaximos?: number | null;
+
+  // "YYYY-MM-DD" — fecha calendario, sin hora (ver comentario en el schema).
+  // Omitido o null = sin fecha límite.
+  @IsOptional()
+  @IsDateString({ strict: true })
+  fechaLimite?: string | null;
 }

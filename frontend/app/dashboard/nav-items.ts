@@ -45,6 +45,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes/bot", label: "Llave del bot", emoji: "🤖", iconBg: "#E0F2FE", iconColor: "#0284C7" },
   { href: "/dashboard/ajustes/envios", label: "Puntos de envío", emoji: "🚚", iconBg: "#D1FAE5", iconColor: "#059669" },
   { href: "/dashboard/ajustes/pedidos-b2b", label: "Ventana de recepción de pedidos", emoji: "⏰", iconBg: "#FEF3E2", iconColor: "#B45309" },
+  { href: "/dashboard/ajustes/codigos-descuento", label: "Códigos de descuento", emoji: "🏷️", iconBg: "#FEF3E2", iconColor: "#B45309" },
 ];
 
 // Pedidos/Histórico/Pagos operan sobre Order (carrito + pago inmediato) y
@@ -84,6 +85,7 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
   "/dashboard/ajustes/bot",
   "/dashboard/ajustes/envios",
   "/dashboard/ajustes/pedidos-b2b",
+  "/dashboard/ajustes/codigos-descuento",
 ]);
 
 export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[] {

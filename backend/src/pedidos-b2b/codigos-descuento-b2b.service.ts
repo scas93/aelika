@@ -10,14 +10,33 @@ import { UpdateCodigoDescuentoB2bDto } from './dto/update-codigo-descuento-b2b.d
 const PRISMA_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 
+// "YYYY-MM-DD" -> Date a medianoche UTC — el cliente de Prisma generado
+// (prisma-client, no @prisma/client) no coerciona un string plano a Date
+// para una columna @db.Date, así que hay que convertirlo explícitamente
+// antes de pasarlo a create/update.
+function parseFechaLimite(fechaLimite: string | null | undefined): Date | null | undefined {
+  if (fechaLimite === undefined) return undefined;
+  if (fechaLimite === null) return null;
+  return new Date(`${fechaLimite}T00:00:00.000Z`);
+}
+
 @Injectable()
 export class CodigosDescuentoB2bService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
-  findAll() {
-    return this.tenantPrisma.client.pedidoB2bCodigoDescuento.findMany({
+  // usosActuales es derivado (conteo de la relación `pedidos`, incluyendo
+  // cancelados — ver resolverCodigoDescuento), nunca un campo persistido —
+  // se calcula aquí solo para mostrarlo en el listado, no hay contador que
+  // mantener sincronizado.
+  async findAll() {
+    const codigos = await this.tenantPrisma.client.pedidoB2bCodigoDescuento.findMany({
       orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { pedidos: true } } },
     });
+    return codigos.map(({ _count, ...codigo }) => ({
+      ...codigo,
+      usosActuales: _count.pedidos,
+    }));
   }
 
   async create(dto: CreateCodigoDescuentoB2bDto) {
@@ -29,6 +48,8 @@ export class CodigosDescuentoB2bService {
           codigo: dto.codigo.trim().toUpperCase(),
           descuentoPorcentaje: dto.descuentoPorcentaje,
           activo: dto.activo ?? true,
+          usosMaximos: dto.usosMaximos ?? null,
+          fechaLimite: parseFechaLimite(dto.fechaLimite) ?? null,
         } as any,
       });
     } catch (error: any) {
@@ -52,6 +73,8 @@ export class CodigosDescuentoB2bService {
               : undefined,
           descuentoPorcentaje: dto.descuentoPorcentaje,
           activo: dto.activo,
+          usosMaximos: dto.usosMaximos,
+          fechaLimite: parseFechaLimite(dto.fechaLimite),
         },
       });
     } catch (error: any) {

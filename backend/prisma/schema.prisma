@@ -656,14 +656,24 @@ model PedidoB2bItemDia {
 // ya snapshotea texto/porcentaje, así que borrar el código no pierde nada
 // del histórico (mismo principio que ModifierOption, sin Restrict).
 model PedidoB2bCodigoDescuento {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   tenantId            String
   // Normalizado a mayúsculas por PedidosB2bService antes de guardar/buscar.
   codigo              String
-  descuentoPorcentaje Decimal  @db.Decimal(5, 2)
-  activo              Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  descuentoPorcentaje Decimal   @db.Decimal(5, 2)
+  activo              Boolean   @default(true)
+  // null = ilimitado. Sin contador persistido — resolverCodigoDescuento
+  // cuenta la relación `pedidos` al vuelo en cada validación (incluyendo
+  // cancelados, que no liberan el cupo — ver ese mismo comentario ahí).
+  usosMaximos         Int?
+  // null = sin fecha límite. Fecha calendario (@db.Date, sin hora) — el
+  // código es válido durante todo ese día en timezone México, mismo
+  // criterio que el resto de fechas calendario de este módulo
+  // (PedidoB2b.semanaInicio). Comparado contra fechaMexicoYMD() en
+  // resolverCodigoDescuento.
+  fechaLimite         DateTime? @db.Date
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedidos PedidoB2b[]

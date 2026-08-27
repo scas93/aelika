@@ -1,5 +1,7 @@
 import {
   IsBoolean,
+  IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -30,4 +32,15 @@ export class UpdateCodigoDescuentoB2bDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  // Omitido = no tocar, null = limpiar (vuelve a "ilimitado").
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  usosMaximos?: number | null;
+
+  // "YYYY-MM-DD". Omitido = no tocar, null = limpiar (vuelve a "sin fecha límite").
+  @IsOptional()
+  @IsDateString({ strict: true })
+  fechaLimite?: string | null;
 }

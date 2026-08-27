@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, DiaSemana } from '../../generated/prisma/client';
 import { round2 } from '../common/money';
@@ -190,6 +194,34 @@ export async function resolverCodigoDescuento(
     throw new NotFoundException(
       'El código de descuento no existe o no está activo',
     );
+  }
+
+  // Fecha calendario (@db.Date, sin hora) — válido durante todo ese día en
+  // timezone México, mismo criterio que el resto de fechas calendario de
+  // este módulo. 409 (no 404): el código existe, solo que su estado actual
+  // no permite usarlo — mismo principio que "ventana cerrada"/"producto no
+  // disponible" en otros flujos de la app.
+  if (encontrado.fechaLimite) {
+    const fechaLimiteStr = encontrado.fechaLimite.toISOString().slice(0, 10);
+    if (fechaMexicoYMD() > fechaLimiteStr) {
+      throw new ConflictException(
+        `El código de descuento ya no es válido — venció el ${fechaLimiteStr}`,
+      );
+    }
+  }
+
+  // Sin contador persistido — se cuenta la relación al vuelo, incluyendo
+  // pedidos cancelados (un pedido cancelado no libera el cupo: el código ya
+  // se "gastó" en el momento en que se creó ese pedido).
+  if (encontrado.usosMaximos !== null) {
+    const usosActuales = await client.pedidoB2b.count({
+      where: { tenantId, codigoDescuentoId: encontrado.id },
+    });
+    if (usosActuales >= encontrado.usosMaximos) {
+      throw new ConflictException(
+        'El código de descuento ya alcanzó su límite de usos',
+      );
+    }
   }
 
   const descuentoPorcentajeAplicado = Number(encontrado.descuentoPorcentaje);

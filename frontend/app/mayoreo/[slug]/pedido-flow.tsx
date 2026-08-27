@@ -254,7 +254,11 @@ export default function PedidoFlow({
               <div className="grid grid-cols-7 gap-1.5">
                 {DIAS_SEMANA_PEDIDO_B2B.map(({ value }, offset) => (
                   <label key={value} className="flex flex-col items-center gap-1">
-                    <span className="text-center text-[10px] font-medium leading-tight text-mayoreo-ink-soft">
+                    {/* h-[2.5em] (2 líneas a leading-tight) fija la misma altura en
+                        las 7 columnas sin importar si el label cae en una o dos
+                        líneas — si no, el input de la columna con label de una
+                        sola línea queda más arriba que el de sus vecinas. */}
+                    <span className="flex h-[2.5em] items-center justify-center text-center text-[10px] font-medium leading-tight text-mayoreo-ink-soft">
                       {etiquetaDiaConFecha(semanaDestino.inicio, offset)}
                     </span>
                     <input
