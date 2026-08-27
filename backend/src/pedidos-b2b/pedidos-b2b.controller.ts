@@ -32,6 +32,14 @@ export class PedidosB2bController {
     return this.pedidosB2bService.findAll(query);
   }
 
+  // Agregado para el módulo Inicio del panel (RETAIL_B2B) — mismo patrón que
+  // GET /orders/summary (B2C). Debe ir antes de @Get(':id'), mismo motivo
+  // que el resto de rutas estáticas de este controller.
+  @Get('resumen')
+  resumen() {
+    return this.pedidosB2bService.resumen();
+  }
+
   // Debe ir antes de @Get(':id') — mismo motivo que en OrdersController.
   @Get('export')
   @Header('Content-Type', 'text/csv; charset=utf-8')

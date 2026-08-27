@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { ALL_NAV_ITEMS } from "./nav-items";
+import UserMenu from "./_components/UserMenu";
 
 interface DashboardTopbarProps {
   onOpenSidebar: () => void;
@@ -23,6 +24,7 @@ export default function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps)
         ☰
       </button>
       <h1 className="text-[28px] font-bold text-admin-ink">{title}</h1>
+      <UserMenu />
     </header>
   );
 }

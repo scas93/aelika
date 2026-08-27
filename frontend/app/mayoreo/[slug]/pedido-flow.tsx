@@ -8,9 +8,11 @@ import {
   DIAS_SEMANA_PEDIDO_B2B,
   type DiaSemanaPedidoB2b,
   type FacturacionModo,
+  type PedidoB2bSemanaDestino,
   type PublicPedidoB2b,
   type PublicPedidoB2bCatalog,
 } from "@/lib/api";
+import { etiquetaDiaConFecha, rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
 // Pantallas del flujo de checkout, una vez que el catálogo y el carrito ya
@@ -35,30 +37,13 @@ function distribucionVacia(): Distribucion {
   }, {} as Distribucion);
 }
 
-/** El lunes de la próxima semana calendario — si hoy es lunes, la siguiente (no hoy mismo). */
-function proximoLunes(): Date {
-  const hoy = new Date();
-  const dia = hoy.getDay(); // 0=domingo..6=sábado
-  const diasHastaLunes = dia === 1 ? 7 : (8 - dia) % 7 || 7;
-  const target = new Date(hoy);
-  target.setDate(hoy.getDate() + diasHastaLunes);
-  target.setHours(0, 0, 0, 0);
-  return target;
-}
-
-function toISODate(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 export default function PedidoFlow({
   slug,
   catalog,
   cart,
   minimoPiezas,
   facturacionModo,
+  semanaDestino,
   screen,
   onScreenChange,
   onBackToCarrito,
@@ -69,6 +54,7 @@ export default function PedidoFlow({
   cart: Record<string, number>;
   minimoPiezas: number;
   facturacionModo: FacturacionModo;
+  semanaDestino: PedidoB2bSemanaDestino;
   screen: PedidoFlowScreen;
   onScreenChange: (screen: PedidoFlowScreen) => void;
   onBackToCarrito: () => void;
@@ -106,8 +92,6 @@ export default function PedidoFlow({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pedidoCreado, setPedidoCreado] = useState<PublicPedidoB2b | null>(null);
-
-  const semanaInicio = proximoLunes();
 
   function nombreProducto(id: string) {
     return productos.find((p) => p.id === id)?.nombre ?? "Producto";
@@ -201,7 +185,7 @@ export default function PedidoFlow({
         contactoNombre: contactoNombre.trim(),
         contactoTelefono: contactoTelefono.trim(),
         contactoCorreo: contactoCorreo.trim(),
-        semanaInicio: toISODate(semanaInicio),
+        semanaInicio: semanaDestino.inicio,
         codigoDescuento: codigoAplicado?.texto,
         requiereFactura: facturaRequerida || undefined,
         facturaRazonSocial: facturaRequerida ? facturaRazonSocial.trim() : undefined,
@@ -236,6 +220,9 @@ export default function PedidoFlow({
 
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-bold text-mayoreo-ink">Reparte tu pedido por día de entrega</h1>
+          <p className="text-sm font-semibold text-mayoreo-accent">
+            Semana del {rangoSemanaTexto(semanaDestino.inicio, semanaDestino.fin)}
+          </p>
           <p className="text-sm text-mayoreo-ink-soft">
             Asigna cuántas piezas de cada producto se entregan cada día. Debes distribuir el total de cada producto.
           </p>
@@ -265,9 +252,11 @@ export default function PedidoFlow({
                 distribuido {distribuido} de {cart[id]} total
               </span>
               <div className="grid grid-cols-7 gap-1.5">
-                {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => (
+                {DIAS_SEMANA_PEDIDO_B2B.map(({ value }, offset) => (
                   <label key={value} className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] font-medium text-mayoreo-ink-soft">{label.slice(0, 3)}</span>
+                    <span className="text-center text-[10px] font-medium leading-tight text-mayoreo-ink-soft">
+                      {etiquetaDiaConFecha(semanaDestino.inicio, offset)}
+                    </span>
                     <input
                       type="number"
                       min={0}
@@ -298,7 +287,12 @@ export default function PedidoFlow({
     return (
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-mayoreo-ink">Resumen de tu pedido</h2>
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-lg font-semibold text-mayoreo-ink">Resumen de tu pedido</h2>
+            <span className="text-xs font-medium text-mayoreo-ink-soft">
+              Semana del {rangoSemanaTexto(semanaDestino.inicio, semanaDestino.fin)}
+            </span>
+          </div>
           <button type="button" onClick={() => onScreenChange("distribucion")} className={BACK_LINK}>
             Atrás
           </button>
@@ -515,6 +509,9 @@ export default function PedidoFlow({
       <h2 className="text-lg font-semibold text-mayoreo-ink">Pedido enviado, pendiente de confirmación</h2>
       <p className="text-sm text-mayoreo-ink-soft">Se facturará al finalizar la semana.</p>
       <p className="text-xs text-mayoreo-ink-soft">Folio #{pedidoCreado.folio}</p>
+      <p className="text-xs font-semibold text-mayoreo-ink-soft">
+        Semana del {rangoSemanaTexto(semanaDestino.inicio, semanaDestino.fin)}
+      </p>
 
       {pedidoCreado.requiereFactura && (
         <div className={`${CARD} w-full text-left`}>

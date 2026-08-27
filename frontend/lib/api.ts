@@ -459,6 +459,17 @@ export interface OrdersPorDia {
 
 export type FacturacionModo = "OBLIGATORIO" | "OPCIONAL" | "DESACTIVADO";
 
+// Rango semanal recurrente en el que el storefront de mayoreo (/mayoreo/[slug])
+// acepta pedidos nuevos — ver Tenant.pedidoB2bVentana* / ventanaRecepcionB2b
+// en UpdateTenantSettingsPayload. null en TenantSettings significa "sin
+// ventana configurada" (el storefront acepta pedidos en cualquier momento).
+export interface VentanaRecepcionB2b {
+  aperturaDia: DiaSemanaPedidoB2b;
+  aperturaHora: string;
+  cierreDia: DiaSemanaPedidoB2b;
+  cierreHora: string;
+}
+
 export interface TenantSettings {
   nombre: string;
   mensajeBienvenida: string;
@@ -472,6 +483,7 @@ export interface TenantSettings {
   stripeAccountId: string | null;
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
+  ventanaRecepcionB2b: VentanaRecepcionB2b | null;
 }
 
 export interface TenantStripeStatus {
@@ -487,6 +499,10 @@ export interface UpdateTenantSettingsPayload {
   ubicacion?: string;
   facturacionModo?: FacturacionModo;
   stripeContactEmail?: string;
+  // Objeto para configurar, null para limpiar (vuelve a "sin ventana
+  // configurada"), omitido para no tocarla — mismo contrato que
+  // UpdateTenantDto.ventanaRecepcionB2b en el backend.
+  ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
 }
 
 export interface PuntoEnvio {
@@ -947,19 +963,34 @@ export type PedidoB2bModoCobro = "AL_INICIO" | "AL_FINAL";
 export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "DESPACHADO";
 export type PedidoB2bEstadoPago = "PENDIENTE" | "PAGADO";
 
+// Semana calendario (lunes-domingo) a la que aplicará el pedido en curso —
+// calculada por el backend en timezone México (siempre la próxima semana
+// completa, sin importar qué día de la ventana sea hoy). Fechas "YYYY-MM-DD"
+// — ver lib/pedido-b2b-fechas.ts para formatearlas sin desfase de timezone.
+export interface PedidoB2bSemanaDestino {
+  inicio: string;
+  fin: string;
+}
+
 export interface PublicPedidoB2bTenantInfo {
   nombre: string;
   logoUrl: string | null;
   pedidoB2bModoCobro: PedidoB2bModoCobro;
   pedidoB2bMinimoPiezas: number;
-  // Mismo mecanismo que PublicTenantInfo.abierto (B2C) — el storefront lo usa
-  // para bloquear el checkout mientras el negocio está cerrado; el backend
-  // vuelve a revisarlo server-side en createPedido.
+  // A diferencia de PublicTenantInfo.abierto (B2C, horario de atención),
+  // este refleja la ventana de recepción de pedidos del módulo B2B — ver
+  // Tenant.pedidoB2bVentana* / common/ventana-recepcion-b2b.ts en el backend.
+  // El storefront lo usa para bloquear el catálogo/checkout completos
+  // mientras la ventana está cerrada; el backend vuelve a revisarlo
+  // server-side en createPedido.
   abierto: boolean;
-  horarioAtencion: HorarioSemana | null;
+  // Mismo texto que el 409 de createPedido cuando abierto es false —
+  // null cuando abierto es true. Ver pantalla de "ventana cerrada" en page.tsx.
+  ventanaCerradaMensaje: string | null;
   // Mismo Tenant.facturacionModo que ya usa /tienda — controla si el
   // checkbox "Quiero factura" del resumen se muestra/exige.
   facturacionModo: FacturacionModo;
+  semanaDestino: PedidoB2bSemanaDestino;
 }
 
 export interface PublicPedidoB2bProduct {
@@ -1133,6 +1164,52 @@ export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
 
 export function fetchPedidoB2b(token: string, id: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}`, { headers: authHeaders(token) });
+}
+
+// Agregado para /dashboard (Inicio B2B) — ver PedidosB2bService.resumen en
+// el backend. "Semana en curso" es la que ya se está surtiendo, distinta de
+// "próxima semana" (la que calcularSemanaDestino calcula para pedidos
+// entrando ahora mismo por la ventana de recepción del storefront).
+export interface PedidoB2bEntregaResumen {
+  folio: string;
+  negocioNombre: string;
+  cantidad: number;
+}
+
+export interface PedidoB2bPendienteResumen {
+  id: string;
+  folio: string;
+  negocioNombre: string;
+  diasPendiente: number;
+}
+
+export interface PedidoB2bRankingProducto {
+  nombreProducto: string;
+  cantidadTotal: number;
+}
+
+export interface PedidoB2bResumen {
+  semanaEnCurso: {
+    inicio: string;
+    fin: string;
+    pendientesConfirmacion: number;
+    confirmadosSurtiendo: number;
+    totalPiezas: number;
+    entregasHoy: PedidoB2bEntregaResumen[];
+    entregasManana: PedidoB2bEntregaResumen[];
+    pendientesMasAntiguos: PedidoB2bPendienteResumen[];
+  };
+  proximaSemana: {
+    inicio: string;
+    fin: string;
+    totalPedidos: number;
+    totalPiezas: number;
+  };
+  rankingProductos: PedidoB2bRankingProducto[];
+}
+
+export function fetchPedidosB2bResumen(token: string) {
+  return request<PedidoB2bResumen>("/pedidos-b2b/resumen", { headers: authHeaders(token) });
 }
 
 export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[]) {

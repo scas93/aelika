@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
+import { VentanaRecepcionB2bDto } from '../../common/dto/ventana-recepcion-b2b.dto';
 import {
   FacturacionModo,
   PedidoB2bModoCobro,
@@ -49,4 +50,13 @@ export class UpdateTenantDto {
   @IsInt()
   @IsPositive()
   pedidoB2bMinimoPiezas?: number;
+
+  // Todo-o-nada: si se manda, deben venir los 4 campos (validados dentro de
+  // VentanaRecepcionB2bDto). @IsOptional() en class-validator ignora tanto
+  // undefined (no tocar) como null (borrar la ventana configurada) — ver
+  // normalizarVentanaRecepcion en common/ventana-recepcion-b2b.ts.
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => VentanaRecepcionB2bDto)
+  ventanaRecepcionB2b?: VentanaRecepcionB2bDto | null;
 }

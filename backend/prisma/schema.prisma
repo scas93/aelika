@@ -48,54 +48,67 @@ enum TipoStorefront {
 }
 
 model Tenant {
-  id                    String             @id @default(uuid())
-  slug                  String             @unique
-  nombre                String
+  id                           String             @id @default(uuid())
+  slug                         String             @unique
+  nombre                       String
   // Elegido explícitamente al registrar el negocio (RegisterDto.tipoStorefront
   // es obligatorio, sin default a nivel de API) — el @default de aquí es solo
   // para el backfill de tenants creados antes de este campo, que
   // históricamente eran todos retail de pickup. Ver TipoStorefront arriba.
-  tipoStorefront        TipoStorefront     @default(RETAIL_B2C)
-  logoUrl               String?
+  tipoStorefront               TipoStorefront     @default(RETAIL_B2C)
+  logoUrl                      String?
   // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
   // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
-  horarioAtencion       Json?
-  ubicacion             String?
+  horarioAtencion              Json?
+  ubicacion                    String?
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.
-  mensajeBienvenida     String?
+  mensajeBienvenida            String?
   // Contact email used specifically as Stripe Connect's contact_email when
   // creating the tenant's connected account (see TenantService.createOrContinueStripeAccount)
   // — not a general business/support email, deliberately scoped to Stripe.
   // No default/backfill: stays null until the Dueño fills it in via PATCH
   // /tenant/me, which is exactly what forces it to be set before Stripe
   // onboarding can start for a given tenant.
-  stripeContactEmail    String?
+  stripeContactEmail           String?
   // Bot (Botpress) auth key against the Aelika API — generated once at
   // register time (crypto.randomBytes, see AuthService), regenerable via
   // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the
   // general PATCH /tenant/me.
-  botApiKey             String             @unique
+  botApiKey                    String             @unique
   // Whether/how factura* fields on Order are required at checkout — see
   // FacturacionModo and PublicService.createOrder.
-  facturacionModo       FacturacionModo    @default(DESACTIVADO)
+  facturacionModo              FacturacionModo    @default(DESACTIVADO)
   // Stripe Connect connected account for this tenant (platform = Aelika).
   // Null until POST /internal/tenants/:slug/stripe-account is called — see
   // InternalService. chargesEnabled/payoutsEnabled mirror the connected
   // account's own fields of the same name, refreshed from Stripe (never
   // trusted as stale) by GET /internal/tenants/:slug/stripe-status and by
   // the account.updated webhook event.
-  stripeAccountId       String?            @unique
-  stripeChargesEnabled  Boolean            @default(false)
-  stripePayoutsEnabled  Boolean            @default(false)
+  stripeAccountId              String?            @unique
+  stripeChargesEnabled         Boolean            @default(false)
+  stripePayoutsEnabled         Boolean            @default(false)
   // Config del módulo de pedidos B2B a crédito (ver PedidoB2b) — a nivel
   // tenant, no por pedido/cliente. modoCobro/minimoPiezas se snapshotean en
   // cada PedidoB2b al crearse, así que cambiar esto no afecta pedidos ya
   // creados.
-  pedidoB2bModoCobro    PedidoB2bModoCobro @default(AL_FINAL)
-  pedidoB2bMinimoPiezas Int                @default(100)
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  pedidoB2bModoCobro           PedidoB2bModoCobro @default(AL_FINAL)
+  pedidoB2bMinimoPiezas        Int                @default(100)
+  // Ventana semanal recurrente en la que el storefront público de mayoreo
+  // acepta pedidos nuevos — reemplaza a horarioAtencion/isAbiertoAhora para
+  // este módulo (ver PublicPedidosB2bService.createPedido). Los 4 campos
+  // son todos null u todos no-null (ver normalizarVentanaRecepcion en
+  // common/ventana-recepcion-b2b.ts) — null significa "sin ventana
+  // configurada", que se trata como siempre abierta (nunca bloquea). Rango
+  // simple dentro de una misma semana lunes-domingo: aperturaDia debe ser
+  // igual o anterior a cierreDia en ese orden — no se soportan ventanas que
+  // crucen domingo→lunes.
+  pedidoB2bVentanaAperturaDia  DiaSemana?
+  pedidoB2bVentanaAperturaHora String?
+  pedidoB2bVentanaCierreDia    DiaSemana?
+  pedidoB2bVentanaCierreHora   String?
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
 
   users                     User[]
   categories                Category[]

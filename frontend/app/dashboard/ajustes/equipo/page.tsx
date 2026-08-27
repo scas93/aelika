@@ -10,9 +10,10 @@ import {
   type Role,
   type TeamUser,
 } from "@/lib/api";
-import Card from "../_components/Card";
-import Button from "../_components/Button";
-import Modal from "../_components/Modal";
+import Card from "../../_components/Card";
+import Button from "../../_components/Button";
+import Modal from "../../_components/Modal";
+import VolverAjustesLink from "../volver-link";
 
 const ROLES: Role[] = ["OPERADOR", "GERENTE", "DUENO"];
 const ROLE_LABEL: Record<Role, string> = {
@@ -24,11 +25,16 @@ const ROLE_LABEL: Record<Role, string> = {
 export default function EquipoPage() {
   const { user, token } = useSession();
 
-  if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar el equipo.</p>;
-  }
-
-  return <TeamManager currentUserId={user.id} token={token} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <VolverAjustesLink />
+      {user.rol !== "DUENO" ? (
+        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar el equipo.</p>
+      ) : (
+        <TeamManager currentUserId={user.id} token={token} />
+      )}
+    </div>
+  );
 }
 
 function TeamManager({ currentUserId, token }: { currentUserId: string; token: string }) {

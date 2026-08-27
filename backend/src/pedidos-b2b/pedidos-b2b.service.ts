@@ -14,12 +14,25 @@ import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
 import {
   assertLunes,
+  calcularSemanaDestino,
   crearItems,
+  diasEntreFechasISO,
+  fechaMexicoYMD,
   nextFolioPedidoB2b,
   resolverCodigoDescuento,
   resolverItems,
   resolverSemanaYDia,
+  sumarDiasISO,
 } from './pedidos-b2b-logica';
+
+// Semana en curso = la que ya se está surtiendo/despachando (resolverSemanaYDia
+// de "hoy"), nunca calcularSemanaDestino (que siempre da la semana siguiente,
+// pensada para pedidos nuevos entrando por el storefront). Mismo criterio de
+// "activo" que ya usa findEntregasDia — no despachados, no cancelados.
+const ESTADOS_ACTIVOS: PedidoB2bEstado[] = [
+  PedidoB2bEstado.PENDIENTE_CONFIRMACION,
+  PedidoB2bEstado.CONFIRMADO_SURTIENDO,
+];
 
 // Secuencial, sin marcha atrás, independiente de Order/EstadoPedido — ver
 // PedidoB2bEstado en schema.prisma. DESPACHADO no tiene siguiente.
@@ -216,6 +229,163 @@ export class PedidosB2bService {
       { header: 'Producto', value: (f) => f.nombreProducto },
       { header: 'Cantidad', value: (f) => f.cantidad },
     ]);
+  }
+
+  /**
+   * Agregado para el módulo Inicio del panel cuando el tenant es RETAIL_B2B —
+   * mismo patrón que OrdersService.summary (B2C): un solo método que junta
+   * varias fuentes en un objeto de respuesta, acoplado directo a este
+   * service (sin capa de "reports" separada). "Semana en curso" es la que ya
+   * se está surtiendo (resolverSemanaYDia(hoy)); "próxima semana" es la que
+   * calcularSemanaDestino calcula para pedidos entrando ahora mismo por la
+   * ventana de recepción del storefront — son conceptos distintos, nunca la
+   * misma semana salvo que hoy sea domingo.
+   */
+  async resumen() {
+    const hoy = fechaMexicoYMD();
+    const manana = sumarDiasISO(hoy, 1);
+
+    const { semanaInicio: semanaEnCursoInicio } = resolverSemanaYDia(hoy);
+    const semanaEnCursoFin = new Date(semanaEnCursoInicio);
+    semanaEnCursoFin.setUTCDate(semanaEnCursoInicio.getUTCDate() + 6);
+
+    const semanaSiguiente = calcularSemanaDestino();
+    const semanaSiguienteInicio = new Date(
+      `${semanaSiguiente.inicio}T00:00:00.000Z`,
+    );
+
+    const [
+      pendientesConfirmacion,
+      confirmadosSurtiendo,
+      piezasActivasAgg,
+      entregasHoy,
+      entregasManana,
+      pendientesMasAntiguosRaw,
+      proximaSemanaAgg,
+      rankingProductosRaw,
+    ] = await Promise.all([
+      this.tenantPrisma.client.pedidoB2b.count({
+        where: {
+          semanaInicio: semanaEnCursoInicio,
+          cancelado: false,
+          estado: PedidoB2bEstado.PENDIENTE_CONFIRMACION,
+        },
+      }),
+      this.tenantPrisma.client.pedidoB2b.count({
+        where: {
+          semanaInicio: semanaEnCursoInicio,
+          cancelado: false,
+          estado: PedidoB2bEstado.CONFIRMADO_SURTIENDO,
+        },
+      }),
+      this.tenantPrisma.client.pedidoB2b.aggregate({
+        where: {
+          semanaInicio: semanaEnCursoInicio,
+          cancelado: false,
+          estado: { in: ESTADOS_ACTIVOS },
+        },
+        _sum: { totalPiezas: true },
+      }),
+      this.entregasResumenDia(hoy),
+      this.entregasResumenDia(manana),
+      this.tenantPrisma.client.pedidoB2b.findMany({
+        where: {
+          cancelado: false,
+          estado: PedidoB2bEstado.PENDIENTE_CONFIRMACION,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 10,
+        select: { id: true, folio: true, negocioNombre: true, createdAt: true },
+      }),
+      this.tenantPrisma.client.pedidoB2b.aggregate({
+        where: { semanaInicio: semanaSiguienteInicio, cancelado: false },
+        _count: true,
+        _sum: { totalPiezas: true },
+      }),
+      // Ranking de productos: semana en curso + próxima semana juntas, solo
+      // excluyendo cancelados (no se filtra por estado — a diferencia de los
+      // conteos de arriba, esto mide demanda, no pipeline de confirmación).
+      this.tenantPrisma.client.pedidoB2bItem.groupBy({
+        by: ['nombreProducto'],
+        where: {
+          pedidoB2b: {
+            semanaInicio: { in: [semanaEnCursoInicio, semanaSiguienteInicio] },
+            cancelado: false,
+          },
+        },
+        _sum: { cantidadTotal: true },
+        orderBy: { _sum: { cantidadTotal: 'desc' } },
+        take: 6,
+      }),
+    ]);
+
+    return {
+      semanaEnCurso: {
+        inicio: semanaEnCursoInicio.toISOString().slice(0, 10),
+        fin: semanaEnCursoFin.toISOString().slice(0, 10),
+        pendientesConfirmacion,
+        confirmadosSurtiendo,
+        totalPiezas: piezasActivasAgg._sum.totalPiezas ?? 0,
+        entregasHoy,
+        entregasManana,
+        pendientesMasAntiguos: pendientesMasAntiguosRaw.map((p) => ({
+          id: p.id,
+          folio: p.folio,
+          negocioNombre: p.negocioNombre,
+          diasPendiente: diasEntreFechasISO(fechaMexicoYMD(p.createdAt), hoy),
+        })),
+      },
+      proximaSemana: {
+        inicio: semanaSiguiente.inicio,
+        fin: semanaSiguiente.fin,
+        totalPedidos: proximaSemanaAgg._count,
+        totalPiezas: proximaSemanaAgg._sum.totalPiezas ?? 0,
+      },
+      rankingProductos: rankingProductosRaw.map((r) => ({
+        nombreProducto: r.nombreProducto,
+        cantidadTotal: r._sum.cantidadTotal ?? 0,
+      })),
+    };
+  }
+
+  /**
+   * Entregas de un día — mismo filtro "activo" y misma resolución de
+   * semana/día que findEntregasDia, pero una proyección más ligera (sin
+   * productId/nombreProducto/precioUnitario/contactoTelefono) y agregada por
+   * pedido (cantidad ya sumada entre todos sus productos de ese día) en vez
+   * de desglosada por item — pensada para el widget de Inicio, no para
+   * imprimir/exportar.
+   */
+  private async entregasResumenDia(fechaStr: string) {
+    const { semanaInicio, dia } = resolverSemanaYDia(fechaStr);
+
+    const pedidos = await this.tenantPrisma.client.pedidoB2b.findMany({
+      where: {
+        semanaInicio,
+        cancelado: false,
+        estado: { in: ESTADOS_ACTIVOS },
+      },
+      select: {
+        folio: true,
+        negocioNombre: true,
+        items: {
+          select: {
+            distribucion: { where: { dia }, select: { cantidad: true } },
+          },
+        },
+      },
+    });
+
+    return pedidos
+      .map((pedido) => ({
+        folio: pedido.folio,
+        negocioNombre: pedido.negocioNombre,
+        cantidad: pedido.items.reduce(
+          (suma, item) => suma + (item.distribucion[0]?.cantidad ?? 0),
+          0,
+        ),
+      }))
+      .filter((entrega) => entrega.cantidad > 0);
   }
 
   async findOne(id: string) {

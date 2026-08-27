@@ -10,6 +10,7 @@ import {
   type PublicPedidoB2bProduct,
   type PublicPedidoB2bTenantInfo,
 } from "@/lib/api";
+import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import InstruccionesModal from "./instrucciones-modal";
 import ProductoDetalleModal from "./producto-detalle-modal";
 import PedidoFlow, { type PedidoFlowScreen } from "./pedido-flow";
@@ -27,27 +28,6 @@ const TAB_ACTIVE = "shrink-0 rounded-full bg-mayoreo-button px-3.5 py-1.5 text-s
 const TAB_INACTIVE =
   "shrink-0 rounded-full border border-mayoreo-border bg-mayoreo-card px-3.5 py-1.5 text-sm font-medium text-mayoreo-ink-soft";
 const BACK_LINK = "text-sm text-mayoreo-ink-soft hover:text-mayoreo-ink";
-
-// Mismo mensaje/estructura que el "Estamos cerrados" de checkout-modal.tsx en
-// /tienda — ver el comentario junto a `cerrado` más abajo para el resto del
-// mecanismo.
-function AvisoCerrado({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="flex flex-col items-center gap-4 rounded-xl bg-mayoreo-card p-6 text-center shadow-sm">
-      <h2 className="text-lg font-semibold text-mayoreo-ink">Estamos cerrados</h2>
-      <p className="text-sm text-mayoreo-ink-soft">
-        No podemos recibir pedidos en este momento. Vuelve a intentarlo cuando abramos.
-      </p>
-      <button
-        type="button"
-        onClick={onClose}
-        className="rounded-lg bg-mayoreo-button px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95"
-      >
-        Cerrar
-      </button>
-    </div>
-  );
-}
 
 // Catálogo → carrito → distribución semanal (+ resumen/confirmación, ver
 // pedido-flow.tsx) — un flujo continuo de pantallas dentro de este mismo
@@ -132,6 +112,31 @@ export default function MayoreoPage() {
     );
   }
 
+  // Ventana de recepción de pedidos cerrada (Tenant.pedidoB2bVentana*, ver
+  // PublicPedidosB2bService.getTenantInfo) — bloquea el catálogo completo,
+  // igual que el aviso de AL_INICIO de arriba, pero es un caso distinto con
+  // su propio mensaje (nunca el "Estamos cerrados" genérico de /tienda B2C):
+  // aquí sí sabemos exactamente cuándo reabre (tenant.ventanaCerradaMensaje,
+  // el mismo texto que devolvería el 409 de createPedido si se forzara el
+  // envío). createPedido revisa esto de nuevo server-side sin importar lo
+  // que muestre esta pantalla.
+  if (!tenant.abierto) {
+    return (
+      <div className={`${WRAPPER} flex items-center justify-center p-6 text-center`}>
+        <div className="flex max-w-sm flex-col items-center gap-3">
+          <h1 className="text-lg font-semibold">{tenant.nombre}</h1>
+          <p className="text-mayoreo-ink-soft">
+            No estamos recibiendo pedidos para la semana del {rangoSemanaTexto(tenant.semanaDestino.inicio, tenant.semanaDestino.fin)}{" "}
+            en este momento.
+          </p>
+          {tenant.ventanaCerradaMensaje && (
+            <p className="text-mayoreo-ink-soft">{tenant.ventanaCerradaMensaje}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const todosLosProductos = catalog.categories.flatMap((c) => c.products);
 
   const totalPiezas = Object.values(cart).reduce((sum, c) => sum + c, 0);
@@ -165,17 +170,6 @@ export default function MayoreoPage() {
       return next;
     });
   }
-
-  // Mismo mecanismo que /tienda (checkout-modal.tsx): "abierto" viene del
-  // backend (Tenant.horarioAtencion, ver PublicPedidosB2bService.getTenantInfo)
-  // y createPedido lo vuelve a revisar server-side — este flag es solo para
-  // no dejar avanzar al cliente por adelantado. A diferencia de /tienda (que
-  // gatea todo el modal de checkout desde el paso "cart"), aquí el catálogo y
-  // el carrito ya no son un modal sino pantallas propias del flujo, así que
-  // el aviso se muestra en el lugar de cada pantalla de checkout en vez de
-  // reemplazar toda la página — pero el efecto es el mismo: no se puede
-  // avanzar ni enviar un pedido mientras el negocio está cerrado.
-  const cerrado = !tenant.abierto;
 
   const productIdsCarrito = Object.keys(cart).filter((id) => cart[id] > 0);
   const subtotalCarrito = productIdsCarrito.reduce((sum, id) => {
@@ -275,7 +269,12 @@ export default function MayoreoPage() {
       <main className="flex flex-1 flex-col gap-4 px-4 pb-24 pt-4">
         {screen === "catalogo" && (
           <>
-            <h1 className="text-xl font-bold">Hola, ¿qué necesitas hoy?</h1>
+            <div className="flex flex-col gap-1">
+              <h1 className="text-xl font-bold">Hola, ¿qué necesitas hoy?</h1>
+              <p className="text-sm text-mayoreo-ink-soft">
+                Pedidos para la semana del {rangoSemanaTexto(tenant.semanaDestino.inicio, tenant.semanaDestino.fin)}
+              </p>
+            </div>
 
             <div className="flex flex-col gap-1.5 rounded-xl bg-mayoreo-card p-4 shadow-sm">
               <div className="flex items-center justify-between text-xs font-medium text-mayoreo-ink-soft">
@@ -310,42 +309,44 @@ export default function MayoreoPage() {
                   </div>
                 )}
               </section>
-            ) : (
-              categoriaActiva && (
-                <>
-                  <nav className="sticky top-16 z-20 -mx-4 flex gap-2 overflow-x-auto bg-mayoreo-bg px-4 py-2">
-                    {catalog.categories.map((category) => (
-                      <button
-                        key={category.id}
-                        onClick={() => setTabActiva(category.id)}
-                        className={category.id === categoriaActiva.id ? TAB_ACTIVE : TAB_INACTIVE}
-                      >
-                        {category.nombre}
-                      </button>
-                    ))}
-                  </nav>
+            ) : categoriaActiva ? (
+              <>
+                <nav className="sticky top-16 z-20 -mx-4 flex gap-2 overflow-x-auto bg-mayoreo-bg px-4 py-2">
+                  {catalog.categories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => setTabActiva(category.id)}
+                      className={category.id === categoriaActiva.id ? TAB_ACTIVE : TAB_INACTIVE}
+                    >
+                      {category.nombre}
+                    </button>
+                  ))}
+                </nav>
 
-                  <section className="flex flex-col gap-3">
-                    <h2 className="text-sm font-semibold text-mayoreo-ink-soft">{categoriaActiva.nombre}</h2>
-                    {categoriaActiva.products.length === 0 ? (
-                      <p className="text-sm text-mayoreo-ink-soft">No hay productos disponibles.</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        {categoriaActiva.products.map((product) => (
-                          <ProductoCard key={product.id} product={product} />
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                </>
-              )
+                <section className="flex flex-col gap-3">
+                  <h2 className="text-sm font-semibold text-mayoreo-ink-soft">{categoriaActiva.nombre}</h2>
+                  {categoriaActiva.products.length === 0 ? (
+                    <p className="text-sm text-mayoreo-ink-soft">No hay productos disponibles.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {categoriaActiva.products.map((product) => (
+                        <ProductoCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : (
+              // catalog.categories vacío (sin categorías activas, o ninguna
+              // con productos) — sin este caso categoriaActiva queda
+              // undefined y la pantalla se quedaba en blanco debajo del
+              // buscador, sin ningún indicio de qué pasó.
+              <p className="text-sm text-mayoreo-ink-soft">Este negocio todavía no tiene productos disponibles.</p>
             )}
           </>
         )}
 
-        {screen === "carrito" && cerrado && <AvisoCerrado onClose={() => setScreen("catalogo")} />}
-
-        {screen === "carrito" && !cerrado && (
+        {screen === "carrito" && (
           <>
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-bold">Tu carrito</h1>
@@ -413,17 +414,14 @@ export default function MayoreoPage() {
           </>
         )}
 
-        {(screen === "distribucion" || screen === "resumen") && cerrado && (
-          <AvisoCerrado onClose={() => setScreen("catalogo")} />
-        )}
-
-        {((screen === "distribucion" || screen === "resumen") && !cerrado) || screen === "confirmacion" ? (
+        {(screen === "distribucion" || screen === "resumen" || screen === "confirmacion") && (
           <PedidoFlow
             slug={slug}
             catalog={catalog}
             cart={cart}
             minimoPiezas={tenant.pedidoB2bMinimoPiezas}
             facturacionModo={tenant.facturacionModo}
+            semanaDestino={tenant.semanaDestino}
             screen={screen}
             onScreenChange={setScreen}
             onBackToCarrito={() => setScreen("carrito")}
@@ -432,7 +430,7 @@ export default function MayoreoPage() {
               setScreen("catalogo");
             }}
           />
-        ) : null}
+        )}
       </main>
 
       {screen === "catalogo" && hayProductosEnCarrito && (

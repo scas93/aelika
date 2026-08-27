@@ -68,6 +68,11 @@ export function horaActualMexico(now = new Date()): string {
   return ahoraEnTimezone(now).hora;
 }
 
+/** Current day of week (see DiaSemana), in the tenant timezone (see TIMEZONE above). */
+export function diaActualMexico(now = new Date()): DiaSemana {
+  return ahoraEnTimezone(now).dia;
+}
+
 /** Today's schedule entry, in the tenant timezone — null if no schedule is set at all. */
 export function horarioDeHoy(horario: HorarioSemana | null | undefined, now = new Date()): HorarioDia | null {
   if (!horario) return null;

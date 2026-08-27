@@ -9,8 +9,13 @@ import { StripeService } from '../stripe/stripe.service';
 import { normalizarHorarioSemana } from '../common/horario';
 import { generateApiKey } from '../common/api-key';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
+import {
+  normalizarVentanaRecepcion,
+  ventanaDesdeTenant,
+} from '../common/ventana-recepcion-b2b';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import type {
+  DiaSemana,
   FacturacionModo,
   PedidoB2bModoCobro,
 } from '../../generated/prisma/enums';
@@ -32,6 +37,10 @@ const SETTINGS_SELECT = {
   stripePayoutsEnabled: true,
   pedidoB2bModoCobro: true,
   pedidoB2bMinimoPiezas: true,
+  pedidoB2bVentanaAperturaDia: true,
+  pedidoB2bVentanaAperturaHora: true,
+  pedidoB2bVentanaCierreDia: true,
+  pedidoB2bVentanaCierreHora: true,
 } as const;
 
 const API_BASE_URL_DEFAULT = 'http://localhost:3001';
@@ -58,6 +67,7 @@ export class TenantService {
     // already drops it if a client sends it. Regeneration is a separate,
     // deliberate action (see regenerateBotKey), not a side effect of a
     // routine settings save.
+    const ventana = normalizarVentanaRecepcion(dto.ventanaRecepcionB2b);
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -75,6 +85,10 @@ export class TenantService {
         stripeContactEmail: dto.stripeContactEmail,
         pedidoB2bModoCobro: dto.pedidoB2bModoCobro,
         pedidoB2bMinimoPiezas: dto.pedidoB2bMinimoPiezas,
+        pedidoB2bVentanaAperturaDia: ventana?.pedidoB2bVentanaAperturaDia,
+        pedidoB2bVentanaAperturaHora: ventana?.pedidoB2bVentanaAperturaHora,
+        pedidoB2bVentanaCierreDia: ventana?.pedidoB2bVentanaCierreDia,
+        pedidoB2bVentanaCierreHora: ventana?.pedidoB2bVentanaCierreHora,
       },
       select: SETTINGS_SELECT,
     });
@@ -243,6 +257,10 @@ export class TenantService {
     stripePayoutsEnabled: boolean;
     pedidoB2bModoCobro: PedidoB2bModoCobro;
     pedidoB2bMinimoPiezas: number;
+    pedidoB2bVentanaAperturaDia: DiaSemana | null;
+    pedidoB2bVentanaAperturaHora: string | null;
+    pedidoB2bVentanaCierreDia: DiaSemana | null;
+    pedidoB2bVentanaCierreHora: string | null;
   }) {
     return {
       nombre: tenant.nombre,
@@ -257,6 +275,7 @@ export class TenantService {
       stripePayoutsEnabled: tenant.stripePayoutsEnabled,
       pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
       pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
+      ventanaRecepcionB2b: ventanaDesdeTenant(tenant),
     };
   }
 }

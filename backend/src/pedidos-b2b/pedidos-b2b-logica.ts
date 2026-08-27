@@ -4,6 +4,35 @@ import { Prisma, DiaSemana } from '../../generated/prisma/client';
 import { round2 } from '../common/money';
 import { PedidoB2bItemInputDto } from './dto/pedido-b2b-item-input.dto';
 
+// Misma timezone que common/horario.ts (TIMEZONE) — "hoy" para efectos de
+// calcularSemanaDestino se resuelve en la zona horaria del negocio, no en la
+// del servidor.
+const TIMEZONE = 'America/Mexico_City';
+
+/** Cualquier instante, como "YYYY-MM-DD" en la timezone del negocio — nunca la del servidor. */
+export function fechaMexicoYMD(date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/** Suma (o resta, con `dias` negativo) días calendario a una fecha "YYYY-MM-DD". */
+export function sumarDiasISO(fechaStr: string, dias: number): string {
+  const fecha = new Date(`${fechaStr}T00:00:00.000Z`);
+  fecha.setUTCDate(fecha.getUTCDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
+/** Días calendario completos entre dos fechas "YYYY-MM-DD" (hasta - desde). */
+export function diasEntreFechasISO(desdeStr: string, hastaStr: string): number {
+  const desde = new Date(`${desdeStr}T00:00:00.000Z`);
+  const hasta = new Date(`${hastaStr}T00:00:00.000Z`);
+  return Math.round((hasta.getTime() - desde.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 /**
  * Lógica de negocio del módulo de pedidos B2B, compartida entre el servicio
  * autenticado (PedidosB2bService, vía TenantPrismaService) y el público
@@ -220,6 +249,32 @@ export async function crearItems(
  * folio por tenant, así que deben serializarse entre sí también. Debe correr
  * dentro de la misma transacción que el insert.
  */
+/**
+ * Siempre la semana calendario completa (lunes-domingo) inmediatamente
+ * siguiente a "hoy" (en la timezone del negocio), sin importar qué día sea
+ * hoy — si hoy es lunes, la semana destino es la de la próxima semana, no
+ * la actual. Expuesta por GET /public/pedidos-b2b/tenants/:slug para que el
+ * frontend deje de recalcular esto por su cuenta (ver proximoLunes() en
+ * pedido-flow.tsx) — ese consumo queda para una fase posterior.
+ */
+export function calcularSemanaDestino(now = new Date()): {
+  inicio: string;
+  fin: string;
+} {
+  const hoyStr = fechaMexicoYMD(now);
+  const hoy = new Date(`${hoyStr}T00:00:00.000Z`);
+
+  const diaSemanaJs = hoy.getUTCDay(); // 0=domingo..6=sábado
+  const diasHastaProximoLunes = diaSemanaJs === 1 ? 7 : ((8 - diaSemanaJs) % 7 || 7);
+
+  const inicio = new Date(hoy);
+  inicio.setUTCDate(hoy.getUTCDate() + diasHastaProximoLunes);
+  const fin = new Date(inicio);
+  fin.setUTCDate(inicio.getUTCDate() + 6);
+
+  return { inicio: inicio.toISOString().slice(0, 10), fin: fin.toISOString().slice(0, 10) };
+}
+
 export async function nextFolioPedidoB2b(
   tx: Prisma.TransactionClient,
   tenantId: string,

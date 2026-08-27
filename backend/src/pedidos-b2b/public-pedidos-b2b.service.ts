@@ -5,11 +5,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { round2 } from '../common/money';
-import { isAbiertoAhora, HorarioSemana } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
+import {
+  estaEnVentana,
+  mensajeVentanaCerrada,
+  ventanaDesdeTenant,
+} from '../common/ventana-recepcion-b2b';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import {
   assertLunes,
+  calcularSemanaDestino,
   crearItems,
   nextFolioPedidoB2b,
   resolverCodigoDescuento,
@@ -41,7 +46,10 @@ export class PublicPedidosB2bService {
         logoUrl: true,
         pedidoB2bModoCobro: true,
         pedidoB2bMinimoPiezas: true,
-        horarioAtencion: true,
+        pedidoB2bVentanaAperturaDia: true,
+        pedidoB2bVentanaAperturaHora: true,
+        pedidoB2bVentanaCierreDia: true,
+        pedidoB2bVentanaCierreHora: true,
         facturacionModo: true,
       },
     });
@@ -49,22 +57,38 @@ export class PublicPedidosB2bService {
       throw new NotFoundException('Negocio no encontrado');
     }
 
-    const horario = tenant.horarioAtencion as HorarioSemana | null;
+    const ventana = ventanaDesdeTenant(tenant);
+    const abierto = estaEnVentana(ventana);
     return {
       nombre: tenant.nombre,
       logoUrl: tenant.logoUrl,
       pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
       pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
-      // Mismo mecanismo que PublicService.getTenantInfo (B2C): el storefront
-      // usa esto para bloquear el flujo de checkout mientras el negocio está
-      // cerrado — createPedido vuelve a revisarlo server-side, este flag es
-      // solo para no mostrar el paso de checkout de entrada.
-      abierto: isAbiertoAhora(horario),
+      // A diferencia de PublicService.getTenantInfo (B2C, que usa
+      // isAbiertoAhora/HorarioSemana), este storefront gatea el checkout con
+      // su propia ventana de recepción — ver Tenant.pedidoB2bVentana* y
+      // common/ventana-recepcion-b2b.ts. Sin ventana configurada, estaEnVentana
+      // regresa true (siempre abierta). createPedido vuelve a revisarlo
+      // server-side, este flag es solo para no mostrar el paso de checkout
+      // de entrada.
+      abierto,
+      // Mismo texto que vería el cliente si forzara el envío mientras está
+      // cerrado (ver el 409 de createPedido más abajo) — null cuando abierto
+      // es true. Expuesto aquí para que el storefront pueda bloquear el
+      // catálogo de entrada (no solo el paso de checkout) con el mismo
+      // mensaje de "cuándo reabre", sin necesitar un segundo viaje al
+      // servidor vía un intento de creación condenado a fallar.
+      ventanaCerradaMensaje: abierto ? null : mensajeVentanaCerrada(ventana!),
       // Mismo propósito que en PublicService.getTenantInfo: para que el
       // storefront decida, sin una segunda llamada, si mostrar/exigir los
       // campos de factura — resolverFacturacion en createPedido vuelve a
       // exigirlo server-side.
       facturacionModo: tenant.facturacionModo,
+      // Semana calendario a la que aplicará el pedido que se está armando —
+      // ver calcularSemanaDestino. El frontend todavía no la consume (sigue
+      // calculando su propio "próximo lunes" en pedido-flow.tsx); queda
+      // expuesta aquí para que una fase posterior deje de recalcularla.
+      semanaDestino: calcularSemanaDestino(),
     };
   }
 
@@ -140,7 +164,10 @@ export class PublicPedidosB2bService {
         id: true,
         pedidoB2bModoCobro: true,
         pedidoB2bMinimoPiezas: true,
-        horarioAtencion: true,
+        pedidoB2bVentanaAperturaDia: true,
+        pedidoB2bVentanaAperturaHora: true,
+        pedidoB2bVentanaCierreDia: true,
+        pedidoB2bVentanaCierreHora: true,
         facturacionModo: true,
       },
     });
@@ -148,13 +175,16 @@ export class PublicPedidosB2bService {
       throw new NotFoundException('Negocio no encontrado');
     }
 
-    // Cerrado ahora mismo? Mismo chequeo que PublicService.createOrder (B2C)
-    // — no puede depender de que el "abierto" que ya vio el cliente siga
-    // vigente, se revisa server-side sin importar lo que haya mostrado el
-    // frontend.
-    const horario = tenant.horarioAtencion as HorarioSemana | null;
-    if (!isAbiertoAhora(horario)) {
-      throw new ConflictException('El negocio está cerrado en este momento');
+    // Fuera de la ventana de recepción ahora mismo? A diferencia de
+    // PublicService.createOrder (B2C, que usa isAbiertoAhora/HorarioSemana),
+    // este flujo ya no depende del horario de atención del negocio — ver
+    // common/ventana-recepcion-b2b.ts. Sin ventana configurada, estaEnVentana
+    // regresa true (nunca bloquea). No puede depender de que el "abierto"
+    // que ya vio el cliente siga vigente, se revisa server-side sin importar
+    // lo que haya mostrado el frontend.
+    const ventana = ventanaDesdeTenant(tenant);
+    if (!estaEnVentana(ventana)) {
+      throw new ConflictException(mensajeVentanaCerrada(ventana!));
     }
 
     // Fuera de alcance de esta fase — ver comentario de clase. El pedido

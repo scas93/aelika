@@ -6,6 +6,8 @@ import { useSession } from "@/lib/session-context";
 import { ApiError, fetchOrdersSummary, fetchOrdersSummaryDaily, type OrderSummary, type OrdersPorDia } from "@/lib/api";
 import { rangoHoyISO } from "@/lib/fecha";
 import Card from "./_components/Card";
+import SummaryCard from "./_components/SummaryCard";
+import InicioB2B from "./inicio-b2b";
 
 const MONEY_FORMATTER = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -25,6 +27,19 @@ function formatFechaCorta(fecha: string): string {
 }
 
 export default function DashboardPage() {
+  const { user } = useSession();
+
+  // B2C queda exactamente igual a como estaba (InicioB2C, sin cambios) —
+  // B2B consume un agregado distinto (GET /pedidos-b2b/resumen, ver
+  // inicio-b2b.tsx), Order/summary no le aplica.
+  if (user.tenant.tipoStorefront === "RETAIL_B2B") {
+    return <InicioB2B />;
+  }
+
+  return <InicioB2C />;
+}
+
+function InicioB2C() {
   const { token } = useSession();
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -98,18 +113,5 @@ export default function DashboardPage() {
         )}
       </Card>
     </div>
-  );
-}
-
-function SummaryCard({ label, value, error }: { label: string; value: string | number | undefined; error: string | null }) {
-  return (
-    <Card className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-semibold text-admin-ink-soft">{label}</span>
-      {error ? (
-        <span className="text-sm text-red-600">No se pudo cargar</span>
-      ) : (
-        <span className="text-[30px] font-bold text-admin-ink">{value ?? "—"}</span>
-      )}
-    </Card>
   );
 }

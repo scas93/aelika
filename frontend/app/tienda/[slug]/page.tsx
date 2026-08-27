@@ -284,54 +284,60 @@ export default function TiendaPage() {
               </ul>
             )}
           </section>
-        ) : (
-          categoriaActiva && (
-            <>
-              <nav className="sticky top-16 z-20 -mx-4 flex gap-2 overflow-x-auto bg-chat-bg px-4 py-2 dark:bg-chat-bg-dark">
-                {catalog.categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setTabActiva(category.id)}
-                    className={
-                      category.id === categoriaActiva.id
-                        ? "shrink-0 rounded-full bg-black px-3.5 py-1.5 text-sm font-semibold text-white dark:bg-white dark:text-black"
-                        : "shrink-0 rounded-full border border-black/10 bg-black/5 px-3.5 py-1.5 text-sm font-medium text-black/60 dark:border-white/10 dark:bg-white/10 dark:text-white/60"
-                    }
-                  >
-                    {category.nombre}
-                  </button>
-                ))}
-              </nav>
+        ) : categoriaActiva ? (
+          <>
+            <nav className="sticky top-16 z-20 -mx-4 flex gap-2 overflow-x-auto bg-chat-bg px-4 py-2 dark:bg-chat-bg-dark">
+              {catalog.categories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setTabActiva(category.id)}
+                  className={
+                    category.id === categoriaActiva.id
+                      ? "shrink-0 rounded-full bg-black px-3.5 py-1.5 text-sm font-semibold text-white dark:bg-white dark:text-black"
+                      : "shrink-0 rounded-full border border-black/10 bg-black/5 px-3.5 py-1.5 text-sm font-medium text-black/60 dark:border-white/10 dark:bg-white/10 dark:text-white/60"
+                  }
+                >
+                  {category.nombre}
+                </button>
+              ))}
+            </nav>
 
-              <section className="flex flex-col gap-3">
-                <h2 className="text-lg font-semibold">{categoriaActiva.nombre}</h2>
-                {categoriaActiva.products.length === 0 ? (
-                  <p className="text-sm text-black/60 dark:text-white/60">No hay productos disponibles.</p>
-                ) : (
-                  <ul className="grid grid-cols-2 gap-3">
-                    {categoriaActiva.products.map((product) => {
-                      const { precioFinal, precioOriginal, promo } = precioConDescuento(product, catalog.promotions);
-                      const { cantidad, onAdd, onIncrement, onDecrement } = cardProps(product, precioFinal);
-                      return (
-                        <ProductoCard
-                          key={product.id}
-                          product={product}
-                          precioFinal={precioFinal}
-                          precioOriginal={precioOriginal}
-                          promo={promo}
-                          cantidad={cantidad}
-                          layout="grid"
-                          onAdd={onAdd}
-                          onIncrement={onIncrement}
-                          onDecrement={onDecrement}
-                        />
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            </>
-          )
+            <section className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold">{categoriaActiva.nombre}</h2>
+              {categoriaActiva.products.length === 0 ? (
+                <p className="text-sm text-black/60 dark:text-white/60">No hay productos disponibles.</p>
+              ) : (
+                <ul className="grid grid-cols-2 gap-3">
+                  {categoriaActiva.products.map((product) => {
+                    const { precioFinal, precioOriginal, promo } = precioConDescuento(product, catalog.promotions);
+                    const { cantidad, onAdd, onIncrement, onDecrement } = cardProps(product, precioFinal);
+                    return (
+                      <ProductoCard
+                        key={product.id}
+                        product={product}
+                        precioFinal={precioFinal}
+                        precioOriginal={precioOriginal}
+                        promo={promo}
+                        cantidad={cantidad}
+                        layout="grid"
+                        onAdd={onAdd}
+                        onIncrement={onIncrement}
+                        onDecrement={onDecrement}
+                      />
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </>
+        ) : (
+          // catalog.categories vacío (sin categorías activas, o ninguna con
+          // productos) — sin este caso categoriaActiva queda undefined y la
+          // pantalla se quedaba en blanco debajo del buscador, sin ningún
+          // indicio de qué pasó.
+          <p className="text-sm text-black/60 dark:text-white/60">
+            Este negocio todavía no tiene productos disponibles.
+          </p>
         )}
       </main>
 
