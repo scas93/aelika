@@ -296,11 +296,12 @@ function buildComandaB2bDiaBytes(entrega: PedidoB2bEntregaDia, ctx: ComandaB2bDi
     .align("left")
     .rule({ width: COLUMNS_BODY })
     .bold(true)
-    .line(entrega.negocioNombre)
+    .line(`Nombre del negocio: ${entrega.negocioNombre}`)
     .bold(false)
-    .line(entrega.contactoNombre)
-    .line(entrega.contactoTelefono)
-    .rule({ width: COLUMNS_BODY });
+    .line(`Nombre del contacto: ${entrega.contactoNombre}`)
+    .line(`Teléfono de contacto: ${entrega.contactoTelefono}`)
+    .rule({ width: COLUMNS_BODY })
+    .line("Pedido a preparar:");
 
   for (const item of entrega.items) {
     encoder.bold(true).line(`${item.cantidad}x ${item.nombreProducto}`).bold(false);
@@ -310,9 +311,7 @@ function buildComandaB2bDiaBytes(entrega: PedidoB2bEntregaDia, ctx: ComandaB2bDi
     .rule({ width: COLUMNS_BODY })
     .line(`Impreso por: ${ctx.impresoPor.nombre} (${ROLE_LABEL[ctx.impresoPor.rol]})`)
     .line(`Fecha de impresión: ${formatFechaHora(new Date())}`)
-    .align("center")
-    .line("Gracias por su preferencia")
-    .align("left");
+    .newline(2);
 
   encoder.newline(3).cut();
 
