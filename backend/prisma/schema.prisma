@@ -241,11 +241,14 @@ enum MetodoPago {
 // default to PAGADO at creation time (nothing for Aelika's system to track —
 // the exchange happens in person). TARJETA starts PENDIENTE and only becomes
 // PAGADO/FALLIDO once the Stripe webhook confirms the PaymentIntent — see
-// PublicService.createOrder and StripeWebhookController.
+// PublicService.createOrder and StripeWebhookController. REEMBOLSADO is only
+// reachable from PAGADO, via OrdersService.reembolsar (POST
+// /orders/:id/reembolsar) — full refund only, no partial in v1.
 enum EstadoPago {
   PENDIENTE
   PAGADO
   FALLIDO
+  REEMBOLSADO
 }
 
 enum MetodoEntrega {
@@ -293,6 +296,10 @@ model Order {
   // created (same request, second write — see PublicService.createOrder).
   // Unique so the webhook can look up the order by PaymentIntent id.
   stripePaymentIntentId String?          @unique
+  // Set only when estadoPago = REEMBOLSADO, right after stripe.refunds.create
+  // succeeds — see OrdersService.reembolsar. No webhook confirms this in v1;
+  // the Stripe API response itself is the confirmation.
+  stripeRefundId        String?
   metodoEntrega         MetodoEntrega    @default(RECOGER)
   // Required (and validated as belonging to this tenant + activo) only when
   // metodoEntrega = DOMICILIO; null for RECOGER. onDelete: Restrict — unlike

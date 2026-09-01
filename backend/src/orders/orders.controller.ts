@@ -1,4 +1,12 @@
-import { Controller, Get, Header, Param, Patch, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
@@ -52,5 +60,12 @@ export class OrdersController {
   @Patch(':id/avanzar')
   avanzar(@Param('id') id: string) {
     return this.ordersService.avanzar(id);
+  }
+
+  // No @Roles() — same "any authenticated role" convention as the rest of
+  // this controller (see product decision in the implementation prompt).
+  @Post(':id/reembolsar')
+  reembolsar(@Param('id') id: string) {
+    return this.ordersService.reembolsar(id);
   }
 }

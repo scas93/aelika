@@ -348,7 +348,7 @@ export interface PublicOrderItem {
 }
 
 export type EstadoPedido = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "LISTO_ENTREGA" | "DESPACHADO";
-export type EstadoPago = "PENDIENTE" | "PAGADO" | "FALLIDO";
+export type EstadoPago = "PENDIENTE" | "PAGADO" | "FALLIDO" | "REEMBOLSADO";
 
 export interface PublicOrder {
   id: string;
@@ -365,6 +365,8 @@ export interface PublicOrder {
   // needed to confirm the payment client-side with Stripe.js. Absent (not
   // just undefined-in-practice, actually never sent) for any other method.
   clientSecret?: string | null;
+  // Set only once estadoPago = REEMBOLSADO — see OrdersService.reembolsar.
+  stripeRefundId?: string | null;
   metodoEntrega: MetodoEntrega;
   puntoEnvioId: string | null;
   direccionCalle: string | null;
@@ -912,6 +914,13 @@ export function fetchOrder(token: string, id: string) {
 export function avanzarOrder(token: string, id: string) {
   return request<Order>(`/orders/${id}/avanzar`, {
     method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export function reembolsarOrder(token: string, id: string) {
+  return request<Order>(`/orders/${id}/reembolsar`, {
+    method: "POST",
     headers: authHeaders(token),
   });
 }

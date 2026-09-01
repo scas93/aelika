@@ -51,6 +51,11 @@ const ESTADO_PAGO_LABEL: Record<EstadoPago, string> = {
   PENDIENTE: "Pendiente",
   PAGADO: "Pagado",
   FALLIDO: "Fallido",
+  // Doesn't actually occur on a Payment row today — refunds (v1) update
+  // Order.estadoPago directly and never touch Payment (see
+  // OrdersService.reembolsar) — but Record<EstadoPago, string> must stay
+  // exhaustive since Payment.status reuses the same enum.
+  REEMBOLSADO: "Reembolsado",
 };
 
 // PENDIENTE nunca aplica a una fila de Payment (ver comentario en el schema

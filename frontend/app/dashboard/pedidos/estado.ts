@@ -1,4 +1,4 @@
-import type { EstadoPedido } from "@/lib/api";
+import type { EstadoPago, EstadoPedido } from "@/lib/api";
 
 export const ESTADO_LABEL: Record<EstadoPedido, string> = {
   PENDIENTE_CONFIRMACION: "Pendiente de confirmación",
@@ -31,4 +31,17 @@ export const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, EstadoPedido>> = {
   PENDIENTE_CONFIRMACION: "CONFIRMADO_SURTIENDO",
   CONFIRMADO_SURTIENDO: "LISTO_ENTREGA",
   LISTO_ENTREGA: "DESPACHADO",
+};
+
+// Only REEMBOLSADO gets shown here as a badge (see OrderCard) — PENDIENTE/
+// PAGADO/FALLIDO for a TARJETA order aren't surfaced in this card today, so
+// there's no existing color for them to be consistent with. red-600 matches
+// the only other "money going backwards" color already in the app (discount
+// lines in /tienda's checkout — see CLAUDE.md).
+export const ESTADO_PAGO_LABEL: Partial<Record<EstadoPago, string>> = {
+  REEMBOLSADO: "Reembolsado",
+};
+
+export const ESTADO_PAGO_COLOR: Partial<Record<EstadoPago, string>> = {
+  REEMBOLSADO: "bg-red-600 text-white",
 };

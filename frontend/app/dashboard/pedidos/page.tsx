@@ -9,6 +9,7 @@ import {
   fetchOrders,
   fetchPuntosEnvio,
   fetchTenantSettings,
+  reembolsarOrder,
   METODO_PAGO_LABEL,
   type Order,
 } from "@/lib/api";
@@ -25,10 +26,11 @@ import {
 } from "@/lib/thermal-printer";
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { rangoHoyISO } from "@/lib/fecha";
-import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import { ESTADO_COLOR, ESTADO_LABEL, ESTADO_PAGO_COLOR, ESTADO_PAGO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import Modal from "../_components/Modal";
 
 const POLL_INTERVAL_MS = 25000;
 
@@ -153,6 +155,9 @@ function OrderCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [confirmReembolsoOpen, setConfirmReembolsoOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
   // Defaults to true so SSR and the first client render match (navigator.usb
   // isn't available during SSR) — the effect below corrects it right after.
   const [webUsbSupported, setWebUsbSupported] = useState(true);
@@ -188,6 +193,20 @@ function OrderCard({
     }
   }
 
+  async function handleReembolsar() {
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      await reembolsarOrder(token, order.id);
+      setConfirmReembolsoOpen(false);
+      onAdvanced();
+    } catch (err) {
+      setRefundError(err instanceof ApiError ? err.message : "No se pudo procesar la devolución");
+    } finally {
+      setRefunding(false);
+    }
+  }
+
   async function handleImprimirWebUsb() {
     setPrinting(true);
     setPrintError(null);
@@ -219,7 +238,12 @@ function OrderCard({
             <span className="text-base font-bold text-admin-ink">#{order.folio}</span>
             <span className="text-sm text-admin-ink-soft">{fecha}</span>
           </div>
-          <Badge color={ESTADO_COLOR[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
+          <div className="flex items-center gap-2">
+            {order.estadoPago === "REEMBOLSADO" && (
+              <Badge color={ESTADO_PAGO_COLOR.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+            )}
+            <Badge color={ESTADO_COLOR[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
+          </div>
         </button>
 
         {expanded && (
@@ -285,6 +309,7 @@ function OrderCard({
             )}
 
             {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+            {refundError && <p className="text-sm text-red-600">{refundError}</p>}
             {printError && (
               <p className="text-sm text-red-600">
                 {printError}{" "}
@@ -304,6 +329,11 @@ function OrderCard({
                 <Button variant="secondary" onClick={handleImprimirWebUsb} disabled={printing || !webUsbSupported}>
                   {printing ? "Imprimiendo..." : "Imprimir ticket"}
                 </Button>
+                {order.metodoPago === "TARJETA" && order.estadoPago === "PAGADO" && (
+                  <Button variant="danger" onClick={() => setConfirmReembolsoOpen(true)}>
+                    Reembolsar
+                  </Button>
+                )}
                 <button
                   onClick={() => {
                     flushSync(() => setFechaImpresion(new Date()));
@@ -326,6 +356,29 @@ function OrderCard({
       </Card>
 
       {expanded && <ComandaImprimible order={order} ctx={comandaCtx} fechaImpresion={fechaImpresion} />}
+
+      <Modal
+        open={confirmReembolsoOpen}
+        onClose={() => {
+          if (!refunding) setConfirmReembolsoOpen(false);
+        }}
+        title={`Reembolsar pedido #${order.folio}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmReembolsoOpen(false)} disabled={refunding}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleReembolsar} disabled={refunding}>
+              {refunding ? "Procesando..." : "Sí, reembolsar"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-admin-ink-soft">
+          Se devolverá el total de ${Number(order.total).toFixed(2)} a la tarjeta del cliente. Esta acción no se puede
+          deshacer.
+        </p>
+      </Modal>
     </li>
   );
 }

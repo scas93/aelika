@@ -1,11 +1,18 @@
 import {
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import Stripe from 'stripe';
 import { Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
-import { EstadoPedido } from '../../generated/prisma/enums';
+import { StripeService } from '../stripe/stripe.service';
+import {
+  EstadoPago,
+  EstadoPedido,
+  MetodoPago,
+} from '../../generated/prisma/enums';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
@@ -23,7 +30,10 @@ const SIGUIENTE_ESTADO: Record<EstadoPedido, EstadoPedido | null> = {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly stripeService: StripeService,
+  ) {}
 
   findAll(query: ListOrdersQueryDto) {
     return this.tenantPrisma.client.order.findMany({
@@ -151,7 +161,9 @@ export class OrdersService {
     };
   }
 
-  async exportHistoricoCsv(query: ExportOrdersHistoricoQueryDto): Promise<string> {
+  async exportHistoricoCsv(
+    query: ExportOrdersHistoricoQueryDto,
+  ): Promise<string> {
     const where = this.buildHistoricoWhere(query);
 
     const orders = await this.tenantPrisma.client.order.findMany({
@@ -206,5 +218,62 @@ export class OrdersService {
       data: { estadoPedido: siguiente },
       include: { items: true },
     });
+  }
+
+  /**
+   * POST /:id/reembolsar. v1 scope: full refund only, no partial — no
+   * `amount` passed to Stripe. Synchronous confirmation straight from the
+   * refund creation response; no new webhook event is handled for this (see
+   * CLAUDE.md's Stripe Connect section — same "server always recomputes,
+   * never trusts the client" spirit, just applied to Stripe's response
+   * instead of a client body). Ownership is enforced the same way as
+   * avanzar() — tenantPrisma.client.order.findUnique already scopes to the
+   * session's tenantId, so a foreign order 404s instead of leaking a 403.
+   */
+  async reembolsar(id: string) {
+    const order = await this.tenantPrisma.client.order.findUnique({
+      where: { id },
+    });
+    if (!order) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+
+    if (
+      order.metodoPago !== MetodoPago.TARJETA ||
+      order.estadoPago !== EstadoPago.PAGADO
+    ) {
+      throw new ConflictException(
+        'Solo se pueden reembolsar pedidos pagados con tarjeta y en estado Pagado',
+      );
+    }
+
+    try {
+      const refund = await this.stripeService.client.refunds.create({
+        payment_intent: order.stripePaymentIntentId!,
+        reverse_transfer: true,
+      });
+
+      return this.tenantPrisma.client.order.update({
+        where: { id },
+        data: { estadoPago: EstadoPago.REEMBOLSADO, stripeRefundId: refund.id },
+        include: { items: true },
+      });
+    } catch (error) {
+      // balance_insufficient: the connected account's Stripe balance can't
+      // cover reverse_transfer pulling the money back — the one failure mode
+      // product explicitly asked to be told apart from any other Stripe
+      // error. The order is left untouched (no write happened above).
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === 'balance_insufficient'
+      ) {
+        throw new ConflictException(
+          'El negocio no tiene saldo suficiente para esta devolución.',
+        );
+      }
+      throw new InternalServerErrorException(
+        'No se pudo procesar la devolución. Intenta de nuevo más tarde.',
+      );
+    }
   }
 }
