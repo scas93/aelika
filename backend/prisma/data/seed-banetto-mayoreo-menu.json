@@ -1,0 +1,564 @@
+{
+  "tenant": {
+    "nombre": "Panadería Banetto Mayoreo",
+    "slug": "banetto-mayorista",
+    "logoUrl": null,
+    "ubicacion": null,
+    "mensajeBienvenida": null,
+    "tipoStorefront": "RETAIL_B2B",
+    "facturacionModo": "OPCIONAL",
+    "horarioAtencion": {
+      "lunes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "17:00"
+      },
+      "martes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "17:00"
+      },
+      "miercoles": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "17:00"
+      },
+      "jueves": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "17:00"
+      },
+      "viernes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "17:00"
+      },
+      "sabado": {
+        "abierto": true,
+        "apertura": "09:00",
+        "cierre": "14:00"
+      },
+      "domingo": {
+        "abierto": false,
+        "apertura": null,
+        "cierre": null
+      }
+    },
+    "pedidoB2b": {
+      "minimoPiezas": 100,
+      "modoCobro": "AL_FINAL",
+      "ventanaAperturaDia": "LUNES",
+      "ventanaAperturaHora": "08:00",
+      "ventanaCierreDia": "VIERNES",
+      "ventanaCierreHora": "18:00"
+    },
+    "duenoDemo": {
+      "email": "dueno@banetto-mayorista.com",
+      "nombre": "Dueño Banetto Mayorista",
+      "password": "banettomayorista1234"
+    }
+  },
+  "codigosDescuento": [
+    {
+      "codigo": "MAYORISTA10",
+      "descuentoPorcentaje": 10.0,
+      "activo": true,
+      "usosMaximos": null,
+      "fechaLimite": null
+    }
+  ],
+  "categorias": [
+    {
+      "orden": 1,
+      "nombre": "Más Favoritos",
+      "productos": [
+        {
+          "nombre": "Miguelito",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/miguelito-Bt4mmwqP.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Espiral de naranja",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/espiral-naranja-BEbfgQ0y.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Chocolatín",
+          "precio": 45.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/chocolatin-DkAMi09b.webp",
+          "disponible": false
+        },
+        {
+          "nombre": "Lunitas",
+          "precio": 35.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/lunita-e_NhADeF.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Rol de canela",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/rol-canela-DXPEN3y7.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Panqué de plátano",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/panque-D7OYFOnm.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Monkey bread",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/monkey-bread-Mv1IaNUo.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 2,
+      "nombre": "Croissants Dulces",
+      "productos": [
+        {
+          "nombre": "Croissant de almendra",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/croissant-almendra-CkNyZIgJ.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant natural",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/croissant-natural-DCYPvZR5.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant de chocolate",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/croissant-chocolate-B_irh4NX.webp",
+          "disponible": false
+        }
+      ]
+    },
+    {
+      "orden": 3,
+      "nombre": "Facturitas",
+      "productos": [
+        {
+          "nombre": "Facturita frutos rojos",
+          "precio": 45.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/facturita-frutosrojos-B1KuDbKY.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Facturita de pistache",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/facturita-pistache-Wkb5-u0o.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Facturita de guayaba",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/facturita-guayaba-DzZ2IBc2.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Facturita tiramisú",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/facturita-tiramisu-BITNeXoa.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Facturita dulce de leche",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/facturita-dulcedeleche-BV1_VI7H.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 4,
+      "nombre": "Kouign Amann",
+      "productos": [
+        {
+          "nombre": "Kouign Amann crema pastelera",
+          "precio": 45.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/kouign-crema-Bm03TOkT.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Kouign Amann Nutella",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/kouign-nutella-l5si8pyZ.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 5,
+      "nombre": "Galletas y Alfajores",
+      "productos": [
+        {
+          "nombre": "Alfajor de chocolate",
+          "precio": 38.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/alfajor-chocolate-DH_vEV4d.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Galleta de cacahuate",
+          "precio": 35.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/galleta-cacahuate-BDrSZPmN.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Galleta red velvet",
+          "precio": 40.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/galleta-redvelvet-DFIHC_q0.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Alfajor maicena",
+          "precio": 35.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/alfajor-maicena-hjMkEX6e.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 6,
+      "nombre": "Hogazas",
+      "productos": [
+        {
+          "nombre": "Hogaza de jalapeño",
+          "precio": 80.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/hogaza-jalapeno-Bso4d2Te.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Hogaza natural",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/hogaza-natural-B8JTK5G8.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 7,
+      "nombre": "Croissants Salados",
+      "productos": [
+        {
+          "nombre": "Croissant jamón serrano",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/croissant-serrano-Dlt6Nx0z.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant jamón y queso",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/croissant-jamon-lMm2YZI8.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 8,
+      "nombre": "Panadería Salada",
+      "productos": [
+        {
+          "nombre": "Baguette",
+          "precio": 35.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/baguette-TL0mjGfX.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Lunita de jamón serrano",
+          "precio": 50.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/lunita-serrano-C3m6M_0l.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Suizo de roast beef",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/suizo-B_p3mpx6.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Quiche de hongos",
+          "precio": 57.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/quiche-Dud4UkHN.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Pan de caja",
+          "precio": 85.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/pan-de-caja-BrUBmv7g.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 9,
+      "nombre": "Café Caliente",
+      "productos": [
+        {
+          "nombre": "Flat White caliente",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/flat-white-caliente-CYXckuNM.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Americano caliente",
+          "precio": 45.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/americano-caliente-CSfEv7aI.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Espresso",
+          "precio": 45.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/espresso-DdyXYJly.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Moka caliente",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/moka-caliente-qCiBnfvm.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Latte caliente",
+          "precio": 60.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/latte-caliente-DaWIY66N.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 10,
+      "nombre": "Chai, Matcha y Chocolate Caliente",
+      "productos": [
+        {
+          "nombre": "Dirty chai caliente",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/dirty-chai-caliente-iLIM2Fyp.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Chai caliente",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/chai-caliente-DcGMt-uJ.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Matcha orgánico caliente",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/matcha-organico-caliente-Dvie7wp0.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Matcha caliente",
+          "precio": 60.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/matcha-caliente-bJ1MPgcD.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Chocolate caliente",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/chocolate-caliente-7mC9u_Jk.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 11,
+      "nombre": "Té y Tisanas Caliente",
+      "productos": [
+        {
+          "nombre": "Tisana maracuyá caliente",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/tisana-maracuya-caliente-BTR-4hFO.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Té en taza",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/te-earl-gray-Dh_dNwzv.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Tetera grande",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/te-earl-gray-Dh_dNwzv.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Tisana fresa kiwi caliente",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/tisana-fresa-caliente-5zNR0OSz.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 12,
+      "nombre": "Café Frío",
+      "productos": [
+        {
+          "nombre": "Espresso tonic",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/espresso-tonic-BrSrCeld.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Americano frío",
+          "precio": 55.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/americano-frio-D01iSTjj.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Moka frío",
+          "precio": 80.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/moka-frio-rNKNBWEM.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Latte frío",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/latte-frio-DNWamDPd.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Flat White frío",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/flat-white-frio-SOyOsxm9.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 13,
+      "nombre": "Frappé",
+      "productos": [
+        {
+          "nombre": "Frappé matcha",
+          "precio": 85.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/frappe-matcha-BT8NrSns.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Frappé chai",
+          "precio": 85.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/frappe-chai-DQnAUpUY.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Frappé moka",
+          "precio": 90.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/frappe-moka-BvCX511T.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Frappé café",
+          "precio": 80.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/frappe-cafe-BeSe2BFG.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 14,
+      "nombre": "Cold Brew",
+      "productos": [
+        {
+          "nombre": "Cold brew vainilla",
+          "precio": 80.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/cold-brew-vainilla-BSK8zYz3.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Cold brew tonic",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/cold-brew-tonic-C7C_IARI.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 15,
+      "nombre": "Chai, Matcha y Chocolate Frío",
+      "productos": [
+        {
+          "nombre": "Matcha orgánico frío",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/matcha-organico-frio-DF9RSM7j.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Chocolate frío",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/chocolate-frio-dWmCCw5f.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Dirty chai frío",
+          "precio": 80.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/dirty-chai-frio-A5ZHKAYm.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Chai frío",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/chai-frio-B1I1GReB.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Matcha frío",
+          "precio": 70.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/matcha-frio-D4ZBu7vX.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 16,
+      "nombre": "Té y Tisanas Frío",
+      "productos": [
+        {
+          "nombre": "Tisana fresa kiwi fría",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/tisana-fresa-frio-BNPkc2fc.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Té en taza frío",
+          "precio": 65.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/te-varios-sabores-BAS0m78i.webp",
+          "disponible": true
+        },
+        {
+          "nombre": "Tisana maracuyá fría",
+          "precio": 75.0,
+          "fotoUrl": "https://www.panaderiabanetto.com/assets/tisana-maracuya-frio-BwYAAfDm.webp",
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 17,
+      "nombre": "Otras Bebidas",
+      "productos": [
+        {
+          "nombre": "Agua embotellada",
+          "precio": 55.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Kombucha",
+          "precio": 90.0,
+          "fotoUrl": null,
+          "disponible": false
+        }
+      ]
+    }
+  ]
+}
