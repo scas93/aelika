@@ -32,11 +32,34 @@ const TIMEOUT_MS = 2000;
  * fallback.
  */
 async function resolverTipoStorefront(slug: string): Promise<string | null> {
+  const targetUrl = `${API_URL}/public/tenants/${encodeURIComponent(slug)}`;
+
+  // TEMPORAL — instrumentación de diagnóstico para el fallback inesperado a
+  // /tienda visto en staging para tenants RETAIL_B2B. Quitar en el prompt de
+  // limpieza aparte, una vez diagnosticado (no antes).
+  console.log("[DEBUG-PROXY] consultando tipoStorefront", {
+    slug,
+    targetUrl,
+    NEXT_PUBLIC_API_URL_env: process.env.NEXT_PUBLIC_API_URL,
+    API_URL_resuelta: API_URL,
+  });
+
   try {
-    const res = await fetch(`${API_URL}/public/tenants/${encodeURIComponent(slug)}`, {
+    const res = await fetch(targetUrl, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      // TEMPORAL — ver comentario arriba.
+      console.log("[DEBUG-PROXY] fetch respondió con status no-200", {
+        slug,
+        targetUrl,
+        status: res.status,
+        statusText: res.statusText,
+      });
+      return null;
+    }
+
     const data: unknown = await res.json();
     if (
       typeof data === "object" &&
@@ -44,12 +67,33 @@ async function resolverTipoStorefront(slug: string): Promise<string | null> {
       "tipoStorefront" in data &&
       typeof (data as { tipoStorefront: unknown }).tipoStorefront === "string"
     ) {
-      return (data as { tipoStorefront: string }).tipoStorefront;
+      const tipoStorefront = (data as { tipoStorefront: string }).tipoStorefront;
+      // TEMPORAL — ver comentario arriba.
+      console.log("[DEBUG-PROXY] fetch exitoso", { slug, targetUrl, tipoStorefront });
+      return tipoStorefront;
     }
+
+    // TEMPORAL — ver comentario arriba.
+    console.log("[DEBUG-PROXY] fetch exitoso pero la respuesta no trae tipoStorefront válido", {
+      slug,
+      targetUrl,
+      data,
+    });
     return null;
-  } catch {
-    // Red caída, timeout (AbortSignal.timeout lanza), JSON inválido, etc. —
-    // todos tratados igual: no se pudo determinar, ver fallback en proxy().
+  } catch (err) {
+    const esError = err instanceof Error;
+    // AbortSignal.timeout() rechaza con un error cuyo `name` es "TimeoutError"
+    // — cualquier otro nombre (TypeError de fetch, etc.) es un fallo de red
+    // real, no un timeout.
+    const tipoError = esError && err.name === "TimeoutError" ? "timeout" : esError ? "red" : "desconocido";
+    // TEMPORAL — ver comentario arriba.
+    console.log("[DEBUG-PROXY] fetch falló", {
+      slug,
+      targetUrl,
+      tipoError,
+      errorNombre: esError ? err.name : undefined,
+      errorMensaje: esError ? err.message : String(err),
+    });
     return null;
   }
 }
@@ -74,6 +118,21 @@ export async function proxy(request: NextRequest) {
   // comportamiento que ya existía antes de este cambio, así que un fallo
   // nunca deja al visitante peor de lo que estaba.
   const prefijo = tipoStorefront === "RETAIL_B2B" ? "/mayoreo" : "/tienda";
+
+  // TEMPORAL — ver nota en resolverTipoStorefront. Quitar junto con el resto
+  // de este logging en el prompt de limpieza.
+  console.log("[DEBUG-PROXY] decisión final de reescritura", {
+    host,
+    pathnameOriginal: url.pathname,
+    slug,
+    tipoStorefront,
+    prefijo,
+    razon: !slug
+      ? "sin slug en el path"
+      : tipoStorefront
+        ? `consulta exitosa, tipoStorefront=${tipoStorefront}`
+        : "fallback a /tienda por fallo en la consulta (ver logs [DEBUG-PROXY] de resolverTipoStorefront arriba)",
+  });
 
   url.pathname = `${prefijo}${url.pathname}`;
   return NextResponse.rewrite(url);
