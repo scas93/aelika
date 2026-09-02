@@ -163,23 +163,6 @@ body {
   box-shadow: 0 0 0 3px var(--color-mayoreo-accent-soft);
 }
 
-/* Campos numéricos angostos de "día" en la pantalla de distribución semanal
-   de /mayoreo/[slug] (7 en una sola fila, ~50px c/u) — las flechas nativas
-   de spin de type=number no caben en ese ancho y se superponen al dígito
-   centrado, recortándolo visualmente. Se ocultan solo aquí (clase aparte,
-   no en .mayoreo-input en general) porque el selector de cantidad del modal
-   de producto también usa .mayoreo-input pero es mucho más ancho y no tiene
-   este problema — no hace falta tocarlo. */
-.mayoreo-input.dia-input {
-  -moz-appearance: textfield;
-}
-
-.mayoreo-input.dia-input::-webkit-outer-spin-button,
-.mayoreo-input.dia-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
 /* Same iOS auto-zoom fix as .input.search-input in /tienda (font-size under
    16px triggers it) — scoped to the /mayoreo/[slug] search box the same way,
    via the extra .search-input class rather than touching .mayoreo-input

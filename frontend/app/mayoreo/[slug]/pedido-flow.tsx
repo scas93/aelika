@@ -23,6 +23,7 @@ import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 export type PedidoFlowScreen = "distribucion" | "resumen" | "confirmacion";
 
 type Distribucion = Record<DiaSemanaPedidoB2b, number>;
+type DiasActivos = Record<DiaSemanaPedidoB2b, boolean>;
 
 const BTN_PRIMARY =
   "rounded-lg bg-mayoreo-button px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50";
@@ -30,11 +31,30 @@ const BTN_SECONDARY = "rounded-lg border border-mayoreo-border px-4 py-3 text-sm
 const BACK_LINK = "self-start text-sm text-mayoreo-ink-soft hover:text-mayoreo-ink";
 const CARD = "flex flex-col gap-2 rounded-xl bg-mayoreo-card p-4 shadow-sm";
 
+const STEPPER_BTN =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-mayoreo-border text-base font-semibold text-mayoreo-ink hover:bg-mayoreo-bg disabled:cursor-not-allowed disabled:opacity-40";
+// Miniatura del producto en el header de cada card (expandida y colapsada) —
+// mismo círculo con inicial de respaldo que ya usa el resto de la app para
+// avatares sin foto (ver tenantInitial en dashboard/nav.tsx), aplicado aquí
+// con los tokens mayoreo-* en vez de admin-*.
+const THUMB =
+  "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-mayoreo-bg text-xs font-semibold text-mayoreo-ink-soft";
+
 function distribucionVacia(): Distribucion {
   return DIAS_SEMANA_PEDIDO_B2B.reduce((acc, { value }) => {
     acc[value] = 0;
     return acc;
   }, {} as Distribucion);
+}
+
+// Todos los días activos por default — mismo punto de partida que la
+// versión anterior de esta pantalla, donde los 7 días estaban disponibles
+// para escribir una cantidad sin necesidad de "activarlos" primero.
+function diasActivosDefault(): DiasActivos {
+  return DIAS_SEMANA_PEDIDO_B2B.reduce((acc, { value }) => {
+    acc[value] = true;
+    return acc;
+  }, {} as DiasActivos);
 }
 
 export default function PedidoFlow({
@@ -66,6 +86,13 @@ export default function PedidoFlow({
   const [distribuciones, setDistribuciones] = useState<Record<string, Distribucion>>(() =>
     Object.fromEntries(productIds.map((id) => [id, distribucionVacia()])),
   );
+  const [diasActivos, setDiasActivos] = useState<Record<string, DiasActivos>>(() =>
+    Object.fromEntries(productIds.map((id) => [id, diasActivosDefault()])),
+  );
+  // Acordeón: un solo producto expandido a la vez. Al montar, nada está
+  // distribuido todavía, así que "el primero incompleto" es simplemente el
+  // primer producto del carrito.
+  const [expandedId, setExpandedId] = useState<string | null>(() => productIds[0] ?? null);
 
   const [codigoInput, setCodigoInput] = useState("");
   const [codigoAplicado, setCodigoAplicado] = useState<{ texto: string; porcentaje: number } | null>(null);
@@ -113,19 +140,49 @@ export default function PedidoFlow({
     return DIAS_SEMANA_PEDIDO_B2B.reduce((sum, { value }) => sum + (dist[value] ?? 0), 0);
   }
 
-  // Reparte el total de este producto entre los 7 días lo más parejo
-  // posible; si no divide exacto, el resto (1 pieza extra por día) se asigna
-  // empezando por el primer día de la semana.
+  // Reparte el total de este producto entre los días marcados como activos
+  // lo más parejo posible; si no divide exacto, el resto (1 pieza extra por
+  // día) se asigna empezando por el primer día activo de la semana. Los días
+  // inactivos quedan en 0 (distribucionVacia ya parte de ahí).
   function repartirParejo(productId: string) {
     const total = cart[productId] ?? 0;
-    const dias = DIAS_SEMANA_PEDIDO_B2B.length;
-    const base = Math.floor(total / dias);
-    const resto = total % dias;
+    const activos = diasActivos[productId] ?? diasActivosDefault();
+    const diasActivosLista = DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) => activos[value]);
+    if (diasActivosLista.length === 0) return;
+    const base = Math.floor(total / diasActivosLista.length);
+    const resto = total % diasActivosLista.length;
     const nueva = distribucionVacia();
-    DIAS_SEMANA_PEDIDO_B2B.forEach(({ value }, index) => {
+    diasActivosLista.forEach(({ value }, index) => {
       nueva[value] = base + (index < resto ? 1 : 0);
     });
     setDistribuciones((prev) => ({ ...prev, [productId]: nueva }));
+  }
+
+  // Marca/desmarca un día como activo para este producto. Al desactivar un
+  // día que ya tenía piezas asignadas, esas piezas regresan al restante (se
+  // ponen en 0) en vez de quedar fantasma en el total distribuido.
+  function toggleDia(productId: string, dia: DiaSemanaPedidoB2b) {
+    const activoActual = diasActivos[productId]?.[dia] ?? true;
+    const siguienteActivo = !activoActual;
+    setDiasActivos((prev) => ({
+      ...prev,
+      [productId]: { ...(prev[productId] ?? diasActivosDefault()), [dia]: siguienteActivo },
+    }));
+    if (!siguienteActivo) {
+      setDia(productId, dia, 0);
+    }
+  }
+
+  function incrementarDia(productId: string, dia: DiaSemanaPedidoB2b) {
+    const total = cart[productId] ?? 0;
+    if (totalDistribuido(productId) >= total) return;
+    setDia(productId, dia, (distribuciones[productId]?.[dia] ?? 0) + 1);
+  }
+
+  function decrementarDia(productId: string, dia: DiaSemanaPedidoB2b) {
+    const actual = distribuciones[productId]?.[dia] ?? 0;
+    if (actual <= 0) return;
+    setDia(productId, dia, actual - 1);
   }
 
   const todoDistribuido = productIds.every((id) => totalDistribuido(id) === cart[id]);
@@ -235,42 +292,138 @@ export default function PedidoFlow({
         )}
 
         {productIds.map((id) => {
+          const producto = productos.find((p) => p.id === id);
           const distribuido = totalDistribuido(id);
+          const total = cart[id] ?? 0;
+          const completo = distribuido === total;
+          const isExpanded = expandedId === id;
+          const activos = diasActivos[id] ?? diasActivosDefault();
+          const diasConFecha = DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }, offset) => ({
+            value,
+            label,
+            fecha: etiquetaDiaConFecha(semanaDestino.inicio, offset),
+          }));
+          const algunDiaActivo = diasConFecha.some(({ value }) => activos[value]);
+
+          const thumb = (
+            <span className={THUMB}>
+              {producto?.fotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- external, tenant-provided URLs
+                <img src={producto.fotoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                nombreProducto(id).trim().charAt(0).toUpperCase() || "?"
+              )}
+            </span>
+          );
+
           return (
             <div key={id} className={CARD}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-mayoreo-ink">{nombreProducto(id)}</span>
-                <button
-                  type="button"
-                  onClick={() => repartirParejo(id)}
-                  className="shrink-0 text-xs font-semibold text-mayoreo-accent hover:underline"
+              {/* flex-wrap en vez de truncate en el nombre — con "Repartir
+                  parejo" + el badge compartiendo la fila, un nombre de
+                  producto largo en pantalla angosta ya no cabía y se
+                  recortaba ("Espiral de n..."); ahora, si no alcanza, las
+                  acciones bajan a su propia línea dentro del mismo header en
+                  vez de cortar el nombre. */}
+              <div className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                {/* role="button" en un <div>, no un <button> real — evita anidar
+                    el botón "Repartir parejo" (acción propia, con su propio
+                    stopPropagation) dentro de otro botón, que sería HTML
+                    inválido. Mismo patrón que la tarjeta de producto clickeable
+                    en page.tsx. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedId((current) => (current === id ? null : id))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedId((current) => (current === id ? null : id));
+                    }
+                  }}
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                 >
-                  Repartir parejo
-                </button>
+                  <span className="shrink-0 text-mayoreo-ink-soft">{isExpanded ? "▼" : "▶"}</span>
+                  {thumb}
+                  <span className="text-sm font-semibold text-mayoreo-ink">{nombreProducto(id)}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {isExpanded && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        repartirParejo(id);
+                      }}
+                      disabled={!algunDiaActivo}
+                      className="text-xs font-semibold text-mayoreo-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
+                    >
+                      Repartir parejo
+                    </button>
+                  )}
+                  <span
+                    className={`flex items-center gap-1 text-xs font-medium ${
+                      completo ? "text-emerald-600" : "text-amber-600"
+                    }`}
+                  >
+                    {completo && <span aria-hidden>✓</span>}
+                    {distribuido} de {total}
+                  </span>
+                </div>
               </div>
-              <span className="text-xs text-mayoreo-ink-soft">
-                distribuido {distribuido} de {cart[id]} total
-              </span>
-              <div className="grid grid-cols-7 gap-1.5">
-                {DIAS_SEMANA_PEDIDO_B2B.map(({ value }, offset) => (
-                  <label key={value} className="flex flex-col items-center gap-1">
-                    {/* h-[2.5em] (2 líneas a leading-tight) fija la misma altura en
-                        las 7 columnas sin importar si el label cae en una o dos
-                        líneas — si no, el input de la columna con label de una
-                        sola línea queda más arriba que el de sus vecinas. */}
-                    <span className="flex h-[2.5em] items-center justify-center text-center text-[10px] font-medium leading-tight text-mayoreo-ink-soft">
-                      {etiquetaDiaConFecha(semanaDestino.inicio, offset)}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={distribuciones[id]?.[value] ?? 0}
-                      onChange={(e) => setDia(id, value, Number(e.target.value) || 0)}
-                      className="mayoreo-input dia-input w-full px-1 py-1.5 text-center text-sm"
-                    />
-                  </label>
-                ))}
-              </div>
+
+              {isExpanded && (
+                <div className="flex flex-col gap-1 border-t border-mayoreo-border pt-3">
+                  {diasConFecha.map(({ value, fecha }) => {
+                    const activo = activos[value];
+                    const cantidad = distribuciones[id]?.[value] ?? 0;
+                    return (
+                      <div
+                        key={value}
+                        className={`flex items-center justify-between gap-2 rounded-lg px-1 py-1.5 ${
+                          activo ? "" : "opacity-50"
+                        }`}
+                      >
+                        <label className="flex items-center gap-2 text-sm text-mayoreo-ink">
+                          <input
+                            type="checkbox"
+                            checked={activo}
+                            onChange={() => toggleDia(id, value)}
+                            className="h-4 w-4 accent-mayoreo-accent"
+                          />
+                          {fecha}
+                        </label>
+                        {activo ? (
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => decrementarDia(id, value)}
+                              disabled={cantidad <= 0}
+                              className={STEPPER_BTN}
+                              aria-label={`Quitar una pieza el ${fecha}`}
+                            >
+                              −
+                            </button>
+                            <span className="w-6 text-center text-base font-semibold text-mayoreo-ink">
+                              {cantidad}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => incrementarDia(id, value)}
+                              disabled={distribuido >= total}
+                              className={STEPPER_BTN}
+                              aria-label={`Agregar una pieza el ${fecha}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-mayoreo-ink-soft">Excluido</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
