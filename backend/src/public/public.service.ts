@@ -59,6 +59,7 @@ export class PublicService {
         facturacionModo: true,
         stripeAccountId: true,
         stripeChargesEnabled: true,
+        tipoStorefront: true,
       },
     });
     if (!tenant) {
@@ -69,6 +70,7 @@ export class PublicService {
     return {
       nombre: tenant.nombre,
       logoUrl: tenant.logoUrl,
+      tipoStorefront: tenant.tipoStorefront,
       horarioAtencion: horario,
       ubicacion: tenant.ubicacion,
       abierto: isAbiertoAhora(horario),
