@@ -141,6 +141,8 @@ export default function MayoreoPage() {
 
   const totalPiezas = Object.values(cart).reduce((sum, c) => sum + c, 0);
   const progreso = Math.min(100, Math.round((totalPiezas / tenant.pedidoB2bMinimoPiezas) * 100));
+  const alcanzaMinimoCarrito = totalPiezas >= tenant.pedidoB2bMinimoPiezas;
+  const faltantePiezasCarrito = Math.max(0, tenant.pedidoB2bMinimoPiezas - totalPiezas);
 
   function actualizarCantidad(productId: string, cantidad: number) {
     setCart((prev) => {
@@ -403,10 +405,17 @@ export default function MayoreoPage() {
               <span>${subtotalCarrito.toFixed(2)}</span>
             </div>
 
+            {!alcanzaMinimoCarrito && productIdsCarrito.length > 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Tu pedido tiene {totalPiezas} piezas. Te faltan {faltantePiezasCarrito} piezas para alcanzar el
+                mínimo de {tenant.pedidoB2bMinimoPiezas}.
+              </p>
+            )}
+
             <button
               type="button"
               onClick={() => setScreen("distribucion")}
-              disabled={productIdsCarrito.length === 0}
+              disabled={productIdsCarrito.length === 0 || !alcanzaMinimoCarrito}
               className="rounded-lg bg-mayoreo-button px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Continuar ({totalPiezas} pieza{totalPiezas === 1 ? "" : "s"})

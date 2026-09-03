@@ -291,6 +291,13 @@ export default function PedidoFlow({
           </p>
         )}
 
+        {!alcanzaMinimo && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Tu pedido tiene {totalPiezas} piezas. Te faltan {faltantePiezas} piezas para alcanzar el mínimo de{" "}
+            {minimoPiezas}.
+          </p>
+        )}
+
         {productIds.map((id) => {
           const producto = productos.find((p) => p.id === id);
           const distribuido = totalDistribuido(id);
@@ -431,7 +438,7 @@ export default function PedidoFlow({
         <button
           type="button"
           onClick={() => onScreenChange("resumen")}
-          disabled={!todoDistribuido}
+          disabled={!todoDistribuido || !alcanzaMinimo}
           className={`${BTN_PRIMARY} w-full`}
         >
           Continuar
