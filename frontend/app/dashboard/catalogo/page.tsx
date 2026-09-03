@@ -37,7 +37,11 @@ export default function CatalogoPage() {
 
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  // Acordeón: null = ninguna categoría expandida (default al cargar, para no
+  // pedir productos de todas las categorías de una vez). Distinto del viejo
+  // "selectedCategoryId siempre apunta a la primera categoría" — aquí no hay
+  // selección por default, solo expansión explícita del usuario.
+  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -47,10 +51,13 @@ export default function CatalogoPage() {
     try {
       const data = await fetchCategories(token);
       setCategories(data);
-      setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
     } catch (err) {
       setCategoriesError(err instanceof ApiError ? err.message : "No se pudieron cargar las categorías");
     }
+  }
+
+  function toggleExpanded(categoryId: string) {
+    setExpandedCategoryId((current) => (current === categoryId ? null : categoryId));
   }
 
   useEffect(() => {
@@ -99,9 +106,7 @@ export default function CatalogoPage() {
       await deleteCategory(token, deleteTarget.id);
       const remaining = (categories ?? []).filter((c) => c.id !== deleteTarget.id);
       setCategories(remaining);
-      if (selectedCategoryId === deleteTarget.id) {
-        setSelectedCategoryId(remaining[0]?.id ?? null);
-      }
+      setExpandedCategoryId((current) => (current === deleteTarget.id ? null : current));
       setDeleteTarget(null);
     } catch (err) {
       setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar la categoría");
@@ -147,66 +152,85 @@ export default function CatalogoPage() {
                     <Card className="text-sm text-admin-ink-soft">Aún no tienes categorías.</Card>
                   </li>
                 )}
-                {categories.map((category, index) => (
-                  <li key={category.id}>
-                    <Card
-                      padding={12}
-                      className={`flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 ${
-                        selectedCategoryId === category.id ? "ring-2 ring-admin-green/40" : ""
-                      }`}
-                    >
-                      <button
-                        onClick={() => setSelectedCategoryId(category.id)}
-                        className="flex flex-1 items-center gap-2 text-left"
-                      >
-                        <span
-                          className={
-                            category.activa
-                              ? "text-[15px] font-semibold text-admin-ink"
-                              : "text-[15px] font-semibold text-admin-ink/40"
-                          }
-                        >
-                          {category.nombre}
-                        </span>
-                        {!category.activa && (
-                          <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                            Inactiva
-                          </span>
-                        )}
-                      </button>
+                {categories.map((category, index) => {
+                  const expanded = expandedCategoryId === category.id;
+                  return (
+                    <li key={category.id}>
+                      <Card padding={12} className="flex flex-col gap-0">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
+                          <button
+                            onClick={() => toggleExpanded(category.id)}
+                            aria-expanded={expanded}
+                            className="flex flex-1 items-center gap-2 text-left"
+                          >
+                            <span
+                              aria-hidden
+                              className={`text-xs text-admin-ink-soft transition-transform ${expanded ? "rotate-90" : ""}`}
+                            >
+                              ▶
+                            </span>
+                            <span
+                              className={
+                                category.activa
+                                  ? "text-[15px] font-semibold text-admin-ink"
+                                  : "text-[15px] font-semibold text-admin-ink/40"
+                              }
+                            >
+                              {category.nombre}
+                            </span>
+                            {!category.activa && (
+                              <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
+                                Inactiva
+                              </span>
+                            )}
+                          </button>
 
-                      {canWrite && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <IconButton label="Subir" disabled={index === 0} onClick={() => handleReorder(index, -1)}>
-                            ↑
-                          </IconButton>
-                          <IconButton
-                            label="Bajar"
-                            disabled={index === categories.length - 1}
-                            onClick={() => handleReorder(index, 1)}
-                          >
-                            ↓
-                          </IconButton>
-                          <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(category)}>
-                            {category.activa ? "Desactivar" : "Activar"}
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => setDeleteTarget(category)}
-                            disabled={category._count.products > 0}
-                            title={category._count.products > 0 ? "Tiene productos" : undefined}
-                          >
-                            Eliminar
-                          </Button>
-                          {category._count.products > 0 && (
-                            <span className="text-[13px] text-admin-ink-soft">Tiene productos</span>
+                          {canWrite && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <IconButton label="Subir" disabled={index === 0} onClick={() => handleReorder(index, -1)}>
+                                ↑
+                              </IconButton>
+                              <IconButton
+                                label="Bajar"
+                                disabled={index === categories.length - 1}
+                                onClick={() => handleReorder(index, 1)}
+                              >
+                                ↓
+                              </IconButton>
+                              <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(category)}>
+                                {category.activa ? "Desactivar" : "Activar"}
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => setDeleteTarget(category)}
+                                disabled={category._count.products > 0}
+                                title={category._count.products > 0 ? "Tiene productos" : undefined}
+                              >
+                                Eliminar
+                              </Button>
+                              {category._count.products > 0 && (
+                                <span className="text-[13px] text-admin-ink-soft">Tiene productos</span>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </Card>
-                  </li>
-                ))}
+
+                        {expanded && (
+                          <div className="mt-3 border-t border-admin-border pt-3">
+                            <ProductsSection
+                              key={category.id}
+                              token={token}
+                              categoryId={category.id}
+                              categories={categories}
+                              canWrite={canWrite}
+                            />
+                          </div>
+                        )}
+                      </Card>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -245,10 +269,6 @@ export default function CatalogoPage() {
             <p className="text-sm text-admin-ink-soft">Esta acción no se puede deshacer.</p>
             {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
           </Modal>
-
-          {selectedCategoryId && (
-            <ProductsSection key={selectedCategoryId} token={token} categoryId={selectedCategoryId} canWrite={canWrite} />
-          )}
         </>
       )}
     </div>
@@ -359,10 +379,12 @@ function NewCategoryPanel({
 function ProductsSection({
   token,
   categoryId,
+  categories,
   canWrite,
 }: {
   token: string;
   categoryId: string;
+  categories: Category[];
   canWrite: boolean;
 }) {
   const [products, setProducts] = useState<Product[] | null>(null);
@@ -415,6 +437,7 @@ function ProductsSection({
                 <li key={product.id} className="p-4">
                   <ProductForm
                     initial={product}
+                    categories={categories}
                     onCancel={() => setEditingId(null)}
                     onSubmit={async (payload) => {
                       await updateProduct(token, product.id, payload);
@@ -466,9 +489,11 @@ function ProductsSection({
 
       <NewProductPanel
         open={productPanelOpen}
+        defaultCategoryId={categoryId}
+        categories={categories}
         onClose={() => setProductPanelOpen(false)}
         onCreate={async (payload) => {
-          await createProduct(token, { ...payload, categoryId });
+          await createProduct(token, payload);
           await load();
         }}
       />
@@ -481,28 +506,32 @@ interface ProductFormValues {
   descripcion?: string;
   precio: number;
   fotoUrl?: string;
+  categoryId: string;
 }
 
 function ProductForm({
   initial,
+  categories,
   onSubmit,
   onCancel,
 }: {
-  initial?: Product;
+  initial: Product;
+  categories: Category[];
   onSubmit: (payload: ProductFormValues) => Promise<void>;
   onCancel?: () => void;
 }) {
-  const [nombre, setNombre] = useState(initial?.nombre ?? "");
-  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
-  const [precio, setPrecio] = useState(initial?.precio ?? "");
-  const [fotoUrl, setFotoUrl] = useState(initial?.fotoUrl ?? "");
+  const [nombre, setNombre] = useState(initial.nombre);
+  const [descripcion, setDescripcion] = useState(initial.descripcion ?? "");
+  const [precio, setPrecio] = useState<number | string>(initial.precio);
+  const [fotoUrl, setFotoUrl] = useState(initial.fotoUrl ?? "");
+  const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const precioNumber = Number(precio);
-    if (!nombre.trim() || !Number.isFinite(precioNumber) || precioNumber <= 0) return;
+    if (!nombre.trim() || !Number.isFinite(precioNumber) || precioNumber <= 0 || !categoryId) return;
 
     setSubmitting(true);
     setError(null);
@@ -512,13 +541,8 @@ function ProductForm({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        categoryId,
       });
-      if (!initial) {
-        setNombre("");
-        setDescripcion("");
-        setPrecio("");
-        setFotoUrl("");
-      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar el producto");
     } finally {
@@ -526,9 +550,9 @@ function ProductForm({
     }
   }
 
-  const form = (
+  return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <p className="text-[17px] font-bold text-admin-ink">{initial ? "Editar producto" : "Nuevo producto"}</p>
+      <p className="text-[17px] font-bold text-admin-ink">Editar producto</p>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Nombre
@@ -553,6 +577,16 @@ function ProductForm({
         </label>
       </div>
       <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+        Categoría
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="admin-input">
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
         Descripción (opcional)
         <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="admin-input" />
       </label>
@@ -565,7 +599,7 @@ function ProductForm({
 
       <div className="flex gap-2">
         <Button type="submit" disabled={submitting}>
-          {initial ? "Guardar cambios" : "Agregar producto"}
+          Guardar cambios
         </Button>
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel}>
@@ -575,16 +609,18 @@ function ProductForm({
       </div>
     </form>
   );
-
-  return initial ? form : <Card>{form}</Card>;
 }
 
 function NewProductPanel({
   open,
+  defaultCategoryId,
+  categories,
   onClose,
   onCreate,
 }: {
   open: boolean;
+  defaultCategoryId: string;
+  categories: Category[];
   onClose: () => void;
   onCreate: (payload: ProductFormValues) => Promise<void>;
 }) {
@@ -592,6 +628,7 @@ function NewProductPanel({
   const [descripcion, setDescripcion] = useState("");
   const [precio, setPrecio] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
+  const [categoryId, setCategoryId] = useState(defaultCategoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -601,17 +638,20 @@ function NewProductPanel({
     setDescripcion("");
     setPrecio("");
     setFotoUrl("");
+    setCategoryId(defaultCategoryId);
     setError(null);
   }
 
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form each time the panel opens
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form (preselecting the category it was opened from) each time the panel opens
     resetForm();
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultCategoryId]);
 
   const precioNumber = Number(precio);
-  const canSubmit = nombre.trim().length > 0 && Number.isFinite(precioNumber) && precioNumber > 0 && !submitting;
+  const canSubmit =
+    nombre.trim().length > 0 && Number.isFinite(precioNumber) && precioNumber > 0 && !!categoryId && !submitting;
 
   async function handleSubmit(keepOpen: boolean) {
     setSubmitting(true);
@@ -622,11 +662,13 @@ function NewProductPanel({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        categoryId,
       });
       setNombre("");
       setDescripcion("");
       setPrecio("");
       setFotoUrl("");
+      setCategoryId(defaultCategoryId);
       if (keepOpen) {
         firstFieldRef.current?.focus();
       } else {
@@ -677,6 +719,16 @@ function NewProductPanel({
             placeholder="129.90"
             className="admin-input"
           />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Categoría
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="admin-input">
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Descripción (opcional)

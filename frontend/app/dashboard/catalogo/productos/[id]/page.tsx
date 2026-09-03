@@ -29,8 +29,6 @@ export default function ProductoDetallePage() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [allGroups, setAllGroups] = useState<ModifierGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [unassignError, setUnassignError] = useState<string | null>(null);
-  const [unassigningId, setUnassigningId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -48,19 +46,6 @@ export default function ProductoDetallePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function handleUnassign(modifierGroupId: string) {
-    setUnassigningId(modifierGroupId);
-    setUnassignError(null);
-    try {
-      await unassignModifierGroupFromProduct(token, modifierGroupId, id);
-      await load();
-    } catch (err) {
-      setUnassignError(err instanceof ApiError ? err.message : "No se pudo desasignar el modificador");
-    } finally {
-      setUnassigningId(null);
-    }
-  }
-
   if (error) {
     return (
       <div className="flex flex-col gap-3">
@@ -76,9 +61,6 @@ export default function ProductoDetallePage() {
     return <p className="text-sm text-admin-ink-soft">Cargando...</p>;
   }
 
-  const asignados = product.modifierGroups;
-  const disponibles = allGroups.filter((g) => !asignados.some((a) => a.modifierGroupId === g.id));
-
   return (
     <div className="flex flex-col gap-6">
       <Link href="/dashboard/catalogo" className="text-sm font-semibold text-admin-ink-soft hover:text-admin-ink">
@@ -93,130 +75,123 @@ export default function ProductoDetallePage() {
       </Card>
 
       <section className="flex flex-col gap-3">
-        <h2 className={SECTION_HEADER}>Modificadores asignados</h2>
-        {unassignError && <p className="text-sm text-red-600">{unassignError}</p>}
-        {asignados.length === 0 ? (
-          <Card className="text-sm text-admin-ink-soft">Este producto no tiene modificadores asignados.</Card>
+        <h2 className={SECTION_HEADER}>Modificadores</h2>
+        {allGroups.length === 0 ? (
+          <Card className="text-sm text-admin-ink-soft">
+            Este negocio todavía no tiene grupos de modificadores. Créalos desde el tab &quot;Modificadores&quot; en
+            Catálogo y vuelve aquí para asignarlos a este producto.
+          </Card>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {asignados.map((asignacion) => (
-              <li key={asignacion.modifierGroupId}>
-                <Card padding={12} className="flex items-center justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-admin-ink">{asignacion.modifierGroup.nombre}</span>
-                    <span className="text-xs text-admin-ink-soft">
-                      Orden {asignacion.orden} · {asignacion.modifierGroup.opciones.length}{" "}
-                      {asignacion.modifierGroup.opciones.length === 1 ? "opción" : "opciones"}
-                    </span>
-                  </div>
-                  {canWrite && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleUnassign(asignacion.modifierGroupId)}
-                      disabled={unassigningId === asignacion.modifierGroupId}
-                    >
-                      {unassigningId === asignacion.modifierGroupId ? "Desasignando..." : "Desasignar"}
-                    </Button>
-                  )}
-                </Card>
-              </li>
-            ))}
-          </ul>
+          <ModifierChecklist
+            key={product.id}
+            allGroups={allGroups}
+            asignados={product.modifierGroups}
+            canWrite={canWrite}
+            onSave={async (toAssign, toUnassign) => {
+              // toAssign ya trae el siguiente `orden` calculado — se anexa
+              // después de los grupos que se quedan asignados, sin
+              // renumerar los que ya tenían un orden guardado (ver
+              // ModifierChecklist).
+              await Promise.all([
+                ...toAssign.map(({ modifierGroupId, orden }) =>
+                  assignModifierGroupToProduct(token, modifierGroupId, id, orden),
+                ),
+                ...toUnassign.map((modifierGroupId) => unassignModifierGroupFromProduct(token, modifierGroupId, id)),
+              ]);
+              await load();
+            }}
+          />
         )}
       </section>
-
-      {canWrite && (
-        <section className="flex flex-col gap-3">
-          <h2 className={SECTION_HEADER}>Asignar modificador existente</h2>
-          {disponibles.length === 0 ? (
-            <Card className="text-sm text-admin-ink-soft">
-              No hay más grupos de modificadores disponibles para asignar.
-            </Card>
-          ) : (
-            <AssignModifierGroupForm
-              // Remounts (resetting the internal selection) whenever the
-              // available-groups list changes shape — e.g. right after an
-              // assign shrinks it — instead of syncing local state via an
-              // effect.
-              key={disponibles.map((g) => g.id).join(",")}
-              groups={disponibles}
-              onAssign={async (modifierGroupId, orden) => {
-                await assignModifierGroupToProduct(token, modifierGroupId, id, orden);
-                await load();
-              }}
-            />
-          )}
-        </section>
-      )}
     </div>
   );
 }
 
-function AssignModifierGroupForm({
-  groups,
-  onAssign,
+function ModifierChecklist({
+  allGroups,
+  asignados,
+  canWrite,
+  onSave,
 }: {
-  groups: ModifierGroup[];
-  onAssign: (modifierGroupId: string, orden?: number) => Promise<void>;
+  allGroups: ModifierGroup[];
+  asignados: ProductDetail["modifierGroups"];
+  canWrite: boolean;
+  onSave: (toAssign: { modifierGroupId: string; orden: number }[], toUnassign: string[]) => Promise<void>;
 }) {
-  const [modifierGroupId, setModifierGroupId] = useState(groups[0]?.id ?? "");
-  const [orden, setOrden] = useState("");
+  const asignadoIds = new Set(asignados.map((a) => a.modifierGroupId));
+  const [selected, setSelected] = useState<Set<string>>(asignadoIds);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!modifierGroupId) return;
+  const dirty = selected.size !== asignadoIds.size || [...selected].some((id) => !asignadoIds.has(id));
 
-    const ordenNumber = orden.trim() ? Number(orden) : undefined;
-    if (ordenNumber !== undefined && (!Number.isFinite(ordenNumber) || ordenNumber < 0)) {
-      setError("El orden debe ser un número mayor o igual a 0");
-      return;
-    }
+  function toggle(groupId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
 
+  async function handleSave() {
     setSubmitting(true);
     setError(null);
     try {
-      await onAssign(modifierGroupId, ordenNumber);
-      setOrden("");
+      const toUnassign = [...asignadoIds].filter((groupId) => !selected.has(groupId));
+      // Los grupos que se quedan asignados conservan su `orden` guardado —
+      // los recién marcados se anexan al final, en el orden en que aparecen
+      // en el checklist (mismo orden que ve el dueño, así el storefront los
+      // muestra en ese orden). No hay UI de reordenar manualmente, ver
+      // CLAUDE.md.
+      const ordenesExistentes = asignados.filter((a) => selected.has(a.modifierGroupId)).map((a) => a.orden);
+      let siguienteOrden = ordenesExistentes.length > 0 ? Math.max(...ordenesExistentes) + 1 : 0;
+      const toAssign = allGroups
+        .filter((g) => selected.has(g.id) && !asignadoIds.has(g.id))
+        .map((g) => ({ modifierGroupId: g.id, orden: siguienteOrden++ }));
+
+      await onSave(toAssign, toUnassign);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo asignar el modificador");
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar la selección de modificadores");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Card>
-      <form onSubmit={handleSubmit} className="flex items-end gap-3">
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Grupo de modificadores
-          <select value={modifierGroupId} onChange={(e) => setModifierGroupId(e.target.value)} className="admin-input">
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex w-28 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Orden (opcional)
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={orden}
-            onChange={(e) => setOrden(e.target.value)}
-            placeholder="0"
-            className="admin-input"
-          />
-        </label>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Asignando..." : "Asignar"}
+    <Card className="flex flex-col gap-3">
+      <ul className="flex flex-col divide-y divide-admin-border">
+        {allGroups.map((group) => (
+          <li key={group.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+            <label className="flex flex-1 items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.has(group.id)}
+                onChange={() => toggle(group.id)}
+                disabled={!canWrite}
+                className="h-4 w-4"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="font-semibold text-admin-ink">{group.nombre}</span>
+                <span className="text-xs text-admin-ink-soft">
+                  {group.opciones.length} {group.opciones.length === 1 ? "opción" : "opciones"}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {canWrite && (
+        <Button onClick={handleSave} disabled={!dirty || submitting} className="self-start">
+          {submitting ? "Guardando..." : "Guardar selección"}
         </Button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
+      )}
     </Card>
   );
 }
