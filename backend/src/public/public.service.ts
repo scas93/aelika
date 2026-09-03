@@ -183,6 +183,7 @@ export class PublicService {
       where: { slug },
       select: {
         id: true,
+        nombre: true,
         horarioAtencion: true,
         facturacionModo: true,
         stripeAccountId: true,
@@ -385,6 +386,7 @@ export class PublicService {
                         create: modificadores.map((m) => ({
                           tenantId: tenant.id,
                           modifierOptionId: m.modifierOptionId,
+                          nombreGrupo: m.nombreGrupo,
                           nombre: m.nombre,
                           precioAdicional: m.precioAdicional,
                         })),
@@ -397,7 +399,7 @@ export class PublicService {
         include: {
           items: {
             include: {
-              modificadores: { select: { nombre: true, precioAdicional: true } },
+              modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } },
             },
           },
         },
@@ -415,7 +417,7 @@ export class PublicService {
       evento: NotificacionEvento.PEDIDO_RECIBIDO,
       mensaje: {
         asunto: `Nuevo pedido #${order.folio}`,
-        texto: `Nuevo pedido #${order.folio} de ${order.clienteNombre} — total $${Number(order.total).toFixed(2)}`,
+        texto: this.construirReciboPedidoRecibido(tenant.nombre, order),
       },
     });
 
@@ -457,6 +459,81 @@ export class PublicService {
     }
 
     return order;
+  }
+
+  /**
+   * Texto del mensaje de Telegram para "Pedido recibido" — recibo detallado:
+   * cliente/teléfono, hora de recogida (solo si HORA_ESPECIFICA — omitida
+   * por completo si LO_ANTES_POSIBLE, no se inventa un estimado), cada línea
+   * con sus modificadores como "Grupo: Opción", y el total real del pedido.
+   *
+   * El subtotal de cada línea es (precioUnitario + suma de precioAdicional
+   * de sus modificadores) × cantidad — mismo criterio que usa el cálculo real
+   * de Order.total para el subtotal + modifiersExtraTotal (ver createOrder).
+   * Si el pedido tiene descuentoTotal > 0 (combo o descuento por producto),
+   * se agrega una línea "Descuento: -$X" entre las líneas de producto y el
+   * TOTAL — el descuento se aplica de forma global (combos no corresponden
+   * 1:1 a una línea), así que no se reparte por línea, solo se muestra el
+   * monto total descontado. Con esa línea, suma de subtotales de línea menos
+   * el descuento sí cuadra con el TOTAL.
+   */
+  private construirReciboPedidoRecibido(
+    tenantNombre: string,
+    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+  ): string {
+    const lineas: string[] = [
+      `NUEVO PEDIDO - ${tenantNombre}`,
+      '------------------------------',
+      `Cliente: ${order.clienteNombre}`,
+      `Telefono: ${order.clienteTelefono}`,
+    ];
+
+    if (order.horaRecogidaTipo === HoraRecogidaTipo.HORA_ESPECIFICA && order.horaRecogida) {
+      lineas.push(`Llega en: ${order.horaRecogida}`);
+    }
+
+    lineas.push('');
+
+    order.items.forEach((item, index) => {
+      const extraPorUnidad = item.modificadores.reduce((sum, m) => sum + Number(m.precioAdicional), 0);
+      const subtotalLinea = round2((Number(item.precioUnitario) + extraPorUnidad) * item.cantidad);
+
+      lineas.push(
+        `${item.cantidad}x ${item.nombreProducto} - $${Number(item.precioUnitario).toFixed(2)} c/u = $${subtotalLinea.toFixed(2)}`,
+      );
+      for (const modificador of item.modificadores) {
+        lineas.push(`   ${modificador.nombreGrupo}: ${modificador.nombre}`);
+      }
+
+      if (index < order.items.length - 1) {
+        lineas.push('');
+      }
+    });
+
+    lineas.push('');
+    if (Number(order.descuentoTotal) > 0) {
+      lineas.push(`Descuento: -$${Number(order.descuentoTotal).toFixed(2)}`);
+    }
+    lineas.push('------------------------------', `TOTAL: $${Number(order.total).toFixed(2)} MXN`, '', `Recibido: ${this.formatearFechaRecibo(order.createdAt)}`);
+
+    return lineas.join('\n');
+  }
+
+  // DD/MM/YYYY HH:mm en la zona horaria de los pilotos (ver TIMEZONE en
+  // common/horario.ts) — vía Intl/tzdata, nunca aritmética manual de offset.
+  private formatearFechaRecibo(fecha: Date): string {
+    const formatter = new Intl.DateTimeFormat('es-MX', {
+      timeZone: 'America/Mexico_City',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const partes = formatter.formatToParts(fecha);
+    const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+    return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
   }
 
   /**
@@ -561,7 +638,7 @@ export class PublicService {
     productIds: string[],
     items: CreatePublicOrderDto['items'],
   ): Promise<{
-    modificadoresPorItem: { modifierOptionId: string; nombre: string; precioAdicional: number }[][];
+    modificadoresPorItem: { modifierOptionId: string; nombreGrupo: string; nombre: string; precioAdicional: number }[][];
     modifiersExtraTotal: number;
   }> {
     const asignaciones = await this.prisma.productModifierGroup.findMany({
@@ -584,7 +661,7 @@ export class PublicService {
       gruposPorProducto.set(asignacion.productId, lista);
     }
 
-    const modificadoresPorItem: { modifierOptionId: string; nombre: string; precioAdicional: number }[][] = [];
+    const modificadoresPorItem: { modifierOptionId: string; nombreGrupo: string; nombre: string; precioAdicional: number }[][] = [];
     let modifiersExtraTotal = 0;
 
     for (const item of items) {
@@ -629,9 +706,10 @@ export class PublicService {
       }
 
       const snapshots = optionIds.map((optionId) => {
-        const { opcion } = optionIndex.get(optionId)!;
+        const { grupo, opcion } = optionIndex.get(optionId)!;
         return {
           modifierOptionId: opcion.id,
+          nombreGrupo: grupo.nombre,
           nombre: opcion.nombre,
           precioAdicional: Number(opcion.precioAdicional),
         };

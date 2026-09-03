@@ -598,6 +598,14 @@ model OrderItemModifier {
   tenantId         String
   orderItemId      String
   modifierOptionId String?
+  // Nombre del ModifierGroup al que pertenecía la opción (ej. "Leche",
+  // "Tamaño") — snapshoteado por separado de `nombre` (el de la opción, ej.
+  // "Entera") para poder armar etiquetas tipo "Leche: Entera" en recibos/
+  // notificaciones sin tener que resolver el grupo desde modifierOptionId
+  // (nullable, se pierde si se borra la opción). Nullable y sin backfill a
+  // propósito: solo se llena hacia adelante — pedidos creados antes de este
+  // campo se quedan en null, es un dato que no se puede reconstruir después.
+  nombreGrupo      String?
   nombre           String
   precioAdicional  Decimal @db.Decimal(10, 2)
 
