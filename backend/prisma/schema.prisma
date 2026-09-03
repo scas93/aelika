@@ -392,6 +392,14 @@ model Order {
   folio                 String
   clienteNombre         String
   clienteTelefono       String
+  // Correo general del cliente, opcional — distinto de facturaCorreo (que
+  // solo existe si el tenant tiene facturación activa y el cliente la pidió
+  // para ESE pedido). Este es el campo de correo "de siempre", capturado en
+  // el paso "datos" del checkout junto a nombre/teléfono, sin depender de
+  // facturación — pensado como destinatario principal de las notificaciones
+  // de audiencia Cliente (ver OrdersService.avanzar). facturaCorreo queda
+  // como respaldo para pedidos que sí tengan ese dato pero no este.
+  clienteCorreo         String?
   notas                 String?
   horaRecogidaTipo      HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
   // "HH:mm", same-day only (no date picker yet). Only set when

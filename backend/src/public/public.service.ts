@@ -349,6 +349,7 @@ export class PublicService {
           folio,
           clienteNombre: dto.clienteNombre,
           clienteTelefono: dto.clienteTelefono,
+          clienteCorreo: dto.clienteCorreo,
           notas: dto.notas,
           horaRecogidaTipo,
           horaRecogida,

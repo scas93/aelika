@@ -32,6 +32,13 @@ export class CreatePublicOrderDto {
   @MaxLength(20)
   clienteTelefono: string;
 
+  // Correo general del cliente — opcional, independiente de facturación (ver
+  // facturaCorreo más abajo). Destinatario principal de las notificaciones
+  // de audiencia Cliente, ver OrdersService.avanzar.
+  @IsOptional()
+  @IsEmail()
+  clienteCorreo?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)

@@ -172,7 +172,7 @@ function EventoRow({
           <span className="text-sm font-semibold text-admin-ink">{EVENTO_LABEL[def.evento]}</span>
           {def.audiencia === "CLIENTE" && (
             <span className="text-xs text-admin-ink-soft">
-              Depende de que el pedido tenga correo de facturación capturado.
+              Depende de que el cliente haya dejado su correo al hacer el pedido.
             </span>
           )}
         </div>
@@ -200,8 +200,9 @@ function EventoRow({
 
       {def.audiencia === "CLIENTE" && (
         <p className="rounded-[var(--radius-admin-control)] bg-admin-bg px-3 py-2 text-xs text-admin-ink-soft">
-          Este aviso se manda por correo al correo de facturación que el cliente capturó en su pedido. Si tu negocio
-          tiene la facturación desactivada, tus clientes no van a recibir este aviso en la práctica.
+          Este aviso se manda por correo al que el cliente escribió al hacer su pedido (el campo de correo en el
+          checkout es opcional) — si no lo dejó, no le llega. Si tu negocio pide factura, también se usa el correo de
+          facturación cuando falte el otro.
         </p>
       )}
 

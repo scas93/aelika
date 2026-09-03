@@ -238,12 +238,13 @@ export class OrdersService {
     if (evento) {
       // Best-effort a propósito (ver NotificacionesQueueService.encolarSeguro)
       // — nunca debe bloquear ni tumbar el avance del pedido. destinatarioCliente
-      // viene de Order.facturaCorreo: es el único campo de correo del cliente
-      // que existe hoy en el modelo, y solo está presente cuando el tenant
-      // pide factura (Tenant.facturacionModo != DESACTIVADO) y el cliente la
-      // solicitó — hallazgo reportado en CLAUDE.md, no resuelto aquí. Si no
-      // hay correo, el worker omite la fila de audiencia CLIENTE con un log
-      // claro (ver NotificacionesProcessor), no falla el job por eso.
+      // prioriza Order.clienteCorreo (correo general, capturado en el paso
+      // "datos" del checkout, independiente de facturación) y cae a
+      // Order.facturaCorreo como respaldo — pedidos creados antes de que
+      // existiera clienteCorreo, o casos raros donde el cliente solo llenó el
+      // correo de facturación. Si ninguno de los dos existe, el worker omite
+      // la fila de audiencia CLIENTE con un log claro (ver
+      // NotificacionesProcessor), no falla el job por eso.
       void this.notificacionesQueueService.encolarSeguro({
         tenantId: actualizado.tenantId,
         evento,
@@ -251,7 +252,7 @@ export class OrdersService {
           asunto: `Tu pedido #${actualizado.folio} — actualización`,
           texto: `Tu pedido #${actualizado.folio} cambió de estatus: ${evento}.`,
         },
-        destinatarioCliente: actualizado.facturaCorreo ?? undefined,
+        destinatarioCliente: actualizado.clienteCorreo ?? actualizado.facturaCorreo ?? undefined,
       });
     }
 

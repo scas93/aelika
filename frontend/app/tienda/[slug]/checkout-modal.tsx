@@ -115,6 +115,11 @@ export default function CheckoutModal({
   // "datos"
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteTelefono, setClienteTelefono] = useState("");
+  // Opcional — a diferencia de facturaCorreo (paso "pago", solo si el
+  // tenant tiene facturación activa), este es el correo general, capturado
+  // siempre en este paso, independiente de facturación. No participa en
+  // canContinueDatos: dejarlo vacío no bloquea el checkout.
+  const [clienteCorreo, setClienteCorreo] = useState("");
   const [notas, setNotas] = useState("");
 
   // "pago"
@@ -246,6 +251,7 @@ export default function CheckoutModal({
       const created = await createPublicOrder(slug, {
         clienteNombre,
         clienteTelefono,
+        clienteCorreo: clienteCorreo.trim() || undefined,
         notas: notas.trim() || undefined,
         // horaRecogidaTipo is always HORA_ESPECIFICA now — LO_ANTES_POSIBLE
         // isn't offered as its own UI option anymore ("En 15 min o menos"
@@ -591,6 +597,19 @@ export default function CheckoutModal({
                   placeholder="55 1234 5678"
                   className="input"
                 />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                Correo (opcional)
+                <input
+                  type="email"
+                  value={clienteCorreo}
+                  onChange={(e) => setClienteCorreo(e.target.value)}
+                  placeholder="tucorreo@ejemplo.com"
+                  className="input"
+                />
+                <span className="text-xs font-normal text-black/50 dark:text-white/50">
+                  Para avisarte cuando tu pedido cambie de estatus.
+                </span>
               </label>
               <label className="flex flex-col gap-1.5 text-sm font-medium">
                 Notas (opcional)

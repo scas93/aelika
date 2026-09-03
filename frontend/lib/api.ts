@@ -317,6 +317,10 @@ export interface PublicPuntoEnvio {
 export interface CreatePublicOrderPayload {
   clienteNombre: string;
   clienteTelefono: string;
+  // Correo general del cliente — opcional, independiente de facturación
+  // (distinto de facturaCorreo más abajo). Ver checkout-modal.tsx, paso
+  // "datos".
+  clienteCorreo?: string;
   notas?: string;
   horaRecogidaTipo?: HoraRecogidaTipo;
   horaRecogida?: string;
@@ -355,6 +359,7 @@ export interface PublicOrder {
   folio: string;
   clienteNombre: string;
   clienteTelefono: string;
+  clienteCorreo: string | null;
   notas: string | null;
   horaRecogidaTipo: HoraRecogidaTipo;
   horaRecogida: string | null;
