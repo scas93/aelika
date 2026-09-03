@@ -18,6 +18,7 @@ import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PedidosB2bModule } from './pedidos-b2b/pedidos-b2b.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PedidosB2bModule } from './pedidos-b2b/pedidos-b2b.module';
     WebhooksModule,
     PaymentsModule,
     PedidosB2bModule,
+    NotificacionesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

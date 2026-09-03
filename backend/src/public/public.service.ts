@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
+import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
@@ -11,6 +12,7 @@ import {
   HoraRecogidaTipo,
   MetodoEntrega,
   MetodoPago,
+  NotificacionEvento,
   Prisma,
   PromotionTipo,
   TipoSeleccion,
@@ -46,6 +48,7 @@ export class PublicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
+    private readonly notificacionesQueueService: NotificacionesQueueService,
   ) {}
 
   async getTenantInfo(slug: string) {
@@ -399,6 +402,21 @@ export class PublicService {
           },
         },
       });
+    });
+
+    // "Pedido recibido" (audiencia NEGOCIO) — se encola apenas el pedido
+    // existe, sin importar el método de pago (aplica igual a TARJETA que
+    // sigue PENDIENTE unas líneas más abajo). Best-effort a propósito (ver
+    // NotificacionesQueueService.encolarSeguro): jamás debe bloquear ni
+    // tumbar la creación del pedido si Redis está caído — por eso no se le
+    // hace `await` aquí, solo se dispara.
+    void this.notificacionesQueueService.encolarSeguro({
+      tenantId: tenant.id,
+      evento: NotificacionEvento.PEDIDO_RECIBIDO,
+      mensaje: {
+        asunto: `Nuevo pedido #${order.folio}`,
+        texto: `Nuevo pedido #${order.folio} de ${order.clienteNombre} — total $${Number(order.total).toFixed(2)}`,
+      },
     });
 
     // TARJETA: the order already exists (folio assigned, PENDIENTE) — now

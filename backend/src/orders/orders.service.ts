@@ -8,10 +8,12 @@ import Stripe from 'stripe';
 import { Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { StripeService } from '../stripe/stripe.service';
+import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
 import {
   EstadoPago,
   EstadoPedido,
   MetodoPago,
+  NotificacionEvento,
 } from '../../generated/prisma/enums';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
@@ -28,11 +30,24 @@ const SIGUIENTE_ESTADO: Record<EstadoPedido, EstadoPedido | null> = {
   [EstadoPedido.DESPACHADO]: null,
 };
 
+// Evento de notificación (audiencia CLIENTE) disparado por cada transición
+// de avanzar() — solo las 3 que le importan al cliente final; la primera
+// transición (PENDIENTE_CONFIRMACION -> CONFIRMADO_SURTIENDO ya cubierta
+// abajo) no tiene un paso "anterior" que notificar aquí porque "pedido
+// recibido" (audiencia NEGOCIO) se dispara en la creación, no en avanzar()
+// — ver PublicService.createOrder.
+const EVENTO_POR_ESTADO: Partial<Record<EstadoPedido, NotificacionEvento>> = {
+  [EstadoPedido.CONFIRMADO_SURTIENDO]: NotificacionEvento.PEDIDO_CONFIRMADO,
+  [EstadoPedido.LISTO_ENTREGA]: NotificacionEvento.PEDIDO_EN_CAMINO,
+  [EstadoPedido.DESPACHADO]: NotificacionEvento.PEDIDO_ENTREGADO,
+};
+
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly stripeService: StripeService,
+    private readonly notificacionesQueueService: NotificacionesQueueService,
   ) {}
 
   findAll(query: ListOrdersQueryDto) {
@@ -213,11 +228,34 @@ export class OrdersService {
       throw new ConflictException('Este pedido ya está despachado');
     }
 
-    return this.tenantPrisma.client.order.update({
+    const actualizado = await this.tenantPrisma.client.order.update({
       where: { id },
       data: { estadoPedido: siguiente },
       include: { items: true },
     });
+
+    const evento = EVENTO_POR_ESTADO[siguiente];
+    if (evento) {
+      // Best-effort a propósito (ver NotificacionesQueueService.encolarSeguro)
+      // — nunca debe bloquear ni tumbar el avance del pedido. destinatarioCliente
+      // viene de Order.facturaCorreo: es el único campo de correo del cliente
+      // que existe hoy en el modelo, y solo está presente cuando el tenant
+      // pide factura (Tenant.facturacionModo != DESACTIVADO) y el cliente la
+      // solicitó — hallazgo reportado en CLAUDE.md, no resuelto aquí. Si no
+      // hay correo, el worker omite la fila de audiencia CLIENTE con un log
+      // claro (ver NotificacionesProcessor), no falla el job por eso.
+      void this.notificacionesQueueService.encolarSeguro({
+        tenantId: actualizado.tenantId,
+        evento,
+        mensaje: {
+          asunto: `Tu pedido #${actualizado.folio} — actualización`,
+          texto: `Tu pedido #${actualizado.folio} cambió de estatus: ${evento}.`,
+        },
+        destinatarioCliente: actualizado.facturaCorreo ?? undefined,
+      });
+    }
+
+    return actualizado;
   }
 
   /**

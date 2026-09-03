@@ -6,7 +6,8 @@ import type Stripe from 'stripe';
 import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
-import { EstadoPago } from '../../generated/prisma/client';
+import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { EstadoPago, NotificacionEvento } from '../../generated/prisma/client';
 
 // Capability-status events for both configurations we request on account
 // creation (see TenantService.createOrContinueStripeAccount) — card_payments
@@ -27,6 +28,7 @@ export class StripeWebhookController {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
+    private readonly notificacionesQueueService: NotificacionesQueueService,
   ) {}
 
   private readonly logger = new Logger(StripeWebhookController.name);
@@ -109,6 +111,41 @@ export class StripeWebhookController {
     } catch (error) {
       this.logger.error(
         `No se pudo crear el registro de Payment para PaymentIntent ${paymentIntent.id}: ${(error as Error).message}`,
+      );
+    }
+
+    if (estadoPago === EstadoPago.PAGADO) {
+      await this.encolarPagoConfirmado(paymentIntent);
+    }
+  }
+
+  /**
+   * "Pago confirmado" (audiencia NEGOCIO) — solo para pedidos TARJETA, es el
+   * único metodoPago cuyo estadoPago pasa por este webhook (EFECTIVO/
+   * TRANSFERENCIA nacen PAGADO, nunca disparan este evento). Best-effort a
+   * propósito (ver NotificacionesQueueService.encolarSeguro): nunca debe
+   * afectar la respuesta 200 que Stripe espera de este webhook, ni la
+   * actualización de Order/Payment de arriba.
+   */
+  private async encolarPagoConfirmado(paymentIntent: Stripe.PaymentIntent) {
+    try {
+      const order = await this.prisma.order.findFirst({
+        where: { stripePaymentIntentId: paymentIntent.id },
+        select: { tenantId: true, folio: true, total: true },
+      });
+      if (!order) return;
+
+      void this.notificacionesQueueService.encolarSeguro({
+        tenantId: order.tenantId,
+        evento: NotificacionEvento.PAGO_CONFIRMADO,
+        mensaje: {
+          asunto: `Pago confirmado — pedido #${order.folio}`,
+          texto: `Se confirmó el pago del pedido #${order.folio} por $${Number(order.total).toFixed(2)}.`,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo encolar "pago confirmado" para PaymentIntent ${paymentIntent.id}: ${(error as Error).message}`,
       );
     }
   }

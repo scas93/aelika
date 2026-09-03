@@ -106,6 +106,12 @@ export class TenantPrismaService {
           pedidoB2bCodigoDescuento: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          notificacionCanalConfig: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          notificacionEventoConfig: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

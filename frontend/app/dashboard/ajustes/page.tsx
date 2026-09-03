@@ -16,6 +16,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
   "/dashboard/ajustes/pedidos-b2b": "Rango semanal en el que aceptas pedidos de mayoreo",
   "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
+  "/dashboard/ajustes/notificaciones": "Avisos por Telegram y correo cuando algo pasa con un pedido",
 };
 
 interface Grupo {
@@ -30,6 +31,7 @@ const GRUPOS: Grupo[] = [
     hrefs: ["/dashboard/ajustes/facturacion", "/dashboard/ajustes/pagos", "/dashboard/ajustes/bot"],
   },
   { titulo: "Envíos", hrefs: ["/dashboard/ajustes/envios"] },
+  { titulo: "Notificaciones", hrefs: ["/dashboard/ajustes/notificaciones"] },
 ];
 
 // Solo se agrega si el tenant es RETAIL_B2B — mismo gate que ya usaba la

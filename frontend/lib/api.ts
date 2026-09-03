@@ -530,6 +530,62 @@ export interface UpdatePuntoEnvioPayload {
   activo?: boolean;
 }
 
+// --- Notificaciones (/dashboard/ajustes/notificaciones) ---
+
+export type NotificacionCanalTipo = "TELEGRAM" | "CORREO";
+export type NotificacionEvento =
+  | "PEDIDO_RECIBIDO"
+  | "PEDIDO_CONFIRMADO"
+  | "PEDIDO_EN_CAMINO"
+  | "PEDIDO_ENTREGADO"
+  | "PAGO_CONFIRMADO";
+export type NotificacionAudiencia = "CLIENTE" | "NEGOCIO";
+
+// `config` shape depende de `tipo` — ver comentario en schema.prisma:
+//   TELEGRAM -> { chatId: string } (lo captura el webhook de conexión)
+//   CORREO   -> { nombreRemitente: string, correoDestino?: string }
+export interface NotificacionCanalConfig {
+  id: string;
+  tenantId: string;
+  tipo: NotificacionCanalTipo;
+  activo: boolean;
+  conectado: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface NotificacionEventoConfig {
+  id: string;
+  tenantId: string;
+  evento: NotificacionEvento;
+  audiencia: NotificacionAudiencia;
+  canalConfigId: string;
+  activo: boolean;
+  canalConfig: NotificacionCanalConfig;
+}
+
+export interface CreateNotificacionCanalConfigPayload {
+  tipo: NotificacionCanalTipo;
+  config: Record<string, unknown>;
+  activo?: boolean;
+}
+
+export interface UpdateNotificacionCanalConfigPayload {
+  config?: Record<string, unknown>;
+  activo?: boolean;
+}
+
+export interface CreateNotificacionEventoConfigPayload {
+  evento: NotificacionEvento;
+  audiencia: NotificacionAudiencia;
+  canalConfigId: string;
+  activo?: boolean;
+}
+
+export interface UpdateNotificacionEventoConfigPayload {
+  activo?: boolean;
+  canalConfigId?: string;
+}
+
 // --- Códigos de descuento B2B (/dashboard/ajustes/codigos-descuento) ---
 // usosActuales es derivado por el backend (conteo de PedidoB2b vinculados,
 // incluyendo cancelados) en cada GET — nunca se manda al crear/editar, solo
@@ -978,6 +1034,67 @@ export function updatePuntoEnvio(token: string, id: string, payload: UpdatePunto
 export function deletePuntoEnvio(token: string, id: string) {
   return request<void>(`/puntos-envio/${id}`, {
     method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchNotificacionCanales(token: string) {
+  return request<NotificacionCanalConfig[]>("/notificaciones/canales", { headers: authHeaders(token) });
+}
+
+export function createNotificacionCanal(token: string, payload: CreateNotificacionCanalConfigPayload) {
+  return request<NotificacionCanalConfig>("/notificaciones/canales", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateNotificacionCanal(token: string, id: string, payload: UpdateNotificacionCanalConfigPayload) {
+  return request<NotificacionCanalConfig>(`/notificaciones/canales/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteNotificacionCanal(token: string, id: string) {
+  return request<void>(`/notificaciones/canales/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchNotificacionEventos(token: string) {
+  return request<NotificacionEventoConfig[]>("/notificaciones/eventos", { headers: authHeaders(token) });
+}
+
+export function createNotificacionEvento(token: string, payload: CreateNotificacionEventoConfigPayload) {
+  return request<NotificacionEventoConfig>("/notificaciones/eventos", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateNotificacionEvento(token: string, id: string, payload: UpdateNotificacionEventoConfigPayload) {
+  return request<NotificacionEventoConfig>(`/notificaciones/eventos/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteNotificacionEvento(token: string, id: string) {
+  return request<void>(`/notificaciones/eventos/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function conectarTelegram(token: string) {
+  return request<{ url: string }>("/notificaciones/telegram/conectar", {
+    method: "POST",
     headers: authHeaders(token),
   });
 }

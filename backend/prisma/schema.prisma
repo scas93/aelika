@@ -125,6 +125,8 @@ model Tenant {
   pedidoB2bItems            PedidoB2bItem[]
   pedidoB2bItemsDia         PedidoB2bItemDia[]
   pedidoB2bCodigosDescuento PedidoB2bCodigoDescuento[]
+  notificacionCanalConfigs  NotificacionCanalConfig[]
+  notificacionEventoConfigs NotificacionEventoConfig[]
 
   @@map("tenants")
 }
@@ -274,6 +276,114 @@ model PuntoEnvio {
 
   @@index([tenantId])
   @@map("puntos_envio")
+}
+
+// ---------------------------------------------------------------------------
+// Notificaciones (Fase A: solo modelo de datos + cola base — ver CLAUDE.md.
+// Ningún trigger del ciclo de vida del pedido está enganchado todavía; estos
+// modelos solo describen QUÉ debería notificarse y POR DÓNDE, sin que nada
+// los lea aún).
+// ---------------------------------------------------------------------------
+
+// WhatsApp queda fuera de alcance por ahora (el envío al cliente final vía
+// WhatsApp ya lo cubre el bot de Botpress) — este canal es para el resto de
+// notificaciones (al negocio, o al cliente por otra vía).
+enum NotificacionCanalTipo {
+  TELEGRAM
+  SMS
+  CORREO
+}
+
+// Lista extensible a propósito (mismo principio que TipoStorefront arriba)
+// — agregar un evento nuevo es solo extender el enum. Fase D enganchó los 5
+// triggers reales (ver OrdersService.avanzar, PublicService.createOrder,
+// StripeWebhookController): PEDIDO_EN_CAMINO dispara en la transición a
+// LISTO_ENTREGA (nombre pensado para el cliente final, no calca
+// EstadoPedido) y PEDIDO_ENTREGADO en la transición a DESPACHADO.
+enum NotificacionEvento {
+  PEDIDO_RECIBIDO
+  PEDIDO_CONFIRMADO
+  PEDIDO_EN_CAMINO
+  PEDIDO_ENTREGADO
+  PAGO_CONFIRMADO
+}
+
+enum NotificacionAudiencia {
+  CLIENTE
+  NEGOCIO
+}
+
+// Un canal de envío configurado por el tenant (uno por NotificacionCanalTipo,
+// ver @@unique abajo) — sigue el patrón de PuntoEnvio (colección tenant-owned
+// con su propio ciclo de vida CRUD), no campos sueltos en Tenant, porque cada
+// canal trae su propia credencial/config y puede prenderse o apagarse por
+// separado.
+model NotificacionCanalConfig {
+  id        String                @id @default(uuid())
+  tenantId  String
+  tipo      NotificacionCanalTipo
+  activo    Boolean               @default(true)
+  // Distinto de `activo` (intención del tenant de usar el canal, Fase E) —
+  // `conectado` es si el canal ya tiene lo necesario para enviar de verdad.
+  // Solo TELEGRAM lo usa por ahora: false hasta que TelegramConexionService
+  // captura el chatId real vía el webhook de /start (ver
+  // backend/src/notificaciones/telegram/). CORREO no necesita "conectarse"
+  // (el tenant solo escribe un nombre de remitente), así que se queda en
+  // false para ese canal sin significado especial todavía.
+  conectado Boolean               @default(false)
+  // Shape depende de `tipo` (validado en la capa de aplicación, no por
+  // Postgres — mismo principio que Promotion.config):
+  //   TELEGRAM -> { chatId: string } — chatId lo captura el webhook de
+  //               conexión, nunca lo escribe el tenant a mano. Usado tanto
+  //               para enviar (NotificacionesProcessor lo resuelve como
+  //               destinatario de la audiencia NEGOCIO) como remitente.
+  //   SMS      -> { numeroVerificado: string }
+  //   CORREO   -> { nombreRemitente: string, correoDestino?: string } —
+  //               nombreRemitente es la identidad con la que el negocio le
+  //               escribe A SUS CLIENTES (usado como "from" sobre el
+  //               dominio fijo de Aelika, ver CorreoProvider);
+  //               correoDestino es distinto: el correo AL QUE le llegan al
+  //               negocio los avisos de audiencia NEGOCIO (ej. "pago
+  //               confirmado"). Captura de correoDestino en el dashboard es
+  //               Fase E — el modelo ya lo soporta desde Fase D.
+  config    Json
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  tenant  Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  eventos NotificacionEventoConfig[]
+
+  @@unique([tenantId, tipo])
+  @@index([tenantId])
+  @@map("notificacion_canal_configs")
+}
+
+// Un evento del ciclo de vida del pedido (PEDIDO_RECIBIDO/CONFIRMADO) puede
+// tener varias filas — una por cada combinación audiencia+canal a la que
+// debe avisar (ej. "pedido recibido" -> NEGOCIO por Telegram Y por correo al
+// mismo tiempo), así que NO hay un único canal por evento+audiencia, sino
+// N filas con @@unique evitando solo el duplicado exacto.
+model NotificacionEventoConfig {
+  id            String                @id @default(uuid())
+  tenantId      String
+  evento        NotificacionEvento
+  audiencia     NotificacionAudiencia
+  canalConfigId String
+  activo        Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Cascade (a diferencia de Order -> PuntoEnvio, que es Restrict): esta fila
+  // no tiene ningún valor histórico/snapshot por sí misma — es pura config,
+  // así que borrar el canal que referencia simplemente deja de notificar por
+  // ahí en vez de necesitar bloquear el borrado.
+  canalConfig NotificacionCanalConfig @relation(fields: [canalConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, evento, audiencia, canalConfigId])
+  @@index([tenantId])
+  @@index([canalConfigId])
+  @@map("notificacion_evento_configs")
 }
 
 model Order {
