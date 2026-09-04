@@ -42,6 +42,21 @@ const EVENTO_POR_ESTADO: Partial<Record<EstadoPedido, NotificacionEvento>> = {
   [EstadoPedido.DESPACHADO]: NotificacionEvento.PEDIDO_ENTREGADO,
 };
 
+// Título/subtítulo amigables por evento para el correo HTML — ver
+// construirCorreoHtmlPedido. subtitulo es opcional (solo PEDIDO_CONFIRMADO
+// trae uno en el diseño validado); si falta, esa línea simplemente no se
+// renderiza.
+const EVENTO_TITULO: Record<NotificacionEvento, { titulo: string; subtitulo?: string }> = {
+  [NotificacionEvento.PEDIDO_RECIBIDO]: { titulo: 'Pedido recibido' }, // no se usa aquí (audiencia NEGOCIO, ver PublicService)
+  [NotificacionEvento.PAGO_CONFIRMADO]: { titulo: 'Pago confirmado' }, // no se usa aquí (audiencia NEGOCIO, ver StripeWebhookController)
+  [NotificacionEvento.PEDIDO_CONFIRMADO]: {
+    titulo: '🎉 ¡Tu pedido fue confirmado!',
+    subtitulo: 'Ya lo estamos preparando',
+  },
+  [NotificacionEvento.PEDIDO_EN_CAMINO]: { titulo: '🚚 Tu pedido va en camino' },
+  [NotificacionEvento.PEDIDO_ENTREGADO]: { titulo: '✅ Tu pedido fue entregado' },
+};
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -231,7 +246,13 @@ export class OrdersService {
     const actualizado = await this.tenantPrisma.client.order.update({
       where: { id },
       data: { estadoPedido: siguiente },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } },
+          },
+        },
+      },
     });
 
     const evento = EVENTO_POR_ESTADO[siguiente];
@@ -245,18 +266,149 @@ export class OrdersService {
       // correo de facturación. Si ninguno de los dos existe, el worker omite
       // la fila de audiencia CLIENTE con un log claro (ver
       // NotificacionesProcessor), no falla el job por eso.
+      //
+      // nombreTenant: consulta extra (Tenant.findUnique) no evitable — este
+      // service no tenía el nombre del negocio a la mano. Se prefirió sobre
+      // NotificacionCanalConfig.nombreRemitente (lo que usa CorreoProvider
+      // como remitente real) porque qué canal/config termina usándose se
+      // resuelve después, dentro de NotificacionesProcessor — adivinarlo aquí
+      // podría no coincidir con el canal real que se dispare.
+      const tenant = await this.tenantPrisma.client.tenant.findUnique({
+        where: { id: actualizado.tenantId },
+        select: { nombre: true },
+      });
+
       void this.notificacionesQueueService.encolarSeguro({
         tenantId: actualizado.tenantId,
         evento,
         mensaje: {
           asunto: `Tu pedido #${actualizado.folio} — actualización`,
           texto: `Tu pedido #${actualizado.folio} cambió de estatus: ${evento}.`,
+          html: this.construirCorreoHtmlPedido(tenant?.nombre ?? 'Aelika', actualizado, evento),
         },
         destinatarioCliente: actualizado.clienteCorreo ?? actualizado.facturaCorreo ?? undefined,
       });
     }
 
     return actualizado;
+  }
+
+  /**
+   * HTML del correo para los 3 eventos de estatus (audiencia Cliente) —
+   * mismo nivel de detalle que PublicService.construirReciboPedidoRecibido
+   * (Telegram, "Pedido recibido"), pero reconstruido aquí a propósito: ese
+   * método vive donde se crea el pedido, este vive donde se avanza de
+   * estatus — datos disponibles y forma del mensaje son distintos (HTML vs
+   * texto plano de Telegram), así que no valía la pena forzar un helper
+   * compartido para tres líneas de lógica que ya difieren en formato.
+   *
+   * Estilos inline a propósito — sin librería de plantillas (no hay
+   * React Email/MJML en el proyecto, ver CLAUDE.md): es el estándar para
+   * correos transaccionales, mejor compatibilidad entre clientes de correo
+   * que agregar una dependencia nueva para una sola plantilla.
+   */
+  private construirCorreoHtmlPedido(
+    tenantNombre: string,
+    order: Prisma.OrderGetPayload<{
+      include: {
+        items: {
+          include: { modificadores: { select: { nombreGrupo: true; nombre: true; precioAdicional: true } } };
+        };
+      };
+    }>,
+    evento: NotificacionEvento,
+  ): string {
+    const { titulo, subtitulo } = EVENTO_TITULO[evento];
+
+    const filasProductos = order.items
+      .map((item) => {
+        const extraPorUnidad = item.modificadores.reduce((sum, m) => sum + Number(m.precioAdicional), 0);
+        const subtotalLinea = (Number(item.precioUnitario) + extraPorUnidad) * item.cantidad;
+        const modificadoresTexto =
+          item.modificadores.length > 0
+            ? item.modificadores.map((m) => `${m.nombreGrupo}: ${m.nombre}`).join(' · ')
+            : 'Sin modificadores';
+
+        return `
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    ${item.cantidad}x ${item.nombreProducto}
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $${subtotalLinea.toFixed(2)}
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">${modificadoresTexto}</div>
+            </td>
+          </tr>`;
+      })
+      .join('');
+
+    const filaDescuento =
+      Number(order.descuentoTotal) > 0
+        ? `<tr>
+             <td style="padding:6px 0;font-size:14px;color:#c0392b;text-align:right;" colspan="2">
+               Descuento: -$${Number(order.descuentoTotal).toFixed(2)}
+             </td>
+           </tr>`
+        : '';
+
+    return `
+<div style="max-width:520px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;background:#ffffff;">
+  <div style="background:#111111;padding:20px 24px;">
+    <span style="color:#ffffff;font-size:16px;font-weight:700;">${tenantNombre}</span>
+  </div>
+
+  <div style="padding:24px;">
+    <p style="font-size:20px;font-weight:700;color:#111111;margin:0 0 4px;">${titulo}</p>
+    ${subtitulo ? `<p style="font-size:14px;color:#666666;margin:0 0 16px;">${subtitulo}</p>` : ''}
+
+    <p style="font-size:13px;color:#666666;margin:16px 0;">
+      Pedido #${order.folio} · ${order.clienteNombre} · ${order.clienteTelefono}
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eeeeee;">
+      ${filasProductos}
+      ${filaDescuento}
+      <tr>
+        <td style="padding:14px 0 4px;font-size:16px;font-weight:700;color:#111111;text-align:right;" colspan="2">
+          TOTAL: $${Number(order.total).toFixed(2)} MXN
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#f5f5f5;border-radius:6px;padding:10px 14px;margin-top:20px;font-size:13px;color:#555555;">
+      Recibido: ${this.formatearFechaRecibo(order.createdAt)}
+    </div>
+  </div>
+
+  <div style="padding:16px 24px;border-top:1px solid #eeeeee;">
+    <span style="font-size:11px;color:#aaaaaa;">Enviado con Aelika</span>
+  </div>
+</div>`;
+  }
+
+  // DD/MM/YYYY HH:mm en la zona horaria de los pilotos — mismo criterio que
+  // PublicService.formatearFechaRecibo (ver CLAUDE.md), duplicado aquí en
+  // vez de extraído a un helper compartido: cada service tiene su propia
+  // copia mínima, mismo patrón ya establecido por ese método.
+  private formatearFechaRecibo(fecha: Date): string {
+    const formatter = new Intl.DateTimeFormat('es-MX', {
+      timeZone: 'America/Mexico_City',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const partes = formatter.formatToParts(fecha);
+    const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+    return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
   }
 
   /**
