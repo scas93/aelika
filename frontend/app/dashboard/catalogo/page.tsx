@@ -8,6 +8,7 @@ import {
   createCategory,
   createProduct,
   deleteCategory,
+  deleteProduct,
   fetchCategories,
   fetchProducts,
   updateCategory,
@@ -391,6 +392,9 @@ function ProductsSection({
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [productPanelOpen, setProductPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -412,6 +416,27 @@ function ProductsSection({
       prev ? prev.map((p) => (p.id === product.id ? { ...p, disponible: !product.disponible } : p)) : prev,
     );
     await updateProduct(token, product.id, { disponible: !product.disponible });
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteProduct(token, deleteTarget.id);
+      setProducts((prev) => (prev ? prev.filter((p) => p.id !== deleteTarget.id) : prev));
+      setDeleteTarget(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteError("Este producto está en una promoción activa. Desactívala primero para poder eliminarlo.");
+      } else if (err instanceof ApiError && err.status === 404) {
+        setDeleteError("No se pudo eliminar el producto.");
+      } else {
+        setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar el producto.");
+      }
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -477,6 +502,9 @@ function ProductsSection({
                           onChange={() => handleToggleDisponible(product)}
                           label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
                         />
+                        <Button variant="danger" size="sm" onClick={() => setDeleteTarget(product)}>
+                          Eliminar
+                        </Button>
                       </>
                     )}
                   </div>
@@ -497,6 +525,35 @@ function ProductsSection({
           await load();
         }}
       />
+
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        title={`¿Eliminar el producto ${deleteTarget?.nombre ?? ""}?`}
+        footer={
+          <>
+            <Button variant="primary" onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-admin-ink-soft">Esta acción no se puede deshacer.</p>
+        {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+      </Modal>
     </section>
   );
 }

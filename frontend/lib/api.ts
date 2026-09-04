@@ -732,6 +732,13 @@ export function updateProduct(token: string, id: string, payload: UpdateProductP
   });
 }
 
+export function deleteProduct(token: string, id: string) {
+  return request<void>(`/products/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
 export function fetchUsers(token: string) {
   return request<TeamUser[]>("/users", { headers: authHeaders(token) });
 }

@@ -44,6 +44,7 @@ export class PromotionsService {
     }
 
     const tipo = dto.tipo ?? (existing.tipo as PromotionTipo);
+    const activa = dto.activa ?? existing.activa;
     let config: DescuentoProductoConfigDto | ComboConfigDto;
 
     if (dto.config) {
@@ -54,9 +55,17 @@ export class PromotionsService {
       throw new BadRequestException('Debes enviar `config` al cambiar el tipo de promoción');
     } else {
       config = existing.config as unknown as DescuentoProductoConfigDto | ComboConfigDto;
+      // `config` didn't come in this PATCH (e.g. a bare `{ activa: true }` to
+      // reactivate), so its productIds were never re-checked above — a
+      // product referenced here could have been deleted while this
+      // promotion sat inactive (Product deletion only blocks *active*
+      // promotions). Re-validate before letting it go active again, so it
+      // never surfaces a dangling productId to the storefront.
+      if (activa) {
+        await this.assertProductsBelongToTenant(this.extractProductIds(tipo, config));
+      }
     }
 
-    const activa = dto.activa ?? existing.activa;
     if (activa) {
       const productIds = this.extractProductIds(tipo, config);
       await this.assertProductsNotInOtherActivePromotion(productIds, id);
