@@ -105,6 +105,14 @@ export default function CheckoutModal({
   // 15 min o menos" already covers that case with a concrete time).
   const [opcionRecogida, setOpcionRecogida] = useState<"15" | "30" | "60" | "otra" | null>(null);
   const [horaRecogida, setHoraRecogida] = useState("");
+  // Minutos de la opción rápida activa (15/30/60), o null si la selección
+  // fue "Otra hora" (manual) o si no se ha elegido nada. horaRecogida ya
+  // trae el "HH:mm" calculado al momento del clic — sirve para mostrarlo en
+  // pantalla — pero para el envío real hay que recalcularlo con la hora
+  // actual en el momento del submit (ver handleSubmit), porque el tiempo
+  // que tarda el cliente en pasar por "Datos"/"Pago" puede dejar ese valor
+  // congelado por debajo del mínimo que el backend vuelve a exigir.
+  const [minutosOpcionRapida, setMinutosOpcionRapida] = useState<number | null>(null);
   const [puntosEnvio, setPuntosEnvio] = useState<PublicPuntoEnvio[] | null>(null);
   const [puntoEnvioId, setPuntoEnvioId] = useState("");
   const [direccionCalle, setDireccionCalle] = useState("");
@@ -186,12 +194,14 @@ export default function CheckoutModal({
     if (opcion.disabled || !opcion.hora) return;
     setOpcionRecogida(opcion.key);
     setHoraRecogida(opcion.hora);
+    setMinutosOpcionRapida(opcion.minutos);
   }
 
   function elegirOtraHora() {
     if (otraHoraDisabled) return;
     setOpcionRecogida("otra");
     setHoraRecogida("");
+    setMinutosOpcionRapida(null);
   }
 
   const zonaSeleccionada = puntosEnvio?.find((p) => p.id === puntoEnvioId) ?? null;
@@ -248,6 +258,17 @@ export default function CheckoutModal({
     setSubmitting(true);
     setError(null);
     try {
+      // Si la selección fue una opción rápida (15/30/60 min), horaRecogida
+      // en el estado quedó congelada al momento del clic — recalcularla
+      // aquí, lo más cerca posible del request real, con la hora actual en
+      // este instante. "Otra hora" (minutosOpcionRapida === null) se manda
+      // tal cual, sin recalcular: ahí el cliente eligió un horario de reloj
+      // explícito y ese valor debe respetarse.
+      const horaRecogidaFinal =
+        metodoEntrega === "RECOGER" && minutosOpcionRapida != null
+          ? (horaRapida(minutosOpcionRapida) ?? horaRecogida)
+          : horaRecogida;
+
       const created = await createPublicOrder(slug, {
         clienteNombre,
         clienteTelefono,
@@ -257,7 +278,7 @@ export default function CheckoutModal({
         // isn't offered as its own UI option anymore ("En 15 min o menos"
         // already covers that case with a concrete time).
         horaRecogidaTipo: metodoEntrega === "RECOGER" ? "HORA_ESPECIFICA" : undefined,
-        horaRecogida: metodoEntrega === "RECOGER" ? horaRecogida : undefined,
+        horaRecogida: metodoEntrega === "RECOGER" ? horaRecogidaFinal : undefined,
         metodoPago,
         metodoEntrega,
         puntoEnvioId: metodoEntrega === "DOMICILIO" ? puntoEnvioId : undefined,
