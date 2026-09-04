@@ -407,21 +407,6 @@ export class PublicService {
       });
     });
 
-    // "Pedido recibido" (audiencia NEGOCIO) — se encola apenas el pedido
-    // existe, sin importar el método de pago (aplica igual a TARJETA que
-    // sigue PENDIENTE unas líneas más abajo). Best-effort a propósito (ver
-    // NotificacionesQueueService.encolarSeguro): jamás debe bloquear ni
-    // tumbar la creación del pedido si Redis está caído — por eso no se le
-    // hace `await` aquí, solo se dispara.
-    void this.notificacionesQueueService.encolarSeguro({
-      tenantId: tenant.id,
-      evento: NotificacionEvento.PEDIDO_RECIBIDO,
-      mensaje: {
-        asunto: `Nuevo pedido #${order.folio}`,
-        texto: this.construirReciboPedidoRecibido(tenant.nombre, order),
-      },
-    });
-
     // TARJETA: the order already exists (folio assigned, PENDIENTE) — now
     // create the PaymentIntent and attach its id/clientSecret. Deliberately
     // outside the transaction above: a network call to Stripe has no
@@ -431,6 +416,15 @@ export class PublicService {
     // order (subscription-only), and already pays Stripe's own fees/losses
     // per the account's `defaults.responsibilities` (see
     // TenantService.createOrContinueStripeAccount), so nothing is deducted here.
+    //
+    // "Pedido recibido" (audiencia NEGOCIO) se encola DESPUÉS de resolver
+    // este intento de cobro (éxito o fallo) para TARJETA — no justo al crear
+    // el pedido — así el indicador de pago del mensaje refleja el resultado
+    // real, nunca el PENDIENTE optimista con el que nace el pedido si ese
+    // intento ya falló unos milisegundos después. EFECTIVO/TRANSFERENCIA no
+    // tienen ningún paso async posterior a la creación, así que para esos
+    // métodos encolar aquí (en vez de justo tras crear el pedido) no cambia
+    // nada.
     if (dto.metodoPago === MetodoPago.TARJETA) {
       try {
         const paymentIntent = await this.stripeService.client.paymentIntents.create({
@@ -445,25 +439,100 @@ export class PublicService {
           where: { id: order.id },
           data: { stripePaymentIntentId: paymentIntent.id },
           include: {
-            items: { include: { modificadores: { select: { nombre: true, precioAdicional: true } } } },
+            items: {
+              include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } },
+            },
           },
         });
+
+        this.encolarPedidoRecibido(tenant.id, tenant.nombre, orderConPago);
 
         return { ...orderConPago, clientSecret: paymentIntent.client_secret };
       } catch (err) {
         // The order stays on record as FALLIDO rather than silently
         // disappearing — same "never lose a real customer action" principle
-        // as everywhere else in this service.
+        // as everywhere else in this service. El mensaje de "pedido
+        // recibido" se arma con FALLIDO ya reflejado (no con el PENDIENTE
+        // con el que `order` nació) — nunca debe reportar "en proceso" un
+        // cobro que en realidad ya falló.
         await this.prisma.order.update({ where: { id: order.id }, data: { estadoPago: EstadoPago.FALLIDO } });
+        this.encolarPedidoRecibido(tenant.id, tenant.nombre, order, EstadoPago.FALLIDO);
         throw err;
       }
     }
+
+    // EFECTIVO/TRANSFERENCIA: estadoPago ya nació PAGADO/lo que corresponda
+    // en la transacción de arriba y no cambia después — encolar aquí mismo.
+    this.encolarPedidoRecibido(tenant.id, tenant.nombre, order);
 
     return order;
   }
 
   /**
+   * "Pedido recibido" (audiencia NEGOCIO). Best-effort a propósito (ver
+   * NotificacionesQueueService.encolarSeguro): jamás debe bloquear ni tumbar
+   * la creación del pedido si Redis está caído — por eso no se le hace
+   * `await`, solo se dispara.
+   *
+   * `estadoPagoOverride` cubre el caso FALLIDO: la creación del PaymentIntent
+   * puede fallar después de que `order` ya se leyó con `estadoPago =
+   * PENDIENTE`, y el `Order` en la base ya se actualizó a FALLIDO para
+   * entonces — pasar el valor real aquí (en vez de reconstruir el objeto
+   * `order` con ese campo sobreescrito) evita tener que spread-clonar un tipo
+   * generado por Prisma, algo que además hace crashear a este compilador de
+   * TypeScript (5.9.3) con un "Debug Failure" en la resolución de la llamada.
+   */
+  private encolarPedidoRecibido(
+    tenantId: string,
+    tenantNombre: string,
+    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+    estadoPagoOverride?: EstadoPago,
+  ) {
+    void this.notificacionesQueueService.encolarSeguro({
+      tenantId,
+      evento: NotificacionEvento.PEDIDO_RECIBIDO,
+      mensaje: {
+        asunto: `Nuevo pedido #${order.folio}`,
+        texto: this.construirReciboPedidoRecibido(tenantNombre, order, estadoPagoOverride),
+      },
+    });
+  }
+
+  /**
+   * Indicador de cobro para "Pedido recibido" — combina metodoPago +
+   * estadoPago a propósito, nunca estadoPago solo: un EFECTIVO nace
+   * `estadoPago = PAGADO` por diseño del sistema (nada que rastrear), pero
+   * eso NO significa que el dinero ya se cobró — el cobro real ocurre al
+   * entregar/recoger. Mostrar "PAGADO" ahí sería engañoso para quien lee la
+   * notificación y decide si puede surtir el pedido con confianza.
+   *
+   * Un ícono distinto por caso (✅/⏳/❌/↩️/🕓) para que el estado se lea de
+   * un vistazo sin depender del texto. TRANSFERENCIA no tiene flujo real
+   * implementado (deshabilitado en el checkout) — se trata igual que
+   * EFECTIVO por seguridad si llegara a aparecer, no debería ocurrir hoy.
+   */
+  private construirIndicadorPago(order: { metodoPago: MetodoPago; estadoPago: EstadoPago }): string {
+    if (order.metodoPago === MetodoPago.TARJETA) {
+      switch (order.estadoPago) {
+        case EstadoPago.PAGADO:
+          return '✅ PAGADO CON TARJETA';
+        case EstadoPago.FALLIDO:
+          return '❌ PAGO CON TARJETA FALLÓ — no se cobró';
+        case EstadoPago.REEMBOLSADO:
+          return '↩️ REEMBOLSADO';
+        case EstadoPago.PENDIENTE:
+        default:
+          return '⏳ PAGO CON TARJETA EN PROCESO — aún sin confirmar';
+      }
+    }
+
+    return '🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger';
+  }
+
+  /**
    * Texto del mensaje de Telegram para "Pedido recibido" — recibo detallado:
+   * folio + indicador de cobro (lo primero, antes que cualquier otro dato —
+   * es la señal operativa más urgente para quien recibe la notificación),
    * cliente/teléfono, hora de recogida (solo si HORA_ESPECIFICA — omitida
    * por completo si LO_ANTES_POSIBLE, no se inventa un estimado), cada línea
    * con sus modificadores como "Grupo: Opción", y el total real del pedido.
@@ -481,9 +550,11 @@ export class PublicService {
   private construirReciboPedidoRecibido(
     tenantNombre: string,
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+    estadoPagoOverride?: EstadoPago,
   ): string {
     const lineas: string[] = [
-      `NUEVO PEDIDO - ${tenantNombre}`,
+      `NUEVO PEDIDO #${order.folio} - ${tenantNombre}`,
+      this.construirIndicadorPago({ metodoPago: order.metodoPago, estadoPago: estadoPagoOverride ?? order.estadoPago }),
       '------------------------------',
       `Cliente: ${order.clienteNombre}`,
       `Telefono: ${order.clienteTelefono}`,
