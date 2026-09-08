@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import {
   ApiError,
   createPublicOrder,
+  fetchPublicEstadoPago,
   fetchPublicPuntosEnvio,
   type FacturacionModo,
   type HorarioSemana,
@@ -887,6 +888,7 @@ export default function CheckoutModal({
 
         {step === "pago-tarjeta" && order && order.clientSecret && (
           <TarjetaPagoStep
+            slug={slug}
             order={order}
             total={total}
             onAtras={() => setStep("pago")}
@@ -900,6 +902,17 @@ export default function CheckoutModal({
         {step === "confirmation" && order && (
           <>
             <h2 className="text-lg font-semibold">¡Pedido recibido!</h2>
+            {/* TARJETA es la única forma de pago que pasa por una confirmación
+                asíncrona (Stripe + webhook) — el cliente necesita que se le
+                diga explícitamente que ya se resolvió, para no quedarse
+                esperando algo que ya pasó. EFECTIVO/TRANSFERENCIA se cobran
+                al entregar/recoger, así que esta pantalla nunca debe insinuar
+                que ya se cobró para esos métodos. */}
+            {order.metodoPago === "TARJETA" && (
+              <p className="text-sm font-medium text-black dark:text-white">
+                Tu pago fue confirmado — no necesitas hacer nada más.
+              </p>
+            )}
             <p className="text-sm text-black/60 dark:text-white/60">
               Tu folio es <span className="font-semibold text-black dark:text-white">#{order.folio}</span>.{" "}
               {order.metodoEntrega === "DOMICILIO"
@@ -999,11 +1012,13 @@ export default function CheckoutModal({
  * they can't be called from the parent that renders it.
  */
 function TarjetaPagoStep({
+  slug,
   order,
   total,
   onAtras,
   onPagado,
 }: {
+  slug: string;
   order: PublicOrder;
   total: number;
   onAtras: () => void;
@@ -1011,17 +1026,29 @@ function TarjetaPagoStep({
 }) {
   return (
     <Elements stripe={getStripe()} options={{ clientSecret: order.clientSecret! }}>
-      <TarjetaPagoForm order={order} total={total} onAtras={onAtras} onPagado={onPagado} />
+      <TarjetaPagoForm slug={slug} order={order} total={total} onAtras={onAtras} onPagado={onPagado} />
     </Elements>
   );
 }
 
-function TarjetaPagoForm({
+// Cuánto se espera al backend confirmar el pago (vía webhook de Stripe)
+// antes de rendirse — ver el useEffect de polling más abajo.
+const CONFIRMACION_POLL_INTERVAL_MS = 2000;
+const CONFIRMACION_MAX_ESPERA_MS = 18000;
+
+// Exportado únicamente para pruebas (ver checkout-modal.tarjeta-pago.test.tsx)
+// — permite montarlo de forma aislada con useStripe()/useElements() y
+// fetchPublicEstadoPago mockeados, sin tener que atravesar todo el flujo de
+// carrito → entrega → datos → pago solo para llegar a este paso. No es parte
+// de la API pública del módulo para nada más.
+export function TarjetaPagoForm({
+  slug,
   order,
   total,
   onAtras,
   onPagado,
 }: {
+  slug: string;
   order: PublicOrder;
   total: number;
   onAtras: () => void;
@@ -1031,6 +1058,22 @@ function TarjetaPagoForm({
   const elements = useElements();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Solo se llena con "succeeded" o "processing" — es lo único que hace que
+  // se entre a la espera (ver handlePagar). Distingue, si se agota el tiempo
+  // de espera sin que el backend confirme nada, entre "Stripe ya había dicho
+  // que sí" (no se le puede decir al cliente que falló, sería falso e
+  // induciría un posible doble cobro) y "ni Stripe sabía todavía" (ahí sí es
+  // honesto tratarlo como fallo — ver el useEffect de abajo).
+  const [respuestaStripe, setRespuestaStripe] = useState<"succeeded" | "processing" | null>(null);
+  // Ref en vez de dependencia directa del efecto de abajo: onPagado se
+  // recrea en cada render del padre (es un arrow function inline), y no
+  // queremos que eso reinicie el cronómetro de espera cada vez que
+  // CheckoutModal re-renderiza por cualquier otra razón mientras se espera
+  // al backend.
+  const onPagadoRef = useRef(onPagado);
+  useEffect(() => {
+    onPagadoRef.current = onPagado;
+  }, [onPagado]);
 
   async function handlePagar(e: React.FormEvent) {
     e.preventDefault();
@@ -1049,18 +1092,107 @@ function TarjetaPagoForm({
     });
 
     if (confirmError) {
+      // Rechazo síncrono (tarjeta rechazada, CVC inválido, etc.) — se queda
+      // en el formulario, mismo pedido/folio, puede reintentar. Camino
+      // mutuamente excluyente con la espera de abajo: nunca se llega a fijar
+      // respuestaStripe en este caso.
       setError(confirmError.message ?? "No se pudo procesar el pago");
       setPaying(false);
       return;
     }
 
     if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
-      onPagado();
+      // Ninguno de los dos significa "ya está confirmado" — solo que Stripe
+      // no rechazó nada todavía. La confirmación real (el webhook llegando
+      // al backend) se espera con polling en el useEffect de abajo, nunca
+      // aquí directamente.
+      setRespuestaStripe(paymentIntent.status);
       return;
     }
 
     setError("El pago no se completó — intenta de nuevo");
     setPaying(false);
+  }
+
+  // Polling de estadoPago mientras se espera que el webhook de Stripe llegue
+  // al backend — ver PublicService.getEstadoPago (Fase 1). Se re-arma cada
+  // vez que el cliente reintenta el pago (respuestaStripe vuelve a null tras
+  // un fallo/timeout, luego se vuelve a fijar en un nuevo intento).
+  useEffect(() => {
+    if (!respuestaStripe) return;
+
+    let cancelado = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const inicio = Date.now();
+
+    async function poll() {
+      if (cancelado) return;
+
+      try {
+        const { estadoPago } = await fetchPublicEstadoPago(slug, order.id);
+        if (cancelado) return;
+
+        if (estadoPago === "PAGADO") {
+          onPagadoRef.current();
+          return;
+        }
+
+        if (estadoPago === "FALLIDO") {
+          setRespuestaStripe(null);
+          setError("El pago no se pudo confirmar — intenta de nuevo");
+          setPaying(false);
+          return;
+        }
+        // PENDIENTE/PROCESANDO: todavía sin veredicto del backend, se sigue
+        // esperando (salvo que ya se haya agotado el tiempo, revisado abajo).
+      } catch {
+        // Hiccup de red consultando el estado — no es un fallo del pago en
+        // sí, se reintenta en el siguiente tick salvo que ya se acabó el
+        // tiempo de espera.
+      }
+
+      if (cancelado) return;
+
+      if (Date.now() - inicio >= CONFIRMACION_MAX_ESPERA_MS) {
+        if (respuestaStripe === "succeeded") {
+          // Stripe ya confirmó el cobro del lado del cliente — solo falta
+          // que el webhook se refleje en el backend. Decirle al cliente que
+          // falló sería falso y lo empujaría a un posible doble cobro si
+          // reintenta, así que se confía en la respuesta que Stripe ya dio.
+          onPagadoRef.current();
+        } else {
+          // "processing": ni Stripe mismo sabía el resultado. Sin
+          // confirmación de nadie, es honesto tratarlo como fallo.
+          setRespuestaStripe(null);
+          setError("No pudimos confirmar tu pago a tiempo — intenta de nuevo");
+          setPaying(false);
+        }
+        return;
+      }
+
+      timeoutId = setTimeout(poll, CONFIRMACION_POLL_INTERVAL_MS);
+    }
+
+    timeoutId = setTimeout(poll, CONFIRMACION_POLL_INTERVAL_MS);
+    return () => {
+      cancelado = true;
+      clearTimeout(timeoutId);
+    };
+  }, [respuestaStripe, slug, order.id]);
+
+  if (respuestaStripe) {
+    return (
+      <>
+        <h2 className="text-lg font-semibold">Confirmando tu pago...</h2>
+        <p className="text-sm text-black/60 dark:text-white/60">
+          Folio <span className="font-semibold text-black dark:text-white">#{order.folio}</span> — esto toma unos
+          segundos, no cierres esta ventana.
+        </p>
+        <div className="flex items-center justify-center py-6">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-black/20 border-t-black dark:border-white/20 dark:border-t-white" />
+        </div>
+      </>
+    );
   }
 
   return (

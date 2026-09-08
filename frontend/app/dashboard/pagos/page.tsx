@@ -49,6 +49,11 @@ const RANGO_EXPORT_OPTIONS: { value: RangoExport; label: string }[] = [
 // se reutiliza aquí no habría nada que reutilizar.
 const ESTADO_PAGO_LABEL: Record<EstadoPago, string> = {
   PENDIENTE: "Pendiente",
+  // Tampoco ocurre en una fila de Payment hoy (ver nota de REEMBOLSADO abajo)
+  // — el webhook solo crea el Payment al recibir succeeded/payment_failed,
+  // nunca en processing (ver StripeWebhookController) — pero Record debe
+  // seguir siendo exhaustivo.
+  PROCESANDO: "Procesando",
   PAGADO: "Pagado",
   FALLIDO: "Fallido",
   // Doesn't actually occur on a Payment row today — refunds (v1) update

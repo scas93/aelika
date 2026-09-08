@@ -352,7 +352,7 @@ export interface PublicOrderItem {
 }
 
 export type EstadoPedido = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "LISTO_ENTREGA" | "DESPACHADO";
-export type EstadoPago = "PENDIENTE" | "PAGADO" | "FALLIDO" | "REEMBOLSADO";
+export type EstadoPago = "PENDIENTE" | "PROCESANDO" | "PAGADO" | "FALLIDO" | "REEMBOLSADO";
 
 export interface PublicOrder {
   id: string;
@@ -876,6 +876,14 @@ export function createPublicOrder(slug: string, payload: CreatePublicOrderPayloa
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// Polling target while the checkout waits for Stripe's webhook to land — see
+// TarjetaPagoForm in checkout-modal.tsx.
+export function fetchPublicEstadoPago(slug: string, orderId: string) {
+  return request<{ estadoPago: EstadoPago }>(
+    `/public/tenants/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderId)}/estado-pago`,
+  );
 }
 
 export function fetchOrders(token: string, filter?: OrdersFilter) {
