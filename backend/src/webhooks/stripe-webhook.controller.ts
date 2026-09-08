@@ -7,6 +7,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { PublicService } from '../public/public.service';
 import { EstadoPago, NotificacionEvento } from '../../generated/prisma/client';
 
 // Capability-status events for both configurations we request on account
@@ -29,6 +30,7 @@ export class StripeWebhookController {
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
     private readonly notificacionesQueueService: NotificacionesQueueService,
+    private readonly publicService: PublicService,
   ) {}
 
   private readonly logger = new Logger(StripeWebhookController.name);
@@ -88,20 +90,48 @@ export class StripeWebhookController {
 
   /** PaymentIntent events (metodoPago = TARJETA) — see PublicService.createOrder. */
   private async handleClassicEvent(event: Stripe.Event) {
-    if (event.type !== 'payment_intent.succeeded' && event.type !== 'payment_intent.payment_failed') {
+    if (
+      event.type !== 'payment_intent.succeeded' &&
+      event.type !== 'payment_intent.payment_failed' &&
+      event.type !== 'payment_intent.processing'
+    ) {
       return;
     }
 
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
+
+    if (event.type === 'payment_intent.processing') {
+      // Refleja el pago async de Stripe que todavía no se resuelve. Solo
+      // transiciona desde el PENDIENTE inicial — si el pedido ya se
+      // resolvió (PAGADO/FALLIDO) para cuando llega este evento fuera de
+      // orden, no debe regresarlo a un estado intermedio. Nunca dispara
+      // ninguna notificación por sí solo (ver criterios de aceptación).
+      await this.prisma.order.updateMany({
+        where: { stripePaymentIntentId: paymentIntent.id, estadoPago: EstadoPago.PENDIENTE },
+        data: { estadoPago: EstadoPago.PROCESANDO },
+      });
+      return;
+    }
+
     const estadoPago = event.type === 'payment_intent.succeeded' ? EstadoPago.PAGADO : EstadoPago.FALLIDO;
 
-    // updateMany (not update): matches 0 rows and does nothing when this
-    // PaymentIntent isn't tied to any order (e.g. a stray/unrelated one on
-    // the platform account) — same "ignore, respond 200" outcome as below.
-    await this.prisma.order.updateMany({
-      where: { stripePaymentIntentId: paymentIntent.id },
+    // El `estadoPago: { not: PAGADO }` en el where hace dos cosas a la vez:
+    // 1) idempotencia — si Stripe reenvía el mismo "succeeded", la segunda
+    //    entrega encuentra el pedido ya PAGADO, count sale 0, y no se
+    //    vuelve a disparar PEDIDO_RECIBIDO/PAGO_CONFIRMADO abajo.
+    // 2) protege un pago ya exitoso de un "payment_failed" fuera de orden
+    //    para el mismo PaymentIntent — nunca lo regresa a FALLIDO.
+    // count 0 también cubre, igual que antes, un PaymentIntent que no
+    // pertenece a ningún pedido (ej. uno ajeno en la cuenta de la
+    // plataforma) — mismo "ignora, responde 200" de siempre.
+    const { count } = await this.prisma.order.updateMany({
+      where: { stripePaymentIntentId: paymentIntent.id, estadoPago: { not: EstadoPago.PAGADO } },
       data: { estadoPago },
     });
+
+    if (count === 0) {
+      return;
+    }
 
     // Best-effort audit trail — never let a Payment write fail the webhook.
     // Stripe expects a fast 200 and retries on anything else, so a broken
@@ -114,8 +144,34 @@ export class StripeWebhookController {
       );
     }
 
+    // FALLIDO: de cara al negocio este pedido nunca "existió" — no se
+    // dispara ninguna notificación (ni PEDIDO_RECIBIDO ni PAGO_CONFIRMADO).
     if (estadoPago === EstadoPago.PAGADO) {
       await this.encolarPagoConfirmado(paymentIntent);
+      await this.encolarPedidoRecibido(paymentIntent);
+    }
+  }
+
+  /**
+   * PEDIDO_RECIBIDO para TARJETA ahora se dispara aquí — solo cuando el
+   * webhook confirma el pago como exitoso, nunca al crear el pedido (ver
+   * PublicService.createOrder). Best-effort, mismo principio que
+   * encolarPagoConfirmado: nunca debe afectar la respuesta 200 que Stripe
+   * espera de este webhook.
+   */
+  private async encolarPedidoRecibido(paymentIntent: Stripe.PaymentIntent) {
+    try {
+      const order = await this.prisma.order.findFirst({
+        where: { stripePaymentIntentId: paymentIntent.id },
+        select: { id: true },
+      });
+      if (!order) return;
+
+      await this.publicService.notificarPedidoRecibidoTrasPago(order.id);
+    } catch (error) {
+      this.logger.error(
+        `No se pudo encolar "pedido recibido" para PaymentIntent ${paymentIntent.id}: ${(error as Error).message}`,
+      );
     }
   }
 

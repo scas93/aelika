@@ -178,6 +178,34 @@ export class PublicService {
     });
   }
 
+  /**
+   * Consulta pública de `estadoPago` — pensada para que el storefront (Fase
+   * 2, frontend) haga polling mientras espera que el webhook de Stripe
+   * confirme un pago con tarjeta. Filtra por slug+id igual que el resto de
+   * este servicio (nunca por id solo) y solo expone `estadoPago` — nada del
+   * resto del pedido (cliente, dirección, factura, total) — porque cualquier
+   * cliente que conozca un `id` de pedido de otro tenant podría intentar
+   * consultarlo aquí; el 404 por tenant equivocado es la misma protección
+   * que ya usa el resto del PublicController, y el campo expuesto es
+   * deliberadamente mínimo.
+   */
+  async getEstadoPago(slug: string, orderId: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    if (!tenant) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId: tenant.id },
+      select: { estadoPago: true },
+    });
+    if (!order) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+
+    return { estadoPago: order.estadoPago };
+  }
+
   async createOrder(slug: string, dto: CreatePublicOrderDto) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
@@ -417,14 +445,15 @@ export class PublicService {
     // per the account's `defaults.responsibilities` (see
     // TenantService.createOrContinueStripeAccount), so nothing is deducted here.
     //
-    // "Pedido recibido" (audiencia NEGOCIO) se encola DESPUÉS de resolver
-    // este intento de cobro (éxito o fallo) para TARJETA — no justo al crear
-    // el pedido — así el indicador de pago del mensaje refleja el resultado
-    // real, nunca el PENDIENTE optimista con el que nace el pedido si ese
-    // intento ya falló unos milisegundos después. EFECTIVO/TRANSFERENCIA no
-    // tienen ningún paso async posterior a la creación, así que para esos
-    // métodos encolar aquí (en vez de justo tras crear el pedido) no cambia
-    // nada.
+    // "Pedido recibido" (audiencia NEGOCIO) ya NO se encola aquí para
+    // TARJETA — se pospone hasta que el webhook de Stripe confirme el pago
+    // (`payment_intent.succeeded`, ver StripeWebhookController), sin
+    // importar cuánto tarde en resolverse. Antes se encolaba en este punto
+    // con el PENDIENTE optimista con el que nace el pedido, lo que dejaba el
+    // mensaje de Telegram congelado en "en proceso" si el pago se resolvía
+    // mal (o tarde) después. Si el intento de cobro falla de entrada (catch
+    // abajo) tampoco se notifica nada — de cara al negocio, ese pedido nunca
+    // existió.
     if (dto.metodoPago === MetodoPago.TARJETA) {
       try {
         const paymentIntent = await this.stripeService.client.paymentIntents.create({
@@ -445,18 +474,12 @@ export class PublicService {
           },
         });
 
-        this.encolarPedidoRecibido(tenant.id, tenant.nombre, orderConPago);
-
         return { ...orderConPago, clientSecret: paymentIntent.client_secret };
       } catch (err) {
         // The order stays on record as FALLIDO rather than silently
         // disappearing — same "never lose a real customer action" principle
-        // as everywhere else in this service. El mensaje de "pedido
-        // recibido" se arma con FALLIDO ya reflejado (no con el PENDIENTE
-        // con el que `order` nació) — nunca debe reportar "en proceso" un
-        // cobro que en realidad ya falló.
+        // as everywhere else in this service.
         await this.prisma.order.update({ where: { id: order.id }, data: { estadoPago: EstadoPago.FALLIDO } });
-        this.encolarPedidoRecibido(tenant.id, tenant.nombre, order, EstadoPago.FALLIDO);
         throw err;
       }
     }
@@ -474,28 +497,48 @@ export class PublicService {
    * la creación del pedido si Redis está caído — por eso no se le hace
    * `await`, solo se dispara.
    *
-   * `estadoPagoOverride` cubre el caso FALLIDO: la creación del PaymentIntent
-   * puede fallar después de que `order` ya se leyó con `estadoPago =
-   * PENDIENTE`, y el `Order` en la base ya se actualizó a FALLIDO para
-   * entonces — pasar el valor real aquí (en vez de reconstruir el objeto
-   * `order` con ese campo sobreescrito) evita tener que spread-clonar un tipo
-   * generado por Prisma, algo que además hace crashear a este compilador de
-   * TypeScript (5.9.3) con un "Debug Failure" en la resolución de la llamada.
+   * Para EFECTIVO/TRANSFERENCIA se llama al crear el pedido (línea de arriba
+   * en createOrder). Para TARJETA se llama desde
+   * `notificarPedidoRecibidoTrasPago`, disparado por
+   * StripeWebhookController solo cuando el pago ya se confirmó — nunca al
+   * crear el pedido.
    */
   private encolarPedidoRecibido(
     tenantId: string,
     tenantNombre: string,
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
-    estadoPagoOverride?: EstadoPago,
   ) {
     void this.notificacionesQueueService.encolarSeguro({
       tenantId,
       evento: NotificacionEvento.PEDIDO_RECIBIDO,
       mensaje: {
         asunto: `Nuevo pedido #${order.folio}`,
-        texto: this.construirReciboPedidoRecibido(tenantNombre, order, estadoPagoOverride),
+        texto: this.construirReciboPedidoRecibido(tenantNombre, order),
       },
     });
+  }
+
+  /**
+   * Dispara "Pedido recibido" para un pedido TARJETA cuyo pago el webhook de
+   * Stripe acaba de confirmar como exitoso — ver
+   * StripeWebhookController.handleClassicEvent, el único caller. La
+   * idempotencia (no duplicar si Stripe reenvía el mismo evento) es
+   * responsabilidad del caller: solo debe invocar este método cuando su
+   * propio `updateMany` de estadoPago realmente transicionó a PAGADO, nunca
+   * en una entrega duplicada del webhook.
+   */
+  async notificarPedidoRecibidoTrasPago(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        tenant: { select: { nombre: true } },
+        items: { include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } } },
+      },
+    });
+    if (!order) {
+      return;
+    }
+    this.encolarPedidoRecibido(order.tenantId, order.tenant.nombre, order);
   }
 
   /**
@@ -550,11 +593,10 @@ export class PublicService {
   private construirReciboPedidoRecibido(
     tenantNombre: string,
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
-    estadoPagoOverride?: EstadoPago,
   ): string {
     const lineas: string[] = [
       `NUEVO PEDIDO #${order.folio} - ${tenantNombre}`,
-      this.construirIndicadorPago({ metodoPago: order.metodoPago, estadoPago: estadoPagoOverride ?? order.estadoPago }),
+      this.construirIndicadorPago({ metodoPago: order.metodoPago, estadoPago: order.estadoPago }),
       '------------------------------',
       `Cliente: ${order.clienteNombre}`,
       `Telefono: ${order.clienteTelefono}`,

@@ -248,6 +248,13 @@ enum MetodoPago {
 // /orders/:id/reembolsar) — full refund only, no partial in v1.
 enum EstadoPago {
   PENDIENTE
+  // Solo TARJETA pasa por aquí — reflejo del `payment_intent.processing` de
+  // Stripe (pago async, ej. algunos métodos bancarios, todavía sin
+  // resolver). Distinto de PENDIENTE (el pedido nació así, sin que Stripe
+  // haya dicho nada todavía) para que el estado en base de datos sea
+  // explícito sobre qué le dijo Stripe al pedido — ver
+  // StripeWebhookController.handleClassicEvent.
+  PROCESANDO
   PAGADO
   FALLIDO
   REEMBOLSADO

@@ -8,5 +8,6 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
   imports: [StripeModule, NotificacionesModule],
   controllers: [PublicController],
   providers: [PublicService],
+  exports: [PublicService],
 })
 export class PublicModule {}

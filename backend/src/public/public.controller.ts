@@ -27,4 +27,9 @@ export class PublicController {
   createOrder(@Param('slug') slug: string, @Body() dto: CreatePublicOrderDto) {
     return this.publicService.createOrder(slug, dto);
   }
+
+  @Get('tenants/:slug/orders/:id/estado-pago')
+  getEstadoPago(@Param('slug') slug: string, @Param('id') id: string) {
+    return this.publicService.getEstadoPago(slug, id);
+  }
 }
