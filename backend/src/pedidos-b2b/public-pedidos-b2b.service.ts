@@ -6,6 +6,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { round2 } from '../common/money';
 import { resolverFacturacion } from '../common/facturacion';
+import { ClienteCanal } from '../../generated/prisma/client';
+import { ClientesService } from '../clientes/clientes.service';
 import {
   estaEnVentana,
   mensajeVentanaCerrada,
@@ -36,7 +38,10 @@ import {
  */
 @Injectable()
 export class PublicPedidosB2bService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clientesService: ClientesService,
+  ) {}
 
   async getTenantInfo(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -248,6 +253,15 @@ export class PublicPedidosB2bService {
       });
 
       await crearItems(tx, tenant.id, pedido.id, resueltos);
+
+      await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId: tenant.id,
+        canal: ClienteCanal.B2B,
+        telefono: pedido.contactoTelefono,
+        nombre: pedido.contactoNombre,
+        correo: pedido.contactoCorreo,
+        fechaPedido: pedido.createdAt,
+      });
 
       return tx.pedidoB2b.findUniqueOrThrow({
         where: { id: pedido.id },

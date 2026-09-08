@@ -127,6 +127,7 @@ model Tenant {
   pedidoB2bCodigosDescuento PedidoB2bCodigoDescuento[]
   notificacionCanalConfigs  NotificacionCanalConfig[]
   notificacionEventoConfigs NotificacionEventoConfig[]
+  clientes                  Cliente[]
 
   @@map("tenants")
 }
@@ -821,4 +822,46 @@ model PedidoB2bCodigoDescuento {
   @@unique([tenantId, codigo])
   @@index([tenantId])
   @@map("pedido_b2b_codigos_descuento")
+}
+
+// B2C (Order) y B2B (PedidoB2b) son audiencias de negocio distintas — un
+// mismo teléfono en ambos canales del mismo tenant se trata como dos
+// Cliente separados, sin fusionar (decisión de producto). No hay FK hacia
+// Order/PedidoB2b todavía (eso es Módulo 2) — este modelo solo se mantiene
+// sincronizado vía ClientesService.sincronizarDesdePedido, llamado dentro de
+// la misma transacción que crea el pedido en los 3 puntos de creación
+// reales (ver PublicService.createOrder, PublicPedidosB2bService.createPedido,
+// PedidosB2bService.create).
+enum ClienteCanal {
+  B2C
+  B2B
+}
+
+model Cliente {
+  id             String       @id @default(uuid())
+  tenantId       String
+  canal          ClienteCanal
+  // Normalizado por ClientesService/normalizarTelefono (common/telefono.ts)
+  // antes de guardar: solo dígitos, últimos 10 — así "+52 55 1111 2222",
+  // "55-1111-2222" y "5511112222" resuelven al mismo Cliente. Nunca se
+  // guarda el formato crudo capturado en el pedido.
+  telefono       String
+  // Nombre y correo más recientemente capturados — se sobreescriben en cada
+  // pedido nuevo del mismo cliente (ver ClientesService). correo es opcional
+  // porque Order.clienteCorreo lo es; un pedido sin correo nunca borra un
+  // correo ya conocido de un pedido anterior (ClientesService no pisa con
+  // null).
+  nombre         String
+  correo         String?
+  primerPedidoAt DateTime
+  ultimoPedidoAt DateTime
+  totalPedidos   Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, canal, telefono])
+  @@index([tenantId])
+  @@map("clientes")
 }

@@ -5,8 +5,10 @@ import { CodigosDescuentoB2bController } from './codigos-descuento-b2b.controlle
 import { CodigosDescuentoB2bService } from './codigos-descuento-b2b.service';
 import { PublicPedidosB2bController } from './public-pedidos-b2b.controller';
 import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
+import { ClientesModule } from '../clientes/clientes.module';
 
 @Module({
+  imports: [ClientesModule],
   controllers: [
     PedidosB2bController,
     CodigosDescuentoB2bController,

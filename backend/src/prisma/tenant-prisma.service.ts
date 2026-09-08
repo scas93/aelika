@@ -112,6 +112,9 @@ export class TenantPrismaService {
           notificacionEventoConfig: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          cliente: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

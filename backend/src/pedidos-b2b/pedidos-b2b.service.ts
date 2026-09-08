@@ -7,7 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { round2 } from '../common/money';
 import { toCsv } from '../common/csv';
-import { PedidoB2bEstado, Prisma } from '../../generated/prisma/client';
+import {
+  ClienteCanal,
+  PedidoB2bEstado,
+  Prisma,
+} from '../../generated/prisma/client';
+import { ClientesService } from '../clientes/clientes.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
@@ -67,6 +72,7 @@ export class PedidosB2bService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantPrisma: TenantPrismaService,
+    private readonly clientesService: ClientesService,
   ) {}
 
   private buildWhere(query: {
@@ -458,6 +464,15 @@ export class PedidosB2bService {
       });
 
       await crearItems(tx, tenantId, pedido.id, resueltos);
+
+      await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId,
+        canal: ClienteCanal.B2B,
+        telefono: pedido.contactoTelefono,
+        nombre: pedido.contactoNombre,
+        correo: pedido.contactoCorreo,
+        fechaPedido: pedido.createdAt,
+      });
 
       return tx.pedidoB2b.findUniqueOrThrow({
         where: { id: pedido.id },

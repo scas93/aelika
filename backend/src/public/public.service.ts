@@ -2,11 +2,13 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { ClientesService } from '../clientes/clientes.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
 import {
   CanalOrigen,
+  ClienteCanal,
   EstadoPago,
   EstadoPedido,
   HoraRecogidaTipo,
@@ -51,6 +53,7 @@ export class PublicService {
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
     private readonly notificacionesQueueService: NotificacionesQueueService,
+    private readonly clientesService: ClientesService,
   ) {}
 
   async getTenantInfo(slug: string) {
@@ -373,7 +376,7 @@ export class PublicService {
     const order = await this.prisma.$transaction(async (tx) => {
       const folio = await this.nextFolio(tx, tenant.id);
 
-      return tx.order.create({
+      const nuevoOrder = await tx.order.create({
         data: {
           tenantId: tenant.id,
           folio,
@@ -435,6 +438,17 @@ export class PublicService {
           },
         },
       });
+
+      await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId: tenant.id,
+        canal: ClienteCanal.B2C,
+        telefono: nuevoOrder.clienteTelefono,
+        nombre: nuevoOrder.clienteNombre,
+        correo: nuevoOrder.clienteCorreo,
+        fechaPedido: nuevoOrder.createdAt,
+      });
+
+      return nuevoOrder;
     });
 
     // TARJETA: the order already exists (folio assigned, PENDIENTE) — now
