@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
@@ -45,6 +45,8 @@ const MARGEN_MINIMO_MINUTOS = 15;
 
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
@@ -486,7 +488,7 @@ export class PublicService {
 
     // EFECTIVO/TRANSFERENCIA: estadoPago ya nació PAGADO/lo que corresponda
     // en la transacción de arriba y no cambia después — encolar aquí mismo.
-    this.encolarPedidoRecibido(tenant.id, tenant.nombre, order);
+    void this.encolarPedidoRecibido(tenant.id, tenant.nombre, order);
 
     return order;
   }
@@ -494,8 +496,12 @@ export class PublicService {
   /**
    * "Pedido recibido" (audiencia NEGOCIO). Best-effort a propósito (ver
    * NotificacionesQueueService.encolarSeguro): jamás debe bloquear ni tumbar
-   * la creación del pedido si Redis está caído — por eso no se le hace
-   * `await`, solo se dispara.
+   * la creación del pedido si Redis está caído — por eso el caller nunca le
+   * hace `await`, solo la dispara (con `void`). Es async solo para poder
+   * resolver la categoría de cada línea antes de armar el texto (ver
+   * resolverCategoriasPorProducto) — esa resolución también está protegida
+   * con su propio try/catch, así que un fallo ahí tampoco puede propagarse
+   * como una promesa rechazada sin manejar.
    *
    * Para EFECTIVO/TRANSFERENCIA se llama al crear el pedido (línea de arriba
    * en createOrder). Para TARJETA se llama desde
@@ -503,19 +509,54 @@ export class PublicService {
    * StripeWebhookController solo cuando el pago ya se confirmó — nunca al
    * crear el pedido.
    */
-  private encolarPedidoRecibido(
+  private async encolarPedidoRecibido(
     tenantId: string,
     tenantNombre: string,
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
-  ) {
+  ): Promise<void> {
+    const productIds = order.items.map((item) => item.productId).filter((id): id is string => id !== null);
+    const categoriaPorProducto = await this.resolverCategoriasPorProducto(productIds);
+
     void this.notificacionesQueueService.encolarSeguro({
       tenantId,
       evento: NotificacionEvento.PEDIDO_RECIBIDO,
       mensaje: {
         asunto: `Nuevo pedido #${order.folio}`,
-        texto: this.construirReciboPedidoRecibido(tenantNombre, order),
+        texto: this.construirReciboPedidoRecibido(tenantNombre, order, categoriaPorProducto),
       },
     });
+  }
+
+  /**
+   * Categoría de cada producto, resuelta EN VIVO desde el catálogo actual al
+   * momento de notificar — a propósito, no un snapshot en OrderItem (ver
+   * CLAUDE.md/auditoría: la categoría de un producto puede cambiar, y un
+   * pedido no necesita fijar ese dato histórico). Si un producto de la
+   * línea fue borrado después de crear el pedido, simplemente no aparece en
+   * el mapa devuelto — construirReciboPedidoRecibido omite la categoría en
+   * ese caso en vez de fallar. Envuelto en try/catch para preservar el
+   * principio "una notificación nunca debe fallar" (ver encolarSeguro): si
+   * la consulta a la base de datos falla por algún motivo, el pedido se
+   * sigue notificando, solo que sin categorías.
+   */
+  private async resolverCategoriasPorProducto(productIds: string[]): Promise<Map<string, string>> {
+    const idsUnicos = [...new Set(productIds)];
+    if (idsUnicos.length === 0) {
+      return new Map();
+    }
+
+    try {
+      const productos = await this.prisma.product.findMany({
+        where: { id: { in: idsUnicos } },
+        select: { id: true, category: { select: { nombre: true } } },
+      });
+      return new Map(productos.map((producto) => [producto.id, producto.category.nombre]));
+    } catch (error: any) {
+      this.logger.error(
+        `No se pudieron resolver categorías para la notificación de pedido recibido: ${error?.message ?? error}`,
+      );
+      return new Map();
+    }
   }
 
   /**
@@ -538,7 +579,7 @@ export class PublicService {
     if (!order) {
       return;
     }
-    this.encolarPedidoRecibido(order.tenantId, order.tenant.nombre, order);
+    await this.encolarPedidoRecibido(order.tenantId, order.tenant.nombre, order);
   }
 
   /**
@@ -589,10 +630,20 @@ export class PublicService {
    * 1:1 a una línea), así que no se reparte por línea, solo se muestra el
    * monto total descontado. Con esa línea, suma de subtotales de línea menos
    * el descuento sí cuadra con el TOTAL.
+   *
+   * `categoriaPorProducto` (ver resolverCategoriasPorProducto) trae, cuando
+   * está disponible, la categoría actual del producto de cada línea — se
+   * muestra entre paréntesis junto al nombre para distinguir productos con
+   * el mismo nombre en categorías distintas (ej. "Latte" de Fríos vs. de
+   * Calientes). Si la línea no tiene productId (nunca lo tuvo o se puso en
+   * null por el borrado del producto, ver OrderItem.productId) o el
+   * producto ya no está en el mapa, la línea simplemente no muestra
+   * categoría — nunca se trata como error.
    */
   private construirReciboPedidoRecibido(
     tenantNombre: string,
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+    categoriaPorProducto: Map<string, string>,
   ): string {
     const lineas: string[] = [
       `NUEVO PEDIDO #${order.folio} - ${tenantNombre}`,
@@ -612,8 +663,11 @@ export class PublicService {
       const extraPorUnidad = item.modificadores.reduce((sum, m) => sum + Number(m.precioAdicional), 0);
       const subtotalLinea = round2((Number(item.precioUnitario) + extraPorUnidad) * item.cantidad);
 
+      const categoria = item.productId ? categoriaPorProducto.get(item.productId) : undefined;
+      const nombreConCategoria = categoria ? `${item.nombreProducto} (${categoria})` : item.nombreProducto;
+
       lineas.push(
-        `${item.cantidad}x ${item.nombreProducto} - $${Number(item.precioUnitario).toFixed(2)} c/u = $${subtotalLinea.toFixed(2)}`,
+        `${item.cantidad}x ${nombreConCategoria} - $${Number(item.precioUnitario).toFixed(2)} c/u = $${subtotalLinea.toFixed(2)}`,
       );
       for (const modificador of item.modificadores) {
         lineas.push(`   ${modificador.nombreGrupo}: ${modificador.nombre}`);
@@ -743,6 +797,17 @@ export class PublicService {
    * (nombre/precioAdicional) needed to create each OrderItem's
    * OrderItemModifier rows, plus the total extra to add to the order.
    *
+   * The returned snapshots are ordered by `ProductModifierGroup.orden` (the
+   * same field the public catalog already orders by, see
+   * `PublicService.getCatalog`) — never by the order `modifierOptionIds`
+   * arrived in the request body. That keeps the order the client sends
+   * (whatever it happens to be) from leaking into what gets persisted and
+   * later shown in the "pedido recibido" notification; it's derived purely
+   * from `orden`, never from comparing modifier/group names. Options
+   * selected within the same group keep their original relative order
+   * (Array.prototype.sort is a stable sort) — only the grouping itself is
+   * reordered.
+   *
    * No TenantPrismaService here — same reason as the rest of this method:
    * this is a public, unauthenticated endpoint (tenant resolved from the
    * slug, not a JWT), so tenantId is passed explicitly into every where.
@@ -768,10 +833,13 @@ export class PublicService {
     });
 
     type GrupoConOpciones = (typeof asignaciones)[number]['modifierGroup'];
-    const gruposPorProducto = new Map<string, GrupoConOpciones[]>();
+    // orden viene de la asignación producto-grupo (ProductModifierGroup),
+    // no del ModifierGroup en sí — mismo campo que ya ordena los grupos en
+    // PublicService.getCatalog.
+    const gruposPorProducto = new Map<string, { orden: number; grupo: GrupoConOpciones }[]>();
     for (const asignacion of asignaciones) {
       const lista = gruposPorProducto.get(asignacion.productId) ?? [];
-      lista.push(asignacion.modifierGroup);
+      lista.push({ orden: asignacion.orden, grupo: asignacion.modifierGroup });
       gruposPorProducto.set(asignacion.productId, lista);
     }
 
@@ -779,16 +847,20 @@ export class PublicService {
     let modifiersExtraTotal = 0;
 
     for (const item of items) {
-      const grupos = gruposPorProducto.get(item.productId) ?? [];
+      const asignacionesProducto = gruposPorProducto.get(item.productId) ?? [];
+      const grupos = asignacionesProducto.map((a) => a.grupo);
       const optionIds = item.modifierOptionIds ?? [];
 
       // a) Every selected option must belong to a group assigned to this
       // product — 404 for anything else, same "never confirm a foreign
       // resource exists" principle as the rest of this service.
-      const optionIndex = new Map<string, { grupo: GrupoConOpciones; opcion: GrupoConOpciones['opciones'][number] }>();
-      for (const grupo of grupos) {
+      const optionIndex = new Map<
+        string,
+        { grupo: GrupoConOpciones; ordenGrupo: number; opcion: GrupoConOpciones['opciones'][number] }
+      >();
+      for (const { orden, grupo } of asignacionesProducto) {
         for (const opcion of grupo.opciones) {
-          optionIndex.set(opcion.id, { grupo, opcion });
+          optionIndex.set(opcion.id, { grupo, ordenGrupo: orden, opcion });
         }
       }
 
@@ -819,15 +891,15 @@ export class PublicService {
         }
       }
 
-      const snapshots = optionIds.map((optionId) => {
-        const { grupo, opcion } = optionIndex.get(optionId)!;
-        return {
+      const snapshots = optionIds
+        .map((optionId) => optionIndex.get(optionId)!)
+        .sort((a, b) => a.ordenGrupo - b.ordenGrupo)
+        .map(({ grupo, opcion }) => ({
           modifierOptionId: opcion.id,
           nombreGrupo: grupo.nombre,
           nombre: opcion.nombre,
           precioAdicional: Number(opcion.precioAdicional),
-        };
-      });
+        }));
       modificadoresPorItem.push(snapshots);
 
       const extraPorUnidad = snapshots.reduce((sum, s) => sum + s.precioAdicional, 0);
