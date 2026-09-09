@@ -408,6 +408,14 @@ model Order {
   // de audiencia Cliente (ver OrdersService.avanzar). facturaCorreo queda
   // como respaldo para pedidos que sí tengan ese dato pero no este.
   clienteCorreo         String?
+  // FK formal hacia Cliente — desde Módulo 2. Siempre presente: la crea/
+  // resuelve ClientesService.sincronizarDesdePedido en la misma transacción
+  // que el pedido (ver PublicService.createOrder), nunca queda huérfano tras
+  // el checkout. clienteNombre/clienteTelefono/clienteCorreo de arriba siguen
+  // siendo el snapshot al momento del pedido — no se leen de Cliente en
+  // tiempo de consulta, esta FK es solo para poder navegar/agrupar por
+  // cliente (ver architecture.md §5).
+  clienteId             String
   notas                 String?
   horaRecogidaTipo      HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
   // "HH:mm", same-day only (no date picker yet). Only set when
@@ -461,6 +469,14 @@ model Order {
   updatedAt             DateTime         @updatedAt
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Restrict, no Cascade/SetNull — mismo criterio que PuntoEnvio arriba
+  // (requerida, sin forma de dejarla nula) pero por el motivo contrario: acá
+  // SÍ hay snapshot (clienteNombre/clienteTelefono en este mismo modelo), así
+  // que no hay pérdida de información real; Restrict se eligió solo porque
+  // clienteId es NOT NULL y Prisma no permite SetNull sobre una relación
+  // requerida — Cascade borraría pedidos reales si algún día existe un
+  // borrado de Cliente, lo cual no debe pasar silenciosamente.
+  cliente    Cliente     @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
   items      OrderItem[]
   payments   Payment[]
@@ -476,6 +492,7 @@ model Order {
   // listing.
   @@index([tenantId, createdAt])
   @@index([puntoEnvioId])
+  @@index([clienteId])
   @@map("orders")
 }
 
@@ -684,6 +701,11 @@ model PedidoB2b {
   contactoNombre              String
   contactoTelefono            String
   contactoCorreo              String
+  // FK formal hacia Cliente (canal B2B) — mismo motivo/mismo momento de
+  // resolución que Order.clienteId, ver ese comentario. negocioNombre/
+  // contactoNombre/contactoTelefono/contactoCorreo de arriba siguen siendo
+  // el snapshot al momento del pedido.
+  clienteId                   String
   // Lunes de la semana que cubre el pedido (fecha, sin hora) — cada
   // PedidoB2bItemDia.dia es relativo a esta semana. Validado como lunes real
   // en PedidosB2bService, no a nivel de columna/DB.
@@ -737,6 +759,9 @@ model PedidoB2b {
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   codigoDescuento PedidoB2bCodigoDescuento? @relation(fields: [codigoDescuentoId], references: [id], onDelete: SetNull)
+  // Restrict — mismo razonamiento que Order.cliente (arriba): requerida,
+  // snapshot propio ya existe en este modelo, Cascade no es aceptable.
+  cliente         Cliente                   @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   items           PedidoB2bItem[]
 
   // folio es corto y de cara al negocio, igual que Order.folio — único por
@@ -744,6 +769,7 @@ model PedidoB2b {
   @@unique([tenantId, folio])
   @@index([tenantId, semanaInicio])
   @@index([codigoDescuentoId])
+  @@index([clienteId])
   @@map("pedidos_b2b")
 }
 
@@ -859,7 +885,9 @@ model Cliente {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  pedidosB2b PedidoB2b[]
 
   @@unique([tenantId, canal, telefono])
   @@index([tenantId])

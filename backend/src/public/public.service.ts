@@ -376,9 +376,23 @@ export class PublicService {
     const order = await this.prisma.$transaction(async (tx) => {
       const folio = await this.nextFolio(tx, tenant.id);
 
+      // Se resuelve antes de crear el Order — clienteId es una FK requerida
+      // desde Módulo 2, así que el Cliente tiene que existir primero (a
+      // diferencia de Módulo 1 Etapa 1, donde esto corría después solo para
+      // mantener Cliente al día, sin nada que enlazar de vuelta).
+      const cliente = await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId: tenant.id,
+        canal: ClienteCanal.B2C,
+        telefono: dto.clienteTelefono,
+        nombre: dto.clienteNombre,
+        correo: dto.clienteCorreo,
+        fechaPedido: new Date(),
+      });
+
       const nuevoOrder = await tx.order.create({
         data: {
           tenantId: tenant.id,
+          clienteId: cliente.id,
           folio,
           clienteNombre: dto.clienteNombre,
           clienteTelefono: dto.clienteTelefono,
@@ -437,15 +451,6 @@ export class PublicService {
             },
           },
         },
-      });
-
-      await this.clientesService.sincronizarDesdePedido(tx, {
-        tenantId: tenant.id,
-        canal: ClienteCanal.B2C,
-        telefono: nuevoOrder.clienteTelefono,
-        nombre: nuevoOrder.clienteNombre,
-        correo: nuevoOrder.clienteCorreo,
-        fechaPedido: nuevoOrder.createdAt,
       });
 
       return nuevoOrder;

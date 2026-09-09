@@ -8,8 +8,10 @@ import {
   HoraRecogidaTipo,
   MetodoPago,
   CanalOrigen,
+  ClienteCanal,
 } from '../generated/prisma/client';
 import { horarioSemanaVacio, type HorarioSemana } from '../src/common/horario';
+import { normalizarTelefono } from '../src/common/telefono';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -55,15 +57,53 @@ interface OrderSeedInput {
   notasDescuento?: string;
 }
 
+// Réplica mínima de ClientesService.sincronizarDesdePedido para el seed — el
+// seed corre fuera del contenedor de Nest (no hay DI aquí), así que no puede
+// importar/instanciar ese service directo. clienteId es requerida en Order
+// desde Módulo 2, así que cada Order del seed necesita su Cliente resuelto
+// primero.
+async function ensureClienteB2C(
+  tenantId: string,
+  nombre: string,
+  telefonoRaw: string,
+) {
+  const telefono = normalizarTelefono(telefonoRaw);
+  const existing = await prisma.cliente.findUnique({
+    where: {
+      tenantId_canal_telefono: { tenantId, canal: ClienteCanal.B2C, telefono },
+    },
+  });
+  if (existing) return existing;
+
+  const ahora = new Date();
+  return prisma.cliente.create({
+    data: {
+      tenantId,
+      canal: ClienteCanal.B2C,
+      telefono,
+      nombre,
+      primerPedidoAt: ahora,
+      ultimoPedidoAt: ahora,
+      totalPedidos: 1,
+    },
+  });
+}
+
 async function ensureOrder(tenantId: string, folio: string, input: OrderSeedInput) {
   const existing = await prisma.order.findFirst({ where: { tenantId, folio } });
   if (existing) return existing;
 
+  const cliente = await ensureClienteB2C(
+    tenantId,
+    input.clienteNombre,
+    input.clienteTelefono,
+  );
   const subtotal = input.items.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
 
   return prisma.order.create({
     data: {
       tenantId,
+      clienteId: cliente.id,
       folio,
       clienteNombre: input.clienteNombre,
       clienteTelefono: input.clienteTelefono,

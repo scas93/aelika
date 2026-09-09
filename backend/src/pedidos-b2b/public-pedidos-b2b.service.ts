@@ -229,9 +229,20 @@ export class PublicPedidosB2bService {
     return this.prisma.$transaction(async (tx) => {
       const folio = await nextFolioPedidoB2b(tx, tenant.id);
 
+      // Antes de crear el pedido — clienteId es FK requerida desde Módulo 2.
+      const cliente = await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId: tenant.id,
+        canal: ClienteCanal.B2B,
+        telefono: dto.contactoTelefono,
+        nombre: dto.contactoNombre,
+        correo: dto.contactoCorreo,
+        fechaPedido: new Date(),
+      });
+
       const pedido = await tx.pedidoB2b.create({
         data: {
           tenantId: tenant.id,
+          clienteId: cliente.id,
           folio,
           negocioNombre: dto.negocioNombre,
           contactoNombre: dto.contactoNombre,
@@ -253,15 +264,6 @@ export class PublicPedidosB2bService {
       });
 
       await crearItems(tx, tenant.id, pedido.id, resueltos);
-
-      await this.clientesService.sincronizarDesdePedido(tx, {
-        tenantId: tenant.id,
-        canal: ClienteCanal.B2B,
-        telefono: pedido.contactoTelefono,
-        nombre: pedido.contactoNombre,
-        correo: pedido.contactoCorreo,
-        fechaPedido: pedido.createdAt,
-      });
 
       return tx.pedidoB2b.findUniqueOrThrow({
         where: { id: pedido.id },

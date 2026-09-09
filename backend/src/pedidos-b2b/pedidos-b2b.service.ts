@@ -440,11 +440,24 @@ export class PedidosB2bService {
     return this.tenantPrisma.client.$transaction(async (tx) => {
       const folio = await nextFolioPedidoB2b(tx, tenantId);
 
+      // Antes de crear el pedido — clienteId es FK requerida desde Módulo 2.
+      const cliente = await this.clientesService.sincronizarDesdePedido(tx, {
+        tenantId,
+        canal: ClienteCanal.B2B,
+        telefono: dto.contactoTelefono,
+        nombre: dto.contactoNombre,
+        correo: dto.contactoCorreo,
+        fechaPedido: new Date(),
+      });
+
       const pedido = await tx.pedidoB2b.create({
         // tenantId es requerido por los tipos generados pero se inyecta en
         // tiempo de ejecución por la extensión tenant-scoped (ver
         // TenantPrismaService) — igual que el resto de los servicios.
+        // clienteId sí se pasa explícito: la extensión solo inyecta
+        // tenantId, no otras FKs.
         data: {
+          clienteId: cliente.id,
           folio,
           negocioNombre: dto.negocioNombre,
           contactoNombre: dto.contactoNombre,
@@ -464,15 +477,6 @@ export class PedidosB2bService {
       });
 
       await crearItems(tx, tenantId, pedido.id, resueltos);
-
-      await this.clientesService.sincronizarDesdePedido(tx, {
-        tenantId,
-        canal: ClienteCanal.B2B,
-        telefono: pedido.contactoTelefono,
-        nombre: pedido.contactoNombre,
-        correo: pedido.contactoCorreo,
-        fechaPedido: pedido.createdAt,
-      });
 
       return tx.pedidoB2b.findUniqueOrThrow({
         where: { id: pedido.id },
