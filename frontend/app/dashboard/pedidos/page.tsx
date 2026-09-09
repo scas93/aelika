@@ -27,6 +27,7 @@ import {
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { rangoHoyISO } from "@/lib/fecha";
 import { ESTADO_COLOR, ESTADO_LABEL, ESTADO_PAGO_COLOR, ESTADO_PAGO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import PedidosKanban from "./kanban";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
@@ -35,6 +36,11 @@ import Modal from "../_components/Modal";
 const POLL_INTERVAL_MS = 25000;
 
 type Tab = "activos" | "entregados";
+// Solo aplica dentro de "Activos" — Kanban es una forma alternativa de ver
+// ese mismo conjunto de pedidos, no un tab nuevo al mismo nivel que
+// "Entregados hoy" (ver CLAUDE.md/prompt de esta etapa). "Entregados hoy"
+// siempre se ve en lista.
+type VistaActivos = "lista" | "kanban";
 
 export default function PedidosPage() {
   const { token } = useSession();
@@ -42,6 +48,7 @@ export default function PedidosPage() {
   const [entregadosHoy, setEntregadosHoy] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("activos");
+  const [vistaActivos, setVistaActivos] = useState<VistaActivos>("lista");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nombreNegocio, setNombreNegocio] = useState("");
   const [ubicacionNegocio, setUbicacionNegocio] = useState<string | null>(null);
@@ -90,22 +97,39 @@ export default function PedidosPage() {
   }, [token]);
 
   const shown = tab === "activos" ? activos : entregadosHoy;
+  const mostrarKanban = tab === "activos" && vistaActivos === "kanban";
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex gap-2">
-        <Button variant={tab === "activos" ? "primary" : "secondary"} onClick={() => setTab("activos")}>
-          Activos {activos ? `(${activos.length})` : ""}
-        </Button>
-        <Button variant={tab === "entregados" ? "primary" : "secondary"} onClick={() => setTab("entregados")}>
-          Entregados hoy {entregadosHoy ? `(${entregadosHoy.length})` : ""}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <Button variant={tab === "activos" ? "primary" : "secondary"} onClick={() => setTab("activos")}>
+            Activos {activos ? `(${activos.length})` : ""}
+          </Button>
+          <Button variant={tab === "entregados" ? "primary" : "secondary"} onClick={() => setTab("entregados")}>
+            Entregados hoy {entregadosHoy ? `(${entregadosHoy.length})` : ""}
+          </Button>
+        </div>
+
+        {/* Solo dentro de "Activos" — "Entregados hoy" siempre se ve en lista */}
+        {tab === "activos" && (
+          <div className="flex gap-2">
+            <Button size="sm" variant={vistaActivos === "lista" ? "primary" : "secondary"} onClick={() => setVistaActivos("lista")}>
+              Lista
+            </Button>
+            <Button size="sm" variant={vistaActivos === "kanban" ? "primary" : "secondary"} onClick={() => setVistaActivos("kanban")}>
+              Kanban
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {shown === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
+      ) : mostrarKanban ? (
+        <PedidosKanban orders={activos ?? []} onAdvanced={load} />
       ) : (
         <ul className="flex flex-col gap-2">
           {shown.length === 0 && (
