@@ -1535,4 +1535,50 @@ export async function exportPedidosB2bDiaCsv(token: string, fecha: string): Prom
   return res.blob();
 }
 
+// --- Clientes (/dashboard/clientes) ---
+
+export type ClienteCanal = "B2C" | "B2B";
+export type ClienteOrdenarPor = "ultimoPedidoAt" | "totalPedidos";
+
+export interface Cliente {
+  id: string;
+  canal: ClienteCanal;
+  // Normalizado por el backend — solo dígitos, últimos 10 (ver
+  // normalizarTelefono en el backend). El formato de despliegue con
+  // espacios/guiones es responsabilidad de la UI, no de este tipo.
+  telefono: string;
+  nombre: string;
+  correo: string | null;
+  primerPedidoAt: string;
+  ultimoPedidoAt: string;
+  totalPedidos: number;
+}
+
+export interface PaginatedClientes {
+  data: Cliente[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ListClientesFilter {
+  q?: string;
+  ordenarPor?: ClienteOrdenarPor;
+  orden?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export function fetchClientes(token: string, filter?: ListClientesFilter) {
+  const params = new URLSearchParams();
+  if (filter?.q) params.set("q", filter.q);
+  if (filter?.ordenarPor) params.set("ordenarPor", filter.ordenarPor);
+  if (filter?.orden) params.set("orden", filter.orden);
+  if (filter?.page) params.set("page", String(filter.page));
+  if (filter?.limit) params.set("limit", String(filter.limit));
+  const query = params.toString();
+  return request<PaginatedClientes>(`/clientes${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
 export { ApiError };

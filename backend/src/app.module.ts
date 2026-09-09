@@ -19,6 +19,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PedidosB2bModule } from './pedidos-b2b/pedidos-b2b.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { ClientesModule } from './clientes/clientes.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
     PaymentsModule,
     PedidosB2bModule,
     NotificacionesModule,
+    ClientesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

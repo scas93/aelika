@@ -25,6 +25,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/pedidos-b2b/dia", label: "Pedidos del día", emoji: "🚚", iconBg: "#FEF3E2", iconColor: "#B45309" },
   { href: "/dashboard/pedidos-b2b/historico", label: "Históricos", emoji: "📜", iconBg: "#FEF3E2", iconColor: "#B45309" },
   { href: "/dashboard/catalogo", label: "Catálogo", emoji: "📋", iconBg: "#EDE9FE", iconColor: "#8B5CF6" },
+  { href: "/dashboard/clientes", label: "Clientes", emoji: "👤", iconBg: "#FFE4E6", iconColor: "#E11D48" },
   { href: "/dashboard/ajustes", label: "Ajustes", emoji: "⚙️", iconBg: "#E2E8F0", iconColor: "#64748B" },
   // Ya no es un ítem de sidebar (ver HREFS_OCULTOS_DEL_SIDEBAR abajo) — solo
   // se accede desde el menú "Mi perfil" en el topbar (UserMenu.tsx). La
@@ -94,6 +95,7 @@ export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[
   return ALL_NAV_ITEMS.filter((item) => {
     if (HREFS_OCULTOS_DEL_SIDEBAR.has(item.href)) return false;
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
+    if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";
     if (tipoStorefront === "RETAIL_B2B" && HREFS_NO_APLICAN_A_RETAIL_B2B.has(item.href)) return false;
     if (tipoStorefront !== "RETAIL_B2B" && HREFS_SOLO_RETAIL_B2B.has(item.href)) return false;
