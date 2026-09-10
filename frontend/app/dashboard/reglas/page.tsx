@@ -1,0 +1,160 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSession } from "@/lib/session-context";
+import { ApiError, dispararReglaManual, fetchReglas, updateRegla, type Regla, type ResumenDisparoManual } from "@/lib/api";
+import Card from "../_components/Card";
+import Button from "../_components/Button";
+import Badge from "../_components/Badge";
+import ToggleSwitch from "../_components/ToggleSwitch";
+import Modal from "../_components/Modal";
+import { CATEGORIA_BADGE_COLOR, CATEGORIA_LABEL, TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
+
+export default function ReglasPage() {
+  const { user, token } = useSession();
+
+  const [reglas, setReglas] = useState<Regla[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [disparando, setDisparando] = useState<string | null>(null);
+  const [resumenDisparo, setResumenDisparo] = useState<{ regla: Regla; resumen: ResumenDisparoManual } | null>(null);
+  const [errorDisparo, setErrorDisparo] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const data = await fetchReglas(token);
+      setReglas(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron cargar las reglas");
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (user.rol !== "DUENO") {
+    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar las reglas de notificación.</p>;
+  }
+
+  async function handleToggleActiva(regla: Regla) {
+    setReglas((prev) => (prev ? prev.map((r) => (r.id === regla.id ? { ...r, activa: !regla.activa } : r)) : prev));
+    await updateRegla(token, regla.id, { activa: !regla.activa });
+  }
+
+  async function handleDisparar(regla: Regla) {
+    setDisparando(regla.id);
+    setErrorDisparo(null);
+    try {
+      const resumen = await dispararReglaManual(token, regla.id);
+      setResumenDisparo({ regla, resumen });
+    } catch (err) {
+      setErrorDisparo(err instanceof ApiError ? err.message : "No se pudo disparar la regla");
+    } finally {
+      setDisparando(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-admin-ink-soft">
+          Reglas de notificación por WhatsApp — a quién, cuándo y con qué plantilla.
+        </p>
+        <Link href="/dashboard/reglas/nueva">
+          <Button variant="primary">+ Nueva regla</Button>
+        </Link>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {errorDisparo && <p className="text-sm text-red-600">{errorDisparo}</p>}
+
+      {reglas === null ? (
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
+      ) : reglas.length === 0 ? (
+        <Card className="text-sm text-admin-ink-soft">
+          Aún no tienes reglas — crea la primera con &quot;+ Nueva regla&quot;.
+        </Card>
+      ) : (
+        <Card padding={0} className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-admin-border text-admin-ink-soft">
+                <th className="px-4 py-3 font-bold">Nombre</th>
+                <th className="px-4 py-3 font-bold">Trigger</th>
+                <th className="px-4 py-3 font-bold">Categoría</th>
+                <th className="px-4 py-3 font-bold">Estado</th>
+                <th className="px-4 py-3 text-right font-bold">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reglas.map((regla) => (
+                <tr key={regla.id} className="border-b border-admin-border last:border-b-0">
+                  <td className="px-4 py-3 font-bold text-admin-ink">{regla.nombre}</td>
+                  <td className="px-4 py-3">
+                    <Badge color={TRIGGER_BADGE_COLOR[regla.trigger]}>{TRIGGER_LABEL[regla.trigger]}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge color={CATEGORIA_BADGE_COLOR[regla.plantillaCategoria]}>
+                      {CATEGORIA_LABEL[regla.plantillaCategoria]}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <ToggleSwitch
+                      checked={regla.activa}
+                      onChange={() => handleToggleActiva(regla)}
+                      label={regla.activa ? "Desactivar" : "Activar"}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      {regla.trigger === "MANUAL" && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleDisparar(regla)}
+                          disabled={disparando === regla.id || !regla.activa}
+                        >
+                          {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
+                        </Button>
+                      )}
+                      <Link href={`/dashboard/reglas/${regla.id}`}>
+                        <Button variant="secondary" size="sm">
+                          Editar
+                        </Button>
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      <Modal
+        open={resumenDisparo !== null}
+        onClose={() => setResumenDisparo(null)}
+        title={`"${resumenDisparo?.regla.nombre ?? ""}" disparada`}
+        footer={
+          <Button variant="primary" onClick={() => setResumenDisparo(null)}>
+            Cerrar
+          </Button>
+        }
+      >
+        {resumenDisparo && (
+          <ul className="flex flex-col gap-1.5 text-sm text-admin-ink">
+            <li>{resumenDisparo.resumen.clientesMatcheados} cliente(s) matcheados por el Filtro</li>
+            <li>{resumenDisparo.resumen.enviosDisparados} envío(s) disparados</li>
+            <li>{resumenDisparo.resumen.bloqueadosPorCandado} bloqueado(s) por el candado de frecuencia</li>
+            {resumenDisparo.resumen.conError > 0 && (
+              <li className="text-red-600">{resumenDisparo.resumen.conError} con error (revisa los logs del servidor)</li>
+            )}
+          </ul>
+        )}
+      </Modal>
+    </div>
+  );
+}

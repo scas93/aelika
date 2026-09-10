@@ -1146,6 +1146,126 @@ export function deleteCodigoDescuentoB2b(token: string, id: string) {
   });
 }
 
+// --- Motor de reglas de notificación (/dashboard/reglas, Módulo 3) ---
+
+export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL";
+export type ReglaCanal = "WHATSAPP";
+export type ReglaMensajeCategoria = "UTILITY" | "MARKETING";
+export type ReglaFiltroCampo = "TOTAL_PEDIDOS" | "ULTIMO_PEDIDO_ANTIGUEDAD_DIAS" | "PRIMER_PEDIDO_ANTIGUEDAD_DIAS";
+// IGUAL solo tiene sentido para TOTAL_PEDIDOS — el backend lo rechaza para
+// los dos campos de antigüedad (ver ReglasService.validarFiltro).
+export type ReglaFiltroOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL";
+export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO";
+export type ReglaTriggerOrigenPedido = "ORDER" | "PEDIDO_B2B";
+
+export interface FiltroCondicion {
+  campo: ReglaFiltroCampo;
+  operador: ReglaFiltroOperador;
+  valor: number;
+}
+
+export interface PlantillaVariable {
+  posicion: number;
+  fuente: ReglaPlantillaVariableFuente;
+  valor: string;
+}
+
+// Shape de Regla.triggerConfig cuando trigger = EVENTO_PEDIDO — ver
+// backend/prisma/schema.prisma. `estatus` es un valor de EstadoPedido (si
+// origen = ORDER) o PedidoB2bEstado (si origen = PEDIDO_B2B) — dos enums
+// con distinto número de valores, ver ESTATUS_POR_ORIGEN abajo.
+export interface EventoPedidoTriggerConfig {
+  origen: ReglaTriggerOrigenPedido;
+  estatus: string;
+}
+
+// Shape cuando trigger = FECHA_PROGRAMADA — instante absoluto en ISO 8601
+// con offset (ej. terminado en "Z"), una hora en punto (minutos/segundos en
+// cero, el job periódico corre cada hora — ver ReglasService.validarTriggerConfig,
+// que lo rechaza si no).
+export interface FechaProgramadaTriggerConfig {
+  fechaHora: string;
+}
+
+export interface Regla {
+  id: string;
+  tenantId: string;
+  nombre: string;
+  trigger: ReglaTriggerTipo;
+  // null para ESTADO_CLIENTE/MANUAL — ver el shape específico arriba para
+  // EVENTO_PEDIDO/FECHA_PROGRAMADA.
+  triggerConfig: Record<string, unknown> | null;
+  // Siempre [] si trigger = EVENTO_PEDIDO (el Filtro no aplica — decisión
+  // de producto ya tomada, el backend lo fuerza al guardar).
+  filtro: FiltroCondicion[];
+  canal: ReglaCanal;
+  plantillaNombre: string;
+  plantillaIdioma: string;
+  plantillaCategoria: ReglaMensajeCategoria;
+  // Solo para la vista previa en este panel — nunca se manda a Botpress.
+  plantillaTexto: string | null;
+  plantillaVariables: PlantillaVariable[];
+  activa: boolean;
+  // Solo aplica a FECHA_PROGRAMADA — null hasta que el job la dispara.
+  disparadaEn: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateReglaPayload {
+  nombre: string;
+  trigger: ReglaTriggerTipo;
+  triggerConfig?: Record<string, unknown>;
+  filtro?: FiltroCondicion[];
+  canal?: ReglaCanal;
+  plantillaNombre: string;
+  plantillaIdioma: string;
+  plantillaCategoria: ReglaMensajeCategoria;
+  plantillaTexto?: string;
+  plantillaVariables?: PlantillaVariable[];
+  activa?: boolean;
+}
+
+export type UpdateReglaPayload = Partial<CreateReglaPayload>;
+
+export interface ResumenDisparoManual {
+  clientesMatcheados: number;
+  enviosDisparados: number;
+  bloqueadosPorCandado: number;
+  conError: number;
+}
+
+export function fetchReglas(token: string) {
+  return request<Regla[]>("/reglas", { headers: authHeaders(token) });
+}
+
+export function fetchRegla(token: string, id: string) {
+  return request<Regla>(`/reglas/${id}`, { headers: authHeaders(token) });
+}
+
+export function createRegla(token: string, payload: CreateReglaPayload) {
+  return request<Regla>("/reglas", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRegla(token: string, id: string, payload: UpdateReglaPayload) {
+  return request<Regla>(`/reglas/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function dispararReglaManual(token: string, id: string) {
+  return request<ResumenDisparoManual>(`/reglas/${id}/disparar`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // --- Storefront público de pedidos B2B (/mayoreo/[slug]) ---
 // Deliberadamente separado de los tipos Public*/PedidoB2b* de arriba, aunque
 // el nombre "Dia" choque en concepto con DiaSemana (horario) — ese tipo es

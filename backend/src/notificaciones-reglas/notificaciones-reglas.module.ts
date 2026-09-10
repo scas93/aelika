@@ -6,6 +6,8 @@ import { ReglaEnvioService } from './regla-envio.service';
 import { ReglaEnvioCallbackController } from './regla-envio-callback.controller';
 import { ReglaBarridoService } from './regla-barrido.service';
 import { ReglaEventoPedidoService } from './regla-evento-pedido.service';
+import { ReglasService } from './reglas.service';
+import { ReglasController } from './reglas.controller';
 
 @Module({
   // ScheduleModule.forRoot() registra el SchedulerRegistry que @Cron
@@ -14,8 +16,15 @@ import { ReglaEventoPedidoService } from './regla-evento-pedido.service';
   // proyecto por ahora (mismo criterio de auto-contención que
   // NotificacionesModule con su propio BullModule.forRootAsync).
   imports: [ScheduleModule.forRoot()],
-  controllers: [ReglaEnvioCallbackController],
-  providers: [ReglasFiltroService, ReglaCandadoService, ReglaEnvioService, ReglaBarridoService, ReglaEventoPedidoService],
+  controllers: [ReglaEnvioCallbackController, ReglasController],
+  providers: [
+    ReglasFiltroService,
+    ReglaCandadoService,
+    ReglaEnvioService,
+    ReglaBarridoService,
+    ReglaEventoPedidoService,
+    ReglasService,
+  ],
   exports: [ReglasFiltroService, ReglaCandadoService, ReglaEnvioService, ReglaBarridoService, ReglaEventoPedidoService],
 })
 export class NotificacionesReglasModule {}

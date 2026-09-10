@@ -1036,6 +1036,12 @@ model Regla {
   plantillaNombre    String
   plantillaIdioma    String
   plantillaCategoria ReglaMensajeCategoria
+  // Texto del cuerpo de la plantilla, SOLO para renderizar la vista previa
+  // en el panel (Etapa 3) — nunca se manda a Botpress ni se usa en el envío
+  // real (ReglaEnvioService no lo toca). Botpress tiene su propia copia
+  // registrada contra Meta; esto es puramente de referencia visual para
+  // quien arma la Regla, y puede quedar vacío (nadie lo pegó todavía).
+  plantillaTexto     String?
 
   // Mapeo ordenado de las variables posicionales de la plantilla (Botpress
   // no soporta variables nombradas — confirmado contra su documentación,
