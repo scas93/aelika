@@ -4,6 +4,14 @@ Plataforma SaaS multi-tenant tipo "Uber Eats Pickup, pero sin comisiones". Negoc
 
 Este archivo resume las decisiones de arquitectura y el alcance de la fase actual. El documento de planeación completo (visión, todas las secciones, decisiones descartadas y por qué) vive en `Aelika - Documento de Planeacion.md`, en la misma carpeta — consúltalo si necesitas el razonamiento completo detrás de algo.
 
+## Convención de ramas y deploys
+
+- `main` está conectada a Vercel producción + Railway producción.
+- `staging` está conectada a Vercel staging + Railway staging.
+- Todo el trabajo nuevo se sube primero a `staging`. Nunca se hace push directo a `main`.
+- Cuando Santiago dice "push a staging", significa: subir/mergear el trabajo actual a la rama `staging`.
+- Cuando Santiago dice "push a prod" (o variantes como "ya, dale push a prod"), significa: mergear `staging` → `main` para promover a producción.
+
 ## Fase actual: Fase 1 — MVP con piloto manual
 
 **Sí construir ahora:**
