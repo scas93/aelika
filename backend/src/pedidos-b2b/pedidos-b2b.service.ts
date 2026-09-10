@@ -13,6 +13,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { ClientesService } from '../clientes/clientes.service';
+import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
@@ -73,6 +74,7 @@ export class PedidosB2bService {
     private readonly prisma: PrismaService,
     private readonly tenantPrisma: TenantPrismaService,
     private readonly clientesService: ClientesService,
+    private readonly reglaEventoPedidoService: ReglaEventoPedidoService,
   ) {}
 
   private buildWhere(query: {
@@ -568,11 +570,24 @@ export class PedidosB2bService {
       }
     }
 
-    return this.tenantPrisma.client.pedidoB2b.update({
+    const actualizado = await this.tenantPrisma.client.pedidoB2b.update({
       where: { id },
       data: { estado: siguiente },
       include: { items: { include: { distribucion: true } } },
     });
+
+    // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — ver el mismo comentario en
+    // OrdersService.avanzar. void + fire-and-forget: nunca debe sumarle al
+    // request la latencia del POST a Botpress.
+    void this.reglaEventoPedidoService.dispararSeguro({
+      tenantId: actualizado.tenantId,
+      origen: 'PEDIDO_B2B',
+      estatus: siguiente,
+      clienteId: actualizado.clienteId,
+      folio: actualizado.folio,
+    });
+
+    return actualizado;
   }
 
   /**
@@ -610,11 +625,28 @@ export class PedidosB2bService {
       data.estado = PedidoB2bEstado.CONFIRMADO_SURTIENDO;
     }
 
-    return this.tenantPrisma.client.pedidoB2b.update({
+    const actualizado = await this.tenantPrisma.client.pedidoB2b.update({
       where: { id },
       data,
       include: { items: { include: { distribucion: true } } },
     });
+
+    // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — solo si esta llamada de
+    // verdad movió `estado` (rama AL_INICIO). En modo AL_FINAL, marcarPagado
+    // nunca cambia `estado` (ver comentario del método), así que no hay
+    // ningún evento de estatus que disparar aquí — ver también avanzar(),
+    // que sí lo cubre para esa transición.
+    if (data.estado) {
+      void this.reglaEventoPedidoService.dispararSeguro({
+        tenantId: actualizado.tenantId,
+        origen: 'PEDIDO_B2B',
+        estatus: data.estado as PedidoB2bEstado,
+        clienteId: actualizado.clienteId,
+        folio: actualizado.folio,
+      });
+    }
+
+    return actualizado;
   }
 
   /**

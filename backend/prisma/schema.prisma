@@ -76,6 +76,17 @@ model Tenant {
   // POST /tenant/me/regenerate-bot-key. Never empty, never editable via the
   // general PATCH /tenant/me.
   botApiKey                    String             @unique
+  // Sentido inverso a botApiKey (Aelika -> Botpress, no Botpress -> Aelika):
+  // URL de la integración Webhook del tenant en Botpress Studio (card
+  // "Start Conversation") que ReglaEnvioService llama para iniciar una
+  // conversación de WhatsApp. Null hasta que se configure a mano en base de
+  // datos (Etapa 2a, sin pantalla en el panel todavía) — ReglaEnvioService
+  // falla explícito si un tenant sin esto intenta enviar. botWebhookSecret
+  // es opcional porque no todo webhook de Botpress exige uno, pero cuando
+  // existe se manda en el header `x-bp-secret` de cada POST saliente (así
+  // es como la integración Webhook de Botpress lo espera).
+  botWebhookUrl                String?
+  botWebhookSecret             String?
   // Whether/how factura* fields on Order are required at checkout — see
   // FacturacionModo and PublicService.createOrder.
   facturacionModo              FacturacionModo    @default(DESACTIVADO)
@@ -128,6 +139,8 @@ model Tenant {
   notificacionCanalConfigs  NotificacionCanalConfig[]
   notificacionEventoConfigs NotificacionEventoConfig[]
   clientes                  Cliente[]
+  reglas                    Regla[]
+  reglaEnvioLogs            ReglaEnvioLog[]
 
   @@map("tenants")
 }
@@ -885,11 +898,225 @@ model Cliente {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  orders     Order[]
-  pedidosB2b PedidoB2b[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders         Order[]
+  pedidosB2b     PedidoB2b[]
+  reglaEnvioLogs ReglaEnvioLog[]
 
   @@unique([tenantId, canal, telefono])
   @@index([tenantId])
   @@map("clientes")
+}
+
+// ---------------------------------------------------------------------------
+// Motor de reglas de notificación (Módulo 3, Etapa 1: solo modelo de datos +
+// evaluación del Filtro — ver CLAUDE.md). Convive con el sistema de
+// notificaciones por evento de arriba (NotificacionEventoConfig y compañía);
+// no lo reemplaza ni se conecta con él en esta etapa. Regla junta Trigger +
+// Filtro + Canal + Mensaje; ReglaEnvioLog es la bitácora de envíos — la
+// primera tabla de este tipo en el proyecto (el sistema de eventos de arriba
+// no registra nada en base de datos, solo logs de aplicación no
+// consultables).
+// ---------------------------------------------------------------------------
+
+// EVENTO_PEDIDO: dispara en una transición de estatus de Order o PedidoB2b —
+//   ver ReglaTriggerOrigenPedido y el shape de Regla.triggerConfig.
+// ESTADO_CLIENTE: evaluación periódica (ej. inactividad). La condición
+//   completa ("sin pedido en X días") vive en el Filtro, no aquí — este
+//   trigger solo marca que la Regla debe evaluarse periódicamente (job de la
+//   Etapa 2), sin duplicar la condición en dos lugares.
+// FECHA_PROGRAMADA: una fecha-hora única (envío de una sola vez), no
+//   recurrente — no hay soporte todavía para algo tipo "cada lunes".
+// MANUAL: disparo a mano desde el panel (Etapa 3), sin job de por medio.
+enum ReglaTriggerTipo {
+  EVENTO_PEDIDO
+  ESTADO_CLIENTE
+  FECHA_PROGRAMADA
+  MANUAL
+}
+
+// Alineado 1:1 a las categorías de plantilla de Meta/WhatsApp — no hay una
+// tercera categoría. Gobierna el candado de frecuencia (ver ReglaEnvioLog):
+// MARKETING lo tiene (máx. 1 envío por cliente por semana, global entre
+// reglas), UTILITY no tiene candado.
+enum ReglaMensajeCategoria {
+  UTILITY
+  MARKETING
+}
+
+// Hoy solo WHATSAPP tiene sentido (el envío al cliente final vía WhatsApp lo
+// hace el bot de Botpress) — enum en vez de un booleano/string suelto para
+// no necesitar otra migración de tipo de columna cuando se agregue un canal
+// nuevo.
+enum ReglaCanal {
+  WHATSAPP
+}
+
+// Solo Order (EstadoPedido, 4 valores) y PedidoB2b (PedidoB2bEstado, 3
+// valores, sin LISTO_ENTREGA) tienen un ciclo de vida con estatus. Un
+// EVENTO_PEDIDO necesita saber de cuál de los dos viene el estatus guardado
+// en Regla.triggerConfig, porque los enums no comparten dominio de forma
+// segura (ej. "CONFIRMADO_SURTIENDO" existe en ambos, pero "LISTO_ENTREGA"
+// solo en Order) — sin este campo, un mismo string de estatus sería
+// ambiguo entre los dos modelos.
+enum ReglaTriggerOrigenPedido {
+  ORDER
+  PEDIDO_B2B
+}
+
+// Query builder de condiciones sobre Cliente — deliberadamente cerrado, no
+// un DSL de propósito general: solo los 3 campos de Cliente que hoy tiene
+// sentido filtrar (ver auditoría previa, Bloque 2). Agregar un campo nuevo
+// es extender este enum, no cambiar la forma del dato.
+enum ReglaFiltroCampo {
+  TOTAL_PEDIDOS
+  ULTIMO_PEDIDO_ANTIGUEDAD_DIAS
+  PRIMER_PEDIDO_ANTIGUEDAD_DIAS
+}
+
+// TOTAL_PEDIDOS admite los 3 (comparación numérica directa). Los dos campos
+// de antigüedad de arriba solo admiten MAYOR_IGUAL/MENOR_IGUAL — nunca
+// IGUAL, que no tiene una interpretación razonable sobre "días transcurridos
+// desde ahora" — validado por ReglasFiltroService, no por Postgres.
+enum ReglaFiltroOperador {
+  MAYOR_IGUAL
+  MENOR_IGUAL
+  IGUAL
+}
+
+// Fuente de cada variable posicional de la plantilla — ver
+// Regla.plantillaVariables.
+enum ReglaPlantillaVariableFuente {
+  CAMPO_CLIENTE
+  // Solo tiene sentido para trigger = EVENTO_PEDIDO (Etapa 2c) — los demás
+  // tipos de Regla no tienen un pedido de contexto que disparó el envío.
+  // ReglaEnvioService lo resuelve a partir del `contexto` que le pasa el
+  // caller (ReglaEventoPedidoService), no consultando Order/PedidoB2b por
+  // su cuenta.
+  CAMPO_PEDIDO
+  VALOR_FIJO
+}
+
+// Regla = Trigger + Filtro + Canal + Mensaje. Esta etapa solo modela la
+// definición — nada la evalúa ni la dispara todavía salvo
+// ReglasFiltroService (invocado directo con un tenantId + condiciones, no
+// necesariamente leyendo una fila de Regla ya guardada — ver ese servicio).
+model Regla {
+  id       String           @id @default(uuid())
+  tenantId String
+  nombre   String
+  trigger  ReglaTriggerTipo
+
+  // Shape depende de `trigger` (validado en la capa de aplicación, no por
+  // Postgres — mismo principio que Promotion.config/NotificacionCanalConfig.config):
+  //   EVENTO_PEDIDO    -> { origen: ReglaTriggerOrigenPedido, estatus: string
+  //                         (un valor de EstadoPedido o PedidoB2bEstado según
+  //                         `origen`) }
+  //   ESTADO_CLIENTE   -> null — la condición vive en `filtro` (ver el
+  //                        comentario de ReglaTriggerTipo arriba).
+  //   FECHA_PROGRAMADA -> { fechaHora: string en ISO 8601 } — una sola vez.
+  //   MANUAL           -> null.
+  triggerConfig Json?
+
+  // Lista de condiciones combinadas con Y — [] (lista vacía) significa "sin
+  // filtro", matchea a todos los clientes del tenant (ver
+  // ReglasFiltroService.evaluar). Cada elemento tiene la forma { campo:
+  // ReglaFiltroCampo, operador: ReglaFiltroOperador, valor: number } — para
+  // los dos campos de antigüedad, `valor` es siempre un número de días,
+  // nunca una fecha absoluta.
+  filtro Json
+
+  canal ReglaCanal @default(WHATSAPP)
+
+  // Plantilla de mensaje — campos embebidos, no un modelo `PlantillaMensaje`
+  // aparte: esta etapa no tiene pantalla de gestión de plantillas todavía.
+  // Referencian una plantilla ya registrada en Meta/WhatsApp Business
+  // (nombre + idioma tal como está dada de alta ahí), no el contenido del
+  // mensaje.
+  plantillaNombre    String
+  plantillaIdioma    String
+  plantillaCategoria ReglaMensajeCategoria
+
+  // Mapeo ordenado de las variables posicionales de la plantilla (Botpress
+  // no soporta variables nombradas — confirmado contra su documentación,
+  // ver ReglaEnvioService). Lista de { posicion: number, fuente:
+  // ReglaPlantillaVariableFuente, valor: string }, ordenada por `posicion`
+  // antes de armar el arreglo `["valor1", "valor2"]` del payload.
+  //   CAMPO_CLIENTE -> `valor` es el nombre del campo de Cliente a leer —
+  //                     solo `"nombre"` soportado (único campo de Cliente
+  //                     con sentido como variable de mensaje).
+  //   CAMPO_PEDIDO  -> `valor` es el nombre del campo del pedido a leer —
+  //                     solo `"folio"` soportado (Etapa 2c). Solo tiene
+  //                     sentido si `Regla.trigger = EVENTO_PEDIDO`; los
+  //                     demás tipos no tienen un pedido de contexto.
+  //   VALOR_FIJO    -> `valor` es el string literal a usar tal cual (ej. el
+  //                     nombre del negocio).
+  // Validado en la capa de aplicación (ReglaEnvioService), no por Postgres
+  // — mismo principio que el resto de los `Json` de este schema.
+  plantillaVariables Json @default("[]")
+
+  activa Boolean @default(true)
+
+  // Solo tiene sentido para trigger = FECHA_PROGRAMADA (una sola vez, no
+  // recurrente — ver ReglaTriggerTipo). Null = todavía no se ha disparado;
+  // ReglaBarridoService la marca con la hora de la corrida que la disparó
+  // justo después de procesarla, para que corridas futuras del job (cada
+  // hora) la salten aunque su fechaHora ya haya pasado. Se marca sin
+  // importar si el Filtro matcheó a algún Cliente esa corrida — lo que se
+  // dispara una sola vez es el trigger (la fecha ya se cumplió), no "hubo
+  // al menos un envío". Siempre null para ESTADO_CLIENTE/EVENTO_PEDIDO/
+  // MANUAL, que no tienen este concepto de disparo único.
+  disparadaEn DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  envios ReglaEnvioLog[]
+
+  @@index([tenantId])
+  @@map("reglas")
+}
+
+// EN_CURSO: el POST a Botpress salió y fue aceptado (o el servicio de envío
+// lo creó justo antes de mandarlo) — no sabemos el resultado todavía,
+// Botpress lo reporta después de forma asíncrona (ver ReglaEnvioService y
+// el endpoint de callback). EXITO/FALLO: resultado real, llega por ese
+// callback. Un fallo síncrono del POST inicial (red caída, Botpress
+// rechazó la request de plano) también se resuelve a FALLO de inmediato,
+// sin esperar callback — ver ReglaEnvioService.
+enum ReglaEnvioEstado {
+  EN_CURSO
+  EXITO
+  FALLO
+}
+
+// Bitácora de envíos — primera tabla de este tipo en el proyecto (ver
+// comentario de la sección arriba). `categoria` está denormalizada desde
+// Regla.plantillaCategoria a propósito: el candado de frecuencia
+// (ReglaCandadoService) necesita resolver "¿ya recibió Marketing en los
+// últimos 7 días?" en cada evaluación de regla, sin depender de un join a
+// Regla (que además es opcional/SetNull, ver abajo) — mismo principio que
+// OrderItem denormalizando tenantId desde Order.
+model ReglaEnvioLog {
+  id        String                @id @default(uuid())
+  tenantId  String
+  clienteId String
+  reglaId   String?
+  categoria ReglaMensajeCategoria
+  estado    ReglaEnvioEstado      @default(EN_CURSO)
+  createdAt DateTime              @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  // SetNull, no Restrict: `categoria` ya está snapshoteada arriba, así que
+  // borrar la Regla que originó este envío no pierde nada que el candado de
+  // frecuencia necesite — mismo criterio que PedidoB2b.codigoDescuento (sin
+  // Restrict, sin snapshot que perder).
+  regla Regla? @relation(fields: [reglaId], references: [id], onDelete: SetNull)
+
+  // El candado de frecuencia consulta exactamente esta combinación en cada
+  // evaluación de regla Marketing — ver ReglaCandadoService.
+  @@index([tenantId, clienteId, categoria, createdAt])
+  @@map("regla_envio_logs")
 }

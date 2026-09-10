@@ -9,6 +9,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
 import {
   EstadoPago,
   EstadoPedido,
@@ -63,6 +64,7 @@ export class OrdersService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly stripeService: StripeService,
     private readonly notificacionesQueueService: NotificacionesQueueService,
+    private readonly reglaEventoPedidoService: ReglaEventoPedidoService,
   ) {}
 
   findAll(query: ListOrdersQueryDto) {
@@ -289,6 +291,22 @@ export class OrdersService {
         destinatarioCliente: actualizado.clienteCorreo ?? actualizado.facturaCorreo ?? undefined,
       });
     }
+
+    // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — sistema aparte del de
+    // arriba (NotificacionEventoConfig), no se cruzan. Se evalúa para
+    // `siguiente` directo (no depende de `evento`/EVENTO_POR_ESTADO, que es
+    // específico del otro sistema) porque en la práctica `siguiente` nunca
+    // es PENDIENTE_CONFIRMACION (SIGUIENTE_ESTADO nunca apunta ahí), así que
+    // cubre exactamente los mismos 3 estatus. void + fire-and-forget:
+    // dispararSeguro nunca lanza y no debe sumarle al request la latencia
+    // del POST a Botpress (ver ReglaEventoPedidoService).
+    void this.reglaEventoPedidoService.dispararSeguro({
+      tenantId: actualizado.tenantId,
+      origen: 'ORDER',
+      estatus: siguiente,
+      clienteId: actualizado.clienteId,
+      folio: actualizado.folio,
+    });
 
     return actualizado;
   }

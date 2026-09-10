@@ -115,6 +115,12 @@ export class TenantPrismaService {
           cliente: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          regla: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          reglaEnvioLog: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

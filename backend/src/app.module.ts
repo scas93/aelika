@@ -20,6 +20,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PedidosB2bModule } from './pedidos-b2b/pedidos-b2b.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ClientesModule } from './clientes/clientes.module';
+import { NotificacionesReglasModule } from './notificaciones-reglas/notificaciones-reglas.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ClientesModule } from './clientes/clientes.module';
     PedidosB2bModule,
     NotificacionesModule,
     ClientesModule,
+    NotificacionesReglasModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],
