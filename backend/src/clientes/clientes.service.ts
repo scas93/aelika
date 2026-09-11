@@ -3,6 +3,7 @@ import { Cliente, ClienteCanal, Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
+import { SummaryQueryDto } from './dto/summary-query.dto';
 
 interface SincronizarClienteInput {
   tenantId: string;
@@ -75,6 +76,83 @@ export class ClientesService {
       limit: query.limit,
       totalPages: Math.ceil(total / query.limit),
     };
+  }
+
+  // Etapa 1 (Módulo 4 / Dashboard) — clientes nuevos vs. recurrentes por
+  // día, sobre la misma ventana de 10 días que OrdersService.summaryDaily
+  // (mismo patrón: una sola query de la ventana completa, agrupada en
+  // memoria por día — ver ese método para el razonamiento de por qué no
+  // usa groupBy aquí). "Nuevo" en el día D = su primerPedidoAt cae en D;
+  // "recurrente" = tuvo un pedido en D pero primerPedidoAt es de un día
+  // anterior. Cuenta clientes distintos por día, no pedidos — dos pedidos
+  // del mismo cliente el mismo día cuentan una sola vez, así que esta
+  // serie diverge a propósito de la de OrdersService.summaryDaily.
+  async summaryDaily(query: SummaryQueryDto) {
+    const DIAS = 10;
+    const DIA_MS = 24 * 60 * 60 * 1000;
+    const desdeHoy = new Date(query.desde);
+    const hastaHoy = new Date(query.hasta);
+
+    const dias = Array.from({ length: DIAS }, (_, i) => {
+      const offsetMs = (DIAS - 1 - i) * DIA_MS;
+      const desde = new Date(desdeHoy.getTime() - offsetMs);
+      const hasta = new Date(hastaHoy.getTime() - offsetMs);
+      return { fecha: desde.toISOString().slice(0, 10), desde, hasta };
+    });
+
+    const orders = await this.tenantPrisma.client.order.findMany({
+      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy } },
+      select: { createdAt: true, clienteId: true },
+    });
+
+    const clienteIds = [...new Set(orders.map((o) => o.clienteId))];
+    const clientes = await this.tenantPrisma.client.cliente.findMany({
+      where: { id: { in: clienteIds } },
+      select: { id: true, primerPedidoAt: true },
+    });
+    const primerPedidoPorCliente = new Map(
+      clientes.map((c) => [c.id, c.primerPedidoAt]),
+    );
+
+    return dias.map(({ fecha, desde, hasta }) => {
+      const clientesDelDia = new Set(
+        orders
+          .filter((o) => o.createdAt >= desde && o.createdAt <= hasta)
+          .map((o) => o.clienteId),
+      );
+
+      let nuevos = 0;
+      let recurrentes = 0;
+      for (const clienteId of clientesDelDia) {
+        const primerPedidoAt = primerPedidoPorCliente.get(clienteId);
+        const esNuevo =
+          !!primerPedidoAt && primerPedidoAt >= desde && primerPedidoAt <= hasta;
+        if (esNuevo) {
+          nuevos++;
+        } else {
+          recurrentes++;
+        }
+      }
+
+      return { fecha, nuevos, recurrentes };
+    });
+  }
+
+  // Etapa 1 (Módulo 4 / Dashboard) — clientes con al menos un pedido en una
+  // ventana rodante de 7 días terminando ahora, independiente de la
+  // ventana de 10 días de summaryDaily (no es un recorte de esa serie).
+  // ultimoPedidoAt ya se actualiza en cada pedido nuevo del cliente (ver
+  // sincronizarDesdePedido), así que "activo" se resuelve con un solo
+  // count sobre Cliente — no hace falta tocar Order para esto.
+  async activos() {
+    const DIAS = 7;
+    const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000);
+
+    const clientesActivos = await this.tenantPrisma.client.cliente.count({
+      where: { ultimoPedidoAt: { gte: desde } },
+    });
+
+    return { clientesActivos };
   }
 
   async sincronizarDesdePedido(

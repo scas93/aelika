@@ -141,6 +141,7 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
 export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[] {
   return ALL_NAV_ITEMS.filter((item) => {
     if (HREFS_OCULTOS_DEL_SIDEBAR.has(item.href)) return false;
+    if (item.href === "/dashboard") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";

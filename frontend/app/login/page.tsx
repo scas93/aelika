@@ -21,7 +21,10 @@ export default function LoginPage() {
     try {
       const session = await login({ email, password });
       saveSession(session);
-      router.push("/dashboard");
+      // Operador no tiene acceso a /dashboard (Inicio, ver DashboardPage) —
+      // aterriza directo en Pedidos, la pantalla que sí puede usar. Gerente
+      // y Dueño mantienen el destino de siempre.
+      router.push(session.user.rol === "OPERADOR" ? "/dashboard/pedidos" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión");
     } finally {

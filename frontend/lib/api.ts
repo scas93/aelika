@@ -993,6 +993,16 @@ export function fetchOrdersSummaryDaily(token: string, range: { desde: string; h
   return request<OrdersPorDia[]>(`/orders/summary/daily?${params.toString()}`, { headers: authHeaders(token) });
 }
 
+export interface OrdersPorEstatus {
+  estadoPedido: EstadoPedido;
+  conteo: number;
+}
+
+export function fetchOrdersSummaryPorEstatus(token: string, range: { desde: string; hasta: string }) {
+  const params = new URLSearchParams({ desde: range.desde, hasta: range.hasta });
+  return request<OrdersPorEstatus[]>(`/orders/summary/estatus?${params.toString()}`, { headers: authHeaders(token) });
+}
+
 export function fetchOrder(token: string, id: string) {
   return request<Order>(`/orders/${id}`, { headers: authHeaders(token) });
 }
@@ -1709,6 +1719,30 @@ export function fetchClientes(token: string, filter?: ListClientesFilter) {
   if (filter?.limit) params.set("limit", String(filter.limit));
   const query = params.toString();
   return request<PaginatedClientes>(`/clientes${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+// --- Clientes agregado (Dashboard, Módulo 4 Etapa 1) ---
+// Distinto del directorio paginado de arriba — alimenta /dashboard, no
+// /dashboard/clientes. Ver ClientesController: abiertos a los 3 roles,
+// a diferencia de fetchClientes.
+
+export interface ClientesPorDia {
+  fecha: string;
+  nuevos: number;
+  recurrentes: number;
+}
+
+export function fetchClientesSummaryDaily(token: string, range: { desde: string; hasta: string }) {
+  const params = new URLSearchParams({ desde: range.desde, hasta: range.hasta });
+  return request<ClientesPorDia[]>(`/clientes/summary/daily?${params.toString()}`, { headers: authHeaders(token) });
+}
+
+export interface ClientesActivos {
+  clientesActivos: number;
+}
+
+export function fetchClientesActivos(token: string) {
+  return request<ClientesActivos>(`/clientes/activos`, { headers: authHeaders(token) });
 }
 
 export { ApiError };

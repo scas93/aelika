@@ -142,6 +142,32 @@ export class OrdersService {
     }));
   }
 
+  // Etapa 2 (Módulo 4 / Dashboard) — conteo de pedidos por estatus, mismo
+  // alcance "hoy" que /orders/summary (createdAt, no estado actual sin
+  // importar fecha: un PENDIENTE_CONFIRMACION de ayer no debe contarse
+  // aquí). A diferencia de summaryDaily, sí usa groupBy de Prisma — aquí es
+  // una agrupación por igualdad sobre una columna real (4 valores fijos),
+  // no el bucketing por rango de fecha que summaryDaily evita hacer con
+  // groupBy. Siempre regresa los 4 estados, incluso en 0, para que el
+  // frontend no tenga que rellenar huecos.
+  async summaryPorEstatus(query: SummaryQueryDto) {
+    const where = {
+      createdAt: { gte: new Date(query.desde), lte: new Date(query.hasta) },
+    };
+
+    const grupos = await this.tenantPrisma.client.order.groupBy({
+      by: ['estadoPedido'],
+      where,
+      _count: true,
+    });
+    const conteoPorEstado = new Map(grupos.map((g) => [g.estadoPedido, g._count]));
+
+    return Object.values(EstadoPedido).map((estadoPedido) => ({
+      estadoPedido,
+      conteo: conteoPorEstado.get(estadoPedido) ?? 0,
+    }));
+  }
+
   private buildHistoricoWhere(query: {
     estadoPedido?: EstadoPedido;
     metodoPago?: ListOrdersHistoricoQueryDto['metodoPago'];

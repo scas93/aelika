@@ -38,6 +38,12 @@ export class OrdersController {
   }
 
   // Must come before @Get(':id') — same reason as 'summary' above.
+  @Get('summary/estatus')
+  summaryPorEstatus(@Query() query: SummaryQueryDto) {
+    return this.ordersService.summaryPorEstatus(query);
+  }
+
+  // Must come before @Get(':id') — same reason as 'summary' above.
   @Get('historico')
   findAllHistorico(@Query() query: ListOrdersHistoricoQueryDto) {
     return this.ordersService.findAllHistorico(query);
