@@ -26,6 +26,9 @@ const SETTINGS_SELECT = {
   horarioAtencion: true,
   ubicacion: true,
   botApiKey: true,
+  botWebhookUrl: true,
+  botWebhookSecret: true,
+  candadoMarketingDias: true,
   facturacionModo: true,
   stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
@@ -89,6 +92,9 @@ export class TenantService {
         pedidoB2bVentanaAperturaHora: ventana?.pedidoB2bVentanaAperturaHora,
         pedidoB2bVentanaCierreDia: ventana?.pedidoB2bVentanaCierreDia,
         pedidoB2bVentanaCierreHora: ventana?.pedidoB2bVentanaCierreHora,
+        botWebhookUrl: dto.botWebhookUrl,
+        botWebhookSecret: dto.botWebhookSecret,
+        candadoMarketingDias: dto.candadoMarketingDias,
       },
       select: SETTINGS_SELECT,
     });
@@ -250,6 +256,9 @@ export class TenantService {
     horarioAtencion: unknown;
     ubicacion: string | null;
     botApiKey: string;
+    botWebhookUrl: string | null;
+    botWebhookSecret: string | null;
+    candadoMarketingDias: number | null;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
     stripeAccountId: string | null;
@@ -269,6 +278,9 @@ export class TenantService {
       ubicacion: tenant.ubicacion,
       stripeContactEmail: tenant.stripeContactEmail,
       botApiKey: tenant.botApiKey,
+      botWebhookUrl: tenant.botWebhookUrl,
+      botWebhookSecret: tenant.botWebhookSecret,
+      candadoMarketingDias: tenant.candadoMarketingDias,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,

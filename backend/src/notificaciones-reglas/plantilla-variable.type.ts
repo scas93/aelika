@@ -18,6 +18,12 @@ export const CAMPO_CLIENTE_SOPORTADO = 'nombre' as const;
 /** Único campo de pedido soportado como CAMPO_PEDIDO en esta etapa (Etapa 2c). */
 export const CAMPO_PEDIDO_SOPORTADO = 'folio' as const;
 
+// NOMBRE_NEGOCIO no tiene nada real que elegir (siempre resuelve
+// Tenant.nombre) — este placeholder existe solo por simetría con
+// CAMPO_CLIENTE_SOPORTADO/CAMPO_PEDIDO_SOPORTADO, para no dejar el campo
+// `valor` vacío sin motivo. Ver ReglaEnvioService.resolverVariables.
+export const NOMBRE_NEGOCIO_SOPORTADO = 'nombre' as const;
+
 /**
  * Datos del pedido que disparó el envío — solo lo aplica ReglaEventoPedidoService
  * (trigger EVENTO_PEDIDO). Se pasa explícito a ReglaEnvioService.enviar en vez

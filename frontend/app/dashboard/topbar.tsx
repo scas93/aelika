@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { ALL_NAV_ITEMS } from "./nav-items";
+import { ALL_NAV_ITEMS, buscarPorHref } from "./nav-items";
 import UserMenu from "./_components/UserMenu";
 
 interface DashboardTopbarProps {
@@ -10,7 +10,7 @@ interface DashboardTopbarProps {
 
 export default function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps) {
   const pathname = usePathname();
-  const current = ALL_NAV_ITEMS.find((item) => item.href === pathname);
+  const current = buscarPorHref(ALL_NAV_ITEMS, pathname ?? "");
   const title = current?.label ?? "Aelika";
 
   return (

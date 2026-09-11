@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUrl,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
@@ -59,4 +60,26 @@ export class UpdateTenantDto {
   @ValidateNested()
   @Type(() => VentanaRecepcionB2bDto)
   ventanaRecepcionB2b?: VentanaRecepcionB2bDto | null;
+
+  // Sentido Aelika -> Botpress (ver comentario en schema.prisma) — a
+  // diferencia de botApiKey, estos los captura Santiago desde Botpress y
+  // aquí solo se guardan, nunca se generan ni se regeneran del lado de
+  // Aelika.
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  @MaxLength(500)
+  botWebhookUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  botWebhookSecret?: string;
+
+  // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
+  // Cliente) — ver ReglaCandadoService y el comentario del campo en
+  // schema.prisma.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  candadoMarketingDias?: number;
 }

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { ApiError, regenerateBotApiKey } from "@/lib/api";
-import Card from "../_components/Card";
-import Button from "../_components/Button";
-import Modal from "../_components/Modal";
+import Card from "../../_components/Card";
+import Button from "../../_components/Button";
+import Modal from "../../_components/Modal";
 
 export default function BotApiKeySection({
   token,

@@ -73,4 +73,20 @@ export const VARIABLE_FUENTE_LABEL: Record<ReglaPlantillaVariableFuente, string>
   CAMPO_CLIENTE: "Campo cliente: nombre",
   VALOR_FIJO: "Valor fijo",
   CAMPO_PEDIDO: "Campo pedido: folio",
+  // Resuelve Tenant.nombre — ver el enum en schema.prisma. Disponible para
+  // cualquier Trigger, no solo EVENTO_PEDIDO como Campo pedido.
+  NOMBRE_NEGOCIO: "Nombre del negocio",
 };
+
+// Catálogo fijo de los idiomas más comunes soportados por WhatsApp (Meta) —
+// reemplaza el texto libre que tenía este campo. es_MX va primero porque es
+// el único usado por todas las plantillas existentes hasta ahora.
+export const IDIOMAS_PLANTILLA: { value: string; label: string }[] = [
+  { value: "es_MX", label: "Español (México)" },
+  { value: "es", label: "Español" },
+  { value: "es_AR", label: "Español (Argentina)" },
+  { value: "es_ES", label: "Español (España)" },
+  { value: "en_US", label: "Inglés (EE. UU.)" },
+  { value: "en", label: "Inglés" },
+  { value: "pt_BR", label: "Portugués (Brasil)" },
+];

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/session-context";
-import { getNavItems } from "./nav-items";
+import { getNavItems, type NavItem } from "./nav-items";
 import Button from "./_components/Button";
 
 interface DashboardNavProps {
@@ -83,28 +83,13 @@ export default function DashboardNav({ open, onClose }: DashboardNavProps) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
-          {items.map((item) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex h-11 items-center gap-3 rounded-md border-l-[3px] px-4 transition ${
-                  active ? "border-admin-green bg-white/8" : "border-transparent hover:bg-white/5"
-                }`}
-              >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] text-sm"
-                  style={{ backgroundColor: item.iconBg, color: item.iconColor }}
-                >
-                  {item.emoji}
-                </span>
-                <span className={active ? "text-[15px] font-semibold text-white" : "text-[15px] text-white/80"}>
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+          {items.map((item) =>
+            item.children ? (
+              <NavGroup key={item.href} item={item} pathname={pathname} />
+            ) : (
+              <NavLink key={item.href} item={item} active={pathname === item.href} />
+            ),
+          )}
         </nav>
 
         <div className="p-3">
@@ -114,5 +99,50 @@ export default function DashboardNav({ open, onClose }: DashboardNavProps) {
         </div>
       </aside>
     </>
+  );
+}
+
+function NavLink({ item, active, indent = false }: { item: NavItem; active: boolean; indent?: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      className={`flex h-11 items-center gap-3 rounded-md border-l-[3px] px-4 transition ${indent ? "ml-6" : ""} ${
+        active ? "border-admin-green bg-white/8" : "border-transparent hover:bg-white/5"
+      }`}
+    >
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] text-sm"
+        style={{ backgroundColor: item.iconBg, color: item.iconColor }}
+      >
+        {item.emoji}
+      </span>
+      <span className={active ? "text-[15px] font-semibold text-white" : "text-[15px] text-white/80"}>
+        {item.label}
+      </span>
+    </Link>
+  );
+}
+
+// Primer consumidor de NavItem.children (ver ese campo en nav-items.ts) —
+// encabezado no clickeable (mismo look que un NavLink inactivo, sin <Link>)
+// + hijos indentados debajo, siempre expandido. `pathname` decide el activo
+// de cada hijo con startsWith (no === ) — así "Recontacto" se resalta tanto
+// en su listado como en /recontacto/nueva o /recontacto/[id].
+function NavGroup({ item, pathname }: { item: NavItem; pathname: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex h-11 items-center gap-3 px-4">
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] text-sm"
+          style={{ backgroundColor: item.iconBg, color: item.iconColor }}
+        >
+          {item.emoji}
+        </span>
+        <span className="text-[13px] font-bold uppercase tracking-wide text-white/50">{item.label}</span>
+      </div>
+      {item.children?.map((child) => (
+        <NavLink key={child.href} item={child} active={pathname.startsWith(child.href)} indent />
+      ))}
+    </div>
   );
 }

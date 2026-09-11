@@ -75,7 +75,7 @@ export class ReglaEventoPedidoService {
       // primera al revisar el candado.
       for (const regla of reglas) {
         try {
-          const bloqueado = await this.candadoService.estaBloqueado(params.tenantId, cliente.id, regla.plantillaCategoria);
+          const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
           if (bloqueado) {
             this.logger.log(
               `EVENTO_PEDIDO: Regla ${regla.id} bloqueada por candado para Cliente ${cliente.id} (tenant=${params.tenantId}).`,

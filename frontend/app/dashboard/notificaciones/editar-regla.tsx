@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session-context";
-import { ApiError, fetchRegla, updateRegla, type Regla } from "@/lib/api";
-import ReglaForm from "../regla-form";
+import { ApiError, fetchRegla, updateRegla, type Regla, type ReglaMensajeCategoria } from "@/lib/api";
+import ReglaForm from "./regla-form";
 
-export default function EditarReglaPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+interface EditarReglaProps {
+  id: string;
+  categoria: ReglaMensajeCategoria;
+  basePath: string;
+}
+
+// Compartido por .../recontacto/[id] y .../seguimiento/[id]. `categoria` se
+// pasa fija (no se lee de la Regla cargada) porque el submódulo de origen
+// ya la determina — si por alguna razón la Regla cargada tuviera otra
+// categoría (no debería pasar, el listado de cada submódulo ya filtra por
+// la suya), esta pantalla la seguiría guardando con la del submódulo actual,
+// no la que traía antes.
+export default function EditarRegla({ id, categoria, basePath }: EditarReglaProps) {
   const { user, token } = useSession();
   const router = useRouter();
 
@@ -39,11 +49,12 @@ export default function EditarReglaPage() {
       <h1 className="text-lg font-extrabold text-admin-ink">Editar &quot;{regla.nombre}&quot;</h1>
       <ReglaForm
         initial={regla}
+        categoriaFija={categoria}
         onSubmit={async (payload) => {
           await updateRegla(token, id, payload);
-          router.push("/dashboard/reglas");
+          router.push(basePath);
         }}
-        onCancel={() => router.push("/dashboard/reglas")}
+        onCancel={() => router.push(basePath)}
       />
     </div>
   );

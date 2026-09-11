@@ -483,6 +483,13 @@ export interface TenantSettings {
   horarioAtencion: HorarioSemana | null;
   ubicacion: string | null;
   botApiKey: string;
+  // Sentido inverso a botApiKey (Aelika -> Botpress, no Botpress -> Aelika)
+  // — ver comentario en schema.prisma. null hasta que se configure.
+  botWebhookUrl: string | null;
+  botWebhookSecret: string | null;
+  // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
+  // Cliente) — null = usa el default del backend (7 días).
+  candadoMarketingDias: number | null;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
@@ -510,6 +517,9 @@ export interface UpdateTenantSettingsPayload {
   // configurada"), omitido para no tocarla — mismo contrato que
   // UpdateTenantDto.ventanaRecepcionB2b en el backend.
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
+  botWebhookUrl?: string;
+  botWebhookSecret?: string;
+  candadoMarketingDias?: number;
 }
 
 export interface PuntoEnvio {
@@ -1146,7 +1156,7 @@ export function deleteCodigoDescuentoB2b(token: string, id: string) {
   });
 }
 
-// --- Motor de reglas de notificación (/dashboard/reglas, Módulo 3) ---
+// --- Motor de reglas de notificación (/dashboard/notificaciones/{recontacto,seguimiento}, Módulo 3) ---
 
 export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL";
 export type ReglaCanal = "WHATSAPP";
@@ -1155,7 +1165,7 @@ export type ReglaFiltroCampo = "TOTAL_PEDIDOS" | "ULTIMO_PEDIDO_ANTIGUEDAD_DIAS"
 // IGUAL solo tiene sentido para TOTAL_PEDIDOS — el backend lo rechaza para
 // los dos campos de antigüedad (ver ReglasService.validarFiltro).
 export type ReglaFiltroOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL";
-export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO";
+export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO";
 export type ReglaTriggerOrigenPedido = "ORDER" | "PEDIDO_B2B";
 
 export interface FiltroCondicion {

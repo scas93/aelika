@@ -157,7 +157,7 @@ export class ReglaBarridoService {
 
   private async intentarEnviar(regla: ReglaConTenant, cliente: Cliente, stats: EstadisticasBarrido): Promise<void> {
     try {
-      const bloqueado = await this.candadoService.estaBloqueado(regla.tenantId, cliente.id, regla.plantillaCategoria);
+      const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
       if (bloqueado) {
         stats.enviosBloqueadosPorCandado++;
         return;

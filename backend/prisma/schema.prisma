@@ -87,6 +87,12 @@ model Tenant {
   // es como la integración Webhook de Botpress lo espera).
   botWebhookUrl                String?
   botWebhookSecret             String?
+  // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
+  // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
+  // default en código (7 días, ver ReglaCandadoService) — nunca se
+  // backfillea el valor explícito, mismo criterio que mensajeBienvenida
+  // (null = "no configurado todavía", no "cero").
+  candadoMarketingDias         Int?
   // Whether/how factura* fields on Order are required at checkout — see
   // FacturacionModo and PublicService.createOrder.
   facturacionModo              FacturacionModo    @default(DESACTIVADO)
@@ -994,6 +1000,11 @@ enum ReglaPlantillaVariableFuente {
   // caller (ReglaEventoPedidoService), no consultando Order/PedidoB2b por
   // su cuenta.
   CAMPO_PEDIDO
+  // Resuelve Tenant.nombre automáticamente — a diferencia de CAMPO_PEDIDO,
+  // disponible para cualquier tipo de Trigger (no hay "pedido de contexto"
+  // que requerir). ReglaEnvioService ya recibe `tenant` como parámetro
+  // siempre, así que no necesita datos adicionales para resolverla.
+  NOMBRE_NEGOCIO
   VALOR_FIJO
 }
 

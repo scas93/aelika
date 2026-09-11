@@ -12,7 +12,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/equipo": "Administra los usuarios que trabajan en tu negocio",
   "/dashboard/ajustes/facturacion": "Define si tus clientes pueden pedir factura",
   "/dashboard/ajustes/pagos": "Conecta Stripe para cobrar con tarjeta",
-  "/dashboard/ajustes/bot": "Conecta el bot de WhatsApp con tu catálogo",
+  "/dashboard/ajustes/conexion-whatsapp": "Llave del bot, webhook de Botpress y candado de frecuencia",
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
   "/dashboard/ajustes/pedidos-b2b": "Rango semanal en el que aceptas pedidos de mayoreo",
   "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
@@ -28,10 +28,14 @@ const GRUPOS: Grupo[] = [
   { titulo: "Negocio", hrefs: ["/dashboard/ajustes/negocio", "/dashboard/ajustes/equipo"] },
   {
     titulo: "Administración",
-    hrefs: ["/dashboard/ajustes/facturacion", "/dashboard/ajustes/pagos", "/dashboard/ajustes/bot"],
+    hrefs: ["/dashboard/ajustes/facturacion", "/dashboard/ajustes/pagos", "/dashboard/ajustes/conexion-whatsapp"],
   },
   { titulo: "Envíos", hrefs: ["/dashboard/ajustes/envios"] },
-  { titulo: "Notificaciones", hrefs: ["/dashboard/ajustes/notificaciones"] },
+  // Título del grupo renombrado igual que la tarjeta que contiene — "Notificaciones"
+  // ya lo usa la entrada de primer nivel del sidebar (Recontacto/Seguimiento),
+  // tenerlo repetido aquí al lado hubiera sido confuso (mismo motivo del
+  // prompt de esta etapa para evitar la palabra en más de un lugar).
+  { titulo: "Canales de notificación", hrefs: ["/dashboard/ajustes/notificaciones"] },
 ];
 
 // Solo se agrega si el tenant es RETAIL_B2B — mismo gate que ya usaba la

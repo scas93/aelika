@@ -3,15 +3,34 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/session-context";
-import { ApiError, dispararReglaManual, fetchReglas, updateRegla, type Regla, type ResumenDisparoManual } from "@/lib/api";
+import {
+  ApiError,
+  dispararReglaManual,
+  fetchReglas,
+  updateRegla,
+  type Regla,
+  type ReglaMensajeCategoria,
+  type ResumenDisparoManual,
+} from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import Modal from "../_components/Modal";
-import { CATEGORIA_BADGE_COLOR, CATEGORIA_LABEL, TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
+import { TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
 
-export default function ReglasPage() {
+interface ReglaListadoProps {
+  categoria: ReglaMensajeCategoria;
+  basePath: string;
+  descripcion: string;
+}
+
+// Compartido por Recontacto (MARKETING) y Seguimiento (UTILITY) — ver esos
+// dos page.tsx. Filtra client-side sobre el mismo GET /reglas de siempre
+// (sin filtro de categoría en el backend, no hacía falta agregar uno para
+// esto) — ya no hace falta la columna "Categoría" en la tabla, la separación
+// la da en qué submódulo estás parado.
+export default function ReglaListado({ categoria, basePath, descripcion }: ReglaListadoProps) {
   const { user, token } = useSession();
 
   const [reglas, setReglas] = useState<Regla[] | null>(null);
@@ -23,7 +42,7 @@ export default function ReglasPage() {
   async function load() {
     try {
       const data = await fetchReglas(token);
-      setReglas(data);
+      setReglas(data.filter((r) => r.plantillaCategoria === categoria));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron cargar las reglas");
     }
@@ -33,7 +52,7 @@ export default function ReglasPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [categoria]);
 
   if (user.rol !== "DUENO") {
     return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar las reglas de notificación.</p>;
@@ -60,10 +79,8 @@ export default function ReglasPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-admin-ink-soft">
-          Reglas de notificación por WhatsApp — a quién, cuándo y con qué plantilla.
-        </p>
-        <Link href="/dashboard/reglas/nueva">
+        <p className="text-sm text-admin-ink-soft">{descripcion}</p>
+        <Link href={`${basePath}/nueva`}>
           <Button variant="primary">+ Nueva regla</Button>
         </Link>
       </div>
@@ -84,7 +101,6 @@ export default function ReglasPage() {
               <tr className="border-b border-admin-border text-admin-ink-soft">
                 <th className="px-4 py-3 font-bold">Nombre</th>
                 <th className="px-4 py-3 font-bold">Trigger</th>
-                <th className="px-4 py-3 font-bold">Categoría</th>
                 <th className="px-4 py-3 font-bold">Estado</th>
                 <th className="px-4 py-3 text-right font-bold">Acciones</th>
               </tr>
@@ -95,11 +111,6 @@ export default function ReglasPage() {
                   <td className="px-4 py-3 font-bold text-admin-ink">{regla.nombre}</td>
                   <td className="px-4 py-3">
                     <Badge color={TRIGGER_BADGE_COLOR[regla.trigger]}>{TRIGGER_LABEL[regla.trigger]}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge color={CATEGORIA_BADGE_COLOR[regla.plantillaCategoria]}>
-                      {CATEGORIA_LABEL[regla.plantillaCategoria]}
-                    </Badge>
                   </td>
                   <td className="px-4 py-3">
                     <ToggleSwitch
@@ -120,7 +131,7 @@ export default function ReglasPage() {
                           {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
                         </Button>
                       )}
-                      <Link href={`/dashboard/reglas/${regla.id}`}>
+                      <Link href={`${basePath}/${regla.id}`}>
                         <Button variant="secondary" size="sm">
                           Editar
                         </Button>

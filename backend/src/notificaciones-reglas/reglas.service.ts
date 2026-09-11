@@ -17,7 +17,7 @@ import { FiltroCondicionDto } from './dto/filtro-condicion.dto';
 import { PlantillaVariableDto } from './dto/plantilla-variable.dto';
 import { EventoPedidoTriggerConfigDto } from './dto/evento-pedido-trigger-config.dto';
 import { FechaProgramadaTriggerConfigDto } from './dto/fecha-programada-trigger-config.dto';
-import { CAMPO_CLIENTE_SOPORTADO, CAMPO_PEDIDO_SOPORTADO } from './plantilla-variable.type';
+import { CAMPO_CLIENTE_SOPORTADO, CAMPO_PEDIDO_SOPORTADO, NOMBRE_NEGOCIO_SOPORTADO } from './plantilla-variable.type';
 import { ReglasFiltroService } from './reglas-filtro.service';
 import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
@@ -199,7 +199,7 @@ export class ReglasService {
     // varios clientes con la misma categoría Marketing.
     for (const cliente of clientes) {
       try {
-        const bloqueado = await this.candadoService.estaBloqueado(tenantId, cliente.id, regla.plantillaCategoria);
+        const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
         if (bloqueado) {
           resumen.bloqueadosPorCandado++;
           continue;
@@ -326,6 +326,15 @@ export class ReglasService {
               `Campo de pedido no soportado: "${instancia.valor}" (solo "${CAMPO_PEDIDO_SOPORTADO}").`,
             );
           }
+        }
+
+        if (
+          instancia.fuente === ReglaPlantillaVariableFuente.NOMBRE_NEGOCIO &&
+          instancia.valor !== NOMBRE_NEGOCIO_SOPORTADO
+        ) {
+          throw new BadRequestException(
+            `Valor no soportado para NOMBRE_NEGOCIO: "${instancia.valor}" (solo "${NOMBRE_NEGOCIO_SOPORTADO}").`,
+          );
         }
 
         return { posicion: instancia.posicion, fuente: instancia.fuente, valor: instancia.valor };

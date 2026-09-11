@@ -22,6 +22,7 @@ import {
   ESTATUS_POR_ORIGEN,
   FILTRO_CAMPO_LABEL,
   FILTRO_OPERADOR_LABEL,
+  IDIOMAS_PLANTILLA,
   ORIGEN_PEDIDO_LABEL,
   TRIGGER_LABEL,
   VARIABLE_FUENTE_LABEL,
@@ -31,7 +32,6 @@ import { formatFechaHora } from "@/lib/format";
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
 const TRIGGERS: ReglaTriggerTipo[] = ["EVENTO_PEDIDO", "ESTADO_CLIENTE", "FECHA_PROGRAMADA", "MANUAL"];
-const CATEGORIAS: ReglaMensajeCategoria[] = ["UTILITY", "MARKETING"];
 const HORAS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 
 // Sin operador IGUAL para los dos campos de antigüedad — el backend lo
@@ -41,24 +41,30 @@ function operadoresPara(campo: ReglaFiltroCampo): ReglaFiltroOperador[] {
   return campo === "TOTAL_PEDIDOS" ? ["MAYOR_IGUAL", "MENOR_IGUAL", "IGUAL"] : ["MAYOR_IGUAL", "MENOR_IGUAL"];
 }
 
+// NOMBRE_NEGOCIO siempre disponible (cualquier Trigger) — a diferencia de
+// CAMPO_PEDIDO, que solo aplica a EVENTO_PEDIDO (ver ReglaEnvioService).
 function fuentesPara(trigger: ReglaTriggerTipo): ReglaPlantillaVariableFuente[] {
-  return trigger === "EVENTO_PEDIDO" ? ["CAMPO_CLIENTE", "VALOR_FIJO", "CAMPO_PEDIDO"] : ["CAMPO_CLIENTE", "VALOR_FIJO"];
+  const base: ReglaPlantillaVariableFuente[] = ["CAMPO_CLIENTE", "NOMBRE_NEGOCIO", "VALOR_FIJO"];
+  return trigger === "EVENTO_PEDIDO" ? [...base, "CAMPO_PEDIDO"] : base;
 }
 
-// Valor fijo por `fuente` — CAMPO_CLIENTE/CAMPO_PEDIDO solo soportan un
-// campo cada uno en esta etapa (ver ReglaEnvioService), así que no hay nada
-// que el usuario deba escribir, el selector de fuente ya lo determina.
+// Valor fijo por `fuente` — CAMPO_CLIENTE/CAMPO_PEDIDO/NOMBRE_NEGOCIO solo
+// soportan un campo cada uno en esta etapa (ver ReglaEnvioService), así que
+// no hay nada que el usuario deba escribir, el selector de fuente ya lo
+// determina.
 function valorParaFuente(fuente: ReglaPlantillaVariableFuente): string {
   if (fuente === "CAMPO_CLIENTE") return "nombre";
   if (fuente === "CAMPO_PEDIDO") return "folio";
+  if (fuente === "NOMBRE_NEGOCIO") return "nombre";
   return "";
 }
 
-// Ejemplo genérico para la vista previa — no hay un Cliente/pedido real en
-// este formulario (ver caso de uso del prompt de esta etapa).
+// Ejemplo genérico para la vista previa — no hay un Cliente/pedido/Tenant
+// real en este formulario (ver caso de uso del prompt de esta etapa).
 function ejemploParaFuente(fuente: ReglaPlantillaVariableFuente, valor: string): string {
   if (fuente === "CAMPO_CLIENTE") return "Juan Pérez";
   if (fuente === "CAMPO_PEDIDO") return "A-1023";
+  if (fuente === "NOMBRE_NEGOCIO") return "Panadería Ejemplo";
   return valor || "(vacío)";
 }
 
@@ -90,11 +96,17 @@ function isoAFechaLocal(iso: string): { dia: string; hora: string } {
 
 interface ReglaFormProps {
   initial?: Regla;
+  // Fija la categoría según el submódulo de origen (Recontacto = MARKETING,
+  // Seguimiento = UTILITY) — no editable en este formulario a propósito: es
+  // justo lo que separa los dos submódulos, dejarla editable permitiría que
+  // una Regla "se mudara" de categoría sin pasar por la navegación
+  // correspondiente. Decisión declarada explícitamente (ver resumen).
+  categoriaFija: ReglaMensajeCategoria;
   onSubmit: (payload: CreateReglaPayload) => Promise<void>;
   onCancel: () => void;
 }
 
-export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProps) {
+export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }: ReglaFormProps) {
   const triggerConfigInicial = (initial?.triggerConfig ?? {}) as Record<string, unknown>;
   const fechaInicial = esFechaProgramadaConValor(initial)
     ? isoAFechaLocal(String(triggerConfigInicial.fechaHora))
@@ -111,9 +123,6 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
   const [filtro, setFiltro] = useState<FiltroCondicion[]>(initial?.filtro ?? []);
   const [plantillaNombre, setPlantillaNombre] = useState(initial?.plantillaNombre ?? "");
   const [plantillaIdioma, setPlantillaIdioma] = useState(initial?.plantillaIdioma ?? "es_MX");
-  const [plantillaCategoria, setPlantillaCategoria] = useState<ReglaMensajeCategoria>(
-    initial?.plantillaCategoria ?? "UTILITY",
-  );
   const [plantillaTexto, setPlantillaTexto] = useState(initial?.plantillaTexto ?? "");
   const [variables, setVariables] = useState<PlantillaVariable[]>(initial?.plantillaVariables ?? []);
   const [activa, setActiva] = useState(initial?.activa ?? true);
@@ -201,8 +210,8 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
       filtro: trigger === "EVENTO_PEDIDO" ? [] : filtro,
       canal: "WHATSAPP",
       plantillaNombre: plantillaNombre.trim(),
-      plantillaIdioma: plantillaIdioma.trim(),
-      plantillaCategoria,
+      plantillaIdioma,
+      plantillaCategoria: categoriaFija,
       plantillaTexto: plantillaTexto.trim() || undefined,
       plantillaVariables: variables,
       activa,
@@ -217,7 +226,6 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
     !submitting &&
     nombre.trim() !== "" &&
     plantillaNombre.trim() !== "" &&
-    plantillaIdioma.trim() !== "" &&
     triggerConfigValido &&
     filtroValido &&
     variablesValidas;
@@ -395,10 +403,16 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
         {/* --- Canal + Plantilla --- */}
         <Card className="flex flex-col gap-4">
           <h2 className={SECTION_HEADER}>Canal y plantilla</h2>
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Canal
-            <input value="WhatsApp" disabled className="admin-input opacity-60" />
-          </label>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Canal
+              <input value="WhatsApp" disabled className="admin-input opacity-60" />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Categoría
+              <input value={CATEGORIA_LABEL[categoriaFija]} disabled className="admin-input opacity-60" />
+            </label>
+          </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
               Nombre de la plantilla (Meta)
@@ -411,28 +425,15 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
             </label>
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
               Idioma
-              <input
-                value={plantillaIdioma}
-                onChange={(e) => setPlantillaIdioma(e.target.value)}
-                placeholder="es_MX"
-                className="admin-input"
-              />
+              <select value={plantillaIdioma} onChange={(e) => setPlantillaIdioma(e.target.value)} className="admin-input">
+                {IDIOMAS_PLANTILLA.map((idioma) => (
+                  <option key={idioma.value} value={idioma.value}>
+                    {idioma.label} ({idioma.value})
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Categoría
-            <select
-              value={plantillaCategoria}
-              onChange={(e) => setPlantillaCategoria(e.target.value as ReglaMensajeCategoria)}
-              className="admin-input"
-            >
-              {CATEGORIAS.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORIA_LABEL[c]}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
             Texto del cuerpo (solo para tu referencia — no se manda a Botpress)
             <textarea
@@ -527,8 +528,8 @@ export default function ReglaForm({ initial, onSubmit, onCancel }: ReglaFormProp
             )}
           </div>
           <p className="text-xs text-admin-ink-soft">
-            Los valores de <em>Campo cliente</em>/<em>Campo pedido</em> son solo un ejemplo genérico — el mensaje real
-            usa el dato del cliente/pedido cuando se dispare.
+            Los valores de <em>Campo cliente</em>/<em>Campo pedido</em>/<em>Nombre del negocio</em> son solo un
+            ejemplo genérico — el mensaje real usa el dato correspondiente cuando se dispare.
           </p>
         </Card>
       </div>

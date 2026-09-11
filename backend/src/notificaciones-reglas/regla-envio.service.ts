@@ -2,7 +2,13 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Cliente, Regla, ReglaEnvioLog, Tenant } from '../../generated/prisma/client';
 import { ReglaPlantillaVariableFuente } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
-import { CAMPO_CLIENTE_SOPORTADO, CAMPO_PEDIDO_SOPORTADO, PedidoContexto, PlantillaVariable } from './plantilla-variable.type';
+import {
+  CAMPO_CLIENTE_SOPORTADO,
+  CAMPO_PEDIDO_SOPORTADO,
+  NOMBRE_NEGOCIO_SOPORTADO,
+  PedidoContexto,
+  PlantillaVariable,
+} from './plantilla-variable.type';
 
 // Todos los tenants piloto operan en México — mismo supuesto ya hardcodeado
 // en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono
@@ -40,7 +46,7 @@ export class ReglaEnvioService {
       );
     }
 
-    const variables = this.resolverVariables(regla.plantillaVariables as unknown as PlantillaVariable[], cliente, contexto);
+    const variables = this.resolverVariables(regla.plantillaVariables as unknown as PlantillaVariable[], tenant, cliente, contexto);
 
     // Se crea ANTES del POST (estado EN_CURSO por default, ver schema.prisma)
     // para poder correlacionar la respuesta asíncrona de Botpress — su id
@@ -130,6 +136,7 @@ export class ReglaEnvioService {
 
   private resolverVariables(
     plantillaVariables: PlantillaVariable[],
+    tenant: Tenant,
     cliente: Cliente,
     contexto: PedidoContexto | undefined,
   ): string[] {
@@ -152,6 +159,15 @@ export class ReglaEnvioService {
             );
           }
           return contexto.folio;
+        }
+
+        if (variable.fuente === ReglaPlantillaVariableFuente.NOMBRE_NEGOCIO) {
+          if (variable.valor !== NOMBRE_NEGOCIO_SOPORTADO) {
+            throw new BadRequestException(
+              `Valor no soportado para NOMBRE_NEGOCIO: "${variable.valor}" (solo "${NOMBRE_NEGOCIO_SOPORTADO}").`,
+            );
+          }
+          return tenant.nombre;
         }
 
         if (variable.valor !== CAMPO_CLIENTE_SOPORTADO) {
