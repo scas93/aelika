@@ -2,12 +2,16 @@
 
 import { usePathname } from "next/navigation";
 import { ALL_NAV_ITEMS, buscarPorHref } from "./nav-items";
-import UserMenu from "./_components/UserMenu";
 
 interface DashboardTopbarProps {
   onOpenSidebar: () => void;
 }
 
+// UserMenu (avatar+nombre+Cerrar sesión/Cambiar contraseña) ya no vive aquí
+// — se movió al fondo del sidebar (ver nav.tsx). En mobile, eso significa
+// que ya no hay acceso directo a "Cerrar sesión" desde la topbar: hay que
+// abrir el drawer con el botón hamburguesa primero. Ver prompt de esta
+// etapa — se reporta en vez de decidir si hace falta un atajo aparte.
 export default function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps) {
   const pathname = usePathname();
   const current = buscarPorHref(ALL_NAV_ITEMS, pathname ?? "");
@@ -24,7 +28,6 @@ export default function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps)
         ☰
       </button>
       <h1 className="text-[28px] font-bold text-admin-ink">{title}</h1>
-      <UserMenu />
     </header>
   );
 }

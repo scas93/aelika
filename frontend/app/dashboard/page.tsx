@@ -21,7 +21,7 @@ import { rangoHoyISO } from "@/lib/fecha";
 import Card from "./_components/Card";
 import SummaryCard from "./_components/SummaryCard";
 import Badge from "./_components/Badge";
-import { ESTADO_COLOR, ESTADO_LABEL, ESTADOS } from "./pedidos/estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS } from "./pedidos/estado";
 import InicioB2B from "./inicio-b2b";
 
 const MONEY_FORMATTER = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
@@ -174,7 +174,7 @@ function InicioB2C() {
                     formatter={(value) => [value, "Pedidos"]}
                     labelStyle={{ color: "var(--color-admin-ink)" }}
                   />
-                  <Bar dataKey="pedidos" fill="var(--color-admin-green)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pedidos" fill="var(--color-admin-accent)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -211,7 +211,7 @@ function InicioB2C() {
                     dataKey="nuevos"
                     name="Nuevos"
                     stackId="clientes"
-                    fill="var(--color-admin-green)"
+                    fill="var(--color-admin-accent)"
                     radius={[0, 0, 0, 0]}
                   />
                   <Bar
@@ -262,7 +262,7 @@ function InicioB2C() {
             <ul className="flex flex-col gap-2">
               {porEstatusOrdenado.map((p) => (
                 <li key={p.estadoPedido} className="flex items-center justify-between gap-3 text-sm">
-                  <Badge color={ESTADO_COLOR[p.estadoPedido]}>{ESTADO_LABEL[p.estadoPedido]}</Badge>
+                  <Badge variant={ESTADO_VARIANT[p.estadoPedido]}>{ESTADO_LABEL[p.estadoPedido]}</Badge>
                   <span className="font-semibold text-admin-ink">{p.conteo}</span>
                 </li>
               ))}

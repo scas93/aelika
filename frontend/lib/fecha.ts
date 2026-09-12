@@ -63,3 +63,32 @@ export function rangoMesAnteriorISO(): { desde: string; hasta: string } {
   const finMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
   return rangoISO(inicioMesAnterior, finMesAnterior);
 }
+
+export type UnidadRangoRelativo = "dias" | "semanas" | "meses";
+
+// Generalización de rangoUltimos7DiasISO/rangoUltimas4SemanasISO a
+// cualquier cantidad+unidad — usada por el selector "está en los últimos N"
+// del FilterBar (ver _components/FiltroFecha.tsx). Mismo cálculo de
+// frontera (YYYY-MM-DD → ISO, nunca aritmética de Date cruda) que el resto
+// de este archivo, para no introducir un segundo criterio de "qué día es
+// hoy" — cantidad=7,dias y cantidad=4,semanas coinciden exactamente con
+// rangoUltimos7DiasISO/rangoUltimas4SemanasISO (mismo offset -6/-27).
+export function rangoRelativoISO(cantidad: number, unidad: UnidadRangoRelativo): { desde: string; hasta: string } {
+  const hoy = new Date();
+  let desde: Date;
+  switch (unidad) {
+    case "dias":
+      desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - (cantidad - 1));
+      break;
+    case "semanas":
+      desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - (cantidad * 7 - 1));
+      break;
+    case "meses":
+      // Sin equivalente "mes calendario" (eso ya lo cubre rangoMesActualISO/
+      // rangoMesAnteriorISO) — este es un rango rodante de N meses hacia
+      // atrás desde hoy, mismo criterio "rodante" que dias/semanas arriba.
+      desde = new Date(hoy.getFullYear(), hoy.getMonth() - cantidad, hoy.getDate() + 1);
+      break;
+  }
+  return rangoISO(desde, hoy);
+}

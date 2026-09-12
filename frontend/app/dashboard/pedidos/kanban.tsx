@@ -5,7 +5,7 @@ import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSe
 import { CSS } from "@dnd-kit/utilities";
 import { useSession } from "@/lib/session-context";
 import { ApiError, avanzarOrder, type EstadoPedido, type Order } from "@/lib/api";
-import { ESTADO_LABEL, ESTADO_PAGO_COLOR, ESTADO_PAGO_LABEL, ESTADOS, SIGUIENTE_ESTADO } from "./estado";
+import { ESTADO_LABEL, ESTADO_PAGO_VARIANT, ESTADO_PAGO_LABEL, ESTADOS, SIGUIENTE_ESTADO } from "./estado";
 import Card from "../_components/Card";
 import Badge from "../_components/Badge";
 
@@ -112,6 +112,9 @@ function KanbanColumn({
   const { setNodeRef, isOver } = useDroppable({ id: estado });
 
   return (
+    // admin-green a propósito en isOver — excepción documentada del prompt
+    // de unificación de tokens (Kanban fuera de alcance, se resuelve en su
+    // propio prompt dedicado).
     <div
       ref={setNodeRef}
       className={`flex w-72 shrink-0 flex-col gap-2 rounded-[var(--radius-admin-card)] border p-2 transition ${
@@ -162,7 +165,7 @@ function KanbanCard({ order, moving }: { order: Order; moving: boolean }) {
         <div className="mt-1 flex items-center justify-between gap-2">
           <span className="text-sm font-bold text-admin-ink">${Number(order.total).toFixed(2)}</span>
           {order.estadoPago === "REEMBOLSADO" && (
-            <Badge color={ESTADO_PAGO_COLOR.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+            <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
           )}
         </div>
       </Card>

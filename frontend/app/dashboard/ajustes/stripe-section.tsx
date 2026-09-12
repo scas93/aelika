@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ApiError, createTenantStripeAccount, fetchTenantStripeStatus, updateTenantSettings } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Badge from "../_components/Badge";
 
 // Basic shape check only ("algo@algo.algo") — the backend (@IsEmail, class-validator)
 // is the real source of truth, this is just to catch obvious typos before a
@@ -140,11 +141,7 @@ export default function StripeSection({
         </Button>
       </form>
 
-      {conectado && (
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-admin-green/10 px-3 py-1 text-xs font-bold text-admin-green-dark">
-          Conectado ✅
-        </span>
-      )}
+      {conectado && <Badge variant="exito">Conectado ✅</Badge>}
 
       {verificacionPendiente && (
         <p className="text-sm font-medium text-admin-ink-soft">

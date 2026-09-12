@@ -6,13 +6,21 @@ import {
   ApiError,
   exportPedidosB2bCsv,
   fetchPedidosB2b,
+  type FiltroImporte,
   type PaginatedPedidosB2b,
   type PedidoB2bEstado,
+  type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_LABEL } from "../estado";
+import { ESTADO_LABEL, ESTADO_VARIANT } from "../estado";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
+import Badge from "../../_components/Badge";
+import Table, { type TableColumn } from "../../_components/Table";
+import { FilterBar, FilterPill } from "../../_components/FilterBar";
+import { FiltroSelectPopover } from "../../_components/FiltroSelect";
+import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
+import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
 import HistoricoDetallePanel from "./historico-detalle-panel";
 
 const LIMIT = 25;
@@ -24,17 +32,83 @@ function formatSemana(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+// Mismo patrón que historico-detalle-panel.tsx: cancelado gana sobre el
+// estado real cuando aplica — no hay variante "cancelado" en ESTADO_VARIANT,
+// se resuelve aquí igual que ahí (peligro).
+const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
+  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">#{pedido.folio}</span> },
+  { key: "negocio", header: "Negocio", render: (pedido) => pedido.negocioNombre },
+  { key: "semana", header: "Semana", render: (pedido) => formatSemana(pedido.semanaInicio) },
+  {
+    key: "estatus",
+    header: "Estatus",
+    render: (pedido) =>
+      pedido.cancelado ? (
+        <Badge variant="peligro">Cancelado</Badge>
+      ) : (
+        <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+      ),
+  },
+  { key: "total", header: "Total", align: "right", render: (pedido) => formatMoney(pedido.total) },
+];
+
+// Solo un consumidor (este módulo) — a diferencia de FiltroSelectPopover/
+// FiltroFechaPopover/FiltroImportePopover, que sí viven en _components/
+// porque las 3 tablas migradas los comparten tal cual, esto no se
+// extrajo ahí.
+function FiltroNegocioPopover({
+  valorAplicado,
+  onAplicar,
+  close,
+}: {
+  valorAplicado: string | null;
+  onAplicar: (value: string | null) => void;
+  close: () => void;
+}) {
+  const [valor, setValor] = useState(valorAplicado ?? "");
+
+  function handleAplicar() {
+    onAplicar(valor.trim() || null);
+    close();
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        placeholder="Buscar por negocio..."
+        className="admin-input"
+      />
+      <Button variant="primary" size="sm" onClick={handleAplicar} className="self-start">
+        Aplicar
+      </Button>
+    </div>
+  );
+}
+
 export default function PedidosB2bHistoricoPage() {
   const { token } = useSession();
 
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [estado, setEstado] = useState<PedidoB2bEstado | "">("");
-  const [negocioNombre, setNegocioNombre] = useState("");
+  const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
+  const [estado, setEstado] = useState<PedidoB2bEstado | null>(null);
+  const [negocioNombre, setNegocioNombre] = useState<string | null>(null);
+  const [cancelado, setCancelado] = useState<boolean | null>(null);
+  const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
   // Sin autofetch en cambios de filtro a propósito — no se muestra nada
   // hasta que se presiona "Buscar" (ver CLAUDE.md). `searched` es lo que
   // distingue "todavía no se buscó" de "se buscó y no hay resultados".
+  //
+  // A diferencia de pedidos/historico y pagos (donde "Aplicar" en el pill
+  // ya dispara la consulta al backend, mismo criterio "autoaplica" que
+  // tenían antes de migrar a FilterBar), aquí "Aplicar" solo actualiza el
+  // valor mostrado en el pill — la consulta real sigue esperando al botón
+  // "Buscar" de abajo, igual que hoy. Decisión explícita: se preserva el
+  // comportamiento existente en vez de unificarlo con los otros dos, ya que
+  // nada en el prompt pedía cambiarlo y esta pantalla ya distingue
+  // "todavía no se buscó" de "se buscó y no hay resultados" (`searched`),
+  // algo que dejaría de tener sentido si autoaplicara como las otras dos.
   const [searched, setSearched] = useState(false);
   const [result, setResult] = useState<PaginatedPedidosB2b | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,11 +120,16 @@ export default function PedidosB2bHistoricoPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   function filtrosActuales() {
+    const { desde, hasta } = resolverFiltroFecha(fecha);
     return {
-      desde: desde || undefined,
-      hasta: hasta || undefined,
-      estado: estado || undefined,
-      negocioNombre: negocioNombre.trim() || undefined,
+      desde,
+      hasta,
+      estado: estado ?? undefined,
+      negocioNombre: negocioNombre?.trim() || undefined,
+      cancelado: cancelado ?? undefined,
+      operador: importe?.operador,
+      valor: importe?.valor,
+      valorHasta: importe?.valorHasta,
     };
   }
 
@@ -90,39 +169,56 @@ export default function PedidosB2bHistoricoPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Card className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Desde
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="admin-input" />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Hasta
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="admin-input" />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Estatus
-          <select
-            value={estado}
-            onChange={(e) => setEstado(e.target.value as PedidoB2bEstado | "")}
-            className="admin-input"
+      <Card className="flex flex-wrap items-center gap-3">
+        <FilterBar>
+          <FilterPill
+            filterKey="estado"
+            label="Estado"
+            valueLabel={estado ? ESTADO_LABEL[estado] : null}
+            onClear={() => setEstado(null)}
           >
-            <option value="">Todos</option>
-            {ESTADOS_FILTRO.map((e) => (
-              <option key={e} value={e}>
-                {ESTADO_LABEL[e]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Negocio
-          <input
-            value={negocioNombre}
-            onChange={(e) => setNegocioNombre(e.target.value)}
-            placeholder="Buscar por negocio..."
-            className="admin-input"
-          />
-        </label>
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_FILTRO.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
+                valorAplicado={estado}
+                onAplicar={setEstado}
+                close={close}
+              />
+            )}
+          </FilterPill>
+
+          <FilterPill filterKey="fecha" label="Semana" valueLabel={labelFiltroFecha(fecha)} onClear={() => setFecha(null)}>
+            {({ close }) => <FiltroFechaPopover valorAplicado={fecha} onAplicar={setFecha} close={close} />}
+          </FilterPill>
+
+          <FilterPill filterKey="importe" label="Total" valueLabel={labelFiltroImporte(importe)} onClear={() => setImporte(null)}>
+            {({ close }) => <FiltroImportePopover valorAplicado={importe} onAplicar={setImporte} close={close} />}
+          </FilterPill>
+
+          <FilterPill filterKey="negocio" label="Negocio" valueLabel={negocioNombre?.trim() || null} onClear={() => setNegocioNombre(null)}>
+            {({ close }) => <FiltroNegocioPopover valorAplicado={negocioNombre} onAplicar={setNegocioNombre} close={close} />}
+          </FilterPill>
+
+          <FilterPill
+            filterKey="cancelado"
+            label="Cancelado"
+            valueLabel={cancelado === null ? null : cancelado ? "Sí" : "No"}
+            onClear={() => setCancelado(null)}
+          >
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={[
+                  { value: "true", label: "Sí" },
+                  { value: "false", label: "No" },
+                ]}
+                valorAplicado={cancelado === null ? null : String(cancelado)}
+                onAplicar={(value) => setCancelado(value === null ? null : value === "true")}
+                close={close}
+              />
+            )}
+          </FilterPill>
+        </FilterBar>
+
         <Button variant="primary" onClick={() => ejecutarBusqueda(1)} disabled={loading}>
           {loading ? "Buscando..." : "Buscar"}
         </Button>
@@ -148,60 +244,19 @@ export default function PedidosB2bHistoricoPage() {
             <Card className="text-sm text-admin-ink-soft">No hay pedidos que coincidan con estos filtros.</Card>
           ) : (
             result && (
-              <>
-                <Card padding={0} className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-admin-border text-admin-ink-soft">
-                        <th className="px-4 py-3 font-bold">Folio</th>
-                        <th className="px-4 py-3 font-bold">Negocio</th>
-                        <th className="px-4 py-3 font-bold">Semana</th>
-                        <th className="px-4 py-3 font-bold">Estatus</th>
-                        <th className="px-4 py-3 text-right font-bold">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.data.map((pedido) => (
-                        <tr
-                          key={pedido.id}
-                          onClick={() => setSelectedId(pedido.id)}
-                          className="cursor-pointer border-b border-admin-border last:border-b-0 hover:bg-admin-bg"
-                        >
-                          <td className="px-4 py-3 font-bold text-admin-ink">#{pedido.folio}</td>
-                          <td className="px-4 py-3 text-admin-ink">{pedido.negocioNombre}</td>
-                          <td className="px-4 py-3 text-admin-ink">{formatSemana(pedido.semanaInicio)}</td>
-                          <td className="px-4 py-3 text-admin-ink">
-                            {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
-                          </td>
-                          <td className="px-4 py-3 text-right text-admin-ink">{formatMoney(pedido.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-admin-ink-soft">
-                    Página {result.page} de {result.totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => ejecutarBusqueda(result.page - 1)}
-                      disabled={loading || result.page <= 1}
-                    >
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => ejecutarBusqueda(result.page + 1)}
-                      disabled={loading || result.page >= result.totalPages}
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
-              </>
+              <Table
+                columns={COLUMNS}
+                data={result.data}
+                rowKey={(pedido) => pedido.id}
+                onRowClick={(pedido) => setSelectedId(pedido.id)}
+                pagination={{
+                  page: result.page,
+                  totalPages: result.totalPages,
+                  onPrevious: () => ejecutarBusqueda(result.page - 1),
+                  onNext: () => ejecutarBusqueda(result.page + 1),
+                  disabled: loading,
+                }}
+              />
             )
           )}
         </>

@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { ExportPaymentsQueryDto } from './dto/export-payments-query.dto';
 import { toCsv } from '../common/csv';
+import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 
 @Injectable()
 export class PaymentsService {
@@ -14,6 +15,9 @@ export class PaymentsService {
     paymentMethodType?: string;
     desde?: string;
     hasta?: string;
+    operador?: FiltroImporteOperador;
+    valor?: number;
+    valorHasta?: number;
   }): Prisma.PaymentWhereInput {
     return {
       status: query.status,
@@ -25,6 +29,7 @@ export class PaymentsService {
               lte: query.hasta ? new Date(query.hasta) : undefined,
             }
           : undefined,
+      amount: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
     };
   }
 

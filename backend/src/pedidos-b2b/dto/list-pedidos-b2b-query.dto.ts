@@ -11,10 +11,15 @@ import {
   Min,
 } from 'class-validator';
 import { PedidoB2bEstado } from '../../../generated/prisma/enums';
+import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
 
 // desde/hasta filtran sobre semanaInicio — la dimensión de negocio natural
 // para un pedido semanal, a diferencia de Order que filtra sobre createdAt.
-export class ListPedidosB2bQueryDto {
+// operador/valor/valorHasta (heredados de FiltroImporteQueryDto) filtran
+// sobre PedidoB2b.total. Este DTO no es exclusivo de "Históricos" —
+// pedidos-b2b/page.tsx ("Pedidos activos") también consume
+// GET /pedidos-b2b con el mismo DTO.
+export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   @IsOptional()
   @IsEnum(PedidoB2bEstado)
   estado?: PedidoB2bEstado;

@@ -28,14 +28,31 @@
      here couples to the storefront tokens above — the green used to
      coincide by accident with --color-whatsapp (#25D366); it's now its own
      distinct value so the two palettes can diverge freely. See CLAUDE.md. */
+  /* admin-green ahora significa exclusivamente "éxito" (Badge variante
+     exito, estados LISTO_ENTREGA/"Conectado") — ya no es el acento
+     interactivo del panel, ver admin-accent abajo. */
   --color-admin-green: #1d9a5c;
   --color-admin-green-dark: #157a48;
   --color-admin-green-soft: #e4f5ec;
+  /* Acento interactivo del panel — teal extraído del logo de Aelika.
+     Reemplaza a admin-green como color de interacción principal: nav activo,
+     Tabs activo, foco de inputs (.admin-input:focus, incluido el query
+     builder de Notificaciones), botón primario. Blanco sobre admin-accent
+     pasa contraste AA (~4.6:1) para texto de botón. */
+  --color-admin-accent: #0f9ba6;
+  --color-admin-accent-dark: #0c7b84;
+  --color-admin-accent-soft: #e1f4f5;
+  /* Peligro/error — reemplaza el uso crudo de red-600/red-200/red-50 en
+     Button (variante danger) y SummaryCard. Mismo valor que ya usaba
+     Tailwind red-600 (#dc2626) para no cambiar el color visible, solo
+     centralizarlo en un token — ver CLAUDE.md/prompt de esta etapa. */
+  --color-admin-red: #dc2626;
+  --color-admin-red-dark: #b91c1c;
+  --color-admin-red-soft: #fee2e2;
   --color-admin-bg: #f5f6f8;
   --color-admin-ink: #0f172a;
   --color-admin-ink-soft: #64748b;
   --color-admin-border: #e2e5ea;
-  --color-admin-sidebar: #121a24;
   --font-admin: -apple-system, "Segoe UI", system-ui, sans-serif;
 
   --radius-admin-card: 16px;
@@ -141,13 +158,13 @@ body {
 
 .admin-input:focus {
   outline: none;
-  border-color: var(--color-admin-green);
-  box-shadow: 0 0 0 3px var(--color-admin-green-soft);
+  border-color: var(--color-admin-accent);
+  box-shadow: 0 0 0 3px var(--color-admin-accent-soft);
 }
 
 /* Scoped input variant for /mayoreo/[slug] — sibling of .input/.admin-input,
    same reasoning: this route's focus glow must not repurpose --color-whatsapp
-   nor --color-admin-green. */
+   nor --color-admin-accent. */
 .mayoreo-input {
   background: var(--color-mayoreo-card);
   border: 1px solid var(--color-mayoreo-border);

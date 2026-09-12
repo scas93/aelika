@@ -405,7 +405,26 @@ export interface OrdersFilter {
   hasta?: string;
 }
 
-export interface HistoricoOrdersFilter {
+// Comparador de importe — mismo shape que acepta el backend en los 3
+// endpoints que lo soportan (Order.total, PedidoB2b.total, Payment.amount;
+// ver backend/src/common/filtro-importe.ts). `valor` es obligatorio si
+// `operador` viene presente; `valorHasta` solo si `operador === "ENTRE"` —
+// el backend vuelve a validar esto, esto es solo el tipo del lado cliente.
+export type FiltroImporteOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL" | "ENTRE";
+
+export interface FiltroImporte {
+  operador?: FiltroImporteOperador;
+  valor?: number;
+  valorHasta?: number;
+}
+
+function appendFiltroImporte(params: URLSearchParams, filter?: FiltroImporte) {
+  if (filter?.operador) params.set("operador", filter.operador);
+  if (filter?.valor !== undefined) params.set("valor", String(filter.valor));
+  if (filter?.valorHasta !== undefined) params.set("valorHasta", String(filter.valorHasta));
+}
+
+export interface HistoricoOrdersFilter extends FiltroImporte {
   estadoPedido?: EstadoPedido;
   metodoPago?: MetodoPago;
   desde?: string;
@@ -435,7 +454,7 @@ export interface Payment {
   folio: string;
 }
 
-export interface PaymentsFilter {
+export interface PaymentsFilter extends FiltroImporte {
   status?: EstadoPago;
   paymentMethodType?: string;
   desde?: string;
@@ -913,6 +932,7 @@ export function fetchOrdersHistorico(token: string, filter?: HistoricoOrdersFilt
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
+  appendFiltroImporte(params, filter);
   const query = params.toString();
   return request<PaginatedOrders>(`/orders/historico${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
 }
@@ -925,6 +945,7 @@ export function fetchPayments(token: string, filter?: PaymentsFilter) {
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
+  appendFiltroImporte(params, filter);
   const query = params.toString();
   return request<PaginatedPayments>(`/payments${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
 }
@@ -1481,7 +1502,7 @@ export interface PedidoB2bDetalle extends PublicPedidoB2b {
   minimoPiezasAplicado: number;
 }
 
-export interface ListPedidosB2bFilter {
+export interface ListPedidosB2bFilter extends FiltroImporte {
   estado?: PedidoB2bEstado;
   cancelado?: boolean;
   desde?: string;
@@ -1504,6 +1525,7 @@ export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
+  appendFiltroImporte(params, filter);
   const query = params.toString();
   return request<PaginatedPedidosB2b>(`/pedidos-b2b${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
 }

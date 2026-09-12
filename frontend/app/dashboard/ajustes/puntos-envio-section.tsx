@@ -13,6 +13,7 @@ import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 import ToggleSwitch from "../_components/ToggleSwitch";
+import Badge from "../_components/Badge";
 
 export default function PuntosEnvioSection({ token }: { token: string }) {
   const [puntos, setPuntos] = useState<PuntoEnvio[] | null>(null);
@@ -106,11 +107,7 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
                     >
                       {punto.nombre}
                     </span>
-                    {!punto.activo && (
-                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                        Inactivo
-                      </span>
-                    )}
+                    {!punto.activo && <Badge variant="neutro">Inactivo</Badge>}
                   </div>
                   <span className="text-sm text-admin-ink-soft">{punto.direccion}</span>
                   {punto.pedidoMinimo && (

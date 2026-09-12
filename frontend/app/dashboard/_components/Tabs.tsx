@@ -27,7 +27,7 @@ export default function Tabs({ items, active, onChange }: TabsProps) {
             onClick={() => onChange(item.key)}
             className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-bold transition ${
               isActive
-                ? "border-admin-green text-admin-ink"
+                ? "border-admin-accent text-admin-ink"
                 : "border-transparent text-admin-ink-soft hover:text-admin-ink"
             }`}
           >

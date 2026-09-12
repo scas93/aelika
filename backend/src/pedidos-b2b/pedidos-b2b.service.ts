@@ -18,6 +18,7 @@ import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
+import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 import {
   assertLunes,
   calcularSemanaDestino,
@@ -84,6 +85,9 @@ export class PedidosB2bService {
     desde?: string;
     hasta?: string;
     negocioNombre?: string;
+    operador?: FiltroImporteOperador;
+    valor?: number;
+    valorHasta?: number;
   }): Prisma.PedidoB2bWhereInput {
     return {
       // `estados` (multi-valor) tiene prioridad si llega — ver
@@ -98,6 +102,7 @@ export class PedidosB2bService {
               lte: query.hasta ? new Date(query.hasta) : undefined,
             }
           : undefined,
+      total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
       // Coincidencia parcial, case-insensitive — usado por "Históricos"
       // (Pedidos activos filtra por negocio en el cliente porque trae todo
       // sin paginar; Históricos pagina de verdad, así que esto tiene que

@@ -115,9 +115,9 @@ function TelegramCard({
   return (
     <CanalCardShell emoji="💬" iconBg="#DBEAFE" iconColor="#3B82F6" titulo="Telegram">
       {conectado ? (
-        <Badge color="bg-admin-green-soft text-admin-green-dark">Conectado</Badge>
+        <Badge variant="exito">Conectado</Badge>
       ) : (
-        <Badge color="bg-admin-bg text-admin-ink-soft">No conectado</Badge>
+        <Badge variant="neutro">No conectado</Badge>
       )}
 
       <p className="text-sm text-admin-ink-soft">
@@ -217,9 +217,9 @@ function CorreoCard({
   return (
     <CanalCardShell emoji="✉️" iconBg="#EDE9FE" iconColor="#8B5CF6" titulo="Correo">
       {configurado ? (
-        <Badge color="bg-admin-green-soft text-admin-green-dark">Configurado</Badge>
+        <Badge variant="exito">Configurado</Badge>
       ) : (
-        <Badge color="bg-admin-bg text-admin-ink-soft">Sin configurar</Badge>
+        <Badge variant="neutro">Sin configurar</Badge>
       )}
 
       <p className="text-sm text-admin-ink-soft">

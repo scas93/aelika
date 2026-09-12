@@ -127,11 +127,7 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
                   >
                     {describe(promo)}
                   </span>
-                  {!promo.activa && (
-                    <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                      Inactiva
-                    </span>
-                  )}
+                  {!promo.activa && <Badge variant="neutro">Inactiva</Badge>}
                 </div>
                 {canWrite && (
                   <div className="flex items-center gap-2">

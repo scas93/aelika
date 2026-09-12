@@ -21,6 +21,7 @@ import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
 import { ExportOrdersHistoricoQueryDto } from './dto/export-orders-historico-query.dto';
 import { toCsv } from '../common/csv';
+import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 
 // Sequential, one-way status flow (see CLAUDE.md) — no arbitrary jumps, no
 // going back. DESPACHADO has no next step.
@@ -173,6 +174,9 @@ export class OrdersService {
     metodoPago?: ListOrdersHistoricoQueryDto['metodoPago'];
     desde?: string;
     hasta?: string;
+    operador?: FiltroImporteOperador;
+    valor?: number;
+    valorHasta?: number;
   }): Prisma.OrderWhereInput {
     return {
       estadoPedido: query.estadoPedido,
@@ -184,6 +188,7 @@ export class OrdersService {
               lte: query.hasta ? new Date(query.hasta) : undefined,
             }
           : undefined,
+      total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
     };
   }
 

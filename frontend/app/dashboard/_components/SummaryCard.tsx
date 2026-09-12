@@ -15,7 +15,7 @@ export default function SummaryCard({
     <Card className="flex flex-col gap-1.5">
       <span className="text-[13px] font-semibold text-admin-ink-soft">{label}</span>
       {error ? (
-        <span className="text-sm text-red-600">No se pudo cargar</span>
+        <span className="text-sm text-admin-red">No se pudo cargar</span>
       ) : (
         <span className="text-[30px] font-bold text-admin-ink">{value ?? "—"}</span>
       )}

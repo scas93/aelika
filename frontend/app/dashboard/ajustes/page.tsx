@@ -63,14 +63,16 @@ export default function AjustesPage() {
             {grupo.hrefs.map((href) => {
               const item = ALL_NAV_ITEMS.find((navItem) => navItem.href === href);
               if (!item) return null;
+              const Icon = item.icon;
               return (
                 <Link key={href} href={href}>
                   <Card className="flex items-center gap-3 transition hover:shadow-md" padding={16}>
-                    <span
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] text-xl"
-                      style={{ backgroundColor: item.iconBg, color: item.iconColor }}
-                    >
-                      {item.emoji}
+                    {/* Monocromático (bg-admin-bg + ink-soft), sin chip de
+                        color individual por sección — mismo criterio que el
+                        sidebar tras el rediseño a fondo claro (ver
+                        nav-items.ts, que ya no trae iconBg/iconColor). */}
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-bg text-admin-ink-soft">
+                      <Icon size={22} />
                     </span>
                     <div className="flex min-w-0 flex-col">
                       <span className="text-sm font-bold text-admin-ink">{item.label}</span>

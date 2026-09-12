@@ -2,12 +2,21 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { ApiError, fetchClientes, type ClienteOrdenarPor, type PaginatedClientes } from "@/lib/api";
+import { ApiError, fetchClientes, type Cliente, type ClienteOrdenarPor, type PaginatedClientes } from "@/lib/api";
 import { formatFechaHora, formatTelefono } from "@/lib/format";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Table, { type TableColumn } from "../_components/Table";
 
 const LIMIT = 25;
+
+const COLUMNS: TableColumn<Cliente>[] = [
+  { key: "nombre", header: "Nombre", render: (cliente) => <span className="font-bold">{cliente.nombre}</span> },
+  { key: "telefono", header: "Teléfono", render: (cliente) => formatTelefono(cliente.telefono) },
+  { key: "correo", header: "Correo", render: (cliente) => cliente.correo ?? "—" },
+  { key: "pedidos", header: "Pedidos", align: "right", render: (cliente) => cliente.totalPedidos },
+  { key: "ultimaCompra", header: "Última compra", render: (cliente) => formatFechaHora(cliente.ultimoPedidoAt) },
+];
 
 // Un solo <select> con presets en vez de dos controles independientes
 // (ordenarPor + orden) — para este listado solo hay 4 combinaciones útiles
@@ -118,54 +127,18 @@ export default function ClientesPage() {
                 : "Aún no tienes clientes registrados — aparecerán aquí en cuanto reciban su primer pedido."}
             </Card>
           ) : (
-            <>
-              <Card padding={0} className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-admin-border text-admin-ink-soft">
-                      <th className="px-4 py-3 font-bold">Nombre</th>
-                      <th className="px-4 py-3 font-bold">Teléfono</th>
-                      <th className="px-4 py-3 font-bold">Correo</th>
-                      <th className="px-4 py-3 text-right font-bold">Pedidos</th>
-                      <th className="px-4 py-3 font-bold">Última compra</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.data.map((cliente) => (
-                      <tr key={cliente.id} className="border-b border-admin-border last:border-b-0">
-                        <td className="px-4 py-3 font-bold text-admin-ink">{cliente.nombre}</td>
-                        <td className="px-4 py-3 text-admin-ink">{formatTelefono(cliente.telefono)}</td>
-                        <td className="px-4 py-3 text-admin-ink">{cliente.correo ?? "—"}</td>
-                        <td className="px-4 py-3 text-right text-admin-ink">{cliente.totalPedidos}</td>
-                        <td className="px-4 py-3 text-admin-ink">{formatFechaHora(cliente.ultimoPedidoAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Card>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-admin-ink-soft">
-                  Página {result.page} de {result.totalPages}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => cargar(result.page - 1, { q, ordenValue })}
-                    disabled={loading || result.page <= 1}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => cargar(result.page + 1, { q, ordenValue })}
-                    disabled={loading || result.page >= result.totalPages}
-                  >
-                    Siguiente
-                  </Button>
-                </div>
-              </div>
-            </>
+            <Table
+              columns={COLUMNS}
+              data={result.data}
+              rowKey={(cliente) => cliente.id}
+              pagination={{
+                page: result.page,
+                totalPages: result.totalPages,
+                onPrevious: () => cargar(result.page - 1, { q, ordenValue }),
+                onNext: () => cargar(result.page + 1, { q, ordenValue }),
+                disabled: loading,
+              }}
+            />
           )}
         </>
       )}

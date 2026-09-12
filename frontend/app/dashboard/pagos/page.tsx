@@ -7,7 +7,9 @@ import {
   exportPaymentsCsv,
   fetchPayments,
   type EstadoPago,
+  type FiltroImporte,
   type PaginatedPayments,
+  type Payment,
 } from "@/lib/api";
 import { formatFechaHora, formatMoney } from "@/lib/format";
 import {
@@ -17,10 +19,16 @@ import {
   rangoUltimas4SemanasISO,
   rangoUltimos7DiasISO,
 } from "@/lib/fecha";
+import { ESTADO_PAGO_VARIANT } from "../pedidos/estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Modal from "../_components/Modal";
-import Tabs from "../_components/Tabs";
+import Badge from "../_components/Badge";
+import Table, { type TableColumn } from "../_components/Table";
+import { FilterBar, FilterPill } from "../_components/FilterBar";
+import { FiltroSelectPopover } from "../_components/FiltroSelect";
+import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../_components/FiltroFecha";
+import { FiltroImportePopover, labelFiltroImporte } from "../_components/FiltroImporteControl";
 
 const LIMIT = 25;
 
@@ -74,15 +82,41 @@ const ESTADOS_PAGO_FILTRABLES: EstadoPago[] = ["PAGADO", "FALLIDO"];
 // Pedidos > Histórico.
 const METODOS_PAGO_FILTRABLES = ["card"];
 
+const COLUMNS: TableColumn<Payment>[] = [
+  { key: "folio", header: "Folio", render: (payment) => <span className="font-bold">#{payment.folio}</span> },
+  { key: "monto", header: "Monto", align: "right", render: (payment) => formatMoney(payment.amount) },
+  { key: "moneda", header: "Moneda", render: (payment) => payment.currency.toUpperCase() },
+  {
+    key: "estado",
+    header: "Estado",
+    render: (payment) => (
+      <Badge variant={ESTADO_PAGO_VARIANT[payment.status]}>{ESTADO_PAGO_LABEL[payment.status]}</Badge>
+    ),
+  },
+  {
+    key: "metodo",
+    header: "Método",
+    render: (payment) =>
+      payment.paymentMethodType
+        ? payment.paymentMethodType.charAt(0).toUpperCase() + payment.paymentMethodType.slice(1)
+        : "—",
+  },
+  {
+    key: "fechaCaptura",
+    header: "Fecha de captura",
+    render: (payment) => (payment.capturedAt ? formatFechaHora(payment.capturedAt) : "—"),
+  },
+];
+
 export default function PagosPage() {
   const { token } = useSession();
   const [result, setResult] = useState<PaginatedPayments | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<EstadoPago | "">("");
-  const [paymentMethodType, setPaymentMethodType] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [status, setStatus] = useState<EstadoPago | null>(null);
+  const [paymentMethodType, setPaymentMethodType] = useState<string | null>(null);
+  const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
+  const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportRango, setExportRango] = useState<RangoExport>("todas");
@@ -91,22 +125,20 @@ export default function PagosPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const hayFiltrosActivos = Boolean(
-    status || paymentMethodType || desde || hasta,
-  );
+  const { desde, hasta } = resolverFiltroFecha(fecha);
+  const hayFiltrosActivos = Boolean(status || paymentMethodType || desde || hasta || importe);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     fetchPayments(token, {
-      status: status || undefined,
-      paymentMethodType: paymentMethodType || undefined,
-      // "Hasta" se extiende al final del día (23:59:59.999) para que el
-      // filtro sea inclusivo — mismo criterio que en Pedidos > Histórico.
-      desde: desde ? new Date(desde).toISOString() : undefined,
-      hasta: hasta
-        ? new Date(`${hasta}T23:59:59.999`).toISOString()
-        : undefined,
+      status: status ?? undefined,
+      paymentMethodType: paymentMethodType ?? undefined,
+      desde,
+      hasta,
+      operador: importe?.operador,
+      valor: importe?.valor,
+      valorHasta: importe?.valorHasta,
       page,
       limit: LIMIT,
     })
@@ -124,7 +156,7 @@ export default function PagosPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, page, status, paymentMethodType, desde, hasta]);
+  }, [token, page, status, paymentMethodType, desde, hasta, importe]);
 
   function handleFilterChange<T>(setter: (value: T) => void, value: T) {
     setter(value);
@@ -189,70 +221,68 @@ export default function PagosPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Tabs
-        items={[{ key: "pagos", label: "Pagos" }]}
-        active="pagos"
-        onChange={() => {}}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <FilterBar>
+          <FilterPill
+            filterKey="estado"
+            label="Estado"
+            valueLabel={status ? ESTADO_PAGO_LABEL[status] : null}
+            onClear={() => handleFilterChange(setStatus, null)}
+          >
+            {({ close }) => (
+              // Solo PAGADO/FALLIDO a propósito (ver ESTADOS_PAGO_FILTRABLES) —
+              // los otros 3 valores de EstadoPago nunca ocurren en una fila de
+              // Payment real, mostrarlos rompería el filtro en silencio.
+              <FiltroSelectPopover
+                opciones={ESTADOS_PAGO_FILTRABLES.map((estado) => ({ value: estado, label: ESTADO_PAGO_LABEL[estado] }))}
+                valorAplicado={status}
+                onAplicar={(value) => handleFilterChange(setStatus, value)}
+                close={close}
+              />
+            )}
+          </FilterPill>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Estatus
-            <select
-              value={status}
-              onChange={(e) =>
-                handleFilterChange(setStatus, e.target.value as EstadoPago | "")
-              }
-              className="admin-input"
-            >
-              <option value="">Todos</option>
-              {ESTADOS_PAGO_FILTRABLES.map((estado) => (
-                <option key={estado} value={estado}>
-                  {ESTADO_PAGO_LABEL[estado]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FilterPill
+            filterKey="metodoPago"
+            label="Método de pago"
+            valueLabel={paymentMethodType ? paymentMethodType.charAt(0).toUpperCase() + paymentMethodType.slice(1) : null}
+            onClear={() => handleFilterChange(setPaymentMethodType, null)}
+          >
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={METODOS_PAGO_FILTRABLES.map((metodo) => ({
+                  value: metodo,
+                  label: metodo.charAt(0).toUpperCase() + metodo.slice(1),
+                }))}
+                valorAplicado={paymentMethodType}
+                onAplicar={(value) => handleFilterChange(setPaymentMethodType, value)}
+                close={close}
+              />
+            )}
+          </FilterPill>
 
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Método de pago
-            <select
-              value={paymentMethodType}
-              onChange={(e) =>
-                handleFilterChange(setPaymentMethodType, e.target.value)
-              }
-              className="admin-input"
-            >
-              <option value="">Todos</option>
-              {METODOS_PAGO_FILTRABLES.map((metodo) => (
-                <option key={metodo} value={metodo}>
-                  {metodo.charAt(0).toUpperCase() + metodo.slice(1)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FilterPill
+            filterKey="fecha"
+            label="Fecha"
+            valueLabel={labelFiltroFecha(fecha)}
+            onClear={() => handleFilterChange(setFecha, null)}
+          >
+            {({ close }) => (
+              <FiltroFechaPopover valorAplicado={fecha} onAplicar={(value) => handleFilterChange(setFecha, value)} close={close} />
+            )}
+          </FilterPill>
 
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Desde
-            <input
-              type="date"
-              value={desde}
-              onChange={(e) => handleFilterChange(setDesde, e.target.value)}
-              className="admin-input"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Hasta
-            <input
-              type="date"
-              value={hasta}
-              onChange={(e) => handleFilterChange(setHasta, e.target.value)}
-              className="admin-input"
-            />
-          </label>
-        </div>
+          <FilterPill
+            filterKey="importe"
+            label="Monto"
+            valueLabel={labelFiltroImporte(importe)}
+            onClear={() => handleFilterChange(setImporte, null)}
+          >
+            {({ close }) => (
+              <FiltroImportePopover valorAplicado={importe} onAplicar={(value) => handleFilterChange(setImporte, value)} close={close} />
+            )}
+          </FilterPill>
+        </FilterBar>
 
         <Button variant="secondary" onClick={() => setExportOpen(true)}>
           📥 Exportar CSV
@@ -270,76 +300,17 @@ export default function PagosPage() {
             : "No hay pagos registrados."}
         </Card>
       ) : (
-        <>
-          <Card padding={0} className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-admin-border text-admin-ink-soft">
-                  <th className="px-4 py-3 font-bold">Folio</th>
-                  <th className="px-4 py-3 text-right font-bold">Monto</th>
-                  <th className="px-4 py-3 font-bold">Moneda</th>
-                  <th className="px-4 py-3 font-bold">Estado</th>
-                  <th className="px-4 py-3 font-bold">Método</th>
-                  <th className="px-4 py-3 font-bold">Fecha de captura</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.data.map((payment) => (
-                  <tr
-                    key={payment.id}
-                    className="border-b border-admin-border last:border-b-0 hover:bg-admin-bg"
-                  >
-                    <td className="px-4 py-3 font-bold text-admin-ink">
-                      #{payment.folio}
-                    </td>
-                    <td className="px-4 py-3 text-right text-admin-ink">
-                      {formatMoney(payment.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-admin-ink">
-                      {payment.currency.toUpperCase()}
-                    </td>
-                    <td className="px-4 py-3 text-admin-ink">
-                      {ESTADO_PAGO_LABEL[payment.status]}
-                    </td>
-                    <td className="px-4 py-3 text-admin-ink">
-                      {payment.paymentMethodType
-                        ? payment.paymentMethodType.charAt(0).toUpperCase() +
-                          payment.paymentMethodType.slice(1)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-admin-ink">
-                      {payment.capturedAt
-                        ? formatFechaHora(payment.capturedAt)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-admin-ink-soft">
-              Página {result.page} de {result.totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setPage((p) => p - 1)}
-                disabled={result.page <= 1}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={result.page >= result.totalPages}
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        </>
+        <Table
+          columns={COLUMNS}
+          data={result.data}
+          rowKey={(payment) => payment.id}
+          pagination={{
+            page: result.page,
+            totalPages: result.totalPages,
+            onPrevious: () => setPage((p) => p - 1),
+            onNext: () => setPage((p) => p + 1),
+          }}
+        />
       )}
 
       <Modal

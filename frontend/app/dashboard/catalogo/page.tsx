@@ -24,6 +24,7 @@ import Tabs from "../_components/Tabs";
 import Modal from "../_components/Modal";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import SidePanel from "../_components/SidePanel";
+import Badge from "../_components/Badge";
 
 type Tab = "catalogo" | "promociones" | "modificadores";
 
@@ -179,11 +180,7 @@ export default function CatalogoPage() {
                             >
                               {category.nombre}
                             </span>
-                            {!category.activa && (
-                              <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                                Inactiva
-                              </span>
-                            )}
+                            {!category.activa && <Badge variant="neutro">Inactiva</Badge>}
                           </button>
 
                           {canWrite && (

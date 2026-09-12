@@ -17,6 +17,7 @@ import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import Modal from "../_components/Modal";
+import Table, { type TableColumn } from "../_components/Table";
 import { TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
 
 interface ReglaListadoProps {
@@ -76,6 +77,57 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
     }
   }
 
+  // Columnas en el cuerpo del componente (no a nivel de módulo, a diferencia
+  // de otras tablas migradas) porque capturan closures sobre estado/props de
+  // esta instancia (basePath, handleToggleActiva, handleDisparar,
+  // disparando) — "Estado" es un ToggleSwitch interactivo, no un Badge (no
+  // hay ningún enum de estatus detrás, es el booleano `activa`), así que no
+  // migra a variante semántica; "Trigger" sigue con el prop `color`
+  // categórico de Badge (ya excluido de la migración a variantes).
+  const columns: TableColumn<Regla>[] = [
+    { key: "nombre", header: "Nombre", render: (regla) => <span className="font-bold">{regla.nombre}</span> },
+    {
+      key: "trigger",
+      header: "Trigger",
+      render: (regla) => <Badge color={TRIGGER_BADGE_COLOR[regla.trigger]}>{TRIGGER_LABEL[regla.trigger]}</Badge>,
+    },
+    {
+      key: "estado",
+      header: "Estado",
+      render: (regla) => (
+        <ToggleSwitch
+          checked={regla.activa}
+          onChange={() => handleToggleActiva(regla)}
+          label={regla.activa ? "Desactivar" : "Activar"}
+        />
+      ),
+    },
+    {
+      key: "acciones",
+      header: "Acciones",
+      align: "right",
+      render: (regla) => (
+        <div className="flex justify-end gap-2">
+          {regla.trigger === "MANUAL" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleDisparar(regla)}
+              disabled={disparando === regla.id || !regla.activa}
+            >
+              {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
+            </Button>
+          )}
+          <Link href={`${basePath}/${regla.id}`}>
+            <Button variant="secondary" size="sm">
+              Editar
+            </Button>
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -95,54 +147,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
           Aún no tienes reglas — crea la primera con &quot;+ Nueva regla&quot;.
         </Card>
       ) : (
-        <Card padding={0} className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-admin-border text-admin-ink-soft">
-                <th className="px-4 py-3 font-bold">Nombre</th>
-                <th className="px-4 py-3 font-bold">Trigger</th>
-                <th className="px-4 py-3 font-bold">Estado</th>
-                <th className="px-4 py-3 text-right font-bold">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reglas.map((regla) => (
-                <tr key={regla.id} className="border-b border-admin-border last:border-b-0">
-                  <td className="px-4 py-3 font-bold text-admin-ink">{regla.nombre}</td>
-                  <td className="px-4 py-3">
-                    <Badge color={TRIGGER_BADGE_COLOR[regla.trigger]}>{TRIGGER_LABEL[regla.trigger]}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ToggleSwitch
-                      checked={regla.activa}
-                      onChange={() => handleToggleActiva(regla)}
-                      label={regla.activa ? "Desactivar" : "Activar"}
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      {regla.trigger === "MANUAL" && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleDisparar(regla)}
-                          disabled={disparando === regla.id || !regla.activa}
-                        >
-                          {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
-                        </Button>
-                      )}
-                      <Link href={`${basePath}/${regla.id}`}>
-                        <Button variant="secondary" size="sm">
-                          Editar
-                        </Button>
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <Table columns={columns} data={reglas} rowKey={(regla) => regla.id} />
       )}
 
       <Modal

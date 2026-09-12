@@ -15,7 +15,7 @@ import {
   type Product,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_COLOR, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
@@ -232,7 +232,7 @@ export default function DetallePanel({
       {pedido && (
         <div className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
-            <Badge color={ESTADO_COLOR[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+            <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
             <span className="text-sm text-admin-ink-soft">
               {/* timeZone: "UTC" — ver comentario en pedidos-b2b/page.tsx (formatFecha) */}
               Semana del{" "}

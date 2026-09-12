@@ -4,9 +4,10 @@ interface ToggleSwitchProps {
   label: string;
 }
 
-// Extracted from catalogo/page.tsx (same behavior/markup, no functional
-// change) — not yet wired back into catalogo or puntos-envio-section, see
-// CLAUDE.md phase notes.
+// admin-green a propósito en el estado "on" — se lee como "activo/
+// disponible" (un estado, no un acento de interacción), mismo criterio que
+// Badge variante "exito". No se migró a admin-accent en el prompt de
+// unificación de tokens; encontrado por grep y documentado aquí.
 export default function ToggleSwitch({ checked, onChange, label }: ToggleSwitchProps) {
   return (
     <button

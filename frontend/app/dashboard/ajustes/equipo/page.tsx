@@ -13,6 +13,7 @@ import {
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Modal from "../../_components/Modal";
+import Badge from "../../_components/Badge";
 import VolverAjustesLink from "../volver-link";
 
 const ROLES: Role[] = ["OPERADOR", "GERENTE", "DUENO"];
@@ -104,11 +105,7 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
                     <span className="text-sm text-admin-ink-soft">{teamUser.email}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {!teamUser.activo && (
-                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                        Inactivo
-                      </span>
-                    )}
+                    {!teamUser.activo && <Badge variant="neutro">Inactivo</Badge>}
                     <select
                       value={teamUser.rol}
                       disabled={isSelf}

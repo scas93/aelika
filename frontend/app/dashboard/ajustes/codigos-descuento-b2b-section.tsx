@@ -13,6 +13,7 @@ import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 import ToggleSwitch from "../_components/ToggleSwitch";
+import Badge from "../_components/Badge";
 
 // fechaLimite llega del backend como ISO datetime completo (Prisma DateTime
 // serializado, ej. "2026-09-15T00:00:00.000Z") aunque la columna sea
@@ -114,11 +115,7 @@ export default function CodigosDescuentoB2bSection({ token }: { token: string })
                     >
                       {codigo.codigo}
                     </span>
-                    {!codigo.activo && (
-                      <span className="rounded-full bg-admin-bg px-2 py-0.5 text-xs font-medium text-admin-ink-soft">
-                        Inactivo
-                      </span>
-                    )}
+                    {!codigo.activo && <Badge variant="neutro">Inactivo</Badge>}
                   </div>
                   <span className="text-sm text-admin-ink-soft">{Number(codigo.descuentoPorcentaje)}% de descuento</span>
                   <span className="text-sm text-admin-ink-soft">

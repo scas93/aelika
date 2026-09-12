@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import { ApiError, fetchPedidoB2b, DIAS_SEMANA_PEDIDO_B2B, type PedidoB2bDetalle } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_COLOR, ESTADO_LABEL } from "../estado";
+import { ESTADO_VARIANT, ESTADO_LABEL } from "../estado";
 import SidePanel from "../../_components/SidePanel";
 import Badge from "../../_components/Badge";
 
@@ -44,7 +44,7 @@ export default function HistoricoDetallePanel({
       {pedido && (
         <div className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
-            <Badge color={pedido.cancelado ? "bg-red-600 text-white" : ESTADO_COLOR[pedido.estado]}>
+            <Badge variant={pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]}>
               {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
             </Badge>
             <span className="text-sm text-admin-ink-soft">

@@ -10,7 +10,7 @@ import {
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_COLOR, ESTADO_LABEL, ESTADOS_ACTIVOS } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS_ACTIVOS } from "./estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
@@ -202,7 +202,7 @@ export default function PedidosB2bPage() {
                       </span>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Badge color={ESTADO_COLOR[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+                      <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
                       <span className="text-sm font-bold text-admin-ink">{formatMoney(pedido.total)}</span>
                     </div>
                   </div>

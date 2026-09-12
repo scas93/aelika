@@ -26,12 +26,13 @@ import {
 } from "@/lib/thermal-printer";
 import { regimenFiscalLabel, usoCfdiLabel } from "@/lib/catalogos-sat";
 import { rangoHoyISO } from "@/lib/fecha";
-import { ESTADO_COLOR, ESTADO_LABEL, ESTADO_PAGO_COLOR, ESTADO_PAGO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADO_PAGO_VARIANT, ESTADO_PAGO_LABEL, SIGUIENTE_ESTADO } from "./estado";
 import PedidosKanban from "./kanban";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import Modal from "../_components/Modal";
+import Tabs from "../_components/Tabs";
 
 const POLL_INTERVAL_MS = 25000;
 
@@ -101,28 +102,30 @@ export default function PedidosPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* Tabs en su propia fila de ancho completo, mismo patrón que
+          catalogo/page.tsx y pagos/page.tsx (el borde inferior de Tabs
+          corre por debajo de sus propios labels, no tiene sentido
+          compartir la fila con el toggle Lista/Kanban de abajo). */}
+      <Tabs
+        items={[
+          { key: "activos", label: `Activos ${activos ? `(${activos.length})` : ""}`.trim() },
+          { key: "entregados", label: `Entregados hoy ${entregadosHoy ? `(${entregadosHoy.length})` : ""}`.trim() },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as Tab)}
+      />
+
+      {/* Solo dentro de "Activos" — "Entregados hoy" siempre se ve en lista */}
+      {tab === "activos" && (
         <div className="flex gap-2">
-          <Button variant={tab === "activos" ? "primary" : "secondary"} onClick={() => setTab("activos")}>
-            Activos {activos ? `(${activos.length})` : ""}
+          <Button size="sm" variant={vistaActivos === "lista" ? "primary" : "secondary"} onClick={() => setVistaActivos("lista")}>
+            Lista
           </Button>
-          <Button variant={tab === "entregados" ? "primary" : "secondary"} onClick={() => setTab("entregados")}>
-            Entregados hoy {entregadosHoy ? `(${entregadosHoy.length})` : ""}
+          <Button size="sm" variant={vistaActivos === "kanban" ? "primary" : "secondary"} onClick={() => setVistaActivos("kanban")}>
+            Kanban
           </Button>
         </div>
-
-        {/* Solo dentro de "Activos" — "Entregados hoy" siempre se ve en lista */}
-        {tab === "activos" && (
-          <div className="flex gap-2">
-            <Button size="sm" variant={vistaActivos === "lista" ? "primary" : "secondary"} onClick={() => setVistaActivos("lista")}>
-              Lista
-            </Button>
-            <Button size="sm" variant={vistaActivos === "kanban" ? "primary" : "secondary"} onClick={() => setVistaActivos("kanban")}>
-              Kanban
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -264,9 +267,9 @@ function OrderCard({
           </div>
           <div className="flex items-center gap-2">
             {order.estadoPago === "REEMBOLSADO" && (
-              <Badge color={ESTADO_PAGO_COLOR.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+              <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
             )}
-            <Badge color={ESTADO_COLOR[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
+            <Badge variant={ESTADO_VARIANT[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
           </div>
         </button>
 

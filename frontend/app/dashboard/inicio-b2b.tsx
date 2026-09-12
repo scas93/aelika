@@ -104,7 +104,7 @@ export default function InicioB2B() {
                   formatter={(value) => [value, "Piezas"]}
                   labelStyle={{ color: "var(--color-admin-ink)" }}
                 />
-                <Bar dataKey="cantidadTotal" fill="var(--color-admin-green)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="cantidadTotal" fill="var(--color-admin-accent)" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
