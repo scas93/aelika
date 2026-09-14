@@ -3,6 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { ResultadoSitioWebScan } from './sitio-web-scan.types';
 
 const FETCH_TIMEOUT_MS = 10_000;
+// PageSpeed Insights corre una auditoría real de Lighthouse contra la URL,
+// no es un lookup rápido — confirmado contra la API real: ~20s para
+// haciendalaprovidencia.com. El timeout genérico de 10s (bueno para el
+// fetch del HTML propio, Custom Search y Text Search/Place Details) lo
+// cortaba en seco ("This operation was aborted") antes de que PageSpeed
+// alcanzara a responder, generando un falso "PageSpeed falló" en vez del
+// resultado real.
+const PAGESPEED_TIMEOUT_MS = 30_000;
 
 // Subtipos de schema.org LocalBusiness más relevantes para las verticales de
 // Aelika (ver GiroNegocio en el schema de Prisma) — no es la taxonomía
@@ -132,9 +140,9 @@ export class SitioWebScanService {
     return null;
   }
 
-  private async fetchConTimeout(url: string): Promise<Response> {
+  private async fetchConTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await fetch(url, { signal: controller.signal });
     } finally {
@@ -235,7 +243,7 @@ export class SitioWebScanService {
       endpoint.searchParams.set('key', key);
       endpoint.searchParams.set('category', 'performance');
 
-      const respuesta = await this.fetchConTimeout(endpoint.toString());
+      const respuesta = await this.fetchConTimeout(endpoint.toString(), PAGESPEED_TIMEOUT_MS);
       if (!respuesta.ok) {
         throw new Error(`HTTP ${respuesta.status}`);
       }
