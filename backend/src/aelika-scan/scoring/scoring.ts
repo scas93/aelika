@@ -175,7 +175,7 @@ function evaluarGoogleMaps(input: GoogleMapsInput): ResultadoDetalleCheck[] {
     : NivelCheck.NECESITA_ATENCION;
   const nivelFotos = nivelMasBajo(nivelCantidad, nivelRecencia);
 
-  return [
+  const checks: ResultadoDetalleCheck[] = [
     checkBinario('Perfil reclamado/verificado', 3, input.perfilReclamado),
     checkBinario(
       'Categoría principal asignada',
@@ -202,23 +202,40 @@ function evaluarGoogleMaps(input: GoogleMapsInput): ResultadoDetalleCheck[] {
       3,
       nivelPorUmbralAscendente(input.totalResenas, 100, 20),
     ),
-    checkNivel(
-      'Velocidad de reseñas nuevas',
-      3,
-      // Aceptable no es "promedio >= algo" sino "al menos 1 reseña nueva en
-      // los 6 meses" — ver comentario en el tipo VelocidadResenasNuevas.
-      input.velocidadResenasNuevas.promedioMensualUltimos6Meses >= 1
-        ? NivelCheck.OPTIMO
-        : input.velocidadResenasNuevas.totalUltimos6Meses >= 1
-          ? NivelCheck.ACEPTABLE
-          : NivelCheck.NECESITA_ATENCION,
-    ),
-    checkNivel(
-      'Tasa de respuesta a reseñas',
-      2,
-      nivelPorUmbralAscendente(input.tasaRespuestaResenas, 80, 40),
-    ),
   ];
+
+  // Regla 5: si la fuente de reseñas no estuvo disponible para este escaneo
+  // (ver comentario en el tipo), el check se omite por completo en vez de
+  // penalizar con 0 — igual que "Made with AI" en Facebook.
+  if (input.velocidadResenasNuevas.disponible) {
+    const { promedioMensualUltimos6Meses, totalUltimos6Meses } =
+      input.velocidadResenasNuevas;
+    checks.push(
+      checkNivel(
+        'Velocidad de reseñas nuevas',
+        3,
+        // Aceptable no es "promedio >= algo" sino "al menos 1 reseña nueva en
+        // los 6 meses" — ver comentario en el tipo.
+        promedioMensualUltimos6Meses >= 1
+          ? NivelCheck.OPTIMO
+          : totalUltimos6Meses >= 1
+            ? NivelCheck.ACEPTABLE
+            : NivelCheck.NECESITA_ATENCION,
+      ),
+    );
+  }
+
+  if (input.tasaRespuestaResenas.disponible) {
+    checks.push(
+      checkNivel(
+        'Tasa de respuesta a reseñas',
+        2,
+        nivelPorUmbralAscendente(input.tasaRespuestaResenas.valor, 80, 40),
+      ),
+    );
+  }
+
+  return checks;
 }
 
 function evaluarInstagram(input: InstagramInput): ResultadoDetalleCheck[] {

@@ -70,17 +70,27 @@ export interface GoogleMapsInput {
   };
   ratingPromedio: number;
   totalResenas: number;
-  velocidadResenasNuevas: {
-    // Promedio de reseñas nuevas por mes, calculado sobre los últimos 6 meses.
-    promedioMensualUltimos6Meses: number;
-    // Total de reseñas nuevas en los últimos 6 meses — necesario aparte del
-    // promedio porque "Aceptable" (al menos 1 en 6 meses) no es equivalente
-    // a "promedio >= 1/mes": un negocio con 1 reseña nueva en todo el
-    // semestre tiene promedio ~0.17 (no Óptimo) pero sí cumple Aceptable.
-    totalUltimos6Meses: number;
-  };
-  // 0-100.
-  tasaRespuestaResenas: number;
+  // Igual mecanismo de exclusión que FacebookInput.madeWithAi (regla 5), pero
+  // por una razón distinta: no es que el check "no aplique" conceptualmente,
+  // sino que la única fuente de este dato (Outscraper, ver la integración de
+  // Google Maps en Fase 2) puede fallar o no responder para un escaneo en
+  // particular. `disponible: false` excluye el check de la categoría
+  // (numerador y denominador) exactamente igual que un check no aplicable.
+  velocidadResenasNuevas:
+    | { disponible: false }
+    | {
+        disponible: true;
+        // Promedio de reseñas nuevas por mes, calculado sobre los últimos 6 meses.
+        promedioMensualUltimos6Meses: number;
+        // Total de reseñas nuevas en los últimos 6 meses — necesario aparte del
+        // promedio porque "Aceptable" (al menos 1 en 6 meses) no es equivalente
+        // a "promedio >= 1/mes": un negocio con 1 reseña nueva en todo el
+        // semestre tiene promedio ~0.17 (no Óptimo) pero sí cumple Aceptable.
+        totalUltimos6Meses: number;
+      };
+  // Ver comentario de velocidadResenasNuevas — mismo mecanismo, misma fuente.
+  tasaRespuestaResenas:
+    { disponible: false } | { disponible: true; valor: number };
 }
 
 export interface InstagramInput {

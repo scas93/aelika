@@ -34,10 +34,11 @@ const googleMapsOptimo: GoogleMapsInput = {
   ratingPromedio: 4.8,
   totalResenas: 150,
   velocidadResenasNuevas: {
+    disponible: true,
     promedioMensualUltimos6Meses: 2,
     totalUltimos6Meses: 12,
   },
-  tasaRespuestaResenas: 90,
+  tasaRespuestaResenas: { disponible: true, valor: 90 },
 };
 
 const instagramOptimo: InstagramInput = {
@@ -212,6 +213,28 @@ describe('calcularScoreEscaneo', () => {
     expect(facebookSiAplica.puntosObtenidos).toBe(14);
   });
 
+  it('regla 5: "Velocidad de reseñas nuevas" y "Tasa de respuesta" se excluyen de Google Maps cuando la fuente no estuvo disponible', () => {
+    const sinDatosDeResenas = calcularScoreEscaneo({
+      googleMaps: {
+        ...googleMapsOptimo,
+        velocidadResenasNuevas: { disponible: false },
+        tasaRespuestaResenas: { disponible: false },
+      },
+    });
+    const maps = sinDatosDeResenas.categorias[0];
+    // 25 (peso de tabla) - 3 (velocidad) - 2 (tasa de respuesta) = 20.
+    expect(maps.puntosMaximos).toBe(20);
+    expect(maps.checksTotal).toBe(7);
+    expect(
+      maps.checks.find((c) => c.nombre === 'Velocidad de reseñas nuevas'),
+    ).toBeUndefined();
+    expect(
+      maps.checks.find((c) => c.nombre === 'Tasa de respuesta a reseñas'),
+    ).toBeUndefined();
+    // Todo lo demás Óptimo -> puntos obtenidos = puntos máximos (20/20).
+    expect(maps.puntosObtenidos).toBe(20);
+  });
+
   it('normalización: escaneo Lite (5 categorías, 90 pts posibles) con todo Óptimo da score 100', () => {
     const datos: DatosEscaneo = {
       sitioWeb: { tieneCanal: true, ...sitioWebOptimo },
@@ -264,10 +287,11 @@ describe('calcularScoreEscaneo', () => {
         ratingPromedio: 4.2, // Aceptable: 1/2
         totalResenas: 50, // Aceptable: 1.5/3
         velocidadResenasNuevas: {
+          disponible: true,
           promedioMensualUltimos6Meses: 0.5,
           totalUltimos6Meses: 2,
         }, // Aceptable: 1.5/3
-        tasaRespuestaResenas: 50, // Aceptable: 1/2
+        tasaRespuestaResenas: { disponible: true, valor: 50 }, // Aceptable: 1/2
       },
     };
 
