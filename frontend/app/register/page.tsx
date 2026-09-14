@@ -6,9 +6,11 @@ import Link from "next/link";
 import {
   ApiError,
   checkSlugAvailability,
+  GIROS_NEGOCIO,
   horarioSemanaVacio,
   register,
   TIPOS_STOREFRONT,
+  type GiroNegocio,
   type HorarioSemana,
   type TipoStorefront,
 } from "@/lib/api";
@@ -32,6 +34,8 @@ export default function RegisterPage() {
   // (ver CLAUDE.md), así que arranca sin selección en vez de preseleccionar
   // "Retail (B2C)" en silencio.
   const [tipoStorefront, setTipoStorefront] = useState<TipoStorefront | null>(null);
+  // Igual que tipoStorefront: sin default, elección explícita.
+  const [giroNegocio, setGiroNegocio] = useState<GiroNegocio | "">("");
   const [horario, setHorario] = useState<HorarioSemana>(() => horarioSemanaVacio());
   const [ubicacion, setUbicacion] = useState("");
 
@@ -79,6 +83,7 @@ export default function RegisterPage() {
     email.trim().length > 3 &&
     password.length >= 8 &&
     tipoStorefront !== null &&
+    giroNegocio !== "" &&
     !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -95,6 +100,7 @@ export default function RegisterPage() {
         email,
         password,
         tipoStorefront,
+        giroNegocio,
         horarioAtencion: horario,
         ubicacion: ubicacion || undefined,
       });
@@ -218,6 +224,24 @@ export default function RegisterPage() {
             ))}
           </div>
         </fieldset>
+
+        <Field label="Giro del negocio">
+          <select
+            required
+            value={giroNegocio}
+            onChange={(e) => setGiroNegocio(e.target.value as GiroNegocio)}
+            className="input"
+          >
+            <option value="" disabled>
+              Elige una opción
+            </option>
+            {GIROS_NEGOCIO.map((opcion) => (
+              <option key={opcion.value} value={opcion.value}>
+                {opcion.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <HorarioEditor horario={horario} onChange={setHorario} />
 

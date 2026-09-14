@@ -14,11 +14,16 @@ import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
 import { VentanaRecepcionB2bDto } from '../../common/dto/ventana-recepcion-b2b.dto';
 import {
   FacturacionModo,
+  GiroNegocio,
   PedidoB2bModoCobro,
 } from '../../../generated/prisma/enums';
 
 // slug/nombre are intentionally absent — out of scope for now (see CLAUDE.md).
 export class UpdateTenantDto {
+  @IsOptional()
+  @IsEnum(GiroNegocio)
+  giroNegocio?: GiroNegocio;
+
   @IsOptional()
   @IsString()
   @MaxLength(1000)

@@ -54,6 +54,7 @@ export class AuthService {
         slug: dto.slug,
         nombre: dto.nombreNegocio,
         tipoStorefront: dto.tipoStorefront,
+        giroNegocio: dto.giroNegocio,
         horarioAtencion: horarioAtencion as any,
         ubicacion: dto.ubicacion,
         botApiKey: generateApiKey(),

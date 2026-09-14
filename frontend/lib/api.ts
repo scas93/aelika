@@ -50,6 +50,26 @@ export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripci
   },
 ];
 
+// Dato de segmentación interna de Aelika (para Aelika Scan, Módulo 5, en
+// definición) — distinto de TipoStorefront, que es el canal B2B/B2C que ve
+// el cliente final. No se muestra en el storefront público ni al bot.
+export type GiroNegocio =
+  | "RESTAURANTE"
+  | "CAFETERIA"
+  | "HOTEL"
+  | "RENTA_VACACIONAL"
+  | "MAYORISTA"
+  | "OTRO";
+
+export const GIROS_NEGOCIO: { value: GiroNegocio; label: string }[] = [
+  { value: "RESTAURANTE", label: "Restaurante" },
+  { value: "CAFETERIA", label: "Cafetería" },
+  { value: "HOTEL", label: "Hotel" },
+  { value: "RENTA_VACACIONAL", label: "Renta vacacional" },
+  { value: "MAYORISTA", label: "Mayorista" },
+  { value: "OTRO", label: "Otro" },
+];
+
 export interface RegisterPayload {
   nombreNegocio: string;
   slug: string;
@@ -57,6 +77,7 @@ export interface RegisterPayload {
   email: string;
   password: string;
   tipoStorefront: TipoStorefront;
+  giroNegocio: GiroNegocio;
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
 }
@@ -498,6 +519,9 @@ export interface VentanaRecepcionB2b {
 
 export interface TenantSettings {
   nombre: string;
+  // null para tenants creados antes de este campo — se actualiza
+  // manualmente desde Ajustes.
+  giroNegocio: GiroNegocio | null;
   mensajeBienvenida: string;
   horarioAtencion: HorarioSemana | null;
   ubicacion: string | null;
@@ -527,6 +551,7 @@ export interface TenantStripeStatus {
 }
 
 export interface UpdateTenantSettingsPayload {
+  giroNegocio?: GiroNegocio;
   mensajeBienvenida?: string;
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;

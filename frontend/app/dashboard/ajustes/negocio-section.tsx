@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, fetchTenantSettings, horarioSemanaVacio, updateTenantSettings, type HorarioSemana } from "@/lib/api";
+import {
+  ApiError,
+  fetchTenantSettings,
+  GIROS_NEGOCIO,
+  horarioSemanaVacio,
+  updateTenantSettings,
+  type GiroNegocio,
+  type HorarioSemana,
+} from "@/lib/api";
 import HorarioEditor from "@/components/horario-editor";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
@@ -14,6 +22,10 @@ export default function NegocioSection({ token }: { token: string }) {
   const [mensajeBienvenida, setMensajeBienvenida] = useState("");
   const [horario, setHorario] = useState<HorarioSemana>(() => horarioSemanaVacio());
   const [ubicacion, setUbicacion] = useState("");
+  // "" representa "sin especificar" (tenants creados antes de este campo) —
+  // distinto de un GiroNegocio real, y solo se manda en el payload si el
+  // Dueño elige uno.
+  const [giroNegocio, setGiroNegocio] = useState<GiroNegocio | "">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -27,6 +39,7 @@ export default function NegocioSection({ token }: { token: string }) {
         setMensajeBienvenida(settings.mensajeBienvenida);
         setHorario(settings.horarioAtencion ?? horarioSemanaVacio());
         setUbicacion(settings.ubicacion ?? "");
+        setGiroNegocio(settings.giroNegocio ?? "");
       } catch (err) {
         setLoadError(err instanceof ApiError ? err.message : "No se pudo cargar la información del negocio");
       } finally {
@@ -46,8 +59,10 @@ export default function NegocioSection({ token }: { token: string }) {
         mensajeBienvenida,
         horarioAtencion: horario,
         ubicacion: ubicacion || undefined,
+        giroNegocio: giroNegocio || undefined,
       });
       setMensajeBienvenida(settings.mensajeBienvenida);
+      setGiroNegocio(settings.giroNegocio ?? "");
       setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar la información del negocio");
@@ -83,6 +98,25 @@ export default function NegocioSection({ token }: { token: string }) {
       </Card>
 
       <Card className="flex flex-col gap-5">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          Giro del negocio
+          <select
+            value={giroNegocio}
+            onChange={(e) => {
+              setGiroNegocio(e.target.value as GiroNegocio | "");
+              setSaved(false);
+            }}
+            className="admin-input"
+          >
+            <option value="">Sin especificar</option>
+            {GIROS_NEGOCIO.map((opcion) => (
+              <option key={opcion.value} value={opcion.value}>
+                {opcion.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <HorarioEditor
           horario={horario}
           onChange={(value) => {

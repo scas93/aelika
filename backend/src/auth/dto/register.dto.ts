@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { HorarioSemanaDto } from '../../common/dto/horario-semana.dto';
-import { TipoStorefront } from '../../../generated/prisma/enums';
+import { TipoStorefront, GiroNegocio } from '../../../generated/prisma/enums';
 
 export class RegisterDto {
   @IsString()
@@ -37,6 +37,12 @@ export class RegisterDto {
   // creados antes de este campo, no para cubrir este DTO.
   @IsEnum(TipoStorefront)
   tipoStorefront: TipoStorefront;
+
+  // Igual que tipoStorefront: obligatorio y sin default, para que quien
+  // registra el negocio lo elija explícitamente. Nullable a nivel de Tenant
+  // solo para no romper tenants creados antes de este campo.
+  @IsEnum(GiroNegocio)
+  giroNegocio: GiroNegocio;
 
   @IsEmail()
   email: string;

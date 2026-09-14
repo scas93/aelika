@@ -17,11 +17,13 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import type {
   DiaSemana,
   FacturacionModo,
+  GiroNegocio,
   PedidoB2bModoCobro,
 } from '../../generated/prisma/enums';
 
 const SETTINGS_SELECT = {
   nombre: true,
+  giroNegocio: true,
   mensajeBienvenida: true,
   horarioAtencion: true,
   ubicacion: true,
@@ -84,6 +86,7 @@ export class TenantService {
           ? (normalizarHorarioSemana(dto.horarioAtencion) as any)
           : undefined,
         ubicacion: dto.ubicacion,
+        giroNegocio: dto.giroNegocio,
         facturacionModo: dto.facturacionModo,
         stripeContactEmail: dto.stripeContactEmail,
         pedidoB2bModoCobro: dto.pedidoB2bModoCobro,
@@ -252,6 +255,7 @@ export class TenantService {
 
   private present(tenant: {
     nombre: string;
+    giroNegocio: GiroNegocio | null;
     mensajeBienvenida: string | null;
     horarioAtencion: unknown;
     ubicacion: string | null;
@@ -273,6 +277,7 @@ export class TenantService {
   }) {
     return {
       nombre: tenant.nombre,
+      giroNegocio: tenant.giroNegocio,
       mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
       horarioAtencion: tenant.horarioAtencion,
       ubicacion: tenant.ubicacion,

@@ -47,6 +47,20 @@ enum TipoStorefront {
   RETAIL_B2B
 }
 
+// Vertical/giro del negocio — dato de segmentación interna de Aelika, no del
+// canal de venta (ver TipoStorefront, concepto independiente). Pensado para
+// que Aelika Scan (Módulo 5, en definición) ajuste pesos/umbrales de
+// calificación por vertical; ese ajuste todavía no existe, este campo solo
+// deja el dato disponible.
+enum GiroNegocio {
+  RESTAURANTE
+  CAFETERIA
+  HOTEL
+  RENTA_VACACIONAL
+  MAYORISTA
+  OTRO
+}
+
 model Tenant {
   id                           String             @id @default(uuid())
   slug                         String             @unique
@@ -56,6 +70,10 @@ model Tenant {
   // para el backfill de tenants creados antes de este campo, que
   // históricamente eran todos retail de pickup. Ver TipoStorefront arriba.
   tipoStorefront               TipoStorefront     @default(RETAIL_B2C)
+  // Obligatorio en RegisterDto (sin default a nivel de API) para tenants
+  // nuevos; nullable en DB para no romper tenants ya existentes (Entredós,
+  // Banetto), que se actualizarán manualmente desde Ajustes. Ver GiroNegocio.
+  giroNegocio                  GiroNegocio?
   logoUrl                      String?
   // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
   // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
