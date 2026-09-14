@@ -86,10 +86,8 @@ export class SitioWebScanService {
     const ldJsonBloques = this.extraerJsonLd(html);
     const localBusiness = this.buscarLocalBusiness(ldJsonBloques);
 
-    const [pagespeed, indexadoGoogle] = await Promise.all([
-      this.obtenerPageSpeed(finalUrl, advertencias),
-      this.consultarIndexacion(finalUrl, advertencias),
-    ]);
+    const pagespeed = await this.obtenerPageSpeed(finalUrl, advertencias);
+    const indexadoGoogle = this.consultarIndexacion(advertencias);
 
     return {
       sitioWeb: {
@@ -140,7 +138,10 @@ export class SitioWebScanService {
     return null;
   }
 
-  private async fetchConTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+  private async fetchConTimeout(
+    url: string,
+    timeoutMs = FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -243,7 +244,10 @@ export class SitioWebScanService {
       endpoint.searchParams.set('key', key);
       endpoint.searchParams.set('category', 'performance');
 
-      const respuesta = await this.fetchConTimeout(endpoint.toString(), PAGESPEED_TIMEOUT_MS);
+      const respuesta = await this.fetchConTimeout(
+        endpoint.toString(),
+        PAGESPEED_TIMEOUT_MS,
+      );
       if (!respuesta.ok) {
         throw new Error(`HTTP ${respuesta.status}`);
       }
@@ -270,43 +274,25 @@ export class SitioWebScanService {
     }
   }
 
-  private async consultarIndexacion(
-    url: string,
+  /**
+   * "Sitio indexado en Google" queda excluido permanentemente (regla 5), no
+   * "sin configurar todavía" — Google deprecó la opción "Search the entire
+   * web" de Programmable Search Engine (confirmado en su UI: "This feature
+   * is being deprecated and can no longer be enabled"). Sin ella, un motor
+   * de Custom Search solo puede buscar dentro de sitios agregados a mano
+   * (ej. *.aelika.com), lo cual no sirve para verificar indexación de un
+   * sitio de un tercero bajo ningún setup posible — no es un problema de
+   * cuota o configuración pendiente, es que la fuente de datos que el
+   * prompt original proponía ya no existe. No hay llamada HTTP que hacer
+   * aquí: no tiene sentido dejar código muerto para una API que nunca se va
+   * a poder usar como se pensó.
+   */
+  private consultarIndexacion(
     advertencias: string[],
-  ): Promise<{ disponible: false } | { disponible: true; indexado: boolean }> {
-    const key = this.configService.get<string>('GOOGLE_CUSTOM_SEARCH_API_KEY');
-    const cx = this.configService.get<string>('GOOGLE_CUSTOM_SEARCH_CX');
-    if (!key || !cx) {
-      advertencias.push(
-        'Google Custom Search no está configurada (GOOGLE_CUSTOM_SEARCH_API_KEY/CX) — se excluyó el check de Indexación.',
-      );
-      return { disponible: false };
-    }
-
-    try {
-      const dominio = new URL(url).hostname;
-      const endpoint = new URL('https://www.googleapis.com/customsearch/v1');
-      endpoint.searchParams.set('key', key);
-      endpoint.searchParams.set('cx', cx);
-      endpoint.searchParams.set('q', `site:${dominio}`);
-
-      const respuesta = await this.fetchConTimeout(endpoint.toString());
-      if (!respuesta.ok) {
-        throw new Error(`HTTP ${respuesta.status}`);
-      }
-      const body = (await respuesta.json()) as { items?: unknown[] };
-      return {
-        disponible: true,
-        indexado: Boolean(body.items && body.items.length > 0),
-      };
-    } catch (error) {
-      this.logger.warn(
-        `Custom Search falló para ${url}: ${mensajeDeError(error)}`,
-      );
-      advertencias.push(
-        'Google Custom Search falló para este escaneo — se excluyó el check de Indexación.',
-      );
-      return { disponible: false };
-    }
+  ): { disponible: false } | { disponible: true; indexado: boolean } {
+    advertencias.push(
+      'Sitio indexado en Google: excluido permanentemente — Google deprecó "Search the entire web" en Programmable Search Engine, no hay forma de verificar indexación de un sitio de tercero con Custom Search.',
+    );
+    return { disponible: false };
   }
 }

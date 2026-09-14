@@ -54,9 +54,14 @@ export interface SitioWebInput {
   // resto de la categoría — ver la integración de Sitio web en Fase 2.
   // 0-100, resultado crudo de PageSpeed cuando disponible.
   pagespeed: { disponible: false } | { disponible: true; valor: number };
-  // Mismo mecanismo — la Google Custom Search JSON API (fuente de este
-  // check) puede no estar configurada o fallar; ver la integración de Sitio
-  // web en Fase 2.
+  // Mismo mecanismo, pero acá `disponible: false` es una decisión cerrada,
+  // no una degradación por escaneo: Google deprecó "Search the entire web"
+  // en Programmable Search Engine, así que la Google Custom Search JSON API
+  // ya no puede verificar indexación de un sitio de tercero bajo ningún
+  // setup — la integración de Sitio web (Fase 2) siempre regresa
+  // `disponible: false` para este campo. El tipo se deja igual que
+  // `pagespeed` (mismo mecanismo de la regla 5) en vez de simplificarlo a
+  // `boolean | null`, por si en el futuro aparece otra fuente de indexación.
   indexadoGoogle:
     { disponible: false } | { disponible: true; indexado: boolean };
   datosEstructurados: boolean;

@@ -3,17 +3,18 @@ import { SitioWebScanService } from './sitio-web-scan.service';
 import { SitioWebInput } from '../../scoring/types';
 
 // Todas las pruebas mockean fetch — nunca le pegan a sitios reales ni a
-// PageSpeed/Custom Search (ver "Verificación esperada" del prompt de esta
-// integración). La llamada real contra haciendalaprovidencia.com fue solo
-// la verificación manual puntual de este prompt, hecha aparte.
+// PageSpeed (ver "Verificación esperada" del prompt de esta integración).
+// La llamada real contra haciendalaprovidencia.com fue solo la verificación
+// manual puntual de este prompt, hecha aparte. "Sitio indexado en Google"
+// no hace ninguna llamada HTTP — ver el comentario de consultarIndexacion
+// en sitio-web-scan.service.ts: Google deprecó "Search the entire web" en
+// Programmable Search Engine, así que ese check queda excluido siempre.
 
 function configServiceConKeys(
   overrides: Record<string, string | undefined> = {},
 ): ConfigService {
   const defaults: Record<string, string | undefined> = {
     GOOGLE_PAGESPEED_API_KEY: 'test-pagespeed-key',
-    GOOGLE_CUSTOM_SEARCH_API_KEY: 'test-cse-key',
-    GOOGLE_CUSTOM_SEARCH_CX: 'test-cx',
     ...overrides,
   };
   return { get: (key: string) => defaults[key] } as unknown as ConfigService;
@@ -66,9 +67,6 @@ describe('SitioWebScanService', () => {
           lighthouseResult: { categories: { performance: { score: 0.95 } } },
         });
       }
-      if (url.includes('customsearch')) {
-        return jsonResponse({ items: [{ title: 'resultado' }] });
-      }
       return htmlResponse(HTML_COMPLETO, 'https://www.ejemplo.com/');
     });
     global.fetch = fetchMock;
@@ -80,7 +78,7 @@ describe('SitioWebScanService', () => {
       tieneCanal: true,
       sslActivo: true,
       pagespeed: { disponible: true, valor: 95 },
-      indexadoGoogle: { disponible: true, indexado: true },
+      indexadoGoogle: { disponible: false },
       datosEstructurados: true,
       metaPixelInstalado: true,
       googleTagInstalado: true,
@@ -92,7 +90,11 @@ describe('SitioWebScanService', () => {
       telefono: '+52 33 0000 0000',
     });
 
-    expect(resultado.advertencias).toEqual([]);
+    // Indexación siempre trae su advertencia (exclusión permanente, no un
+    // fallo de este escaneo en particular).
+    expect(resultado.advertencias).toEqual([
+      expect.stringContaining('Sitio indexado en Google'),
+    ]);
   });
 
   it('sin JSON-LD, pixel ni tag: los tres binarios correspondientes dan false y nap queda en null', async () => {
@@ -101,9 +103,6 @@ describe('SitioWebScanService', () => {
         return jsonResponse({
           lighthouseResult: { categories: { performance: { score: 0.5 } } },
         });
-      }
-      if (url.includes('customsearch')) {
-        return jsonResponse({ items: [] });
       }
       return htmlResponse(HTML_VACIO, 'https://www.ejemplo.com/');
     });
@@ -125,11 +124,11 @@ describe('SitioWebScanService', () => {
 
   it('SSL se evalúa sobre la URL final tras seguir redirects, no la original', async () => {
     const fetchMock = mockFetch((url) => {
-      if (url.includes('pagespeedonline'))
+      if (url.includes('pagespeedonline')) {
         return jsonResponse({
           lighthouseResult: { categories: { performance: { score: 0.8 } } },
         });
-      if (url.includes('customsearch')) return jsonResponse({ items: [] });
+      }
       // fetch nativo sigue el redirect solo; simulamos que la Response final trae la URL https.
       return htmlResponse(HTML_VACIO, 'https://www.ejemplo.com/');
     });
@@ -143,11 +142,11 @@ describe('SitioWebScanService', () => {
 
   it('sin redirect (el sitio se sirve tal cual en http): SSL da false, un hallazgo real, no un bug', async () => {
     const fetchMock = mockFetch((url) => {
-      if (url.includes('pagespeedonline'))
+      if (url.includes('pagespeedonline')) {
         return jsonResponse({
           lighthouseResult: { categories: { performance: { score: 0.8 } } },
         });
-      if (url.includes('customsearch')) return jsonResponse({ items: [] });
+      }
       return htmlResponse(HTML_VACIO, 'http://www.ejemplo.com/');
     });
     global.fetch = fetchMock;
@@ -199,7 +198,6 @@ describe('SitioWebScanService', () => {
   it('regla 5: PageSpeed falla — se excluye solo Velocidad, el resto de la categoría se sigue evaluando', async () => {
     const fetchMock = mockFetch((url) => {
       if (url.includes('pagespeedonline')) return jsonResponse({}, false, 500);
-      if (url.includes('customsearch')) return jsonResponse({ items: [{}] });
       return htmlResponse(HTML_COMPLETO, 'https://www.ejemplo.com/');
     });
     global.fetch = fetchMock;
@@ -219,21 +217,18 @@ describe('SitioWebScanService', () => {
     );
   });
 
-  it('regla 5: Custom Search sin configurar — se excluye solo Indexación', async () => {
+  it('regla 5: "Sitio indexado en Google" siempre viene excluido — decisión cerrada, no una degradación puntual', async () => {
     const fetchMock = mockFetch((url) => {
-      if (url.includes('pagespeedonline'))
+      if (url.includes('pagespeedonline')) {
         return jsonResponse({
           lighthouseResult: { categories: { performance: { score: 0.7 } } },
         });
+      }
       return htmlResponse(HTML_COMPLETO, 'https://www.ejemplo.com/');
     });
     global.fetch = fetchMock;
 
-    const configSinCse = configServiceConKeys({
-      GOOGLE_CUSTOM_SEARCH_API_KEY: undefined,
-      GOOGLE_CUSTOM_SEARCH_CX: undefined,
-    });
-    const service = new SitioWebScanService(configSinCse);
+    const service = new SitioWebScanService(configServiceConKeys());
     const resultado = await service.escanear('https://www.ejemplo.com/');
 
     const sitio = resultado.sitioWeb as {
@@ -242,8 +237,18 @@ describe('SitioWebScanService', () => {
     };
     expect(sitio.indexadoGoogle).toEqual({ disponible: false });
     expect(
-      resultado.advertencias.some((a) => a.includes('Custom Search')),
+      resultado.advertencias.some((a) =>
+        a.includes('Sitio indexado en Google'),
+      ),
     ).toBe(true);
+    // Ninguna llamada de fetch debió apuntar a Custom Search — no existe ya
+    // ninguna ruta de código que la invoque.
+    const llamadas = (fetchMock as unknown as jest.Mock).mock.calls as [
+      string | URL,
+    ][];
+    expect(llamadas.some(([url]) => String(url).includes('customsearch'))).toBe(
+      false,
+    );
   });
 
   it('PageSpeed: usa GOOGLE_PLACES_API_KEY como respaldo si GOOGLE_PAGESPEED_API_KEY no está configurada', async () => {
@@ -255,7 +260,6 @@ describe('SitioWebScanService', () => {
           lighthouseResult: { categories: { performance: { score: 0.6 } } },
         });
       }
-      if (url.includes('customsearch')) return jsonResponse({ items: [] });
       return htmlResponse(HTML_VACIO, 'https://www.ejemplo.com/');
     });
     global.fetch = fetchMock;
