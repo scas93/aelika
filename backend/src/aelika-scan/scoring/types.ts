@@ -1,0 +1,183 @@
+// Motor de scoring de Aelika Scan (Módulo 5, en definición). Este archivo es
+// puro contrato de datos — la lógica de cálculo vive en scoring.ts. Sin
+// dependencias externas ni de NestJS a propósito: este módulo no llama APIs,
+// no expone HTTP y no persiste nada (eso llega en fases posteriores).
+
+export enum CategoriaId {
+  SITIO_WEB = 'SITIO_WEB',
+  GOOGLE_MAPS = 'GOOGLE_MAPS',
+  INSTAGRAM = 'INSTAGRAM',
+  FACEBOOK = 'FACEBOOK',
+  NAP = 'NAP',
+  WHATSAPP = 'WHATSAPP',
+}
+
+// Vocabulario único de resultado para todo check, binario o de 3 niveles.
+// Un check binario nunca produce ACEPTABLE (cumple -> OPTIMO, no cumple ->
+// NECESITA_ATENCION) — se reutiliza el mismo enum en vez de tener un tipo de
+// resultado aparte para binarios, así el output de scoring.ts habla un solo
+// idioma sin importar el tipo de check.
+export enum NivelCheck {
+  OPTIMO = 'OPTIMO',
+  ACEPTABLE = 'ACEPTABLE',
+  NECESITA_ATENCION = 'NECESITA_ATENCION',
+}
+
+// Algunos checks del prompt tienen un umbral descrito en términos
+// cualitativos, no numéricos ("responde a la mayoría de comentarios",
+// "contenido nativo mayoritario vs. mixto vs. mayoría enlaces", "presencia
+// de Reels: mayoría/algunos/ninguno", "horario completo/parcial/ausente").
+// Sin una definición numérica de "mayoría" en el prompt, este módulo no
+// puede recalcular ese umbral — así que para esos checks específicos recibe
+// el nivel ya clasificado como dato crudo, y la clasificación en sí (contar
+// posts, comparar contra el total) es trabajo de la fuente de datos, no de
+// este motor. El resto de los checks con umbral numérico explícito (rating,
+// pagespeed, % reels, días desde última publicación, etc.) sí reciben el
+// valor crudo y este módulo aplica el umbral.
+
+// Regla 3 vs. regla 4 (ver CLAUDE.md/prompt): "sin canal" (el negocio no
+// tiene ese canal — categoría califica 0 pero SÍ cuenta en el denominador)
+// es un caso explícito dentro del input de la categoría, distinto de "no
+// aplica a este nivel" (la categoría completa ni siquiera se manda — ver
+// DatosEscaneo). Solo aplica a categorías que son, en sí, un canal opcional
+// que un negocio puede no tener: sitio web, Instagram, Facebook, WhatsApp.
+// Google Maps y NAP no modelan "sin canal" — todo negocio de este producto
+// tiene (o debería tener) una ficha de Maps, y NAP es una comparación
+// cruzada entre las otras fuentes, no un canal en sí mismo.
+export type ConCanal<T> = ({ tieneCanal: true } & T) | { tieneCanal: false };
+
+export interface SitioWebInput {
+  sslActivo: boolean;
+  // 0-100, resultado crudo de PageSpeed.
+  pagespeed: number;
+  indexadoGoogle: boolean;
+  datosEstructurados: boolean;
+  metaPixelInstalado: boolean;
+  googleTagInstalado: boolean;
+}
+
+export interface GoogleMapsInput {
+  perfilReclamado: boolean;
+  categoriaPrincipalAsignada: boolean;
+  // Clasificación cualitativa (ver nota arriba) — "todos los días" no tiene
+  // una regla numérica en el prompt más allá de "completo/parcial/ausente".
+  horario: NivelCheck;
+  telefonoPresente: boolean;
+  sitioWebPresente: boolean;
+  fotos: {
+    cantidad: number;
+    actividadUltimos90Dias: boolean;
+  };
+  ratingPromedio: number;
+  totalResenas: number;
+  velocidadResenasNuevas: {
+    // Promedio de reseñas nuevas por mes, calculado sobre los últimos 6 meses.
+    promedioMensualUltimos6Meses: number;
+    // Total de reseñas nuevas en los últimos 6 meses — necesario aparte del
+    // promedio porque "Aceptable" (al menos 1 en 6 meses) no es equivalente
+    // a "promedio >= 1/mes": un negocio con 1 reseña nueva en todo el
+    // semestre tiene promedio ~0.17 (no Óptimo) pero sí cumple Aceptable.
+    totalUltimos6Meses: number;
+  };
+  // 0-100.
+  tasaRespuestaResenas: number;
+}
+
+export interface InstagramInput {
+  cuentaProfesional: boolean;
+  bio: {
+    categoriaPresente: boolean;
+    contactoPresente: boolean;
+    linkPresente: boolean;
+  };
+  postsPorSemana: number;
+  // 0-100.
+  porcentajeReels: number;
+  // Clasificación cualitativa (ver nota arriba).
+  contenidoSinMarcaAgua: NivelCheck;
+  // Clasificación cualitativa (ver nota arriba).
+  interaccionComentarios: NivelCheck;
+  catalogoConectado: boolean;
+}
+
+export interface FacebookInput {
+  pagina: {
+    categoriaPresente: boolean;
+    infoPresente: boolean;
+    ctaPresente: boolean;
+  };
+  // Clasificación cualitativa (ver nota arriba).
+  contenidoNativo: NivelCheck;
+  // Clasificación cualitativa (ver nota arriba).
+  presenciaReels: NivelCheck;
+  diasDesdeUltimaPublicacion: number;
+  catalogoConectado: boolean;
+  // Regla 5: si el negocio nunca publicó contenido generado con AI, el
+  // check completo se excluye de la categoría (numerador y denominador),
+  // igual que una categoría no aplicable a nivel completo (regla 4).
+  madeWithAi:
+    { aplica: false } | { aplica: true; etiquetadoCorrectamente: boolean };
+}
+
+export interface NapInput {
+  nombreConsistente: boolean;
+  direccionConsistente: boolean;
+  telefonoConsistente: boolean;
+}
+
+export interface WhatsappInput {
+  perfilCompleto: {
+    descripcionPresente: boolean;
+    horarioPresente: boolean;
+  };
+  catalogoVisible: boolean;
+}
+
+// Una categoría ausente por completo (key undefined) es la regla 4: no
+// aplica a este nivel de escaneo (Lite/Pro), no cuenta ni en numerador ni en
+// denominador. El módulo no asume qué nivel es el escaneo — solo reacciona
+// a qué categorías vienen presentes en este objeto.
+export interface DatosEscaneo {
+  sitioWeb?: ConCanal<SitioWebInput>;
+  googleMaps?: GoogleMapsInput;
+  instagram?: ConCanal<InstagramInput>;
+  facebook?: ConCanal<FacebookInput>;
+  nap?: NapInput;
+  whatsapp?: ConCanal<WhatsappInput>;
+}
+
+export interface ResultadoDetalleCheck {
+  nombre: string;
+  puntosMaximos: number;
+  puntosObtenidos: number;
+  resultado: NivelCheck;
+}
+
+export interface ResultadoCategoria {
+  categoria: CategoriaId;
+  puntosObtenidos: number;
+  // Suma de los puntos máximos de los checks realmente evaluados en esta
+  // categoría para este escaneo — no siempre es el peso de tabla: cuando
+  // "Made with AI" no aplica (regla 5), Facebook pesa 14 en vez de 15 para
+  // ese escaneo en particular. En el caso "sin canal" sí es el peso íntegro
+  // de tabla (ver categoriaSinCanal en scoring.ts).
+  puntosMaximos: number;
+  // Cuenta como "cumplido" cualquier check con puntosObtenidos > 0 — es
+  // decir, Óptimo o Aceptable, no solo Óptimo. No hay una definición más
+  // precisa de "cumplido" en el prompt para checks de 3 niveles, y este
+  // criterio (algún punto obtenido) es el que tiene sentido de negocio.
+  checksCumplidos: number;
+  checksTotal: number;
+  // Vacío cuando la categoría es "sin canal" (regla 3) — no hay checks
+  // individuales que auditar si el negocio no tiene el canal.
+  checks: ResultadoDetalleCheck[];
+}
+
+export interface ResultadoEscaneo {
+  // Redondeado al entero más cercano (regla 8) — es el único valor
+  // redondeado de todo el resultado, y solo para mostrarse.
+  scoreGlobal: number;
+  puntosObtenidosTotal: number;
+  puntosMaximosTotal: number;
+  categorias: ResultadoCategoria[];
+}
