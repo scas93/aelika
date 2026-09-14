@@ -48,9 +48,17 @@ export type ConCanal<T> = ({ tieneCanal: true } & T) | { tieneCanal: false };
 
 export interface SitioWebInput {
   sslActivo: boolean;
-  // 0-100, resultado crudo de PageSpeed.
-  pagespeed: number;
-  indexadoGoogle: boolean;
+  // Igual mecanismo de exclusión que GoogleMapsInput.velocidadResenasNuevas/
+  // tasaRespuestaResenas (regla 5): PageSpeed Insights es una fuente externa
+  // que puede fallar para un escaneo en particular, sin que eso invalide el
+  // resto de la categoría — ver la integración de Sitio web en Fase 2.
+  // 0-100, resultado crudo de PageSpeed cuando disponible.
+  pagespeed: { disponible: false } | { disponible: true; valor: number };
+  // Mismo mecanismo — la Google Custom Search JSON API (fuente de este
+  // check) puede no estar configurada o fallar; ver la integración de Sitio
+  // web en Fase 2.
+  indexadoGoogle:
+    { disponible: false } | { disponible: true; indexado: boolean };
   datosEstructurados: boolean;
   metaPixelInstalado: boolean;
   googleTagInstalado: boolean;

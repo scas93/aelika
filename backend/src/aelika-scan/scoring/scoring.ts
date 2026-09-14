@@ -144,14 +144,34 @@ function categoriaSinCanal(categoria: CategoriaId): ResultadoCategoria {
 }
 
 function evaluarSitioWeb(input: SitioWebInput): ResultadoDetalleCheck[] {
-  return [
+  const checks: ResultadoDetalleCheck[] = [
     checkBinario('SSL/HTTPS activo', 2, input.sslActivo),
-    checkNivel(
-      'Velocidad (PageSpeed)',
-      5,
-      nivelPorUmbralAscendente(input.pagespeed, 90, 50),
-    ),
-    checkBinario('Sitio indexado en Google', 3, input.indexadoGoogle),
+  ];
+
+  // Regla 5: PageSpeed Insights no respondió para este escaneo — se omite
+  // en vez de penalizar con 0.
+  if (input.pagespeed.disponible) {
+    checks.push(
+      checkNivel(
+        'Velocidad (PageSpeed)',
+        5,
+        nivelPorUmbralAscendente(input.pagespeed.valor, 90, 50),
+      ),
+    );
+  }
+
+  // Regla 5: Custom Search no está configurada o falló para este escaneo.
+  if (input.indexadoGoogle.disponible) {
+    checks.push(
+      checkBinario(
+        'Sitio indexado en Google',
+        3,
+        input.indexadoGoogle.indexado,
+      ),
+    );
+  }
+
+  checks.push(
     checkBinario(
       'Datos estructurados schema.org LocalBusiness',
       3,
@@ -163,7 +183,9 @@ function evaluarSitioWeb(input: SitioWebInput): ResultadoDetalleCheck[] {
       3,
       input.googleTagInstalado,
     ),
-  ];
+  );
+
+  return checks;
 }
 
 function evaluarGoogleMaps(input: GoogleMapsInput): ResultadoDetalleCheck[] {

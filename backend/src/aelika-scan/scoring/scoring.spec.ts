@@ -17,8 +17,8 @@ import {
 // especiales.
 const sitioWebOptimo: SitioWebInput = {
   sslActivo: true,
-  pagespeed: 95,
-  indexadoGoogle: true,
+  pagespeed: { disponible: true, valor: 95 },
+  indexadoGoogle: { disponible: true, indexado: true },
   datosEstructurados: true,
   metaPixelInstalado: true,
   googleTagInstalado: true,
@@ -91,13 +91,25 @@ describe('calcularScoreEscaneo', () => {
 
   it('check de 3 niveles: Óptimo, Aceptable y Necesita atención (velocidad PageSpeed, peso 5)', () => {
     const optimo = calcularScoreEscaneo({
-      sitioWeb: { tieneCanal: true, ...sitioWebOptimo, pagespeed: 95 },
+      sitioWeb: {
+        tieneCanal: true,
+        ...sitioWebOptimo,
+        pagespeed: { disponible: true, valor: 95 },
+      },
     });
     const aceptable = calcularScoreEscaneo({
-      sitioWeb: { tieneCanal: true, ...sitioWebOptimo, pagespeed: 70 },
+      sitioWeb: {
+        tieneCanal: true,
+        ...sitioWebOptimo,
+        pagespeed: { disponible: true, valor: 70 },
+      },
     });
     const necesitaAtencion = calcularScoreEscaneo({
-      sitioWeb: { tieneCanal: true, ...sitioWebOptimo, pagespeed: 30 },
+      sitioWeb: {
+        tieneCanal: true,
+        ...sitioWebOptimo,
+        pagespeed: { disponible: true, valor: 30 },
+      },
     });
 
     const checkDe = (resultado: ReturnType<typeof calcularScoreEscaneo>) =>
@@ -235,6 +247,29 @@ describe('calcularScoreEscaneo', () => {
     expect(maps.puntosObtenidos).toBe(20);
   });
 
+  it('regla 5: "Velocidad (PageSpeed)" y "Sitio indexado en Google" se excluyen de Sitio web cuando la fuente no estuvo disponible', () => {
+    const sinDatosExternos = calcularScoreEscaneo({
+      sitioWeb: {
+        tieneCanal: true,
+        ...sitioWebOptimo,
+        pagespeed: { disponible: false },
+        indexadoGoogle: { disponible: false },
+      },
+    });
+    const sitio = sinDatosExternos.categorias[0];
+    // 20 (peso de tabla) - 5 (velocidad) - 3 (indexación) = 12.
+    expect(sitio.puntosMaximos).toBe(12);
+    expect(sitio.checksTotal).toBe(4);
+    expect(
+      sitio.checks.find((c) => c.nombre === 'Velocidad (PageSpeed)'),
+    ).toBeUndefined();
+    expect(
+      sitio.checks.find((c) => c.nombre === 'Sitio indexado en Google'),
+    ).toBeUndefined();
+    // Todo lo demás Óptimo -> puntos obtenidos = puntos máximos (12/12).
+    expect(sitio.puntosObtenidos).toBe(12);
+  });
+
   it('normalización: escaneo Lite (5 categorías, 90 pts posibles) con todo Óptimo da score 100', () => {
     const datos: DatosEscaneo = {
       sitioWeb: { tieneCanal: true, ...sitioWebOptimo },
@@ -271,8 +306,8 @@ describe('calcularScoreEscaneo', () => {
       sitioWeb: {
         tieneCanal: true,
         sslActivo: false, // 0/2
-        pagespeed: 70, // Aceptable: 2.5/5
-        indexadoGoogle: true, // 3/3
+        pagespeed: { disponible: true, valor: 70 }, // Aceptable: 2.5/5
+        indexadoGoogle: { disponible: true, indexado: true }, // 3/3
         datosEstructurados: false, // 0/3
         metaPixelInstalado: true, // 4/4
         googleTagInstalado: true, // 3/3
