@@ -46,9 +46,9 @@ const instagramOptimo: InstagramInput = {
   bio: { categoriaPresente: true, contactoPresente: true, linkPresente: true },
   postsPorSemana: 8,
   porcentajeReels: 60,
-  contenidoSinMarcaAgua: NivelCheck.OPTIMO,
-  interaccionComentarios: NivelCheck.OPTIMO,
-  catalogoConectado: true,
+  contenidoSinMarcaAgua: { disponible: true, nivel: NivelCheck.OPTIMO },
+  interaccionComentarios: { disponible: true, nivel: NivelCheck.OPTIMO },
+  catalogoConectado: { disponible: true, conectado: true },
 };
 
 const facebookOptimo: FacebookInput = {
@@ -268,6 +268,37 @@ describe('calcularScoreEscaneo', () => {
     ).toBeUndefined();
     // Todo lo demás Óptimo -> puntos obtenidos = puntos máximos (12/12).
     expect(sitio.puntosObtenidos).toBe(12);
+  });
+
+  it('regla 5: "Contenido sin marca de agua", "Interacción" y "Catálogo" se excluyen de Instagram cuando la fuente no estuvo disponible', () => {
+    const sinDatosDeApify = calcularScoreEscaneo({
+      instagram: {
+        tieneCanal: true,
+        ...instagramOptimo,
+        contenidoSinMarcaAgua: { disponible: false },
+        interaccionComentarios: { disponible: false },
+        catalogoConectado: { disponible: false },
+      },
+    });
+    const ig = sinDatosDeApify.categorias[0];
+    // 20 (peso de tabla) - 2 (marca de agua) - 3 (interacción) - 2 (catálogo) = 13.
+    expect(ig.puntosMaximos).toBe(13);
+    expect(ig.checksTotal).toBe(4);
+    expect(
+      ig.checks.find(
+        (c) => c.nombre === 'Contenido sin marca de agua/reposteo',
+      ),
+    ).toBeUndefined();
+    expect(
+      ig.checks.find(
+        (c) => c.nombre === 'Interacción con comentarios (públicos)',
+      ),
+    ).toBeUndefined();
+    expect(
+      ig.checks.find((c) => c.nombre === 'Catálogo conectado'),
+    ).toBeUndefined();
+    // Todo lo demás Óptimo -> puntos obtenidos = puntos máximos (13/13).
+    expect(ig.puntosObtenidos).toBe(13);
   });
 
   it('normalización: escaneo Lite (5 categorías, 90 pts posibles) con todo Óptimo da score 100', () => {

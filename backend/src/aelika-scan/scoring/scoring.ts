@@ -266,7 +266,7 @@ function evaluarInstagram(input: InstagramInput): ResultadoDetalleCheck[] {
     Number(input.bio.contactoPresente) +
     Number(input.bio.linkPresente);
 
-  return [
+  const checks: ResultadoDetalleCheck[] = [
     checkBinario(
       'Cuenta profesional (Business/Creator)',
       3,
@@ -287,18 +287,41 @@ function evaluarInstagram(input: InstagramInput): ResultadoDetalleCheck[] {
       3,
       nivelPorUmbralAscendente(input.porcentajeReels, 50, 20),
     ),
-    checkNivel(
-      'Contenido sin marca de agua/reposteo',
-      2,
-      input.contenidoSinMarcaAgua,
-    ),
-    checkNivel(
-      'Interacción con comentarios (públicos)',
-      3,
-      input.interaccionComentarios,
-    ),
-    checkBinario('Catálogo conectado', 2, input.catalogoConectado),
   ];
+
+  // Regla 5: ningún scraper conocido expone una señal confiable de marca de
+  // agua/reposteo.
+  if (input.contenidoSinMarcaAgua.disponible) {
+    checks.push(
+      checkNivel(
+        'Contenido sin marca de agua/reposteo',
+        2,
+        input.contenidoSinMarcaAgua.nivel,
+      ),
+    );
+  }
+
+  // Regla 5: el actor de Apify no expone contenido de comentarios (solo el
+  // conteo), así que no se puede saber si el negocio respondió sin una
+  // llamada adicional costosa.
+  if (input.interaccionComentarios.disponible) {
+    checks.push(
+      checkNivel(
+        'Interacción con comentarios (públicos)',
+        3,
+        input.interaccionComentarios.nivel,
+      ),
+    );
+  }
+
+  // Regla 5: el actor no expone ningún campo de shopping/catálogo.
+  if (input.catalogoConectado.disponible) {
+    checks.push(
+      checkBinario('Catálogo conectado', 2, input.catalogoConectado.conectado),
+    );
+  }
+
+  return checks;
 }
 
 function evaluarFacebook(input: FacebookInput): ResultadoDetalleCheck[] {

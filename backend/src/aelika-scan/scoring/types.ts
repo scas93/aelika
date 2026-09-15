@@ -116,11 +116,21 @@ export interface InstagramInput {
   postsPorSemana: number;
   // 0-100.
   porcentajeReels: number;
-  // Clasificación cualitativa (ver nota arriba).
-  contenidoSinMarcaAgua: NivelCheck;
-  // Clasificación cualitativa (ver nota arriba).
-  interaccionComentarios: NivelCheck;
-  catalogoConectado: boolean;
+  // Mismo mecanismo de regla 5 que GoogleMapsInput/SitioWebInput — acá la
+  // razón es que ningún scraper conocido expone una señal confiable de
+  // marca de agua/reposteo (ver la integración de Instagram en Fase 2).
+  // Clasificación cualitativa (ver nota arriba) cuando sí está disponible.
+  contenidoSinMarcaAgua:
+    { disponible: false } | { disponible: true; nivel: NivelCheck };
+  // Mismo mecanismo — el actor de Apify usado expone commentsCount pero no
+  // el contenido de los comentarios (siempre regresa una lista vacía), así
+  // que no hay forma de saber si el negocio respondió sin una llamada
+  // adicional costosa (ver la integración de Instagram en Fase 2).
+  interaccionComentarios:
+    { disponible: false } | { disponible: true; nivel: NivelCheck };
+  // Mismo mecanismo — el actor no expone ningún campo de shopping/catálogo.
+  catalogoConectado:
+    { disponible: false } | { disponible: true; conectado: boolean };
 }
 
 export interface FacebookInput {
