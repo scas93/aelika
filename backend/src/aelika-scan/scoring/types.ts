@@ -167,9 +167,17 @@ export interface FacebookInput {
 }
 
 export interface NapInput {
-  nombreConsistente: boolean;
-  direccionConsistente: boolean;
-  telefonoConsistente: boolean;
+  // Mismo mecanismo de regla 5 que las demás categorías — acá la razón es
+  // que cada campo (nombre/dirección/teléfono) necesita al menos 2 valores
+  // no-nulos entre las fuentes evaluadas en este escaneo para poder
+  // comparar; con menos de 2, no hay nada que comparar (ver la integración
+  // de Consistencia NAP en Fase 2).
+  nombreConsistente:
+    { disponible: false } | { disponible: true; consistente: boolean };
+  direccionConsistente:
+    { disponible: false } | { disponible: true; consistente: boolean };
+  telefonoConsistente:
+    { disponible: false } | { disponible: true; consistente: boolean };
 }
 
 export interface WhatsappInput {

@@ -390,15 +390,40 @@ function evaluarFacebook(input: FacebookInput): ResultadoDetalleCheck[] {
 }
 
 function evaluarNap(input: NapInput): ResultadoDetalleCheck[] {
-  return [
-    checkBinario(
-      'Nombre exacto igual entre las 4 fuentes',
-      3,
-      input.nombreConsistente,
-    ),
-    checkBinario('Dirección exacta igual', 3, input.direccionConsistente),
-    checkBinario('Teléfono exacto igual', 4, input.telefonoConsistente),
-  ];
+  const checks: ResultadoDetalleCheck[] = [];
+
+  // Regla 5: cada campo necesita al menos 2 valores no-nulos entre las
+  // fuentes evaluadas para poder comparar — con menos, no hay nada que
+  // comparar (ni consistente ni inconsistente).
+  if (input.nombreConsistente.disponible) {
+    checks.push(
+      checkBinario(
+        'Nombre exacto igual entre las 4 fuentes',
+        3,
+        input.nombreConsistente.consistente,
+      ),
+    );
+  }
+  if (input.direccionConsistente.disponible) {
+    checks.push(
+      checkBinario(
+        'Dirección exacta igual',
+        3,
+        input.direccionConsistente.consistente,
+      ),
+    );
+  }
+  if (input.telefonoConsistente.disponible) {
+    checks.push(
+      checkBinario(
+        'Teléfono exacto igual',
+        4,
+        input.telefonoConsistente.consistente,
+      ),
+    );
+  }
+
+  return checks;
 }
 
 function evaluarWhatsapp(input: WhatsappInput): ResultadoDetalleCheck[] {

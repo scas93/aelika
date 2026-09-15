@@ -61,9 +61,9 @@ const facebookOptimo: FacebookInput = {
 };
 
 const napOptimo: NapInput = {
-  nombreConsistente: true,
-  direccionConsistente: true,
-  telefonoConsistente: true,
+  nombreConsistente: { disponible: true, consistente: true },
+  direccionConsistente: { disponible: true, consistente: true },
+  telefonoConsistente: { disponible: true, consistente: true },
 };
 
 const whatsappOptimo: WhatsappInput = {
@@ -321,6 +321,27 @@ describe('calcularScoreEscaneo', () => {
     ).toBeUndefined();
     // Todo lo demás Óptimo -> puntos obtenidos = puntos máximos (13/13).
     expect(ig.puntosObtenidos).toBe(13);
+  });
+
+  it('regla 5: cada campo de NAP se excluye independientemente cuando no hay suficientes datos para comparar', () => {
+    const resultado = calcularScoreEscaneo({
+      nap: {
+        nombreConsistente: { disponible: false },
+        direccionConsistente: { disponible: true, consistente: false },
+        telefonoConsistente: { disponible: true, consistente: true },
+      },
+    });
+    const nap = resultado.categorias[0];
+    // 10 (peso de tabla) - 3 (nombre excluido) = 7.
+    expect(nap.puntosMaximos).toBe(7);
+    expect(nap.checksTotal).toBe(2);
+    expect(
+      nap.checks.find(
+        (c) => c.nombre === 'Nombre exacto igual entre las 4 fuentes',
+      ),
+    ).toBeUndefined();
+    // Dirección inconsistente (0) + teléfono consistente (4) = 4.
+    expect(nap.puntosObtenidos).toBe(4);
   });
 
   it('normalización: escaneo Lite (5 categorías, 90 pts posibles) con todo Óptimo da score 100', () => {
