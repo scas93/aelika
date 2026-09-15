@@ -336,19 +336,41 @@ function evaluarFacebook(input: FacebookInput): ResultadoDetalleCheck[] {
       3,
       nivelPorConteo(paginaPresentes, 3),
     ),
-    checkNivel(
-      'Contenido nativo (no solo enlaces externos)',
-      3,
-      input.contenidoNativo,
-    ),
-    checkNivel('Presencia de Reels/video', 3, input.presenciaReels),
-    checkNivel(
-      'Recencia de publicaciones',
-      3,
-      nivelPorUmbralDescendente(input.diasDesdeUltimaPublicacion, 7, 30),
-    ),
-    checkBinario('Catálogo conectado', 2, input.catalogoConectado),
   ];
+
+  // Regla 5: estos tres dependen del actor de posts (distinto al de la
+  // página) — si no trajo datos para este escaneo, se excluyen sin afectar
+  // el resto de la categoría.
+  if (input.contenidoNativo.disponible) {
+    checks.push(
+      checkNivel(
+        'Contenido nativo (no solo enlaces externos)',
+        3,
+        input.contenidoNativo.nivel,
+      ),
+    );
+  }
+  if (input.presenciaReels.disponible) {
+    checks.push(
+      checkNivel('Presencia de Reels/video', 3, input.presenciaReels.nivel),
+    );
+  }
+  if (input.diasDesdeUltimaPublicacion.disponible) {
+    checks.push(
+      checkNivel(
+        'Recencia de publicaciones',
+        3,
+        nivelPorUmbralDescendente(input.diasDesdeUltimaPublicacion.dias, 7, 30),
+      ),
+    );
+  }
+
+  // Regla 5: el actor de la página no expone ningún campo de catálogo.
+  if (input.catalogoConectado.disponible) {
+    checks.push(
+      checkBinario('Catálogo conectado', 2, input.catalogoConectado.conectado),
+    );
+  }
 
   // Regla 5: si el negocio nunca publicó contenido con AI, el check se
   // omite por completo — no se agrega a la lista, así que ni sus puntos

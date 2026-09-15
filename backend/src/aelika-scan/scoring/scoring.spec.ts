@@ -53,10 +53,10 @@ const instagramOptimo: InstagramInput = {
 
 const facebookOptimo: FacebookInput = {
   pagina: { categoriaPresente: true, infoPresente: true, ctaPresente: true },
-  contenidoNativo: NivelCheck.OPTIMO,
-  presenciaReels: NivelCheck.OPTIMO,
-  diasDesdeUltimaPublicacion: 2,
-  catalogoConectado: true,
+  contenidoNativo: { disponible: true, nivel: NivelCheck.OPTIMO },
+  presenciaReels: { disponible: true, nivel: NivelCheck.OPTIMO },
+  diasDesdeUltimaPublicacion: { disponible: true, dias: 2 },
+  catalogoConectado: { disponible: true, conectado: true },
   madeWithAi: { aplica: true, etiquetadoCorrectamente: true },
 };
 
@@ -223,6 +223,28 @@ describe('calcularScoreEscaneo', () => {
     expect(facebookSiAplica.checksTotal).toBe(6);
     // Etiquetado incorrecto -> ese check da 0, pero sí cuenta en el máximo.
     expect(facebookSiAplica.puntosObtenidos).toBe(14);
+  });
+
+  it('regla 5: "Contenido nativo", "Presencia de Reels", "Recencia" y "Catálogo" se excluyen de Facebook cuando la fuente no estuvo disponible', () => {
+    const sinDatosDePosts = calcularScoreEscaneo({
+      facebook: {
+        tieneCanal: true,
+        ...facebookOptimo,
+        contenidoNativo: { disponible: false },
+        presenciaReels: { disponible: false },
+        diasDesdeUltimaPublicacion: { disponible: false },
+        catalogoConectado: { disponible: false },
+        madeWithAi: { aplica: false },
+      },
+    });
+    const fb = sinDatosDePosts.categorias[0];
+    // Solo queda "Página completa" (3 pts) — todo lo demás excluido.
+    expect(fb.puntosMaximos).toBe(3);
+    expect(fb.checksTotal).toBe(1);
+    expect(fb.checks.map((c) => c.nombre)).toEqual([
+      'Página completa (categoría + info + botón CTA)',
+    ]);
+    expect(fb.puntosObtenidos).toBe(3);
   });
 
   it('regla 5: "Velocidad de reseñas nuevas" y "Tasa de respuesta" se excluyen de Google Maps cuando la fuente no estuvo disponible', () => {

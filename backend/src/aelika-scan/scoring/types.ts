@@ -139,15 +139,29 @@ export interface FacebookInput {
     infoPresente: boolean;
     ctaPresente: boolean;
   };
-  // Clasificación cualitativa (ver nota arriba).
-  contenidoNativo: NivelCheck;
-  // Clasificación cualitativa (ver nota arriba).
-  presenciaReels: NivelCheck;
-  diasDesdeUltimaPublicacion: number;
-  catalogoConectado: boolean;
+  // Mismo mecanismo de regla 5 que las demás integraciones — estos tres
+  // dependen de un actor de posts distinto al de la página en sí (ver la
+  // integración de Facebook en Fase 2); si ese actor falla o no trae datos
+  // para un escaneo en particular, se excluyen sin invalidar el resto de la
+  // categoría. Clasificación cualitativa (ver nota arriba) cuando disponible.
+  contenidoNativo:
+    { disponible: false } | { disponible: true; nivel: NivelCheck };
+  presenciaReels:
+    { disponible: false } | { disponible: true; nivel: NivelCheck };
+  diasDesdeUltimaPublicacion:
+    { disponible: false } | { disponible: true; dias: number };
+  // Mismo mecanismo — el actor de la página no expone ningún campo de
+  // shopping/catálogo (decisión cerrada, no una degradación puntual, ver la
+  // integración de Facebook en Fase 2).
+  catalogoConectado:
+    { disponible: false } | { disponible: true; conectado: boolean };
   // Regla 5: si el negocio nunca publicó contenido generado con AI, el
   // check completo se excluye de la categoría (numerador y denominador),
-  // igual que una categoría no aplicable a nivel completo (regla 4).
+  // igual que una categoría no aplicable a nivel completo (regla 4). En la
+  // práctica también cubre "no se puede detectar si hay contenido con AI"
+  // (ningún actor conocido expone esa señal) — ver la integración de
+  // Facebook en Fase 2, que declara esta desviación de la semántica
+  // original ("nunca publicó" vs. "no se puede saber").
   madeWithAi:
     { aplica: false } | { aplica: true; etiquetadoCorrectamente: boolean };
 }
