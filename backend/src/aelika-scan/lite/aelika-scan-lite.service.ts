@@ -9,6 +9,7 @@ import {
   GoogleMapsBusquedaError,
   GoogleMapsDetallesError,
   GoogleMapsScanService,
+  NegocioAResolver,
   NegocioNoEncontradoError,
 } from '../integrations/google-maps';
 import { SitioWebScanService } from '../integrations/sitio-web';
@@ -28,6 +29,60 @@ const TIMEOUT_MS_DEFAULT = 60_000;
 
 function mensajeDeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// Plan de qué hacer con un canal opcional (Sitio web/Instagram/Facebook)
+// antes de llamar nada — decide la regla (3/4) o si de plano hay que llamar
+// la integración. 'contradiccion' solo aplica a 'llamar': URL presente +
+// ...ConfirmadoAusente:true a la vez (se prioriza la URL, se declara la
+// contradicción como advertencia).
+type PlanCanal =
+  | { modo: 'llamar'; url: string; contradiccion: boolean }
+  | { modo: 'ausente' }
+  | { modo: 'omitir' };
+
+function planCanal(
+  url: string | undefined,
+  confirmadoAusente: boolean | undefined,
+): PlanCanal {
+  if (url) {
+    return { modo: 'llamar', url, contradiccion: Boolean(confirmadoAusente) };
+  }
+  if (confirmadoAusente) {
+    return { modo: 'ausente' };
+  }
+  return { modo: 'omitir' };
+}
+
+type PlanMaps =
+  | { modo: 'llamar'; negocio: NegocioAResolver; contradiccion: boolean }
+  | { modo: 'ausente' }
+  | { modo: 'omitir' };
+
+function planMaps(dto: EscanearLiteDto): PlanMaps {
+  // mapsConfirmadoAusente gana sobre todo lo demás relacionado a Maps —
+  // salvo que venga placeId, que es la propia contradicción (un ID exacto
+  // no es compatible con "sé que no existe").
+  if (dto.mapsConfirmadoAusente) {
+    if (dto.placeId) {
+      return {
+        modo: 'llamar',
+        negocio: { placeId: dto.placeId },
+        contradiccion: true,
+      };
+    }
+    return { modo: 'ausente' };
+  }
+  // googleMapsSearch:false solo evita el Text Search (nombre+ciudad) — un
+  // placeId directo no tiene ambigüedad que evitar, así que la bandera se
+  // ignora si viene placeId.
+  if (dto.googleMapsSearch === false && !dto.placeId) {
+    return { modo: 'omitir' };
+  }
+  const negocio: NegocioAResolver = dto.placeId
+    ? { placeId: dto.placeId }
+    : { nombre: dto.nombreNegocio, ciudad: dto.ciudad! };
+  return { modo: 'llamar', negocio, contradiccion: false };
 }
 
 @Injectable()
@@ -73,77 +128,119 @@ export class AelikaScanLiteService {
   }
 
   private async ejecutarEscaneo(dto: EscanearLiteDto) {
-    const negocio = dto.placeId
-      ? { placeId: dto.placeId }
-      : { nombre: dto.nombreNegocio, ciudad: dto.ciudad! };
+    const planMapsResultado = planMaps(dto);
+    const planSitioWeb = planCanal(
+      dto.sitioWebUrl,
+      dto.sitioWebConfirmadoAusente,
+    );
+    const planInstagram = planCanal(
+      dto.instagramUrl,
+      dto.instagramConfirmadoAusente,
+    );
+    const planFacebook = planCanal(
+      dto.facebookUrl,
+      dto.facebookConfirmadoAusente,
+    );
 
-    // Las 4 corren en paralelo (Promise.allSettled, no Promise.all) — una
-    // falla inesperada en Sitio web/Instagram/Facebook no debe tumbar a las
-    // demás. Google Maps también corre acá adentro (en paralelo con las
-    // otras, no antes), pero su resultado se trata aparte abajo: es
-    // obligatorio y de fallo duro, sin importar qué haya pasado con el
-    // resto.
+    const advertencias: string[] = [];
+    const datos: DatosEscaneo = {};
+    const fuentesNap: FuentesNap = {};
+
+    if (
+      planMapsResultado.modo === 'llamar' &&
+      planMapsResultado.contradiccion
+    ) {
+      advertencias.push(
+        'Google Maps: se mandó placeId junto con mapsConfirmadoAusente:true — contradicción, se priorizó el placeId e ignoró la bandera.',
+      );
+    }
+    if (planSitioWeb.modo === 'llamar' && planSitioWeb.contradiccion) {
+      advertencias.push(
+        'Sitio web: se mandó sitioWebUrl junto con sitioWebConfirmadoAusente:true — contradicción, se priorizó la URL e ignoró la bandera.',
+      );
+    }
+    if (planInstagram.modo === 'llamar' && planInstagram.contradiccion) {
+      advertencias.push(
+        'Instagram: se mandó instagramUrl junto con instagramConfirmadoAusente:true — contradicción, se priorizó la URL e ignoró la bandera.',
+      );
+    }
+    if (planFacebook.modo === 'llamar' && planFacebook.contradiccion) {
+      advertencias.push(
+        'Facebook: se mandó facebookUrl junto con facebookConfirmadoAusente:true — contradicción, se priorizó la URL e ignoró la bandera.',
+      );
+    }
+
+    // Solo se llaman las integraciones de los canales en modo 'llamar' — el
+    // resto (regla 3 'ausente' o regla 4 'omitir') se resuelve sin red,
+    // antes de este Promise.allSettled. Google Maps sigue corriendo en
+    // paralelo con las otras 3 cuando aplica, no antes.
     const [
       mapsResultado,
       sitioWebResultado,
       instagramResultado,
       facebookResultado,
     ] = await Promise.allSettled([
-      this.googleMapsScanService.escanear(negocio),
-      dto.sitioWebUrl
-        ? this.sitioWebScanService.escanear(dto.sitioWebUrl)
+      planMapsResultado.modo === 'llamar'
+        ? this.googleMapsScanService.escanear(planMapsResultado.negocio)
         : Promise.resolve(undefined),
-      dto.instagramUrl
-        ? this.instagramScanService.escanear(dto.instagramUrl)
+      planSitioWeb.modo === 'llamar'
+        ? this.sitioWebScanService.escanear(planSitioWeb.url)
         : Promise.resolve(undefined),
-      dto.facebookUrl
-        ? this.facebookScanService.escanear(dto.facebookUrl)
+      planInstagram.modo === 'llamar'
+        ? this.instagramScanService.escanear(planInstagram.url)
+        : Promise.resolve(undefined),
+      planFacebook.modo === 'llamar'
+        ? this.facebookScanService.escanear(planFacebook.url)
         : Promise.resolve(undefined),
     ]);
 
-    const advertencias: string[] = [];
-    const datos: DatosEscaneo = {};
-    const fuentesNap: FuentesNap = {};
-
-    // Google Maps ya no es bloqueo duro (revisión de Fase 3) — se distingue
-    // igual que las demás integraciones: "negocio no encontrado" es
-    // información real (regla 3, cuenta en 0 pero sí entra al denominador),
-    // una falla técnica de la API es nuestra (regla 4, categoría omitida
-    // del todo). Ninguno de los dos casos aborta el endpoint.
-    if (mapsResultado.status === 'fulfilled') {
+    // --- Google Maps ---
+    if (planMapsResultado.modo === 'ausente') {
+      datos.googleMaps = { tieneCanal: false };
+      advertencias.push(
+        'Google Maps: confirmado sin canal (mapsConfirmadoAusente) — tratado como regla 3, cuenta en 0 contra el score.',
+      );
+    } else if (planMapsResultado.modo === 'omitir') {
+      advertencias.push(
+        'Google Maps: búsqueda omitida (googleMapsSearch:false) — categoría excluida de este escaneo (regla 4).',
+      );
+    } else if (mapsResultado.status === 'fulfilled' && mapsResultado.value) {
       const maps = mapsResultado.value;
       datos.googleMaps = { tieneCanal: true, ...maps.googleMaps };
       fuentesNap.googleMaps = maps.nap;
       advertencias.push(...maps.advertencias);
-    } else if (mapsResultado.reason instanceof NegocioNoEncontradoError) {
-      datos.googleMaps = { tieneCanal: false };
-      advertencias.push(
-        `Google Maps: ${mapsResultado.reason.message} — tratado como "sin canal" (regla 3), cuenta en 0 contra el score.`,
-      );
-    } else {
-      const detalle =
-        mapsResultado.reason instanceof GoogleMapsBusquedaError ||
-        mapsResultado.reason instanceof GoogleMapsDetallesError
-          ? mapsResultado.reason.message
-          : mensajeDeError(mapsResultado.reason);
-      this.logger.error(`Google Maps falló como servicio: ${detalle}`);
-      advertencias.push(
-        `Google Maps: falla técnica de la API (${detalle}) — categoría omitida de este escaneo (regla 4).`,
-      );
+    } else if (mapsResultado.status === 'rejected') {
+      if (mapsResultado.reason instanceof NegocioNoEncontradoError) {
+        // Regla 3: "negocio no encontrado" es información real del negocio,
+        // no un fallo nuestro — cuenta en 0 contra el score.
+        datos.googleMaps = { tieneCanal: false };
+        advertencias.push(
+          `Google Maps: ${mapsResultado.reason.message} — tratado como "sin canal" (regla 3), cuenta en 0 contra el score.`,
+        );
+      } else {
+        // Regla 4: falla técnica de la API es nuestra, no del negocio.
+        const detalle =
+          mapsResultado.reason instanceof GoogleMapsBusquedaError ||
+          mapsResultado.reason instanceof GoogleMapsDetallesError
+            ? mapsResultado.reason.message
+            : mensajeDeError(mapsResultado.reason);
+        this.logger.error(`Google Maps falló como servicio: ${detalle}`);
+        advertencias.push(
+          `Google Maps: falla técnica de la API (${detalle}) — categoría omitida de este escaneo (regla 4).`,
+        );
+      }
     }
 
-    // Sitio web, Instagram y Facebook: regla 4 si no se mandó la URL (no se
-    // intentó, no es lo mismo que "confirmado sin canal" — ver el prompt de
-    // este endpoint) o si la integración rechazó de forma inesperada bajo
-    // Promise.allSettled (no debería pasar, cada integración ya se degrada
-    // internamente, pero es la red de seguridad). En ambos casos la
-    // categoría simplemente se omite de `datos`, nunca se sustituye por
-    // `{tieneCanal: false}`.
-    // El valor resuelto ya es `undefined` cuando no se mandó la URL
-    // correspondiente (esa rama del allSettled fue Promise.resolve(undefined)
-    // directo, sin llamar la integración) — no hace falta repetir el chequeo
-    // de dto.*Url aparte del `if (sitioWeb)`/etc. de abajo.
-    if (sitioWebResultado.status === 'fulfilled' && sitioWebResultado.value) {
+    // --- Sitio web / Instagram / Facebook: mismo patrón entre los tres ---
+    if (planSitioWeb.modo === 'ausente') {
+      datos.sitioWeb = { tieneCanal: false };
+      advertencias.push(
+        'Sitio web: confirmado sin canal (sitioWebConfirmadoAusente) — regla 3, cuenta en 0 contra el score.',
+      );
+    } else if (
+      sitioWebResultado.status === 'fulfilled' &&
+      sitioWebResultado.value
+    ) {
       const sitioWeb = sitioWebResultado.value;
       datos.sitioWeb = sitioWeb.sitioWeb;
       fuentesNap.sitioWeb = sitioWeb.nap;
@@ -154,7 +251,15 @@ export class AelikaScanLiteService {
       );
     }
 
-    if (instagramResultado.status === 'fulfilled' && instagramResultado.value) {
+    if (planInstagram.modo === 'ausente') {
+      datos.instagram = { tieneCanal: false };
+      advertencias.push(
+        'Instagram: confirmado sin canal (instagramConfirmadoAusente) — regla 3, cuenta en 0 contra el score.',
+      );
+    } else if (
+      instagramResultado.status === 'fulfilled' &&
+      instagramResultado.value
+    ) {
       const instagram = instagramResultado.value;
       if (instagram.instagram !== undefined) {
         datos.instagram = instagram.instagram;
@@ -167,7 +272,15 @@ export class AelikaScanLiteService {
       );
     }
 
-    if (facebookResultado.status === 'fulfilled' && facebookResultado.value) {
+    if (planFacebook.modo === 'ausente') {
+      datos.facebook = { tieneCanal: false };
+      advertencias.push(
+        'Facebook: confirmado sin canal (facebookConfirmadoAusente) — regla 3, cuenta en 0 contra el score.',
+      );
+    } else if (
+      facebookResultado.status === 'fulfilled' &&
+      facebookResultado.value
+    ) {
       const facebook = facebookResultado.value;
       if (facebook.facebook !== undefined) {
         datos.facebook = facebook.facebook;
@@ -180,10 +293,11 @@ export class AelikaScanLiteService {
       );
     }
 
-    // Caso borde: si Maps falló (cualquiera de los dos casos) y ninguno de
-    // los 3 campos opcionales vino en el body tampoco, no queda ninguna
-    // categoría que evaluar — un score sobre 0 categorías no tiene sentido,
-    // así que se declara explícito en vez de regresar algo vacío.
+    // Caso borde: si ninguna categoría quedó evaluable (todas omitidas —
+    // regla 4 — o nunca intentadas), un score sobre 0 categorías no tiene
+    // sentido, así que se declara explícito en vez de regresar algo vacío.
+    // Nota: 'ausente' (regla 3) sí deja una categoría real en 0, así que
+    // nunca dispara este caso por sí solo.
     if (
       !datos.googleMaps &&
       !datos.sitioWeb &&

@@ -324,4 +324,147 @@ describe('AelikaScanLiteService', () => {
       placeId: 'PLACE_ID_TEST',
     });
   });
+
+  it('googleMapsSearch:false sin placeId omite Maps (regla 4) sin intentar Text Search', async () => {
+    const { service, googleMapsScanService } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Aelika',
+      googleMapsSearch: false,
+      sitioWebUrl: 'https://ejemplo.com/',
+    });
+
+    expect(googleMapsScanService.escanear).not.toHaveBeenCalled();
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.GOOGLE_MAPS),
+    ).toBeUndefined();
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.SITIO_WEB),
+    ).toBeDefined();
+  });
+
+  it('googleMapsSearch:false se ignora cuando viene placeId — no hay ambigüedad que evitar', async () => {
+    const { service, googleMapsScanService } = mockServices({});
+
+    await service.escanear({
+      nombreNegocio: 'Negocio Test',
+      placeId: 'PLACE_ID_TEST',
+      googleMapsSearch: false,
+    });
+
+    expect(googleMapsScanService.escanear).toHaveBeenCalledWith({
+      placeId: 'PLACE_ID_TEST',
+    });
+  });
+
+  it('mapsConfirmadoAusente:true entra directo como regla 3 (0/25), sin llamar la integración', async () => {
+    const { service, googleMapsScanService } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Aelika',
+      mapsConfirmadoAusente: true,
+      sitioWebUrl: 'https://ejemplo.com/',
+    });
+
+    expect(googleMapsScanService.escanear).not.toHaveBeenCalled();
+    const maps = resultado.categorias.find(
+      (c) => c.categoria === CategoriaId.GOOGLE_MAPS,
+    )!;
+    expect(maps.puntosObtenidos).toBe(0);
+    expect(maps.puntosMaximos).toBe(25); // sigue contando en el denominador (regla 3, no regla 4)
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Google Maps') && a.includes('regla 3'),
+      ),
+    ).toBe(true);
+  });
+
+  it('mapsConfirmadoAusente:true + placeId es una contradicción — se prioriza el placeId y se declara la advertencia', async () => {
+    const { service, googleMapsScanService } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Negocio Test',
+      placeId: 'PLACE_ID_TEST',
+      mapsConfirmadoAusente: true,
+    });
+
+    expect(googleMapsScanService.escanear).toHaveBeenCalledWith({
+      placeId: 'PLACE_ID_TEST',
+    });
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.GOOGLE_MAPS),
+    ).toBeDefined();
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Google Maps') && a.includes('contradicción'),
+      ),
+    ).toBe(true);
+  });
+
+  it('instagramConfirmadoAusente:true sin instagramUrl entra en 0/13 (regla 3), sin llamar a Apify', async () => {
+    const { service, instagramScanService } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Negocio Test',
+      ciudad: 'Zapopan',
+      instagramConfirmadoAusente: true,
+    });
+
+    expect(instagramScanService.escanear).not.toHaveBeenCalled();
+    const ig = resultado.categorias.find(
+      (c) => c.categoria === CategoriaId.INSTAGRAM,
+    )!;
+    expect(ig.puntosObtenidos).toBe(0);
+    expect(ig.puntosMaximos).toBe(20); // sin exclusiones de regla 5 — el peso íntegro de tabla
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Instagram') && a.includes('regla 3'),
+      ),
+    ).toBe(true);
+  });
+
+  it('facebookUrl + facebookConfirmadoAusente:true es una contradicción — se prioriza la URL y se declara la advertencia', async () => {
+    const { service, facebookScanService } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Negocio Test',
+      ciudad: 'Zapopan',
+      facebookUrl: 'https://www.facebook.com/ejemplo/',
+      facebookConfirmadoAusente: true,
+    });
+
+    expect(facebookScanService.escanear).toHaveBeenCalledWith(
+      'https://www.facebook.com/ejemplo/',
+    );
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.FACEBOOK),
+    ).toBeDefined();
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Facebook') && a.includes('contradicción'),
+      ),
+    ).toBe(true);
+  });
+
+  it('regresión: sin ninguna bandera nueva, el comportamiento no cambia', async () => {
+    const { service } = mockServices({});
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Negocio Test',
+      ciudad: 'Zapopan',
+      sitioWebUrl: 'https://ejemplo.com/',
+      instagramUrl: 'https://www.instagram.com/ejemplo/',
+      facebookUrl: 'https://www.facebook.com/ejemplo/',
+    });
+
+    expect(resultado.categorias.map((c) => c.categoria).sort()).toEqual(
+      [
+        CategoriaId.FACEBOOK,
+        CategoriaId.GOOGLE_MAPS,
+        CategoriaId.INSTAGRAM,
+        CategoriaId.NAP,
+        CategoriaId.SITIO_WEB,
+      ].sort(),
+    );
+  });
 });
