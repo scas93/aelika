@@ -1,7 +1,6 @@
 import {
-  BadGatewayException,
   GatewayTimeoutException,
-  NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AelikaScanLiteService } from './aelika-scan-lite.service';
@@ -219,24 +218,80 @@ describe('AelikaScanLiteService', () => {
     ).toBe(true);
   });
 
-  it('Google Maps: NegocioNoEncontradoError se mapea a NotFoundException (404), sin score parcial', async () => {
+  it('regla 3: Google Maps "negocio no encontrado" ya NO aborta el endpoint — entra en 0, las demás corren normal', async () => {
     const { service } = mockServices({
-      maps: () => Promise.reject(new NegocioNoEncontradoError('X', 'Y')),
+      maps: () =>
+        Promise.reject(new NegocioNoEncontradoError('Aelika', 'Zapopan')),
     });
 
-    await expect(
-      service.escanear({ nombreNegocio: 'X', ciudad: 'Y' }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    const resultado = await service.escanear({
+      nombreNegocio: 'Aelika',
+      ciudad: 'Zapopan',
+      sitioWebUrl: 'https://ejemplo.com/',
+      instagramUrl: 'https://www.instagram.com/ejemplo/',
+      facebookUrl: 'https://www.facebook.com/ejemplo/',
+    });
+
+    const maps = resultado.categorias.find(
+      (c) => c.categoria === CategoriaId.GOOGLE_MAPS,
+    )!;
+    expect(maps.puntosObtenidos).toBe(0);
+    expect(maps.puntosMaximos).toBe(25); // sigue contando en el denominador
+    expect(maps.checks).toEqual([]);
+    // Las otras 3 sí se evaluaron con datos reales.
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.SITIO_WEB),
+    ).toBeDefined();
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.INSTAGRAM),
+    ).toBeDefined();
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.FACEBOOK),
+    ).toBeDefined();
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Google Maps') && a.includes('regla 3'),
+      ),
+    ).toBe(true);
   });
 
-  it('Google Maps: una falla técnica se mapea a BadGatewayException (502)', async () => {
+  it('regla 4: una falla técnica de Google Maps ya NO aborta el endpoint — se omite del todo, las demás corren normal', async () => {
+    const { service } = mockServices({
+      maps: () => Promise.reject(new GoogleMapsBusquedaError('HTTP 500')),
+    });
+
+    const resultado = await service.escanear({
+      nombreNegocio: 'Aelika',
+      ciudad: 'Zapopan',
+      sitioWebUrl: 'https://ejemplo.com/',
+    });
+
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.GOOGLE_MAPS),
+    ).toBeUndefined();
+    expect(
+      resultado.categorias.find((c) => c.categoria === CategoriaId.SITIO_WEB),
+    ).toBeDefined();
+    expect(
+      resultado.advertencias.some(
+        (a) => a.includes('Google Maps') && a.includes('regla 4'),
+      ),
+    ).toBe(true);
+  });
+
+  it('caso borde: Maps falla técnicamente (regla 4, omitido del todo) y ningún campo opcional vino en el body — 422, no un score vacío', async () => {
+    // Con NegocioNoEncontradoError NO se dispara este caso: esa falla deja
+    // a Maps en el DatosEscaneo como {tieneCanal:false} (regla 3, un 0/25
+    // real) — sí hay una categoría que evaluar. El 422 solo aplica cuando
+    // Maps queda completamente ausente (regla 4, falla técnica) Y no hay
+    // ningún otro campo opcional.
     const { service } = mockServices({
       maps: () => Promise.reject(new GoogleMapsBusquedaError('HTTP 500')),
     });
 
     await expect(
       service.escanear({ nombreNegocio: 'X', ciudad: 'Y' }),
-    ).rejects.toBeInstanceOf(BadGatewayException);
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
   it('timeout: si el escaneo excede el límite configurado, responde con GatewayTimeoutException en vez de colgarse', async () => {

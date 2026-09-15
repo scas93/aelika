@@ -1,9 +1,8 @@
 import {
-  BadGatewayException,
   GatewayTimeoutException,
   Injectable,
   Logger,
-  NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -102,14 +101,36 @@ export class AelikaScanLiteService {
         : Promise.resolve(undefined),
     ]);
 
-    if (mapsResultado.status === 'rejected') {
-      throw this.mapearErrorMaps(mapsResultado.reason);
-    }
-    const maps = mapsResultado.value;
+    const advertencias: string[] = [];
+    const datos: DatosEscaneo = {};
+    const fuentesNap: FuentesNap = {};
 
-    const advertencias: string[] = [...maps.advertencias];
-    const datos: DatosEscaneo = { googleMaps: maps.googleMaps };
-    const fuentesNap: FuentesNap = { googleMaps: maps.nap };
+    // Google Maps ya no es bloqueo duro (revisión de Fase 3) — se distingue
+    // igual que las demás integraciones: "negocio no encontrado" es
+    // información real (regla 3, cuenta en 0 pero sí entra al denominador),
+    // una falla técnica de la API es nuestra (regla 4, categoría omitida
+    // del todo). Ninguno de los dos casos aborta el endpoint.
+    if (mapsResultado.status === 'fulfilled') {
+      const maps = mapsResultado.value;
+      datos.googleMaps = { tieneCanal: true, ...maps.googleMaps };
+      fuentesNap.googleMaps = maps.nap;
+      advertencias.push(...maps.advertencias);
+    } else if (mapsResultado.reason instanceof NegocioNoEncontradoError) {
+      datos.googleMaps = { tieneCanal: false };
+      advertencias.push(
+        `Google Maps: ${mapsResultado.reason.message} — tratado como "sin canal" (regla 3), cuenta en 0 contra el score.`,
+      );
+    } else {
+      const detalle =
+        mapsResultado.reason instanceof GoogleMapsBusquedaError ||
+        mapsResultado.reason instanceof GoogleMapsDetallesError
+          ? mapsResultado.reason.message
+          : mensajeDeError(mapsResultado.reason);
+      this.logger.error(`Google Maps falló como servicio: ${detalle}`);
+      advertencias.push(
+        `Google Maps: falla técnica de la API (${detalle}) — categoría omitida de este escaneo (regla 4).`,
+      );
+    }
 
     // Sitio web, Instagram y Facebook: regla 4 si no se mandó la URL (no se
     // intentó, no es lo mismo que "confirmado sin canal" — ver el prompt de
@@ -159,6 +180,21 @@ export class AelikaScanLiteService {
       );
     }
 
+    // Caso borde: si Maps falló (cualquiera de los dos casos) y ninguno de
+    // los 3 campos opcionales vino en el body tampoco, no queda ninguna
+    // categoría que evaluar — un score sobre 0 categorías no tiene sentido,
+    // así que se declara explícito en vez de regresar algo vacío.
+    if (
+      !datos.googleMaps &&
+      !datos.sitioWeb &&
+      !datos.instagram &&
+      !datos.facebook
+    ) {
+      throw new UnprocessableEntityException(
+        'No se pudo evaluar ninguna categoría del negocio — revisa los datos enviados.',
+      );
+    }
+
     // Consistencia NAP corre después — depende de los resultados de las 4
     // anteriores, no es paralela a ellas.
     const napResultado = this.napScanService.comparar(fuentesNap);
@@ -170,24 +206,5 @@ export class AelikaScanLiteService {
     const score = calcularScoreEscaneo(datos);
 
     return { ...score, advertencias };
-  }
-
-  private mapearErrorMaps(error: unknown): Error {
-    if (error instanceof NegocioNoEncontradoError) {
-      return new NotFoundException(error.message);
-    }
-    if (
-      error instanceof GoogleMapsBusquedaError ||
-      error instanceof GoogleMapsDetallesError
-    ) {
-      this.logger.error(`Google Maps falló como servicio: ${error.message}`);
-      return new BadGatewayException(
-        'Google Maps no respondió — intenta de nuevo en unos minutos',
-      );
-    }
-    this.logger.error(
-      `Google Maps — error no anticipado: ${mensajeDeError(error)}`,
-    );
-    return error instanceof Error ? error : new Error(mensajeDeError(error));
   }
 }

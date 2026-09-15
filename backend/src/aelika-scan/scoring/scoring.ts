@@ -464,10 +464,12 @@ export function calcularScoreEscaneo(datos: DatosEscaneo): ResultadoEscaneo {
 
   if (datos.googleMaps) {
     categorias.push(
-      construirCategoria(
-        CategoriaId.GOOGLE_MAPS,
-        evaluarGoogleMaps(datos.googleMaps),
-      ),
+      datos.googleMaps.tieneCanal
+        ? construirCategoria(
+            CategoriaId.GOOGLE_MAPS,
+            evaluarGoogleMaps(datos.googleMaps),
+          )
+        : categoriaSinCanal(CategoriaId.GOOGLE_MAPS),
     );
   }
 

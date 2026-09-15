@@ -39,11 +39,23 @@ export enum NivelCheck {
 // tiene ese canal — categoría califica 0 pero SÍ cuenta en el denominador)
 // es un caso explícito dentro del input de la categoría, distinto de "no
 // aplica a este nivel" (la categoría completa ni siquiera se manda — ver
-// DatosEscaneo). Solo aplica a categorías que son, en sí, un canal opcional
-// que un negocio puede no tener: sitio web, Instagram, Facebook, WhatsApp.
-// Google Maps y NAP no modelan "sin canal" — todo negocio de este producto
-// tiene (o debería tener) una ficha de Maps, y NAP es una comparación
-// cruzada entre las otras fuentes, no un canal en sí mismo.
+// DatosEscaneo). Aplica a categorías que son, en sí, un canal opcional que
+// un negocio puede no tener: sitio web, Google Maps, Instagram, Facebook,
+// WhatsApp.
+//
+// Google Maps SÍ lo necesita (revisión de Fase 3, orquestador del Lite,
+// commit del cambio "Maps deja de ser bloqueo duro") — la suposición
+// original de que "todo negocio tiene una ficha de Maps" resultó falsa en
+// la práctica (caso real: Aelika, agencia B2B, no tiene ficha verificada).
+// "Negocio no encontrado en Maps" es información real del negocio (regla 3,
+// tieneCanal:false); una falla técnica de la API de Maps en cambio es
+// regla 4 (la categoría se omite del todo, ver DatosEscaneo) — esa
+// distinción la resuelve el orquestador, no este motor.
+//
+// NAP es la única categoría que de verdad no modela "sin canal": es una
+// comparación cruzada entre las otras fuentes, no un canal en sí mismo — su
+// exclusión vive a nivel de cada check individual (regla 5, ver NapInput) y
+// a nivel de categoría completa cuando ningún campo tuvo datos (regla 4).
 export type ConCanal<T> = ({ tieneCanal: true } & T) | { tieneCanal: false };
 
 export interface SitioWebInput {
@@ -194,7 +206,7 @@ export interface WhatsappInput {
 // a qué categorías vienen presentes en este objeto.
 export interface DatosEscaneo {
   sitioWeb?: ConCanal<SitioWebInput>;
-  googleMaps?: GoogleMapsInput;
+  googleMaps?: ConCanal<GoogleMapsInput>;
   instagram?: ConCanal<InstagramInput>;
   facebook?: ConCanal<FacebookInput>;
   nap?: NapInput;

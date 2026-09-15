@@ -132,18 +132,21 @@ describe('calcularScoreEscaneo', () => {
   it('regla 9: "Fotos" toma el nivel más bajo entre cantidad y recencia', () => {
     const muchasFotosSinActividad = calcularScoreEscaneo({
       googleMaps: {
+        tieneCanal: true,
         ...googleMapsOptimo,
         fotos: { cantidad: 25, actividadUltimos90Dias: false },
       },
     });
     const pocasFotosConActividad = calcularScoreEscaneo({
       googleMaps: {
+        tieneCanal: true,
         ...googleMapsOptimo,
         fotos: { cantidad: 3, actividadUltimos90Dias: true },
       },
     });
     const ambasAltas = calcularScoreEscaneo({
       googleMaps: {
+        tieneCanal: true,
         ...googleMapsOptimo,
         fotos: { cantidad: 25, actividadUltimos90Dias: true },
       },
@@ -166,7 +169,7 @@ describe('calcularScoreEscaneo', () => {
   it('regla 3: categoría sin canal califica 0 pero cuenta en el denominador, sin detalle de checks', () => {
     const resultado = calcularScoreEscaneo({
       sitioWeb: { tieneCanal: false },
-      googleMaps: googleMapsOptimo,
+      googleMaps: { tieneCanal: true, ...googleMapsOptimo },
     });
 
     const sitio = resultado.categorias.find(
@@ -180,6 +183,27 @@ describe('calcularScoreEscaneo', () => {
     // Sí cuenta en el denominador global (20 de sitio web + 25 de maps).
     expect(resultado.puntosMaximosTotal).toBe(45);
     expect(resultado.puntosObtenidosTotal).toBe(25);
+  });
+
+  it('regla 3: Google Maps sin canal (negocio no encontrado) califica 0 pero cuenta en el denominador', () => {
+    // Caso real que motivó este cambio: un negocio B2B (ej. Aelika) puede no
+    // tener ficha de Maps — antes Google Maps no soportaba "sin canal" en
+    // absoluto (comentario de ConCanal en types.ts), ahora sí.
+    const resultado = calcularScoreEscaneo({
+      googleMaps: { tieneCanal: false },
+      sitioWeb: { tieneCanal: true, ...sitioWebOptimo },
+    });
+
+    const maps = resultado.categorias.find(
+      (c) => c.categoria === CategoriaId.GOOGLE_MAPS,
+    )!;
+    expect(maps.puntosObtenidos).toBe(0);
+    expect(maps.puntosMaximos).toBe(25);
+    expect(maps.checks).toEqual([]);
+
+    // Sí cuenta en el denominador global (25 de Maps + 20 de sitio web).
+    expect(resultado.puntosMaximosTotal).toBe(45);
+    expect(resultado.puntosObtenidosTotal).toBe(20);
   });
 
   it('regla 4: una categoría no enviada no cuenta ni en numerador ni en denominador', () => {
@@ -250,6 +274,7 @@ describe('calcularScoreEscaneo', () => {
   it('regla 5: "Velocidad de reseñas nuevas" y "Tasa de respuesta" se excluyen de Google Maps cuando la fuente no estuvo disponible', () => {
     const sinDatosDeResenas = calcularScoreEscaneo({
       googleMaps: {
+        tieneCanal: true,
         ...googleMapsOptimo,
         velocidadResenasNuevas: { disponible: false },
         tasaRespuestaResenas: { disponible: false },
@@ -347,7 +372,7 @@ describe('calcularScoreEscaneo', () => {
   it('normalización: escaneo Lite (5 categorías, 90 pts posibles) con todo Óptimo da score 100', () => {
     const datos: DatosEscaneo = {
       sitioWeb: { tieneCanal: true, ...sitioWebOptimo },
-      googleMaps: googleMapsOptimo,
+      googleMaps: { tieneCanal: true, ...googleMapsOptimo },
       instagram: { tieneCanal: true, ...instagramOptimo },
       facebook: { tieneCanal: true, ...facebookOptimo },
       nap: napOptimo,
@@ -362,7 +387,7 @@ describe('calcularScoreEscaneo', () => {
   it('normalización: escaneo Pro (6 categorías, 100 pts posibles) con todo Óptimo da score 100', () => {
     const datos: DatosEscaneo = {
       sitioWeb: { tieneCanal: true, ...sitioWebOptimo },
-      googleMaps: googleMapsOptimo,
+      googleMaps: { tieneCanal: true, ...googleMapsOptimo },
       instagram: { tieneCanal: true, ...instagramOptimo },
       facebook: { tieneCanal: true, ...facebookOptimo },
       nap: napOptimo,
@@ -387,6 +412,7 @@ describe('calcularScoreEscaneo', () => {
         googleTagInstalado: true, // 3/3
       },
       googleMaps: {
+        tieneCanal: true,
         perfilReclamado: true, // 3/3
         categoriaPrincipalAsignada: false, // 0/5
         horario: NivelCheck.ACEPTABLE, // 1/2
