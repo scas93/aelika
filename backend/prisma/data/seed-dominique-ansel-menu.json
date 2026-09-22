@@ -104,14 +104,14 @@
           "nombre": "DKA Extra Grande",
           "descripcion": "Versión grande del Kouign Amann caramelizado, ideal para compartir.",
           "precio": 900.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/XL-DKA-DAB-2021-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Cannelé",
           "descripcion": "Pastelito francés con costra caramelizada y centro suave de vainilla y ron.",
           "precio": 80.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2017/11/DominiqueAnsel_Cannele_5PcSet_V1-scaled-1-scaled.jpg",
           "disponible": false
         }
       ]
@@ -123,37 +123,37 @@
         {
           "nombre": "Tarta de Frambuesa y Pistache",
           "precio": 1440.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/v2Large-Raspberry-Pistachio-Tart-DAB-Spring-2021-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Tarta de Fresa y Lychee",
           "precio": 1440.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2026/06/Large-strawberry-lychee-tart-scaled.jpg",
           "disponible": true
         },
         {
           "nombre": "Tarta de Yuzu y Huckleberry",
           "precio": 1440.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/10/IMG_6370-1-scaled-e1761759682976.jpg",
           "disponible": true
         },
         {
           "nombre": "Tarta St. Honoré de Avellana y Praliné",
           "precio": 1440.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/10/IMG_6522-1-scaled-e1761759717359.jpg",
           "disponible": true
         },
         {
           "nombre": "Pastel de Manzana, Miel y Almendra",
           "precio": 1100.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/IMG_4722-2-scaled-1.webp",
           "disponible": true
         },
         {
           "nombre": "Mini Pastel de Chocolate",
           "precio": 1440.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/Mini-Me-Cake1-768x553-1.jpg",
           "disponible": true
         }
       ]
@@ -165,31 +165,31 @@
         {
           "nombre": "Macaron Clásico (caja de 9pz)",
           "precio": 470.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/DominiqueAnsel_MacaronBoxes-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Sablé Bretón (4pz)",
           "precio": 220.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/3.17.23-Dominique-Ansel-77749-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Sablé de Avellana (4pz)",
           "precio": 220.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/3.17.23-Dominique-Ansel-77734-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Sablé de Matcha (6pz)",
           "precio": 240.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/3.17.23-Dominique-Ansel-77729-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Cookie Shot de Chocolate (3pz)",
           "precio": 415.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2023/03/DC6CF6E8-2938-4462-B016-677C72656DF3.webp",
           "disponible": false
         }
       ]
@@ -201,7 +201,7 @@
         {
           "nombre": "Quiche de Espinaca y Gruyère (rinde 6-8 personas)",
           "precio": 1300.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2019/02/Spinach-Gruyere-Quiche-NEW-2026-scaled.jpeg",
           "disponible": true
         },
         {
@@ -226,32 +226,32 @@
           "nombre": "Canasta de Viennoiserie Petit (6pz)",
           "descripcion": "Selección de mini croissants y hojaldres, ideal para juntas.",
           "precio": 690.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/06/petit-viennoiserie-basket.avif",
           "disponible": true
         },
         {
           "nombre": "Canasta de Croissants (6pz)",
           "precio": 805.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/DAB-Croissant-Basket.avif",
           "disponible": true
         },
         {
           "nombre": "Set Viennoiserie Galore (12pz)",
           "descripcion": "Surtido de 12 piezas de hojaldrería para eventos de mayor tamaño.",
           "precio": 1400.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/viennoiserie-galore-set.avif",
           "disponible": true
         },
         {
           "nombre": "Hamper de DKA (12pz)",
           "precio": 2000.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/DominiqueAnsel_DKA_12PcHamper-scaled-1.jpg",
           "disponible": true
         },
         {
           "nombre": "Caja de Regalo DKA (4pz)",
           "precio": 560.0,
-          "fotoUrl": null,
+          "fotoUrl": "https://www.dominiqueanselny.com/wp-content/uploads/2025/09/DominiqueAnsel_DKA_4PcGiftBox-scaled-1.jpg",
           "disponible": true
         }
       ]
