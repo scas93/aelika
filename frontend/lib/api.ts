@@ -682,6 +682,12 @@ class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    // Código estructurado opcional (ej. Lealtad: PREMIO_PENDIENTE,
+    // SELLO_YA_REGISTRADO_HOY, TOKEN_NO_ENCONTRADO) — presente solo cuando
+    // el backend lo manda en el body del error. undefined en todo lo
+    // demás, que sigue sin código y se distingue solo por `status`/
+    // `message` como siempre. Ver lealtad-errors.ts en el backend.
+    public code?: string,
   ) {
     super(message);
   }
@@ -700,7 +706,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const message = body?.message ?? "Ocurrió un error inesperado";
-    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status);
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status, body?.code);
   }
 
   return body as T;

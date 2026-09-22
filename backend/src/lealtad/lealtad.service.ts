@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { WalletPassService, DatosPaseInput, WalletPassResultado } from './wallet-pass.service';
 import { generateApiKey } from '../common/api-key';
 import { fechaEnMexico } from '../common/horario';
 import { Cliente, LoyaltyCard, LoyaltyCardEstado } from '../../generated/prisma/client';
+import { LealtadErrorCode, lealtadConflict, lealtadNotFound } from './lealtad-errors';
 
 const SELLOS_PARA_PREMIO = 10;
 
@@ -84,8 +85,9 @@ export class LealtadService {
     const loyaltyCard = await this.buscarPorToken(token);
 
     if (loyaltyCard.estado === LoyaltyCardEstado.PREMIO_DISPONIBLE) {
-      throw new ConflictException(
+      throw lealtadConflict(
         'Esta tarjeta ya tiene un premio disponible — hay que redimirlo antes de seguir sellando.',
+        LealtadErrorCode.PREMIO_PENDIENTE,
       );
     }
 
@@ -95,8 +97,9 @@ export class LealtadService {
       orderBy: { createdAt: 'desc' },
     });
     if (ultimaVisita && fechaEnMexico(ultimaVisita.createdAt) === hoy) {
-      throw new ConflictException(
+      throw lealtadConflict(
         'Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.',
+        LealtadErrorCode.SELLO_YA_REGISTRADO_HOY,
       );
     }
 
@@ -174,7 +177,10 @@ export class LealtadService {
       where: { token },
     });
     if (!loyaltyCard) {
-      throw new NotFoundException('No se encontró ninguna tarjeta de lealtad con ese código.');
+      throw lealtadNotFound(
+        'No se encontró ninguna tarjeta de lealtad con ese código.',
+        LealtadErrorCode.TOKEN_NO_ENCONTRADO,
+      );
     }
     return loyaltyCard;
   }
