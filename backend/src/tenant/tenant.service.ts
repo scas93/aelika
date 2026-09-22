@@ -4,6 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { normalizarHorarioSemana } from '../common/horario';
@@ -31,6 +32,9 @@ const SETTINGS_SELECT = {
   botWebhookUrl: true,
   botWebhookSecret: true,
   candadoMarketingDias: true,
+  // El hash en sí NUNCA se expone (ver present()) — solo se lee aquí para
+  // derivar el booleano pinLealtadConfigurado.
+  pinLealtad: true,
   facturacionModo: true,
   stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
@@ -49,6 +53,9 @@ const SETTINGS_SELECT = {
 } as const;
 
 const API_BASE_URL_DEFAULT = 'http://localhost:3001';
+// Mismo costo que AuthService (contraseñas de usuario) — el PIN de Lealtad
+// se hashea igual, ver setLealtadPin.
+const SALT_ROUNDS = 10;
 
 @Injectable()
 export class TenantService {
@@ -108,6 +115,25 @@ export class TenantService {
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { botApiKey: generateApiKey() },
+      select: SETTINGS_SELECT,
+    });
+    return this.present(tenant);
+  }
+
+  /**
+   * POST /tenant/me/lealtad-pin — define o cambia el PIN de Lealtad
+   * (Tenant.pinLealtad), hasheado con bcrypt igual que las contraseñas de
+   * usuario (ver AuthService), nunca en texto plano — mismo criterio
+   * documentado en el comentario de ese campo en schema.prisma. Reemplazar
+   * el PIN también resetea el rate-limit (pinIntentosFallidos/
+   * pinBloqueadoHasta) — un Dueño que cambia el PIN a propósito no debería
+   * heredar un bloqueo que aplicaba al PIN anterior.
+   */
+  async setLealtadPin(tenantId: string, pin: string) {
+    const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
+    const tenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { pinLealtad: pinHash, pinIntentosFallidos: 0, pinBloqueadoHasta: null },
       select: SETTINGS_SELECT,
     });
     return this.present(tenant);
@@ -263,6 +289,7 @@ export class TenantService {
     botWebhookUrl: string | null;
     botWebhookSecret: string | null;
     candadoMarketingDias: number | null;
+    pinLealtad: string | null;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
     stripeAccountId: string | null;
@@ -286,6 +313,10 @@ export class TenantService {
       botWebhookUrl: tenant.botWebhookUrl,
       botWebhookSecret: tenant.botWebhookSecret,
       candadoMarketingDias: tenant.candadoMarketingDias,
+      // Nunca el hash — solo si ya hay un PIN configurado, para que
+      // Ajustes pueda mostrar "configurado"/"sin configurar" sin exponer
+      // el valor.
+      pinLealtadConfigurado: !!tenant.pinLealtad,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,

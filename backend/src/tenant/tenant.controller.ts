@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { SetLealtadPinDto } from './dto/set-lealtad-pin.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../../generated/prisma/enums';
@@ -25,6 +26,11 @@ export class TenantController {
   @Post('me/regenerate-bot-key')
   regenerateBotKey(@CurrentUser() user: JwtPayload) {
     return this.tenantService.regenerateBotKey(user.tenantId);
+  }
+
+  @Post('me/lealtad-pin')
+  setLealtadPin(@CurrentUser() user: JwtPayload, @Body() dto: SetLealtadPinDto) {
+    return this.tenantService.setLealtadPin(user.tenantId, dto.pin);
   }
 
   @Post('me/stripe-account')
