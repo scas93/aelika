@@ -22,6 +22,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ClientesModule } from './clientes/clientes.module';
 import { NotificacionesReglasModule } from './notificaciones-reglas/notificaciones-reglas.module';
 import { AelikaScanLiteModule } from './aelika-scan/lite/aelika-scan-lite.module';
+import { LealtadModule } from './lealtad/lealtad.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AelikaScanLiteModule } from './aelika-scan/lite/aelika-scan-lite.module
     ClientesModule,
     NotificacionesReglasModule,
     AelikaScanLiteModule,
+    LealtadModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

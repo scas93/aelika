@@ -155,6 +155,64 @@ export class ClientesService {
     return { clientesActivos };
   }
 
+  /**
+   * Alta de Cliente para el Módulo de Lealtad (`lealtad/`) — a diferencia de
+   * `sincronizarDesdePedido`, aquí NO hay pedido de por medio: se llama
+   * desde una sesión JWT normal del dashboard (usa `this.tenantPrisma`, no
+   * un `tx` recibido), y solo busca-o-crea, nunca actualiza un Cliente ya
+   * existente (si ya tiene pedidos reales, su nombre/correo/fechas no deben
+   * pisarse solo porque alguien lo dio de alta en Lealtad).
+   *
+   * `totalPedidos: 0` y `primerPedidoAt`/`ultimoPedidoAt` = fecha de alta
+   * son placeholders deliberados, no "un pedido fantasma": si este mismo
+   * Cliente hace después un pedido real, `sincronizarDesdePedido` lo
+   * encontrará por el mismo unique `[tenantId, canal, telefono]` e
+   * incrementará `totalPedidos` a 1 correctamente — pero `primerPedidoAt`
+   * seguirá reflejando la fecha de alta en Lealtad, no la del primer
+   * pedido real. Es una desviación conocida y aceptada en el dashboard
+   * "nuevos vs. recurrentes" (ClientesService.summaryDaily), acotada a
+   * clientes que se dan de alta en Lealtad antes de su primer pedido.
+   */
+  async buscarOCrearParaLealtad(nombre: string, telefonoCrudo: string): Promise<Cliente> {
+    const telefono = normalizarTelefono(telefonoCrudo);
+
+    const existente = await this.tenantPrisma.client.cliente.findFirst({
+      where: { canal: ClienteCanal.B2C, telefono },
+    });
+    if (existente) {
+      return existente;
+    }
+
+    const ahora = new Date();
+    try {
+      return await this.tenantPrisma.client.cliente.create({
+        data: {
+          canal: ClienteCanal.B2C,
+          telefono,
+          nombre,
+          primerPedidoAt: ahora,
+          ultimoPedidoAt: ahora,
+          totalPedidos: 0,
+        } as any,
+      });
+    } catch (error: any) {
+      // Condición de carrera: dos altas simultáneas con el mismo teléfono
+      // (mismo motivo que el resto del proyecto evita MAX+1 sin lock, ver
+      // CLAUDE.md) — el unique [tenantId, canal, telefono] rechaza el
+      // segundo create con P2002; en ese caso el Cliente ya existe, se
+      // regresa el que ganó la carrera en vez de fallar.
+      if (error?.code === 'P2002') {
+        const ganador = await this.tenantPrisma.client.cliente.findFirst({
+          where: { canal: ClienteCanal.B2C, telefono },
+        });
+        if (ganador) {
+          return ganador;
+        }
+      }
+      throw error;
+    }
+  }
+
   async sincronizarDesdePedido(
     tx: Prisma.TransactionClient,
     input: SincronizarClienteInput,

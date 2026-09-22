@@ -121,6 +121,15 @@ export class TenantPrismaService {
           reglaEnvioLog: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          loyaltyCard: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          loyaltyVisit: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          loyaltyRedemption: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
         },
       }) as unknown as PrismaService;
     }

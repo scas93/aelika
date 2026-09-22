@@ -105,6 +105,14 @@ model Tenant {
   // es como la integración Webhook de Botpress lo espera).
   botWebhookUrl                String?
   botWebhookSecret             String?
+  // PIN de 4-6 dígitos que protege la pantalla de registro de sellos del
+  // Módulo de Lealtad (backend/src/lealtad/) — hasheado con bcrypt, mismo
+  // patrón que User.passwordHash (ver AuthService), nunca texto plano: a
+  // diferencia de botApiKey (secreto de alta entropía que el backend
+  // necesita leer de vuelta para comparar un header), este es un candado
+  // corto y solo se compara, nunca se muestra de vuelta. Null hasta que el
+  // Dueño lo configure — sin pantalla en el panel todavía en esta fase.
+  pinLealtad                   String?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se
@@ -165,6 +173,9 @@ model Tenant {
   clientes                  Cliente[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
+  loyaltyCards              LoyaltyCard[]
+  loyaltyVisits             LoyaltyVisit[]
+  loyaltyRedemptions        LoyaltyRedemption[]
 
   @@map("tenants")
 }
@@ -926,10 +937,94 @@ model Cliente {
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
+  loyaltyCard    LoyaltyCard?
 
   @@unique([tenantId, canal, telefono])
   @@index([tenantId])
   @@map("clientes")
+}
+
+// ---------------------------------------------------------------------------
+// Módulo de Lealtad (Fase 0: solo schema + andamiaje del módulo, sin
+// endpoints funcionales — ver CLAUDE.md). Tarjeta de lealtad en wallet
+// (Apple/Google vía WalletWallet API), sello por visita, recompensa cada 10.
+// Altas desde Lealtad siempre con Cliente.canal = B2C.
+// ---------------------------------------------------------------------------
+
+enum LoyaltyCardEstado {
+  EN_PROGRESO
+  PREMIO_DISPONIBLE
+}
+
+// Una sola tarjeta por cliente (relación 1:1 con Cliente, clienteId
+// @unique más abajo) — resuelta con upsert, no con múltiples tarjetas
+// activas simultáneas por cliente.
+model LoyaltyCard {
+  id           String            @id @default(uuid())
+  tenantId     String
+  // @unique (no solo el compuesto de abajo) porque Cliente.loyaltyCard es
+  // una relación 1:1 explícita — Prisma exige un unique de un solo campo en
+  // el lado que declara la FK para reconocerla como tal.
+  clienteId    String            @unique
+  // Valor codificado en el QR personal del cliente (`barcodeValue` del
+  // pase) — alta entropía, generado igual que botApiKey (ver
+  // common/api-key.ts), no un UUID: es, en sí mismo, la credencial que
+  // identifica la tarjeta al escanearse.
+  token        String            @unique
+  contador     Int               @default(0)
+  estado       LoyaltyCardEstado @default(EN_PROGRESO)
+  // Identificador que WalletWallet API asigna al pase (serial number del
+  // .pkpass/objeto de Google Wallet) — null hasta que el pase se genera por
+  // primera vez.
+  serialNumber String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Restrict, no Cascade: perder el historial de sellos de un cliente
+  // porque se borró su Cliente no debe pasar silenciosamente — mismo
+  // criterio que Order.clienteId (ver ese comentario).
+  cliente Cliente             @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  visitas LoyaltyVisit[]
+  canjes  LoyaltyRedemption[]
+
+  @@index([tenantId])
+  @@map("loyalty_cards")
+}
+
+// Bitácora de sellos — un evento por visita registrada, sin campo de "quién
+// registró" (el PIN es único por tenant, no por cajera, así que no hay esa
+// trazabilidad en v1, ver CLAUDE.md).
+model LoyaltyVisit {
+  id            String   @id @default(uuid())
+  tenantId      String
+  loyaltyCardId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  loyaltyCard LoyaltyCard @relation(fields: [loyaltyCardId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@map("loyalty_visits")
+}
+
+// Bitácora de canjes — un evento por premio entregado (ver LoyaltyCard.estado
+// PREMIO_DISPONIBLE -> EN_PROGRESO, lógica de canje pendiente de fase
+// posterior). Restrict, mismo criterio que LoyaltyVisit: no perder el
+// historial de canjes de una tarjeta.
+model LoyaltyRedemption {
+  id            String   @id @default(uuid())
+  tenantId      String
+  loyaltyCardId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  loyaltyCard LoyaltyCard @relation(fields: [loyaltyCardId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@map("loyalty_redemptions")
 }
 
 // ---------------------------------------------------------------------------
@@ -1148,7 +1243,7 @@ model ReglaEnvioLog {
   // borrar la Regla que originó este envío no pierde nada que el candado de
   // frecuencia necesite — mismo criterio que PedidoB2b.codigoDescuento (sin
   // Restrict, sin snapshot que perder).
-  regla Regla? @relation(fields: [reglaId], references: [id], onDelete: SetNull)
+  regla   Regla?  @relation(fields: [reglaId], references: [id], onDelete: SetNull)
 
   // El candado de frecuencia consulta exactamente esta combinación en cada
   // evaluación de regla Marketing — ver ReglaCandadoService.

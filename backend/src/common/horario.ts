@@ -73,6 +73,18 @@ export function diaActualMexico(now = new Date()): DiaSemana {
   return ahoraEnTimezone(now).dia;
 }
 
+/**
+ * "YYYY-MM-DD" del día calendario que corresponde a `now` en TIMEZONE — el
+ * locale "en-CA" da ese formato directamente vía Intl, sin aritmética manual
+ * de offset UTC (mismo criterio que el resto de este archivo). Pensado para
+ * comparar "mismo día calendario" entre dos timestamps (ej.
+ * LealtadService: ¿ya hay un LoyaltyVisit de hoy para esta tarjeta?) sin
+ * tener que calcular límites de día en UTC.
+ */
+export function fechaEnMexico(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(now);
+}
+
 /** Today's schedule entry, in the tenant timezone — null if no schedule is set at all. */
 export function horarioDeHoy(horario: HorarioSemana | null | undefined, now = new Date()): HorarioDia | null {
   if (!horario) return null;
