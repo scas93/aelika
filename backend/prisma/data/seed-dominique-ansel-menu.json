@@ -75,42 +75,42 @@
         {
           "nombre": "Croissant Natural",
           "descripcion": "Croissant de mantequilla clásico, hojaldrado y ligero.",
-          "precio": 32.0,
+          "precio": 70.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Croissant de Almendra",
           "descripcion": "Croissant relleno de crema de almendra y cubierto de almendra fileteada.",
-          "precio": 48.0,
+          "precio": 110.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Croissant de Chocolate",
           "descripcion": "Croissant relleno de chocolate oscuro.",
-          "precio": 45.0,
+          "precio": 100.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "DKA (Dominique's Kouign Amann)",
           "descripcion": "Kouign Amann caramelizado, la firma de la casa.",
-          "precio": 55.0,
+          "precio": 140.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "DKA Extra Grande",
           "descripcion": "Versión grande del Kouign Amann caramelizado, ideal para compartir.",
-          "precio": 95.0,
+          "precio": 900.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Cannelé",
           "descripcion": "Pastelito francés con costra caramelizada y centro suave de vainilla y ron.",
-          "precio": 38.0,
+          "precio": 80.0,
           "fotoUrl": null,
           "disponible": false
         }
@@ -122,37 +122,37 @@
       "productos": [
         {
           "nombre": "Tarta de Frambuesa y Pistache",
-          "precio": 145.0,
+          "precio": 1440.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Tarta de Fresa y Lychee",
-          "precio": 145.0,
+          "precio": 1440.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Tarta de Yuzu y Huckleberry",
-          "precio": 145.0,
+          "precio": 1440.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Tarta St. Honoré de Avellana y Praliné",
-          "precio": 145.0,
+          "precio": 1440.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Pastel de Manzana, Miel y Almendra",
-          "precio": 110.0,
+          "precio": 1100.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Mini Pastel de Chocolate",
-          "precio": 145.0,
+          "precio": 1440.0,
           "fotoUrl": null,
           "disponible": true
         }
@@ -206,13 +206,13 @@
         },
         {
           "nombre": "Croissant de Jamón Serrano",
-          "precio": 60.0,
+          "precio": 100.0,
           "fotoUrl": null,
           "disponible": true
         },
         {
           "nombre": "Croissant de Jamón y Queso",
-          "precio": 52.0,
+          "precio": 90.0,
           "fotoUrl": null,
           "disponible": true
         }
