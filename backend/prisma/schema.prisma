@@ -113,6 +113,14 @@ model Tenant {
   // corto y solo se compara, nunca se muestra de vuelta. Null hasta que el
   // Dueño lo configure — sin pantalla en el panel todavía en esta fase.
   pinLealtad                   String?
+  // Rate-limiting del PIN de Lealtad (LealtadPinGuard) — persistido en DB,
+  // no en memoria/Redis, para que el candado sobreviva un reinicio del
+  // backend y funcione igual si algún día corren varias instancias. Un PIN
+  // correcto resetea ambos a 0/null; uno incorrecto incrementa
+  // pinIntentosFallidos y, al llegar al umbral, fija pinBloqueadoHasta a un
+  // tiempo corto en el futuro — ver LealtadPinGuard para los valores.
+  pinIntentosFallidos          Int                @default(0)
+  pinBloqueadoHasta            DateTime?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se
