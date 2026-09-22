@@ -5,6 +5,7 @@ import {
   IconClipboardList,
   IconClock,
   IconCreditCard,
+  IconGift,
   IconHistory,
   IconHome,
   IconKey,
@@ -60,6 +61,11 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/pedidos-b2b/historico", label: "Históricos", icon: IconHistory },
   { href: "/dashboard/catalogo", label: "Catálogo", icon: IconClipboardList },
   { href: "/dashboard/clientes", label: "Clientes", icon: IconUsers },
+  // Sin caso especial en getNavItems: a diferencia de /dashboard/clientes
+  // (solo Gerente/Dueño), esta operación es del día a día físico del
+  // negocio y queda abierta a los 3 roles por default — mismo criterio que
+  // /dashboard/pedidos.
+  { href: "/dashboard/lealtad", label: "Programa de Lealtad", icon: IconGift },
   // Reemplaza la entrada plana "Reglas" (Etapa 3) — ahora como encabezado de
   // grupo con "Recontacto"/"Seguimiento" debajo (Módulo 3, reestructura).
   // `/dashboard/notificaciones` en sí no tiene page.tsx propio con contenido
@@ -91,6 +97,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes/facturacion", label: "Facturación", icon: IconReceipt2 },
   { href: "/dashboard/ajustes/pagos", label: "Cobros con tarjeta", icon: IconCreditCard },
   { href: "/dashboard/ajustes/conexion-whatsapp", label: "Conexión WhatsApp", icon: IconRobot },
+  { href: "/dashboard/ajustes/lealtad", label: "Conexión Lealtad", icon: IconGift },
   { href: "/dashboard/ajustes/envios", label: "Puntos de envío", icon: IconTruckDelivery },
   { href: "/dashboard/ajustes/pedidos-b2b", label: "Ventana de recepción de pedidos", icon: IconClock },
   { href: "/dashboard/ajustes/codigos-descuento", label: "Códigos de descuento", icon: IconTag },
@@ -138,6 +145,7 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
   "/dashboard/ajustes/facturacion",
   "/dashboard/ajustes/pagos",
   "/dashboard/ajustes/conexion-whatsapp",
+  "/dashboard/ajustes/lealtad",
   "/dashboard/ajustes/envios",
   "/dashboard/ajustes/pedidos-b2b",
   "/dashboard/ajustes/codigos-descuento",

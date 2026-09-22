@@ -13,6 +13,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/facturacion": "Define si tus clientes pueden pedir factura",
   "/dashboard/ajustes/pagos": "Conecta Stripe para cobrar con tarjeta",
   "/dashboard/ajustes/conexion-whatsapp": "Llave del bot, webhook de Botpress y candado de frecuencia",
+  "/dashboard/ajustes/lealtad": "PIN que protege la pantalla de registrar compras",
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
   "/dashboard/ajustes/pedidos-b2b": "Rango semanal en el que aceptas pedidos de mayoreo",
   "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
@@ -28,7 +29,12 @@ const GRUPOS: Grupo[] = [
   { titulo: "Negocio", hrefs: ["/dashboard/ajustes/negocio", "/dashboard/ajustes/equipo"] },
   {
     titulo: "Administración",
-    hrefs: ["/dashboard/ajustes/facturacion", "/dashboard/ajustes/pagos", "/dashboard/ajustes/conexion-whatsapp"],
+    hrefs: [
+      "/dashboard/ajustes/facturacion",
+      "/dashboard/ajustes/pagos",
+      "/dashboard/ajustes/conexion-whatsapp",
+      "/dashboard/ajustes/lealtad",
+    ],
   },
   { titulo: "Envíos", hrefs: ["/dashboard/ajustes/envios"] },
   // Título del grupo renombrado igual que la tarjeta que contiene — "Notificaciones"

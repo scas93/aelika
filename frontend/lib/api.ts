@@ -533,6 +533,9 @@ export interface TenantSettings {
   // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
   // Cliente) — null = usa el default del backend (7 días).
   candadoMarketingDias: number | null;
+  // Nunca el PIN en sí (hasheado, nunca se expone) — solo si ya hay uno
+  // configurado. Ver setLealtadPin.
+  pinLealtadConfigurado: boolean;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
@@ -1089,6 +1092,14 @@ export function regenerateBotApiKey(token: string) {
   return request<TenantSettings>("/tenant/me/regenerate-bot-key", {
     method: "POST",
     headers: authHeaders(token),
+  });
+}
+
+export function setLealtadPin(token: string, pin: string) {
+  return request<TenantSettings>("/tenant/me/lealtad-pin", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ pin }),
   });
 }
 
@@ -1796,6 +1807,69 @@ export interface ClientesActivos {
 
 export function fetchClientesActivos(token: string) {
   return request<ClientesActivos>(`/clientes/activos`, { headers: authHeaders(token) });
+}
+
+// ---------------------------------------------------------------------------
+// Módulo de Lealtad (backend/src/lealtad/) — ver CLAUDE.md.
+// ---------------------------------------------------------------------------
+
+export type LoyaltyCardEstado = "EN_PROGRESO" | "PREMIO_DISPONIBLE";
+
+export interface LoyaltyCard {
+  id: string;
+  tenantId: string;
+  clienteId: string;
+  // El valor codificado en el QR personal del cliente — se manda como
+  // `token` en el body de /lealtad/registrar-compra y /redimir-premio.
+  token: string;
+  contador: number;
+  estado: LoyaltyCardEstado;
+  serialNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Lo que regresa WalletWallet — puede venir null en los 3 endpoints
+// (best-effort en registrar-compra/redimir-premio, y en una alta repetida
+// que solo refresca un pase ya existente): el LoyaltyCard siempre se
+// actualiza igual del lado de Aelika, el pase visual puede quedarse
+// desactualizado hasta el siguiente sello si WalletWallet falló.
+export interface WalletPassResultado {
+  serialNumber: string;
+  googleSaveUrl: string;
+  applePass: string;
+  shareUrl: string;
+}
+
+export interface LealtadRespuesta {
+  loyaltyCard: LoyaltyCard;
+  pase: WalletPassResultado | null;
+}
+
+export function altaClienteLealtad(token: string, nombre: string, telefono: string) {
+  return request<LealtadRespuesta>("/lealtad/clientes", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ nombre, telefono }),
+  });
+}
+
+// `qrToken` es LoyaltyCard.token (leído del QR), no confundir con el JWT de
+// sesión (`token`, primer parámetro, igual que en el resto de este archivo).
+export function registrarCompraLealtad(token: string, qrToken: string, pin: string) {
+  return request<LealtadRespuesta>("/lealtad/registrar-compra", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ token: qrToken, pin }),
+  });
+}
+
+export function redimirPremioLealtad(token: string, qrToken: string, pin: string) {
+  return request<LealtadRespuesta>("/lealtad/redimir-premio", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ token: qrToken, pin }),
+  });
 }
 
 export { ApiError };
