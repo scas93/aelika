@@ -23,7 +23,8 @@
     "prisma:migrate": "prisma migrate dev",
     "seed:banetto": "tsx prisma/seed-banetto.ts",
     "seed:reynoso": "tsx prisma/seed-reynoso.ts",
-    "seed:banetto-mayoreo": "tsx prisma/seed-banetto-mayoreo.ts"
+    "seed:banetto-mayoreo": "tsx prisma/seed-banetto-mayoreo.ts",
+    "seed:dominique-ansel": "tsx prisma/seed-dominique-ansel.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.5",

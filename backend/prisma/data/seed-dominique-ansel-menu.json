@@ -1,0 +1,260 @@
+{
+  "tenant": {
+    "nombre": "Dominique Ansel Bakery",
+    "slug": "dominique-ansel",
+    "logoUrl": null,
+    "ubicacion": "189 Spring St, Nueva York, NY 10012",
+    "mensajeBienvenida": "¡Hola! Somos Dominique Ansel Bakery. Aquí puedes levantar tu pedido de mayoreo para tu cafetería, hotel o evento corporativo.",
+    "tipoStorefront": "RETAIL_B2B",
+    "facturacionModo": "OBLIGATORIO",
+    "horarioAtencion": {
+      "lunes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "19:00"
+      },
+      "martes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "19:00"
+      },
+      "miercoles": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "19:00"
+      },
+      "jueves": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "19:00"
+      },
+      "viernes": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "20:00"
+      },
+      "sabado": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "20:00"
+      },
+      "domingo": {
+        "abierto": true,
+        "apertura": "08:00",
+        "cierre": "19:00"
+      }
+    },
+    "pedidoB2b": {
+      "minimoPiezas": 50,
+      "modoCobro": "AL_FINAL",
+      "ventanaAperturaDia": "LUNES",
+      "ventanaAperturaHora": "08:00",
+      "ventanaCierreDia": "VIERNES",
+      "ventanaCierreHora": "18:00"
+    },
+    "duenoDemo": {
+      "email": "dueno@dominique-ansel.com",
+      "nombre": "Dueño Dominique Ansel",
+      "password": "dominiqueansel1234"
+    }
+  },
+  "codigosDescuento": [
+    {
+      "codigo": "ANSEL10",
+      "descuentoPorcentaje": 10.0,
+      "activo": true,
+      "usosMaximos": null,
+      "fechaLimite": null
+    }
+  ],
+  "categorias": [
+    {
+      "orden": 1,
+      "nombre": "Viennoiserie",
+      "productos": [
+        {
+          "nombre": "Croissant Natural",
+          "descripcion": "Croissant de mantequilla clásico, hojaldrado y ligero.",
+          "precio": 32.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant de Almendra",
+          "descripcion": "Croissant relleno de crema de almendra y cubierto de almendra fileteada.",
+          "precio": 48.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant de Chocolate",
+          "descripcion": "Croissant relleno de chocolate oscuro.",
+          "precio": 45.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "DKA (Dominique's Kouign Amann)",
+          "descripcion": "Kouign Amann caramelizado, la firma de la casa.",
+          "precio": 55.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "DKA Extra Grande",
+          "descripcion": "Versión grande del Kouign Amann caramelizado, ideal para compartir.",
+          "precio": 95.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Cannelé",
+          "descripcion": "Pastelito francés con costra caramelizada y centro suave de vainilla y ron.",
+          "precio": 38.0,
+          "fotoUrl": null,
+          "disponible": false
+        }
+      ]
+    },
+    {
+      "orden": 2,
+      "nombre": "Tartas y Pasteles",
+      "productos": [
+        {
+          "nombre": "Tarta de Frambuesa y Pistache",
+          "precio": 145.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Tarta de Fresa y Lychee",
+          "precio": 145.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Tarta de Yuzu y Huckleberry",
+          "precio": 145.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Tarta St. Honoré de Avellana y Praliné",
+          "precio": 145.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Pastel de Manzana, Miel y Almendra",
+          "precio": 110.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Mini Pastel de Chocolate",
+          "precio": 145.0,
+          "fotoUrl": null,
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 3,
+      "nombre": "Macarons y Galletas",
+      "productos": [
+        {
+          "nombre": "Macaron Clásico (caja de 9pz)",
+          "precio": 470.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Sablé Bretón (4pz)",
+          "precio": 220.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Sablé de Avellana (4pz)",
+          "precio": 220.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Sablé de Matcha (6pz)",
+          "precio": 240.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Cookie Shot de Chocolate (3pz)",
+          "precio": 415.0,
+          "fotoUrl": null,
+          "disponible": false
+        }
+      ]
+    },
+    {
+      "orden": 4,
+      "nombre": "Salado",
+      "productos": [
+        {
+          "nombre": "Quiche de Espinaca y Gruyère (rinde 6-8 personas)",
+          "precio": 1300.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant de Jamón Serrano",
+          "precio": 60.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Croissant de Jamón y Queso",
+          "precio": 52.0,
+          "fotoUrl": null,
+          "disponible": true
+        }
+      ]
+    },
+    {
+      "orden": 5,
+      "nombre": "Canastas Corporativas",
+      "productos": [
+        {
+          "nombre": "Canasta de Viennoiserie Petit (6pz)",
+          "descripcion": "Selección de mini croissants y hojaldres, ideal para juntas.",
+          "precio": 690.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Canasta de Croissants (6pz)",
+          "precio": 805.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Set Viennoiserie Galore (12pz)",
+          "descripcion": "Surtido de 12 piezas de hojaldrería para eventos de mayor tamaño.",
+          "precio": 1400.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Hamper de DKA (12pz)",
+          "precio": 2000.0,
+          "fotoUrl": null,
+          "disponible": true
+        },
+        {
+          "nombre": "Caja de Regalo DKA (4pz)",
+          "precio": 560.0,
+          "fotoUrl": null,
+          "disponible": true
+        }
+      ]
+    }
+  ]
+}
