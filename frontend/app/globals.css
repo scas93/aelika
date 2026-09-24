@@ -188,6 +188,29 @@ body {
   font-size: 1rem;
 }
 
+/* Scoped input variant for /lealtad/[slug] — sibling of .input, same
+   combo-selector technique as .input.search-input (higher specificity than
+   plain .input, wins regardless of source order — see that comment).
+   .input's color/border read var(--foreground), which flips to near-white
+   under prefers-color-scheme: dark; this route's page is deliberately
+   light-only (fixed white background, no dark: variants), so without this
+   override, dark-mode text became near-invisible white-on-white. Both here
+   and inside the dark-mode block below, it stays pinned to the same light
+   colors on purpose — this route never switches. */
+.input.lealtad-input {
+  background: white;
+  color: #000;
+  border-color: rgb(0 0 0 / 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  .input.lealtad-input {
+    background: white;
+    color: #000;
+    border-color: rgb(0 0 0 / 0.15);
+  }
+}
+
 /* Print only the comanda ticket (see app/dashboard/pedidos/page.tsx) —
    80mm thermal printer, no local agent/bridge (Fase 1, see CLAUDE.md). */
 @media print {

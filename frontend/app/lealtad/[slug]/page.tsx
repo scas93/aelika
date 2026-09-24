@@ -129,7 +129,7 @@ export default function LealtadPublicoPage() {
             required
             minLength={2}
             maxLength={120}
-            className="input"
+            className="input lealtad-input"
             placeholder="Tu nombre"
           />
         </label>
@@ -141,7 +141,7 @@ export default function LealtadPublicoPage() {
             required
             minLength={7}
             maxLength={20}
-            className="input"
+            className="input lealtad-input"
             placeholder="10 dígitos"
             inputMode="tel"
           />
