@@ -12,7 +12,7 @@ type TabKey = "cliente" | "compra";
 // es la operación física del día a día del Módulo de Lealtad, mismo
 // criterio que /orders (ver nav-items.ts, que no restringe este href).
 export default function LealtadPage() {
-  const { token } = useSession();
+  const { token, user } = useSession();
   const [tab, setTab] = useState<TabKey>("cliente");
 
   return (
@@ -25,7 +25,11 @@ export default function LealtadPage() {
         active={tab}
         onChange={(key) => setTab(key as TabKey)}
       />
-      {tab === "cliente" ? <RegistrarClienteTab token={token} /> : <RegistrarCompraTab token={token} />}
+      {tab === "cliente" ? (
+        <RegistrarClienteTab token={token} slug={user.tenant.slug} />
+      ) : (
+        <RegistrarCompraTab token={token} />
+      )}
     </div>
   );
 }

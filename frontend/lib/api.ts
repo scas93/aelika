@@ -93,7 +93,7 @@ export interface CurrentUser {
   email: string;
   rol: Role;
   tenantId: string;
-  tenant: { nombre: string; tipoStorefront: TipoStorefront };
+  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string };
 }
 
 export interface Category {
@@ -1869,6 +1869,16 @@ export function redimirPremioLealtad(token: string, qrToken: string, pin: string
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ token: qrToken, pin }),
+  });
+}
+
+// Auto-registro público (sin sesión, `/lealtad/[slug]`) — el tenant se
+// identifica por el slug de la URL, no por un token de sesión, así que no
+// lleva authHeaders como las 3 funciones de arriba.
+export function altaClienteLealtadPublico(slug: string, nombre: string, telefono: string) {
+  return request<LealtadRespuesta>(`/public/lealtad/tenants/${encodeURIComponent(slug)}/clientes`, {
+    method: "POST",
+    body: JSON.stringify({ nombre, telefono }),
   });
 }
 

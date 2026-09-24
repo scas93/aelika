@@ -213,6 +213,57 @@ export class ClientesService {
     }
   }
 
+  /**
+   * Variante explícita-por-tenantId de buscarOCrearParaLealtad — mismo
+   * criterio que sincronizarDesdePedido: recibe el cliente Prisma y el
+   * tenantId como parámetros en vez de resolverlos de this.tenantPrisma
+   * (que depende de una sesión JWT que no existe en el flujo público de
+   * auto-registro, ver PublicLealtadService). Misma lógica de
+   * busca-o-crea-nunca-actualiza y la misma resolución de condición de
+   * carrera (P2002) que la variante autenticada — solo cambia de dónde
+   * sale el tenantId y qué cliente Prisma ejecuta las queries.
+   */
+  async buscarOCrearParaLealtadPublico(
+    prisma: Prisma.TransactionClient,
+    tenantId: string,
+    nombre: string,
+    telefonoCrudo: string,
+  ): Promise<Cliente> {
+    const telefono = normalizarTelefono(telefonoCrudo);
+
+    const existente = await prisma.cliente.findFirst({
+      where: { tenantId, canal: ClienteCanal.B2C, telefono },
+    });
+    if (existente) {
+      return existente;
+    }
+
+    const ahora = new Date();
+    try {
+      return await prisma.cliente.create({
+        data: {
+          tenantId,
+          canal: ClienteCanal.B2C,
+          telefono,
+          nombre,
+          primerPedidoAt: ahora,
+          ultimoPedidoAt: ahora,
+          totalPedidos: 0,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        const ganador = await prisma.cliente.findFirst({
+          where: { tenantId, canal: ClienteCanal.B2C, telefono },
+        });
+        if (ganador) {
+          return ganador;
+        }
+      }
+      throw error;
+    }
+  }
+
   async sincronizarDesdePedido(
     tx: Prisma.TransactionClient,
     input: SincronizarClienteInput,

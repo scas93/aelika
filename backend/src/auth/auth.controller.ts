@@ -38,9 +38,12 @@ export class AuthController {
 
   @Get('me')
   async me(@CurrentUser() user: JwtPayload) {
-    // tenant.nombre is included here (a relation include, not a separate
-    // tenant-scoped query) so the dashboard sidebar can show the business
-    // name without a second request.
+    // tenant.nombre/tipoStorefront/slug van aquí (relation include, no una
+    // query aparte) para que el dashboard los tenga sin una segunda
+    // llamada. slug se agregó para el link/QR de auto-registro de Lealtad
+    // (registrar-cliente-tab.tsx) — es el único lugar abierto a los 3 roles
+    // que expone el tenant en sesión; GET /tenant/me también lo tiene pero
+    // es @Roles(DUENO), no sirve para Operador/Gerente.
     const record = await this.tenantPrisma.client.user.findUnique({
       where: { id: user.sub },
       select: {
@@ -49,7 +52,7 @@ export class AuthController {
         email: true,
         rol: true,
         tenantId: true,
-        tenant: { select: { nombre: true, tipoStorefront: true } },
+        tenant: { select: { nombre: true, tipoStorefront: true, slug: true } },
       },
     });
     return record;
