@@ -187,34 +187,39 @@ export class LealtadService {
 
   /**
    * Junta lo que WalletPassService necesita para armar el body del pase —
-   * Tenant (nombre/slug/logo) vía this.tenantPrisma (mismo patrón que
+   * Tenant (nombre) vía this.tenantPrisma (mismo patrón que
    * OrdersService.avanzar, que también hace un findUnique de Tenant
-   * cuando necesita su nombre) y Cliente (nombre), salvo que ya se tenga a
+   * cuando necesita su nombre), Cliente (nombre), salvo que ya se tenga a
    * la mano (altaCliente ya trae el Cliente resuelto, no hace falta
-   * refetchearlo).
+   * refetchearlo), y si esta tarjeta ya canjeó algún premio alguna vez
+   * (ver DatosPaseInput.yaCanjeoPremio — es lo único que
+   * calcularMensajeNotificacion necesita saber además del contador, que ya
+   * viene en loyaltyCard).
    */
   private async construirDatosPase(
     loyaltyCard: LoyaltyCard,
     clienteConocido?: Cliente,
   ): Promise<DatosPaseInput> {
-    const [tenant, cliente] = await Promise.all([
+    const [tenant, cliente, redenciones] = await Promise.all([
       this.tenantPrisma.client.tenant.findUniqueOrThrow({
         where: { id: loyaltyCard.tenantId },
-        select: { nombre: true, slug: true, logoUrl: true },
+        select: { nombre: true },
       }),
       clienteConocido
         ? Promise.resolve(clienteConocido)
         : this.tenantPrisma.client.cliente.findUniqueOrThrow({
             where: { id: loyaltyCard.clienteId },
           }),
+      this.tenantPrisma.client.loyaltyRedemption.count({
+        where: { loyaltyCardId: loyaltyCard.id },
+      }),
     ]);
 
     return {
       loyaltyCard,
       clienteNombre: cliente.nombre,
       tenantNombre: tenant.nombre,
-      tenantLogoUrl: tenant.logoUrl,
-      tenantSlug: tenant.slug,
+      yaCanjeoPremio: redenciones > 0,
     };
   }
 }

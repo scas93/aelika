@@ -13,15 +13,14 @@ export interface DatosPaseInput {
   loyaltyCard: LoyaltyCard;
   clienteNombre: string;
   tenantNombre: string;
-  // Mismo campo que ya usa el storefront público (ver PublicService.getInfo)
-  // — reutilizado tal cual como logoURL/iconURL, no se agregó un campo
-  // nuevo a Tenant. Puede ser null (tenant sin logo subido); en ese caso no
-  // se manda logoURL/iconURL en el body en vez de mandar null. Nota: un
-  // tenant sin logo se queda sin ícono válido en Apple Wallet (requerido
-  // para notificaciones/lock screen) — limitación conocida, no resuelta
-  // aquí, ver CLAUDE.md.
-  tenantLogoUrl: string | null;
-  tenantSlug: string;
+  // Si esta tarjeta tiene al menos un LoyaltyRedemption en su historial —
+  // única pieza de estado que el caller aporta más allá de lo que ya trae
+  // `loyaltyCard` (contador). Con eso, calcularMensajeNotificacion deriva el
+  // mensaje puramente del estado actual, nunca del evento que disparó esta
+  // llamada — así un refresh/reintento/auto-sanación reproduce exactamente
+  // el mismo mensaje que ya tenía el pase, y no dispara notificación. Ver
+  // ese método para la tabla completa.
+  yaCanjeoPremio: boolean;
 }
 
 const WALLETWALLET_BASE_URL = 'https://api.walletwallet.dev/api/passes';
@@ -36,17 +35,15 @@ const SELLOS_TOTAL = 10;
  * esa respuesta en vivo), aquí sí hay un operador parado frente a la
  * pantalla de registrar-compra/redimir-premio.
  *
- * Fix post-Fase 2 (confirmado con un ejemplo real exportado del Pass
- * Editor de WalletWallet): los campos de imagen NO son
- * `backgroundURLPro`/`stripURLPro`/`logoURLPro` (ese "Pro" era una
- * etiqueta de plan en la documentación, no parte del nombre del campo) —
- * son `backgroundURL`/`stripURL`/`logoURL`. Tampoco aceptan una URL
- * externa: la API no descarga imágenes, hay que mandar el contenido ya
- * codificado como `data:image/<tipo>;base64,<bytes>` — ver
- * `descargarComoDataUri`. Un experimento controlado (3 llamadas variando
- * qué campos de imagen se mandaban) descartó que el problema fuera mandar
- * ambos campos juntos; era un problema de nombre de campo + formato,
- * ambos a la vez.
+ * Pase sin imágenes (plan gratis de WalletWallet, ver CLAUDE.md): el plan
+ * conectado no incluye `stripURL` ("Pro-only feature" — confirmado contra la
+ * API real), así que este servicio dejó de mandar
+ * backgroundURL/stripURL/logoURL/iconURL por completo — nunca se degradan
+ * campos individualmente según lo que el plan permita, todo el pase es
+ * texto. El contador de sellos vive en `secondaryFields` (ya no en
+ * `primaryFields`, junto al nombre) y la notificación de lock screen usa un
+ * campo trasero dedicado (`backFields`, ver crearPase/actualizarPase) en vez
+ * del `changeMessage` que antes vivía sobre el campo de Sellos.
  */
 @Injectable()
 export class WalletPassService {
@@ -60,15 +57,13 @@ export class WalletPassService {
    * `shareUrl`: no hay nada útil que darle al cliente todavía. El
    * `Cliente`/`LoyaltyCard` en DB no se revierten por este fallo (ver
    * LealtadService.altaCliente) — un reintento de la alta con el mismo
-   * teléfono vuelve a intentar solo la creación del pase. Esto incluye
-   * fallos al descargar las imágenes de R2 (ver construirBody) — son parte
-   * de la misma operación bloqueante.
+   * teléfono vuelve a intentar solo la creación del pase.
    */
   async crearPase(input: DatosPaseInput): Promise<WalletPassResultado> {
     let body: Record<string, unknown>;
     let response: Response;
     try {
-      body = await this.construirBody(input, input.loyaltyCard.contador);
+      body = this.construirBody(input, input.loyaltyCard.contador);
       response = await fetch(WALLETWALLET_BASE_URL, {
         method: 'POST',
         headers: this.headers(),
@@ -102,11 +97,9 @@ export class WalletPassService {
    * `serialNumber`) falló — se loguea aquí, nunca se tira excepción: el
    * contador ya quedó guardado en DB (fuente de verdad, ver
    * LealtadService) y el endpoint debe responder éxito de todas formas,
-   * mismo criterio que ReglaEnvioService.enviar() con Botpress. Un fallo al
-   * descargar las imágenes de R2 (ver construirBody) se trata igual que
-   * cualquier otro fallo de esta operación — best-effort, nunca rompe la
-   * respuesta. Sin mecanismo de reintento automático (colas/jobs) en esta
-   * fase — decisión consciente de mantenerlo simple por ahora.
+   * mismo criterio que ReglaEnvioService.enviar() con Botpress. Sin
+   * mecanismo de reintento automático (colas/jobs) en esta fase — decisión
+   * consciente de mantenerlo simple por ahora.
    */
   async actualizarPase(input: DatosPaseInput): Promise<WalletPassResultado | null> {
     if (!input.loyaltyCard.serialNumber) {
@@ -126,7 +119,7 @@ export class WalletPassService {
     const url = `${WALLETWALLET_BASE_URL}/${input.loyaltyCard.serialNumber}`;
 
     try {
-      const body = await this.construirBody(input, input.loyaltyCard.contador);
+      const body = this.construirBody(input, input.loyaltyCard.contador);
       const response = await fetch(url, {
         method: 'PUT',
         headers: this.headers(),
@@ -159,60 +152,56 @@ export class WalletPassService {
     };
   }
 
-  private async construirBody(input: DatosPaseInput, contador: number): Promise<Record<string, unknown>> {
-    const r2BaseUrl = this.configService.get<string>('R2_LOYALTY_BASE_URL');
-    const backgroundUrl = `${r2BaseUrl}/${input.tenantSlug}/bg_${contador}.png`;
-    const stripUrl = `${r2BaseUrl}/${input.tenantSlug}/sp_${contador}.png`;
-
-    const [backgroundDataUri, stripDataUri, logoDataUri] = await Promise.all([
-      this.descargarComoDataUri(backgroundUrl),
-      this.descargarComoDataUri(stripUrl),
-      input.tenantLogoUrl ? this.descargarComoDataUri(input.tenantLogoUrl) : Promise.resolve(null),
-    ]);
-
+  private construirBody(input: DatosPaseInput, contador: number): Record<string, unknown> {
     return {
       barcodeValue: input.loyaltyCard.token,
       barcodeFormat: 'QR',
       logoText: input.tenantNombre,
       organizationName: input.tenantNombre,
-      primaryFields: [
-        { label: 'Nombre', value: input.clienteNombre },
-        {
-          label: 'Sellos',
-          value: `${contador}/${SELLOS_TOTAL}`,
-          changeMessage: '¡Ya llevas %@ sellos!',
-        },
-      ],
-      backgroundURL: backgroundDataUri,
-      stripURL: stripDataUri,
       // Sin campo de color por tenant en el schema todavía — fijo para
       // todos por ahora, limitación conocida no bloqueante (ver
       // CLAUDE.md).
       colorPreset: 'dark',
-      // logoURL/iconURL comparten el mismo logo del tenant — un solo
-      // fetch, no dos. iconURL es lo que usa Apple Wallet en
-      // notificaciones/lock screen; sin logo de tenant, el pase se queda
-      // sin ícono válido ahí (ver comentario en DatosPaseInput).
-      ...(logoDataUri ? { logoURL: logoDataUri, iconURL: logoDataUri } : {}),
+      primaryFields: [{ label: 'Nombre', value: input.clienteNombre }],
+      secondaryFields: [{ label: 'Sellos', value: `${contador}/${SELLOS_TOTAL}` }],
+      // Único disparador de notificación de lock screen: WalletWallet manda
+      // el push cuando este valor CAMBIA respecto al último enviado, usando
+      // changeMessage como plantilla (%@ = el valor nuevo, que aquí ya es
+      // el mensaje completo, no un número aislado). Por eso
+      // calcularMensajeNotificacion nunca puede depender de "qué acción
+      // disparó esta llamada" — solo del estado actual — o un refresh sin
+      // cambios reenviaría un valor distinto al último y dispararía una
+      // notificación falsa.
+      backFields: [
+        {
+          label: 'Notifications',
+          value: this.calcularMensajeNotificacion(contador, input.yaCanjeoPremio),
+          changeMessage: '%@',
+        },
+      ],
       // sharingProhibited no se manda — su default (true, tarjeta privada)
       // ya es el comportamiento correcto.
     };
   }
 
   /**
-   * WalletWallet no descarga imágenes desde una URL — el campo espera el
-   * contenido ya codificado como `data:<content-type>;base64,<bytes>`.
-   * Mismo timeout que las llamadas a WalletWallet (8s): un R2 lento no
-   * debe colgar la operación completa más de lo que ya tolera el resto de
-   * esta clase.
+   * Fuente única del mensaje de notificación — derivado solo de
+   * (contador, yaCanjeoPremio), nunca del evento que provocó la llamada
+   * (crear/sello/redimir/refresh). Eso es lo que hace que un
+   * reintento/auto-sanación/alta repetida sin cambios reales sea
+   * naturalmente un no-op: recalculan exactamente el mismo string que ya
+   * tenía el pase, así que WalletWallet no ve un cambio de valor y no manda
+   * push. La rama contador=0 es la única ambigua entre "nunca ha canjeado"
+   * (recién creada) y "acaba de canjear" (el flujo de redimirPremio resetea
+   * el contador a 0) — yaCanjeoPremio es exactamente lo que las distingue.
    */
-  private async descargarComoDataUri(url: string): Promise<string> {
-    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!response.ok) {
-      throw new Error(`No se pudo descargar la imagen ${url}: HTTP ${response.status}`);
+  private calcularMensajeNotificacion(contador: number, yaCanjeoPremio: boolean): string {
+    if (contador >= SELLOS_TOTAL) {
+      return '¡Completaste tu tarjeta! Pide tu premio en tu próxima visita';
     }
-    const contentType = response.headers.get('content-type') ?? 'image/png';
-    const buffer = Buffer.from(await response.arrayBuffer());
-    return `data:${contentType};base64,${buffer.toString('base64')}`;
+    if (contador === 0) {
+      return yaCanjeoPremio ? 'Premio canjeado. Tu tarjeta empieza de nuevo' : ' ';
+    }
+    return `¡Sello registrado! Llevas ${contador}/${SELLOS_TOTAL}`;
   }
 }

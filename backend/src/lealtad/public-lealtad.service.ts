@@ -32,7 +32,7 @@ export class PublicLealtadService {
   async altaCliente(slug: string, nombre: string, telefono: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
-      select: { id: true, nombre: true, slug: true, logoUrl: true },
+      select: { id: true, nombre: true },
     });
     if (!tenant) {
       throw new NotFoundException('Negocio no encontrado');
@@ -59,7 +59,7 @@ export class PublicLealtadService {
       return { loyaltyCard: conPaseActualizado, pase };
     }
 
-    const datosPase = this.construirDatosPase(loyaltyCard, cliente, tenant);
+    const datosPase = await this.construirDatosPase(loyaltyCard, cliente, tenant);
     const pase = await this.walletPassService.crearPase(datosPase);
 
     loyaltyCard = await this.prisma.loyaltyCard.update({
@@ -78,9 +78,9 @@ export class PublicLealtadService {
   private async actualizarPaseYPersistir(
     loyaltyCard: LoyaltyCard,
     cliente: Cliente,
-    tenant: { id: string; nombre: string; slug: string; logoUrl: string | null },
+    tenant: { id: string; nombre: string },
   ): Promise<{ loyaltyCard: LoyaltyCard; pase: WalletPassResultado | null }> {
-    const datosPase = this.construirDatosPase(loyaltyCard, cliente, tenant);
+    const datosPase = await this.construirDatosPase(loyaltyCard, cliente, tenant);
     const pase = await this.walletPassService.actualizarPase(datosPase);
 
     if (!pase || pase.serialNumber === loyaltyCard.serialNumber) {
@@ -96,20 +96,24 @@ export class PublicLealtadService {
 
   // A diferencia de LealtadService.construirDatosPase (que a veces necesita
   // refetchear tenant/cliente porque solo recibe el token de la tarjeta),
-  // aquí ambos ya están resueltos siempre — altaCliente los tiene a la mano
-  // desde el inicio (tenant por slug, cliente recién buscado/creado), así
-  // que este método no necesita ser async ni volver a consultar la DB.
-  private construirDatosPase(
+  // tenant/cliente ya están resueltos siempre aquí — altaCliente los tiene a
+  // la mano desde el inicio (tenant por slug, cliente recién buscado/creado).
+  // Sí necesita seguir siendo async: yaCanjeoPremio (ver DatosPaseInput) es
+  // la única pieza que no viene ya resuelta, hay que consultarla.
+  private async construirDatosPase(
     loyaltyCard: LoyaltyCard,
     cliente: Cliente,
-    tenant: { nombre: string; slug: string; logoUrl: string | null },
-  ): DatosPaseInput {
+    tenant: { nombre: string },
+  ): Promise<DatosPaseInput> {
+    const redenciones = await this.prisma.loyaltyRedemption.count({
+      where: { loyaltyCardId: loyaltyCard.id },
+    });
+
     return {
       loyaltyCard,
       clienteNombre: cliente.nombre,
       tenantNombre: tenant.nombre,
-      tenantLogoUrl: tenant.logoUrl,
-      tenantSlug: tenant.slug,
+      yaCanjeoPremio: redenciones > 0,
     };
   }
 }
