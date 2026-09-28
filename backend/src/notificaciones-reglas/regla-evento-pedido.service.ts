@@ -4,6 +4,7 @@ import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
 import { ReglaTriggerOrigenPedido } from '../../generated/prisma/enums';
 import { Regla, Tenant } from '../../generated/prisma/client';
+import { PedidoContexto } from './plantilla-variable.type';
 
 type ReglaConTenant = Regla & { tenant: Tenant };
 
@@ -12,7 +13,11 @@ interface DispararEventoParams {
   origen: ReglaTriggerOrigenPedido;
   estatus: string;
   clienteId: string;
-  folio: string;
+  // Datos del pedido para resolver variables CAMPO_PEDIDO del catálogo (ver
+  // plantilla-variable-catalogo.ts) — `origen` dentro de este objeto es el
+  // mismo valor que el campo `origen` de arriba, solo que tipado como
+  // discriminante de PedidoContexto en vez de ReglaTriggerOrigenPedido.
+  contexto: PedidoContexto;
 }
 
 /**
@@ -83,7 +88,7 @@ export class ReglaEventoPedidoService {
             continue;
           }
 
-          await this.envioService.enviar(regla.tenant, cliente, regla, { folio: params.folio });
+          await this.envioService.enviar(regla.tenant, cliente, regla, params.contexto);
         } catch (error: any) {
           this.logger.error(
             `EVENTO_PEDIDO: error disparando Regla ${regla.id} para Cliente ${cliente.id} (tenant=${params.tenantId}, ` +

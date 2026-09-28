@@ -336,7 +336,19 @@ export class OrdersService {
       origen: 'ORDER',
       estatus: siguiente,
       clienteId: actualizado.clienteId,
-      folio: actualizado.folio,
+      contexto: {
+        origen: 'ORDER',
+        folio: actualizado.folio,
+        total: actualizado.total,
+        estatus: actualizado.estadoPedido,
+        createdAt: actualizado.createdAt,
+        items: actualizado.items.map((item) => ({ nombreProducto: item.nombreProducto, cantidad: item.cantidad })),
+        metodoEntrega: actualizado.metodoEntrega,
+        direccionCalle: actualizado.direccionCalle,
+        direccionNumero: actualizado.direccionNumero,
+        direccionColonia: actualizado.direccionColonia,
+        metodoPago: actualizado.metodoPago,
+      },
     });
 
     return actualizado;

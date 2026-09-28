@@ -2,7 +2,6 @@ import type {
   ReglaFiltroCampo,
   ReglaFiltroOperador,
   ReglaMensajeCategoria,
-  ReglaPlantillaVariableFuente,
   ReglaTriggerOrigenPedido,
   ReglaTriggerTipo,
 } from "@/lib/api";
@@ -69,14 +68,12 @@ export const FILTRO_OPERADOR_LABEL: Record<ReglaFiltroOperador, string> = {
   IGUAL: "es igual a",
 };
 
-export const VARIABLE_FUENTE_LABEL: Record<ReglaPlantillaVariableFuente, string> = {
-  CAMPO_CLIENTE: "Campo cliente: nombre",
-  VALOR_FIJO: "Valor fijo",
-  CAMPO_PEDIDO: "Campo pedido: folio",
-  // Resuelve Tenant.nombre — ver el enum en schema.prisma. Disponible para
-  // cualquier Trigger, no solo EVENTO_PEDIDO como Campo pedido.
-  NOMBRE_NEGOCIO: "Nombre del negocio",
-};
+// El catálogo de variables de plantilla (fuentes + campos + ejemplos) ya no
+// vive aquí — ver GET /reglas/catalogo-variables (CatalogoVariableDef en
+// lib/api.ts), consumido directo por regla-form.tsx. Antes había un
+// VARIABLE_FUENTE_LABEL fijo con las 4 fuentes de siempre; ahora el label de
+// cada variable es parte de la respuesta del backend, así que agregar una
+// variable nueva no requiere tocar este archivo.
 
 // Catálogo fijo de los idiomas más comunes soportados por WhatsApp (Meta) —
 // reemplaza el texto libre que tenía este campo. es_MX va primero porque es

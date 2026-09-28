@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSession } from "@/lib/session-context";
 import {
   ApiError,
+  fetchCatalogoVariables,
+  type CatalogoVariableDef,
+  type CatalogoVariableGrupo,
   type CreateReglaPayload,
   type FiltroCondicion,
   type PlantillaVariable,
@@ -10,7 +14,6 @@ import {
   type ReglaFiltroCampo,
   type ReglaFiltroOperador,
   type ReglaMensajeCategoria,
-  type ReglaPlantillaVariableFuente,
   type ReglaTriggerOrigenPedido,
   type ReglaTriggerTipo,
 } from "@/lib/api";
@@ -25,7 +28,6 @@ import {
   IDIOMAS_PLANTILLA,
   ORIGEN_PEDIDO_LABEL,
   TRIGGER_LABEL,
-  VARIABLE_FUENTE_LABEL,
 } from "./labels";
 import { formatFechaHora } from "@/lib/format";
 
@@ -34,6 +36,14 @@ const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-a
 const TRIGGERS: ReglaTriggerTipo[] = ["EVENTO_PEDIDO", "ESTADO_CLIENTE", "FECHA_PROGRAMADA", "MANUAL"];
 const HORAS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 
+const GRUPO_ORDEN: CatalogoVariableGrupo[] = ["CLIENTE", "PEDIDO", "NEGOCIO"];
+const GRUPO_LABEL: Record<CatalogoVariableGrupo, string> = {
+  CLIENTE: "Cliente",
+  PEDIDO: "Pedido",
+  NEGOCIO: "Negocio",
+};
+const CLAVE_VALOR_FIJO = "VALOR_FIJO";
+
 // Sin operador IGUAL para los dos campos de antigüedad — el backend lo
 // rechaza al guardar (ver ReglasService.validarFiltro), así que ni se
 // ofrece como opción aquí.
@@ -41,38 +51,39 @@ function operadoresPara(campo: ReglaFiltroCampo): ReglaFiltroOperador[] {
   return campo === "TOTAL_PEDIDOS" ? ["MAYOR_IGUAL", "MENOR_IGUAL", "IGUAL"] : ["MAYOR_IGUAL", "MENOR_IGUAL"];
 }
 
-// NOMBRE_NEGOCIO siempre disponible (cualquier Trigger) — a diferencia de
-// CAMPO_PEDIDO, que solo aplica a EVENTO_PEDIDO (ver ReglaEnvioService).
-function fuentesPara(trigger: ReglaTriggerTipo): ReglaPlantillaVariableFuente[] {
-  const base: ReglaPlantillaVariableFuente[] = ["CAMPO_CLIENTE", "NOMBRE_NEGOCIO", "VALOR_FIJO"];
-  return trigger === "EVENTO_PEDIDO" ? [...base, "CAMPO_PEDIDO"] : base;
+// Identifica una entrada del catálogo dentro del <select> de una variable —
+// "VALOR_FIJO" (sin entrada en el catálogo, texto libre) o "fuente::valor".
+function claveDeVariable(v: PlantillaVariable): string {
+  return v.fuente === "VALOR_FIJO" ? CLAVE_VALOR_FIJO : `${v.fuente}::${v.valor}`;
 }
 
-// Valor fijo por `fuente` — CAMPO_CLIENTE/CAMPO_PEDIDO/NOMBRE_NEGOCIO solo
-// soportan un campo cada uno en esta etapa (ver ReglaEnvioService), así que
-// no hay nada que el usuario deba escribir, el selector de fuente ya lo
-// determina.
-function valorParaFuente(fuente: ReglaPlantillaVariableFuente): string {
-  if (fuente === "CAMPO_CLIENTE") return "nombre";
-  if (fuente === "CAMPO_PEDIDO") return "folio";
-  if (fuente === "NOMBRE_NEGOCIO") return "nombre";
-  return "";
+function buscarEnCatalogo(catalogo: CatalogoVariableDef[], fuente: string, valor: string): CatalogoVariableDef | undefined {
+  return catalogo.find((def) => def.fuente === fuente && def.valor === valor);
 }
 
-// Ejemplo genérico para la vista previa — no hay un Cliente/pedido/Tenant
-// real en este formulario (ver caso de uso del prompt de esta etapa).
-function ejemploParaFuente(fuente: ReglaPlantillaVariableFuente, valor: string): string {
-  if (fuente === "CAMPO_CLIENTE") return "Juan Pérez";
-  if (fuente === "CAMPO_PEDIDO") return "A-1023";
-  if (fuente === "NOMBRE_NEGOCIO") return "Panadería Ejemplo";
-  return valor || "(vacío)";
+// Espejo de ReglaEnvioService.disponibleParaContexto/ReglasService.
+// disponibleParaTrigger (backend) — mismo criterio de restricción, aplicado
+// aquí solo para decidir qué deshabilitar en el dropdown, nunca como
+// autoridad real (el backend revalida al guardar).
+function disponibilidad(
+  restriccion: CatalogoVariableDef["restriccion"],
+  trigger: ReglaTriggerTipo,
+  origen: ReglaTriggerOrigenPedido,
+): { ok: boolean; motivo?: string } {
+  if (restriccion.tipo === "ninguna") return { ok: true };
+  if (trigger !== "EVENTO_PEDIDO") return { ok: false, motivo: restriccion.motivo };
+  if (restriccion.tipo === "evento_pedido") return { ok: true };
+  return origen === "ORDER" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
 }
 
-function renderizarPreview(texto: string, variables: PlantillaVariable[]): string {
+function renderizarPreview(texto: string, variables: PlantillaVariable[], catalogo: CatalogoVariableDef[]): string {
   if (!texto.trim()) return "";
   return texto.replace(/\{\{\s*(\d+)\s*\}\}/g, (match, numStr) => {
     const variable = variables.find((v) => v.posicion === Number(numStr));
-    return variable ? ejemploParaFuente(variable.fuente, variable.valor) : match;
+    if (!variable) return match;
+    if (variable.fuente === "VALOR_FIJO") return variable.valor || "(vacío)";
+    const def = buscarEnCatalogo(catalogo, variable.fuente, variable.valor);
+    return def ? def.ejemplo : match;
   });
 }
 
@@ -129,21 +140,49 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { token } = useSession();
+  const [catalogo, setCatalogo] = useState<CatalogoVariableDef[] | null>(null);
+  const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCatalogoVariables(token)
+      .then(setCatalogo)
+      .catch((err) => setErrorCatalogo(err instanceof ApiError ? err.message : "No se pudo cargar el catálogo de variables"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Casos borde: cambiar de Trigger (o de origen dentro de EVENTO_PEDIDO)
+  // puede volver inválida una variable que ya estaba elegida (ej. una
+  // variable "solo menudeo" cuando el origen deja de ser ORDER). Se limpia
+  // a Valor fijo vacío en vez de desaparecer en silencio — el usuario ve
+  // que necesita llenarla o quitarla. Un solo helper reutilizado por los dos
+  // handlers que pueden invalidar una variable (trigger y origen) — no un
+  // useEffect reactivo, para no encadenar un segundo render por cada cambio.
+  function limpiarVariablesInvalidas(triggerNuevo: ReglaTriggerTipo, origenNuevo: ReglaTriggerOrigenPedido) {
+    if (!catalogo) return;
+    setVariables((prev) =>
+      prev.map((v) => {
+        if (v.fuente === "VALOR_FIJO") return v;
+        const def = buscarEnCatalogo(catalogo, v.fuente, v.valor);
+        if (!def) return v;
+        return disponibilidad(def.restriccion, triggerNuevo, origenNuevo).ok ? v : { ...v, fuente: "VALOR_FIJO", valor: "" };
+      }),
+    );
+  }
+
   function handleTriggerChange(nuevo: ReglaTriggerTipo) {
     setTrigger(nuevo);
-    // Casos borde de esta etapa: cambiar de Trigger limpia/adapta lo que ya
-    // no aplica, en vez de arrastrar datos de un tipo distinto.
+    // El Filtro no aplica a EVENTO_PEDIDO (decisión de producto ya tomada).
     if (nuevo === "EVENTO_PEDIDO") {
       setFiltro([]);
-    } else {
-      // Ya no hay pedido de contexto — cualquier variable CAMPO_PEDIDO deja
-      // de tener sentido, se convierte a Valor fijo vacío en vez de
-      // desaparecer en silencio (el usuario ve que necesita llenarla o
-      // quitarla).
-      setVariables((prev) =>
-        prev.map((v) => (v.fuente === "CAMPO_PEDIDO" ? { ...v, fuente: "VALOR_FIJO", valor: "" } : v)),
-      );
     }
+    limpiarVariablesInvalidas(nuevo, origen);
+  }
+
+  function handleOrigenChange(nuevo: ReglaTriggerOrigenPedido) {
+    setOrigen(nuevo);
+    setEstatus("");
+    limpiarVariablesInvalidas(trigger, nuevo);
   }
 
   function addCondicion() {
@@ -171,22 +210,28 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   }
 
   function addVariable() {
-    setVariables((prev) => [...prev, { posicion: prev.length + 1, fuente: "CAMPO_CLIENTE", valor: "nombre" }]);
+    // Primera entrada del catálogo (Cliente: nombre) como default — siempre
+    // disponible, sin importar el trigger.
+    const primera = catalogo?.[0];
+    setVariables((prev) => [
+      ...prev,
+      { posicion: prev.length + 1, fuente: primera?.fuente ?? "VALOR_FIJO", valor: primera?.valor ?? "" },
+    ]);
   }
 
-  function updateVariable(index: number, patch: Partial<PlantillaVariable>) {
+  function updateVariableClave(index: number, clave: string) {
     setVariables((prev) =>
       prev.map((v, i) => {
         if (i !== index) return v;
-        const actualizada = { ...v, ...patch };
-        if (patch.fuente && patch.fuente !== "VALOR_FIJO") {
-          actualizada.valor = valorParaFuente(patch.fuente);
-        } else if (patch.fuente === "VALOR_FIJO") {
-          actualizada.valor = "";
-        }
-        return actualizada;
+        if (clave === CLAVE_VALOR_FIJO) return { ...v, fuente: "VALOR_FIJO", valor: "" };
+        const [fuente, valor] = clave.split("::");
+        return { ...v, fuente: fuente as PlantillaVariable["fuente"], valor };
       }),
     );
+  }
+
+  function updateVariableTexto(index: number, texto: string) {
+    setVariables((prev) => prev.map((v, i) => (i === index ? { ...v, valor: texto } : v)));
   }
 
   function removeVariable(index: number) {
@@ -221,9 +266,15 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   const triggerConfigValido =
     trigger === "EVENTO_PEDIDO" ? estatus !== "" : trigger === "FECHA_PROGRAMADA" ? fechaDia !== "" : true;
   const filtroValido = trigger === "EVENTO_PEDIDO" || filtro.every((c) => Number.isFinite(c.valor));
-  const variablesValidas = variables.every((v) => v.fuente !== "VALOR_FIJO" || v.valor.trim() !== "");
+  const variablesValidas = variables.every((v) => {
+    if (v.fuente === "VALOR_FIJO") return v.valor.trim() !== "";
+    if (!catalogo) return false;
+    const def = buscarEnCatalogo(catalogo, v.fuente, v.valor);
+    return !!def && disponibilidad(def.restriccion, trigger, origen).ok;
+  });
   const canSubmit =
     !submitting &&
+    !!catalogo &&
     nombre.trim() !== "" &&
     plantillaNombre.trim() !== "" &&
     triggerConfigValido &&
@@ -244,7 +295,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
     }
   }
 
-  const preview = renderizarPreview(plantillaTexto, variables);
+  const preview = renderizarPreview(plantillaTexto, variables, catalogo ?? []);
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_300px] md:items-start">
@@ -282,10 +333,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                 Origen del pedido
                 <select
                   value={origen}
-                  onChange={(e) => {
-                    setOrigen(e.target.value as ReglaTriggerOrigenPedido);
-                    setEstatus("");
-                  }}
+                  onChange={(e) => handleOrigenChange(e.target.value as ReglaTriggerOrigenPedido)}
                   className="admin-input"
                 >
                   {(Object.keys(ORIGEN_PEDIDO_LABEL) as ReglaTriggerOrigenPedido[]).map((o) => (
@@ -454,43 +502,75 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
               Botpress solo soporta variables por posición (<code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>, ...).
             </p>
           </div>
-          <div className="flex flex-col gap-2">
-            {variables.map((variable, index) => (
-              <div
-                key={index}
-                className="flex flex-wrap items-center gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-2"
-              >
-                <span className="w-14 shrink-0 text-sm font-bold text-admin-ink">{`{{${variable.posicion}}}`}</span>
-                <select
-                  value={variable.fuente}
-                  onChange={(e) => updateVariable(index, { fuente: e.target.value as ReglaPlantillaVariableFuente })}
-                  className="admin-input flex-1"
-                >
-                  {fuentesPara(trigger).map((f) => (
-                    <option key={f} value={f}>
-                      {VARIABLE_FUENTE_LABEL[f]}
-                    </option>
-                  ))}
-                </select>
-                {variable.fuente === "VALOR_FIJO" ? (
-                  <input
-                    value={variable.valor}
-                    onChange={(e) => updateVariable(index, { valor: e.target.value })}
-                    placeholder="Panadería Ejemplo"
-                    className="admin-input flex-1"
-                  />
-                ) : (
-                  <input value={valorParaFuente(variable.fuente)} disabled className="admin-input flex-1 opacity-60" />
-                )}
-                <Button type="button" variant="danger" size="sm" onClick={() => removeVariable(index)}>
-                  Quitar
-                </Button>
-              </div>
-            ))}
-            <Button type="button" variant="secondary" size="sm" onClick={addVariable}>
-              + Agregar variable
-            </Button>
-          </div>
+
+          {errorCatalogo && <p className="text-sm text-red-600">{errorCatalogo}</p>}
+          {!catalogo && !errorCatalogo && <p className="text-sm text-admin-ink-soft">Cargando catálogo de variables...</p>}
+
+          {catalogo && (
+            <div className="flex flex-col gap-2">
+              {variables.map((variable, index) => {
+                const def = variable.fuente === "VALOR_FIJO" ? undefined : buscarEnCatalogo(catalogo, variable.fuente, variable.valor);
+                const estado = def ? disponibilidad(def.restriccion, trigger, origen) : { ok: true };
+                return (
+                  <div
+                    key={index}
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-2"
+                  >
+                    <span className="w-14 shrink-0 text-sm font-bold text-admin-ink">{`{{${variable.posicion}}}`}</span>
+                    <select
+                      value={claveDeVariable(variable)}
+                      onChange={(e) => updateVariableClave(index, e.target.value)}
+                      className="admin-input flex-1"
+                    >
+                      <option value={CLAVE_VALOR_FIJO}>Valor fijo</option>
+                      {GRUPO_ORDEN.map((grupo) => {
+                        const opciones = catalogo.filter((d) => d.grupo === grupo);
+                        if (opciones.length === 0) return null;
+                        return (
+                          <optgroup key={grupo} label={GRUPO_LABEL[grupo]}>
+                            {opciones.map((d) => {
+                              const disp = disponibilidad(d.restriccion, trigger, origen);
+                              return (
+                                <option key={`${d.fuente}::${d.valor}`} value={`${d.fuente}::${d.valor}`} disabled={!disp.ok}>
+                                  {d.label} — {d.ejemplo}
+                                  {!disp.ok && disp.motivo ? ` (${disp.motivo})` : ""}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+                    {variable.fuente === "VALOR_FIJO" ? (
+                      <input
+                        value={variable.valor}
+                        onChange={(e) => updateVariableTexto(index, e.target.value)}
+                        placeholder="Panadería Ejemplo"
+                        className="admin-input flex-1"
+                      />
+                    ) : (
+                      <input
+                        value={def ? `${def.label} — ${def.ejemplo}` : "Variable no reconocida"}
+                        disabled
+                        className="admin-input flex-1 opacity-60"
+                      />
+                    )}
+                    <Button type="button" variant="danger" size="sm" onClick={() => removeVariable(index)}>
+                      Quitar
+                    </Button>
+                    {!estado.ok && (
+                      <p className="w-full text-xs text-red-600">
+                        {def?.label}: {estado.motivo} — elige otra variable o quítala.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              <Button type="button" variant="secondary" size="sm" onClick={addVariable}>
+                + Agregar variable
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* --- Activa + guardar --- */}
@@ -528,8 +608,8 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
             )}
           </div>
           <p className="text-xs text-admin-ink-soft">
-            Los valores de <em>Campo cliente</em>/<em>Campo pedido</em>/<em>Nombre del negocio</em> son solo un
-            ejemplo genérico — el mensaje real usa el dato correspondiente cuando se dispare.
+            Los valores de Cliente/Pedido/Negocio son solo el ejemplo del catálogo — el mensaje real usa el dato
+            correspondiente de cada cliente/pedido cuando la regla se dispare.
           </p>
         </Card>
       </div>

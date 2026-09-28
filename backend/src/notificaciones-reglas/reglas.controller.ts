@@ -20,6 +20,13 @@ export class ReglasController {
     return this.reglasService.findAll();
   }
 
+  // Antes de ':id' — de lo contrario Nest la matchearía como
+  // GET /reglas/:id con id="catalogo-variables".
+  @Get('catalogo-variables')
+  catalogoVariables() {
+    return this.reglasService.catalogoVariables();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.reglasService.findOne(id);

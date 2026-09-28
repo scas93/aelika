@@ -14,6 +14,7 @@ import {
 } from '../../generated/prisma/client';
 import { ClientesService } from '../clientes/clientes.service';
 import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
+import { PedidoContexto } from '../notificaciones-reglas/plantilla-variable.type';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
@@ -589,7 +590,7 @@ export class PedidosB2bService {
       origen: 'PEDIDO_B2B',
       estatus: siguiente,
       clienteId: actualizado.clienteId,
-      folio: actualizado.folio,
+      contexto: this.contextoPedidoParaReglas(actualizado),
     });
 
     return actualizado;
@@ -647,7 +648,7 @@ export class PedidosB2bService {
         origen: 'PEDIDO_B2B',
         estatus: data.estado as PedidoB2bEstado,
         clienteId: actualizado.clienteId,
-        folio: actualizado.folio,
+        contexto: this.contextoPedidoParaReglas(actualizado),
       });
     }
 
@@ -685,5 +686,31 @@ export class PedidosB2bService {
     if (pedido.cancelado) {
       throw new ConflictException('Este pedido está cancelado');
     }
+  }
+
+  /**
+   * PedidoContexto para las Reglas de notificación EVENTO_PEDIDO (ver
+   * ReglaEventoPedidoService/CATALOGO_VARIABLES) — compartido por avanzar()
+   * y marcarPagado(), las dos únicas transiciones de estado que disparan
+   * una Regla. PedidoB2b no tiene tipo de entrega/dirección/método de pago
+   * propio (ver auditoría del catálogo), así que su contexto es el
+   * subconjunto sin esos 3 campos (a diferencia de Order, ver
+   * OrdersService.avanzar).
+   */
+  private contextoPedidoParaReglas(pedido: {
+    folio: string;
+    total: Prisma.Decimal;
+    estado: PedidoB2bEstado;
+    createdAt: Date;
+    items: { nombreProducto: string; cantidadTotal: number }[];
+  }): PedidoContexto {
+    return {
+      origen: 'PEDIDO_B2B',
+      folio: pedido.folio,
+      total: pedido.total,
+      estatus: pedido.estado,
+      createdAt: pedido.createdAt,
+      items: pedido.items.map((item) => ({ nombreProducto: item.nombreProducto, cantidad: item.cantidadTotal })),
+    };
   }
 }

@@ -1242,6 +1242,29 @@ export interface PlantillaVariable {
   valor: string;
 }
 
+// Catálogo de variables de plantilla (GET /reglas/catalogo-variables) —
+// fuente única compartida por el dropdown del panel, la validación del
+// backend al guardar y la resolución al enviar (ver
+// backend/src/notificaciones-reglas/plantilla-variable-catalogo.ts).
+// Agregar una variable nueva al catálogo es agregar una entrada ahí — este
+// archivo no necesita ningún cambio para que aparezca en el dropdown.
+export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO";
+
+export type CatalogoVariableRestriccion =
+  | { tipo: "ninguna" }
+  | { tipo: "evento_pedido"; motivo: string }
+  | { tipo: "evento_pedido_menudeo"; motivo: string };
+
+export interface CatalogoVariableDef {
+  fuente: ReglaPlantillaVariableFuente;
+  valor: string;
+  grupo: CatalogoVariableGrupo;
+  label: string;
+  ejemplo: string;
+  restriccion: CatalogoVariableRestriccion;
+  fallback: string;
+}
+
 // Shape de Regla.triggerConfig cuando trigger = EVENTO_PEDIDO — ver
 // backend/prisma/schema.prisma. `estatus` es un valor de EstadoPedido (si
 // origen = ORDER) o PedidoB2bEstado (si origen = PEDIDO_B2B) — dos enums
@@ -1309,6 +1332,10 @@ export interface ResumenDisparoManual {
 
 export function fetchReglas(token: string) {
   return request<Regla[]>("/reglas", { headers: authHeaders(token) });
+}
+
+export function fetchCatalogoVariables(token: string) {
+  return request<CatalogoVariableDef[]>("/reglas/catalogo-variables", { headers: authHeaders(token) });
 }
 
 export function fetchRegla(token: string, id: string) {

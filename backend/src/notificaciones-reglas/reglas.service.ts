@@ -17,7 +17,7 @@ import { FiltroCondicionDto } from './dto/filtro-condicion.dto';
 import { PlantillaVariableDto } from './dto/plantilla-variable.dto';
 import { EventoPedidoTriggerConfigDto } from './dto/evento-pedido-trigger-config.dto';
 import { FechaProgramadaTriggerConfigDto } from './dto/fecha-programada-trigger-config.dto';
-import { CAMPO_CLIENTE_SOPORTADO, CAMPO_PEDIDO_SOPORTADO, NOMBRE_NEGOCIO_SOPORTADO } from './plantilla-variable.type';
+import { CATALOGO_VARIABLES, buscarEnCatalogo, disponibleParaTrigger } from './plantilla-variable-catalogo';
 import { ReglasFiltroService } from './reglas-filtro.service';
 import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
@@ -61,6 +61,19 @@ export class ReglasService {
 
   findAll() {
     return this.tenantPrisma.client.regla.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  /**
+   * Catálogo completo de variables disponibles para el dropdown del panel
+   * (ver CATALOGO_VARIABLES — fuente única, compartida con la validación al
+   * guardar y la resolución al enviar). Sin filtro por trigger/origen aquí
+   * a propósito: el frontend recibe la lista completa una sola vez y decide
+   * qué deshabilitar según el trigger/origen que el usuario tenga elegido
+   * en el formulario en ese momento (que cambia sin volver a pedir nada al
+   * backend) — ver `restriccion` de cada entrada.
+   */
+  catalogoVariables() {
+    return CATALOGO_VARIABLES.map(({ resolver: _resolver, ...definicionPublica }) => definicionPublica);
   }
 
   async findOne(id: string) {
@@ -233,7 +246,14 @@ export class ReglasService {
     const filtro =
       trigger === ReglaTriggerTipo.EVENTO_PEDIDO ? [] : await this.validarFiltro(input.filtroRaw);
 
-    const plantillaVariables = await this.validarPlantillaVariables(trigger, input.plantillaVariablesRaw);
+    // Origen (ORDER/PEDIDO_B2B) solo existe dentro de triggerConfig cuando
+    // trigger = EVENTO_PEDIDO — es lo que decide si las variables "solo
+    // menudeo" del catálogo (tipoEntrega/direccionEntrega/metodoPago) son
+    // guardables (ver validarPlantillaVariables/disponibleParaTrigger).
+    const origen =
+      trigger === ReglaTriggerTipo.EVENTO_PEDIDO ? (triggerConfig as { origen: ReglaTriggerOrigenPedido }).origen : undefined;
+
+    const plantillaVariables = await this.validarPlantillaVariables(trigger, origen, input.plantillaVariablesRaw);
 
     return { triggerConfig, filtro, plantillaVariables };
   }
@@ -302,7 +322,18 @@ export class ReglasService {
     );
   }
 
-  private async validarPlantillaVariables(trigger: ReglaTriggerTipo, raw: unknown[]): Promise<unknown[]> {
+  /**
+   * Valida cada variable contra CATALOGO_VARIABLES (fuente única, ver ese
+   * archivo) — shape con PlantillaVariableDto (sin cambios), contenido
+   * (fuente+valor reconocidos y permitidos para este trigger/origen) contra
+   * el catálogo. VALOR_FIJO es la única fuente sin entrada en el catálogo:
+   * cualquier texto no vacío es válido (ya lo valida PlantillaVariableDto).
+   */
+  private async validarPlantillaVariables(
+    trigger: ReglaTriggerTipo,
+    origen: ReglaTriggerOrigenPedido | undefined,
+    raw: unknown[],
+  ): Promise<unknown[]> {
     return Promise.all(
       raw.map(async (elemento) => {
         const instancia = plainToInstance(PlantillaVariableDto, elemento);
@@ -311,30 +342,17 @@ export class ReglasService {
           throw new BadRequestException(this.primerError(errores, 'Variable de plantilla inválida'));
         }
 
-        if (instancia.fuente === ReglaPlantillaVariableFuente.CAMPO_CLIENTE && instancia.valor !== CAMPO_CLIENTE_SOPORTADO) {
-          throw new BadRequestException(
-            `Campo de Cliente no soportado: "${instancia.valor}" (solo "${CAMPO_CLIENTE_SOPORTADO}").`,
-          );
-        }
-
-        if (instancia.fuente === ReglaPlantillaVariableFuente.CAMPO_PEDIDO) {
-          if (trigger !== ReglaTriggerTipo.EVENTO_PEDIDO) {
-            throw new BadRequestException('Una variable CAMPO_PEDIDO solo es válida si el Trigger es EVENTO_PEDIDO.');
-          }
-          if (instancia.valor !== CAMPO_PEDIDO_SOPORTADO) {
+        if (instancia.fuente !== ReglaPlantillaVariableFuente.VALOR_FIJO) {
+          const definicion = buscarEnCatalogo(instancia.fuente, instancia.valor);
+          if (!definicion) {
             throw new BadRequestException(
-              `Campo de pedido no soportado: "${instancia.valor}" (solo "${CAMPO_PEDIDO_SOPORTADO}").`,
+              `Variable de plantilla no reconocida: fuente=${instancia.fuente}, valor="${instancia.valor}".`,
             );
           }
-        }
-
-        if (
-          instancia.fuente === ReglaPlantillaVariableFuente.NOMBRE_NEGOCIO &&
-          instancia.valor !== NOMBRE_NEGOCIO_SOPORTADO
-        ) {
-          throw new BadRequestException(
-            `Valor no soportado para NOMBRE_NEGOCIO: "${instancia.valor}" (solo "${NOMBRE_NEGOCIO_SOPORTADO}").`,
-          );
+          if (!disponibleParaTrigger(definicion.restriccion, trigger, origen)) {
+            const motivo = definicion.restriccion.tipo === 'ninguna' ? 'no disponible' : definicion.restriccion.motivo;
+            throw new BadRequestException(`La variable "${definicion.label}" no aplica a esta Regla (${motivo}).`);
+          }
         }
 
         return { posicion: instancia.posicion, fuente: instancia.fuente, valor: instancia.valor };

@@ -1,14 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cliente, Regla, ReglaEnvioLog, Tenant } from '../../generated/prisma/client';
 import { ReglaPlantillaVariableFuente } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  CAMPO_CLIENTE_SOPORTADO,
-  CAMPO_PEDIDO_SOPORTADO,
-  NOMBRE_NEGOCIO_SOPORTADO,
-  PedidoContexto,
-  PlantillaVariable,
-} from './plantilla-variable.type';
+import { buildStorefrontUrl } from '../common/storefront-url';
+import { PedidoContexto, PlantillaVariable } from './plantilla-variable.type';
+import { buscarEnCatalogo, disponibleParaContexto } from './plantilla-variable-catalogo';
+import { sanitizarParaMeta } from './plantilla-variable-formato';
 
 // Todos los tenants piloto operan en México — mismo supuesto ya hardcodeado
 // en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono
@@ -31,7 +29,10 @@ const LADA_PAIS = '+52';
 export class ReglaEnvioService {
   private readonly logger = new Logger(ReglaEnvioService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * `contexto` (folio del pedido) solo aplica a Reglas EVENTO_PEDIDO con
@@ -134,49 +135,47 @@ export class ReglaEnvioService {
     return this.prisma.reglaEnvioLog.update({ where: { id: logId }, data: { estado } });
   }
 
+  /**
+   * Resuelve cada variable contra CATALOGO_VARIABLES (fuente única — ver ese
+   * archivo). VALOR_FIJO es la única fuente sin entrada en el catálogo: su
+   * "resolución" es el literal tal cual. Todo valor resuelto —incluido
+   * VALOR_FIJO— pasa por sanitizarParaMeta antes de mandarse a Botpress, así
+   * que ningún envío sale con un parámetro vacío, con saltos de línea/tabs,
+   * o con más de 4 espacios seguidos (restricciones de plantillas de Meta).
+   */
   private resolverVariables(
     plantillaVariables: PlantillaVariable[],
     tenant: Tenant,
     cliente: Cliente,
     contexto: PedidoContexto | undefined,
   ): string[] {
+    const ahora = new Date();
+    const storefrontUrl = buildStorefrontUrl(this.configService, tenant.slug);
+
     return [...plantillaVariables]
       .sort((a, b) => a.posicion - b.posicion)
       .map((variable) => {
         if (variable.fuente === ReglaPlantillaVariableFuente.VALOR_FIJO) {
-          return variable.valor;
+          return sanitizarParaMeta(variable.valor, '—');
         }
 
-        if (variable.fuente === ReglaPlantillaVariableFuente.CAMPO_PEDIDO) {
-          if (!contexto) {
-            throw new BadRequestException(
-              'Esta Regla usa una variable CAMPO_PEDIDO pero no hay pedido de contexto — solo aplica a Reglas EVENTO_PEDIDO.',
-            );
-          }
-          if (variable.valor !== CAMPO_PEDIDO_SOPORTADO) {
-            throw new BadRequestException(
-              `Campo de pedido no soportado como variable de plantilla en esta etapa: "${variable.valor}" (solo "${CAMPO_PEDIDO_SOPORTADO}").`,
-            );
-          }
-          return contexto.folio;
-        }
-
-        if (variable.fuente === ReglaPlantillaVariableFuente.NOMBRE_NEGOCIO) {
-          if (variable.valor !== NOMBRE_NEGOCIO_SOPORTADO) {
-            throw new BadRequestException(
-              `Valor no soportado para NOMBRE_NEGOCIO: "${variable.valor}" (solo "${NOMBRE_NEGOCIO_SOPORTADO}").`,
-            );
-          }
-          return tenant.nombre;
-        }
-
-        if (variable.valor !== CAMPO_CLIENTE_SOPORTADO) {
+        const definicion = buscarEnCatalogo(variable.fuente, variable.valor);
+        if (!definicion) {
           throw new BadRequestException(
-            `Campo de Cliente no soportado como variable de plantilla en esta etapa: "${variable.valor}" (solo "${CAMPO_CLIENTE_SOPORTADO}").`,
+            `Variable de plantilla no reconocida: fuente=${variable.fuente}, valor="${variable.valor}".`,
           );
         }
 
-        return cliente.nombre;
+        if (!disponibleParaContexto(definicion.restriccion, contexto)) {
+          throw new BadRequestException(
+            `La variable "${definicion.label}" no aplica a este envío (${
+              definicion.restriccion.tipo === 'ninguna' ? 'sin restricción' : definicion.restriccion.motivo
+            }).`,
+          );
+        }
+
+        const valor = definicion.resolver({ tenant, cliente, contexto, ahora, storefrontUrl });
+        return sanitizarParaMeta(valor ?? '', definicion.fallback);
       });
   }
 }
