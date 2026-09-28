@@ -7,8 +7,6 @@ import { Public } from '../auth/decorators/public.decorator';
 // PublicPedidosB2bController (pedidos-b2b/): @Public() a nivel de clase,
 // tenant resuelto por slug, sin JWT. Prefijo propio (public/lealtad/...)
 // para no tocar/chocar con las rutas de PublicController (public/tenants/...).
-// Sin PIN — el PIN protege registrar-compra/redimir-premio, no la alta (ver
-// LealtadController).
 @Public()
 @Controller('public/lealtad')
 export class PublicLealtadController {

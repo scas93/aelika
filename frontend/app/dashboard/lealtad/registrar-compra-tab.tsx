@@ -8,21 +8,26 @@ import {
   type LoyaltyCard,
   type WalletPassResultado,
 } from "@/lib/api";
+import { useSession } from "@/lib/session-context";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import QrScanner from "./qr-scanner";
 
 // Códigos estructurados que el backend manda en ApiError.code (ver
-// backend/src/lealtad/lealtad-errors.ts) — reemplaza el match anterior por
-// contenido del mensaje, que se rompía en silencio si alguien cambiaba la
-// redacción sin saber que este archivo dependía de ese texto exacto. El
-// 404 (TOKEN_NO_ENCONTRADO) no necesita este tratamiento — es el único
-// significado posible de ese status en estos 2 endpoints, se sigue
-// distinguiendo solo por `err.status`.
+// backend/src/lealtad/lealtad-errors.ts). Son la única forma en que esta
+// pantalla distingue un resultado de negocio de un error — nunca por
+// status ni por el texto del mensaje. Cualquier error sin uno de estos
+// códigos (400 de validación, el 409 sin código de redimir-premio, 500,
+// red caída...) se muestra como error genérico con el mensaje del backend.
 const CODIGO_PREMIO_PENDIENTE = "PREMIO_PENDIENTE";
+const CODIGO_SELLO_YA_REGISTRADO_HOY = "SELLO_YA_REGISTRADO_HOY";
+const CODIGO_TOKEN_NO_ENCONTRADO = "TOKEN_NO_ENCONTRADO";
 
 type Paso =
-  | { tipo: "pin" }
+  // Cámara apagada, botón "Escanear tarjeta" visible. `errorCamara` viene
+  // de un intento anterior que no pudo encender la cámara — el mismo botón
+  // sirve para reintentar.
+  | { tipo: "inicio"; errorCamara?: string }
   | { tipo: "escaneando" }
   | { tipo: "procesando" }
   | { tipo: "sello_registrado"; loyaltyCard: LoyaltyCard; pase: WalletPassResultado | null }
@@ -30,85 +35,63 @@ type Paso =
   | { tipo: "premio_entregado"; loyaltyCard: LoyaltyCard }
   | { tipo: "ya_sello_hoy" }
   | { tipo: "no_encontrado" }
-  | { tipo: "sin_pin_configurado" }
   | { tipo: "error_generico"; mensaje: string };
 
+// La cámara solo existe mientras paso === "escaneando": <QrScanner> se monta
+// al tocar "Escanear tarjeta" y se desmonta (liberando el stream) al leer un
+// QR, al tocar "Cancelar", al cambiar de pestaña o al salir de la ruta.
+// Ningún resultado vuelve a encenderla solo — todos regresan a "inicio".
 export default function RegistrarCompraTab({ token }: { token: string }) {
-  const [pin, setPin] = useState("");
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [bloqueado, setBloqueado] = useState(false);
-  const [paso, setPaso] = useState<Paso>({ tipo: "pin" });
+  const { logout } = useSession();
+  const [paso, setPaso] = useState<Paso>({ tipo: "inicio" });
   const [redimiendo, setRedimiendo] = useState(false);
 
-  function handleDesbloquear(e: React.FormEvent) {
-    e.preventDefault();
-    // No hay endpoint para "solo verificar el PIN" — se valida hasta el
-    // primer escaneo real (ver handleScan). Este paso solo recolecta el
-    // valor antes de prender la cámara.
-    setPin(pinInput);
-    setPinError(null);
-    setBloqueado(false);
-    setPaso({ tipo: "escaneando" });
+  function volverAlInicio() {
+    setPaso({ tipo: "inicio" });
   }
 
   async function handleScan(qrToken: string) {
     setPaso({ tipo: "procesando" });
     try {
-      const respuesta = await registrarCompraLealtad(token, qrToken, pin);
+      const respuesta = await registrarCompraLealtad(token, qrToken);
       setPaso({ tipo: "sello_registrado", loyaltyCard: respuesta.loyaltyCard, pase: respuesta.pase });
     } catch (err) {
       manejarError(err, qrToken);
     }
   }
 
-  function manejarError(err: unknown, qrToken?: string) {
+  function manejarError(err: unknown, qrToken: string) {
     if (!(err instanceof ApiError)) {
       setPaso({ tipo: "error_generico", mensaje: "Ocurrió un error inesperado" });
       return;
     }
 
-    // PIN incorrecto o bloqueado: no tiene caso seguir escaneando con un
-    // PIN que ya sabemos que falla — regresa a pedirlo de nuevo.
+    // Sesión inválida/expirada — mismo trato que el resto del panel
+    // (SessionProvider): se limpia la sesión y se manda a /login.
     if (err.status === 401) {
-      setPin("");
-      setPinInput("");
-      setPinError("PIN incorrecto — intenta de nuevo.");
-      setBloqueado(false);
-      setPaso({ tipo: "pin" });
+      logout();
       return;
     }
-    if (err.status === 403) {
-      setPin("");
-      setPinInput("");
-      setPinError("PIN bloqueado temporalmente por demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.");
-      setBloqueado(true);
-      setPaso({ tipo: "pin" });
-      return;
-    }
-    if (err.status === 400) {
-      setPaso({ tipo: "sin_pin_configurado" });
-      return;
-    }
-    if (err.status === 404) {
-      setPaso({ tipo: "no_encontrado" });
-      return;
-    }
-    if (err.status === 409) {
-      if (err.code === CODIGO_PREMIO_PENDIENTE && qrToken) {
+
+    switch (err.code) {
+      case CODIGO_PREMIO_PENDIENTE:
         setPaso({ tipo: "premio_pendiente", qrToken });
-      } else {
+        return;
+      case CODIGO_SELLO_YA_REGISTRADO_HOY:
         setPaso({ tipo: "ya_sello_hoy" });
-      }
-      return;
+        return;
+      case CODIGO_TOKEN_NO_ENCONTRADO:
+        setPaso({ tipo: "no_encontrado" });
+        return;
+      default:
+        setPaso({ tipo: "error_generico", mensaje: err.message });
     }
-    setPaso({ tipo: "error_generico", mensaje: err.message });
   }
 
   async function handleRedimir(qrToken: string) {
     setRedimiendo(true);
     try {
-      const respuesta = await redimirPremioLealtad(token, qrToken, pin);
+      const respuesta = await redimirPremioLealtad(token, qrToken);
       setPaso({ tipo: "premio_entregado", loyaltyCard: respuesta.loyaltyCard });
     } catch (err) {
       manejarError(err, qrToken);
@@ -117,49 +100,23 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
     }
   }
 
-  function volverAEscanear() {
-    setPaso({ tipo: "escaneando" });
-  }
-
-  if (paso.tipo === "pin") {
+  if (paso.tipo === "inicio") {
     return (
       <Card className="flex flex-col gap-4">
         <div>
           <h2 className="text-sm font-extrabold text-admin-ink">Registrar nueva compra</h2>
-          <p className="text-sm text-admin-ink-soft">Ingresa el PIN del negocio para desbloquear el escáner.</p>
+          <p className="text-sm text-admin-ink-soft">
+            Escanea el QR personal del cliente — vive dentro de la tarjeta ya agregada a su wallet.
+          </p>
         </div>
-        <form onSubmit={handleDesbloquear} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            PIN
-            <input
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              required
-              inputMode="numeric"
-              pattern="\d{4,6}"
-              minLength={4}
-              maxLength={6}
-              autoFocus
-              className="admin-input"
-              placeholder="4-6 dígitos"
-            />
-          </label>
-          {pinError && <p className={`text-sm ${bloqueado ? "text-amber-700" : "text-red-600"}`}>{pinError}</p>}
-          <Button type="submit" className="self-start">
-            Desbloquear escáner
-          </Button>
-        </form>
-      </Card>
-    );
-  }
-
-  if (paso.tipo === "sin_pin_configurado") {
-    return (
-      <Card className="flex flex-col gap-2">
-        <p className="text-sm text-admin-ink">Este negocio todavía no tiene un PIN de Lealtad configurado.</p>
-        <p className="text-sm text-admin-ink-soft">
-          El Dueño puede definirlo en Ajustes → Conexión Lealtad antes de poder registrar compras.
-        </p>
+        {paso.errorCamara && (
+          <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
+            <p className="text-sm text-admin-red-dark">{paso.errorCamara}</p>
+          </div>
+        )}
+        <Button onClick={() => setPaso({ tipo: "escaneando" })} className="self-start">
+          {paso.errorCamara ? "Reintentar" : "Escanear tarjeta"}
+        </Button>
       </Card>
     );
   }
@@ -169,11 +126,11 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
       <Card className="flex flex-col items-center gap-4">
         <div className="self-stretch">
           <h2 className="text-sm font-extrabold text-admin-ink">Escanea el QR personal del cliente</h2>
-          <p className="text-sm text-admin-ink-soft">El QR vive dentro de la tarjeta ya agregada a su wallet.</p>
+          <p className="text-sm text-admin-ink-soft">Apunta la cámara al QR de la tarjeta en su wallet.</p>
         </div>
-        <QrScanner onScan={handleScan} />
-        <Button variant="secondary" size="sm" onClick={() => setPaso({ tipo: "pin" })}>
-          Cambiar PIN / detener
+        <QrScanner onScan={handleScan} onError={(mensaje) => setPaso({ tipo: "inicio", errorCamara: mensaje })} />
+        <Button variant="secondary" onClick={volverAlInicio}>
+          Cancelar
         </Button>
       </Card>
     );
@@ -198,9 +155,14 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
               Este cliente completó su tarjeta. Entrégale la recompensa que decidas y confirma abajo.
             </p>
           </div>
-          <Button onClick={() => handleRedimir(loyaltyCard.token)} disabled={redimiendo} className="self-start">
-            {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => handleRedimir(loyaltyCard.token)} disabled={redimiendo}>
+              {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
+            </Button>
+            <Button variant="secondary" onClick={volverAlInicio} disabled={redimiendo}>
+              Volver sin canjear
+            </Button>
+          </div>
         </Card>
       );
     }
@@ -217,7 +179,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
             sola en el próximo sello.
           </p>
         )}
-        <Button onClick={volverAEscanear} className="self-start">
+        <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
       </Card>
@@ -231,9 +193,14 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
           <p className="text-base font-extrabold text-amber-900">Esta tarjeta ya tiene un premio pendiente</p>
           <p className="text-sm text-amber-800">Hay que redimirlo antes de poder registrar otro sello.</p>
         </div>
-        <Button onClick={() => handleRedimir(paso.qrToken)} disabled={redimiendo} className="self-start">
-          {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => handleRedimir(paso.qrToken)} disabled={redimiendo}>
+            {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
+          </Button>
+          <Button variant="secondary" onClick={volverAlInicio} disabled={redimiendo}>
+            Volver sin canjear
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -247,7 +214,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
             El ciclo de esta tarjeta reinició — sellos: {paso.loyaltyCard.contador}/10.
           </p>
         </div>
-        <Button onClick={volverAEscanear} className="self-start">
+        <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
       </Card>
@@ -262,7 +229,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
             Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.
           </p>
         </div>
-        <Button onClick={volverAEscanear} className="self-start">
+        <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
       </Card>
@@ -275,7 +242,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
         <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
           <p className="text-sm text-admin-red-dark">No se encontró ninguna tarjeta con ese código.</p>
         </div>
-        <Button onClick={volverAEscanear} className="self-start">
+        <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
       </Card>
@@ -285,9 +252,11 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
   // error_generico
   return (
     <Card className="flex flex-col gap-4">
-      <p className="text-sm text-red-600">{paso.mensaje}</p>
-      <Button onClick={volverAEscanear} className="self-start">
-        Escanear otro
+      <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
+        <p className="text-sm text-admin-red-dark">{paso.mensaje}</p>
+      </div>
+      <Button onClick={volverAlInicio} className="self-start">
+        Volver al inicio
       </Button>
     </Card>
   );

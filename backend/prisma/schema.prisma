@@ -105,22 +105,6 @@ model Tenant {
   // es como la integración Webhook de Botpress lo espera).
   botWebhookUrl                String?
   botWebhookSecret             String?
-  // PIN de 4-6 dígitos que protege la pantalla de registro de sellos del
-  // Módulo de Lealtad (backend/src/lealtad/) — hasheado con bcrypt, mismo
-  // patrón que User.passwordHash (ver AuthService), nunca texto plano: a
-  // diferencia de botApiKey (secreto de alta entropía que el backend
-  // necesita leer de vuelta para comparar un header), este es un candado
-  // corto y solo se compara, nunca se muestra de vuelta. Null hasta que el
-  // Dueño lo configure — sin pantalla en el panel todavía en esta fase.
-  pinLealtad                   String?
-  // Rate-limiting del PIN de Lealtad (LealtadPinGuard) — persistido en DB,
-  // no en memoria/Redis, para que el candado sobreviva un reinicio del
-  // backend y funcione igual si algún día corren varias instancias. Un PIN
-  // correcto resetea ambos a 0/null; uno incorrecto incrementa
-  // pinIntentosFallidos y, al llegar al umbral, fija pinBloqueadoHasta a un
-  // tiempo corto en el futuro — ver LealtadPinGuard para los valores.
-  pinIntentosFallidos          Int                @default(0)
-  pinBloqueadoHasta            DateTime?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se
@@ -1001,8 +985,9 @@ model LoyaltyCard {
 }
 
 // Bitácora de sellos — un evento por visita registrada, sin campo de "quién
-// registró" (el PIN es único por tenant, no por cajera, así que no hay esa
-// trazabilidad en v1, ver CLAUDE.md).
+// registró" (no hay esa trazabilidad en v1). La regla de 1 sello por
+// tarjeta por día no es una constraint de DB: la garantiza el lock de fila
+// sobre LoyaltyCard en LealtadService.registrarCompra.
 model LoyaltyVisit {
   id            String   @id @default(uuid())
   tenantId      String

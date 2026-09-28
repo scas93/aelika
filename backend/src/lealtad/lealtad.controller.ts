@@ -1,35 +1,32 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { LealtadService } from './lealtad.service';
-import { LealtadPinGuard } from './guards/lealtad-pin.guard';
 import { AltaClienteLealtadDto } from './dto/alta-cliente-lealtad.dto';
-import { VerificacionPinDto } from './dto/verificacion-pin.dto';
+import { TokenTarjetaDto } from './dto/token-tarjeta.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../../generated/prisma/enums';
 
 // Abierto a los 3 roles — mismo criterio que /orders: es operación física
 // del día a día (alta de cliente, sellar, redimir), probablemente Operador
-// es quien está parado con el PIN escaneando, no solo Gerente/Dueño.
+// es quien está parado escaneando, no solo Gerente/Dueño. La protección de
+// los 3 endpoints es la misma que la del resto del panel: JWT + RolesGuard
+// (globales vía APP_GUARD) y aislamiento por tenant vía TenantPrismaService.
 @Controller('lealtad')
 @Roles(Role.OPERADOR, Role.GERENTE, Role.DUENO)
 export class LealtadController {
   constructor(private readonly lealtadService: LealtadService) {}
 
-  // Sin PIN — el PIN protege únicamente registrar-compra/redimir-premio,
-  // no la alta.
   @Post('clientes')
   altaCliente(@Body() dto: AltaClienteLealtadDto) {
     return this.lealtadService.altaCliente(dto.nombre, dto.telefono);
   }
 
   @Post('registrar-compra')
-  @UseGuards(LealtadPinGuard)
-  registrarCompra(@Body() dto: VerificacionPinDto) {
+  registrarCompra(@Body() dto: TokenTarjetaDto) {
     return this.lealtadService.registrarCompra(dto.token);
   }
 
   @Post('redimir-premio')
-  @UseGuards(LealtadPinGuard)
-  redimirPremio(@Body() dto: VerificacionPinDto) {
+  redimirPremio(@Body() dto: TokenTarjetaDto) {
     return this.lealtadService.redimirPremio(dto.token);
   }
 }

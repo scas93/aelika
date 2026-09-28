@@ -4,7 +4,7 @@ import { ClientesService } from '../clientes/clientes.service';
 import { WalletPassService, DatosPaseInput, WalletPassResultado } from './wallet-pass.service';
 import { generateApiKey } from '../common/api-key';
 import { fechaEnMexico } from '../common/horario';
-import { Cliente, LoyaltyCard, LoyaltyCardEstado } from '../../generated/prisma/client';
+import { Cliente, LoyaltyCard, LoyaltyCardEstado, Prisma } from '../../generated/prisma/client';
 import { LealtadErrorCode, lealtadConflict, lealtadNotFound } from './lealtad-errors';
 
 const SELLOS_PARA_PREMIO = 10;
@@ -18,7 +18,7 @@ export class LealtadService {
   ) {}
 
   /**
-   * Alta sin PIN (ver LealtadController) — busca/crea el Cliente vía
+   * Alta de cliente — busca/crea el Cliente vía
    * ClientesService.buscarOCrearParaLealtad y, si ese Cliente todavía no
    * tiene tarjeta, crea una. Idempotente por diseño: una segunda alta con
    * el mismo teléfono siempre resuelve al mismo Cliente (unique
@@ -74,40 +74,49 @@ export class LealtadService {
   }
 
   /**
-   * Registrar compra — protegido por PIN a nivel de ruta (LealtadPinGuard),
-   * esta capa solo conoce el token de la tarjeta. Check + create del
-   * LoyaltyVisit + incremento del contador corren en una sola transacción
-   * (this.tenantPrisma.client.$transaction) para cerrar la ventana de
-   * condición de carrera entre el chequeo de "¿ya hay visita hoy?" y el
-   * insert — el schema no tiene una constraint de DB que lo prevenga.
+   * Registrar compra. Todo lo que decide si el sello procede (estado de la
+   * tarjeta, "¿ya hay visita hoy?") y el cálculo del contador nuevo corren
+   * DENTRO de la misma transacción que el insert del LoyaltyVisit, después
+   * de tomar un lock de fila sobre la tarjeta (ver bloquearTarjeta). Dos
+   * escaneos simultáneos de la misma tarjeta se serializan: el segundo
+   * espera a que el primero haga commit y entonces ya ve su visita de hoy
+   * (409 SELLO_YA_REGISTRADO_HOY) o su PREMIO_DISPONIBLE (409
+   * PREMIO_PENDIENTE), en vez de leer ambos el mismo estado viejo. El schema
+   * no tiene una constraint de DB para "1 sello por día" — el lock es lo que
+   * la garantiza.
    */
   async registrarCompra(token: string) {
-    const loyaltyCard = await this.buscarPorToken(token);
+    const tarjeta = await this.buscarPorToken(token);
+    const loyaltyCardId = tarjeta.id;
 
-    if (loyaltyCard.estado === LoyaltyCardEstado.PREMIO_DISPONIBLE) {
-      throw lealtadConflict(
-        'Esta tarjeta ya tiene un premio disponible — hay que redimirlo antes de seguir sellando.',
-        LealtadErrorCode.PREMIO_PENDIENTE,
-      );
-    }
+    const actualizada = await this.tenantPrisma.client.$transaction(async (tx) => {
+      const loyaltyCard = await this.bloquearTarjeta(tx, tarjeta);
 
-    const hoy = fechaEnMexico();
-    const ultimaVisita = await this.tenantPrisma.client.loyaltyVisit.findFirst({
-      where: { loyaltyCardId: loyaltyCard.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (ultimaVisita && fechaEnMexico(ultimaVisita.createdAt) === hoy) {
-      throw lealtadConflict(
-        'Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.',
-        LealtadErrorCode.SELLO_YA_REGISTRADO_HOY,
-      );
-    }
+      if (loyaltyCard.estado === LoyaltyCardEstado.PREMIO_DISPONIBLE) {
+        throw lealtadConflict(
+          'Esta tarjeta ya tiene un premio disponible — hay que redimirlo antes de seguir sellando.',
+          LealtadErrorCode.PREMIO_PENDIENTE,
+        );
+      }
 
-    let actualizada = await this.tenantPrisma.client.$transaction(async (tx) => {
+      const ultimaVisita = await tx.loyaltyVisit.findFirst({
+        where: { loyaltyCardId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (ultimaVisita && fechaEnMexico(ultimaVisita.createdAt) === fechaEnMexico()) {
+        throw lealtadConflict(
+          'Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.',
+          LealtadErrorCode.SELLO_YA_REGISTRADO_HOY,
+        );
+      }
+
       await tx.loyaltyVisit.create({
-        data: { loyaltyCardId: loyaltyCard.id } as any,
+        data: { loyaltyCardId } as any,
       });
 
+      // Seguro leer-y-sumar aquí (en vez de `increment`): la fila está
+      // bloqueada desde bloquearTarjeta, nadie más puede cambiar `contador`
+      // hasta el commit, y el estado nuevo depende del valor resultante.
       const nuevoContador = loyaltyCard.contador + 1;
       const nuevoEstado =
         nuevoContador >= SELLOS_PARA_PREMIO
@@ -115,7 +124,7 @@ export class LealtadService {
           : LoyaltyCardEstado.EN_PROGRESO;
 
       return tx.loyaltyCard.update({
-        where: { id: loyaltyCard.id },
+        where: { id: loyaltyCardId },
         data: { contador: nuevoContador, estado: nuevoEstado },
       });
     });
@@ -124,27 +133,57 @@ export class LealtadService {
     return { loyaltyCard: conPaseActualizado, pase };
   }
 
-  /** Redimir premio — protegido por PIN a nivel de ruta, mismo criterio que registrarCompra. */
+  /**
+   * Redimir premio — mismo lock de fila que registrarCompra, así un canje y
+   * un sello simultáneos (o dos canjes) de la misma tarjeta nunca se
+   * intercalan: un segundo canje concurrente ve la tarjeta ya en EN_PROGRESO
+   * y da 409 en vez de crear un LoyaltyRedemption duplicado.
+   */
   async redimirPremio(token: string) {
-    const loyaltyCard = await this.buscarPorToken(token);
-
-    if (loyaltyCard.estado !== LoyaltyCardEstado.PREMIO_DISPONIBLE) {
-      throw new ConflictException('Esta tarjeta no tiene ningún premio disponible para redimir.');
-    }
+    const tarjeta = await this.buscarPorToken(token);
+    const loyaltyCardId = tarjeta.id;
 
     const actualizada = await this.tenantPrisma.client.$transaction(async (tx) => {
+      const loyaltyCard = await this.bloquearTarjeta(tx, tarjeta);
+
+      if (loyaltyCard.estado !== LoyaltyCardEstado.PREMIO_DISPONIBLE) {
+        throw new ConflictException('Esta tarjeta no tiene ningún premio disponible para redimir.');
+      }
+
       await tx.loyaltyRedemption.create({
-        data: { loyaltyCardId: loyaltyCard.id } as any,
+        data: { loyaltyCardId } as any,
       });
 
       return tx.loyaltyCard.update({
-        where: { id: loyaltyCard.id },
+        where: { id: loyaltyCardId },
         data: { contador: 0, estado: LoyaltyCardEstado.EN_PROGRESO },
       });
     });
 
     const { loyaltyCard: conPaseActualizado, pase } = await this.actualizarPaseYPersistir(actualizada);
     return { loyaltyCard: conPaseActualizado, pase };
+  }
+
+  /**
+   * `SELECT ... FOR UPDATE` sobre la fila de la tarjeta, dentro de la
+   * transacción recibida, y luego relee la tarjeta ya con el lock tomado —
+   * en READ COMMITTED (default de Postgres) cada statement ve lo último
+   * committeado, así que esta lectura refleja cualquier sello/canje que
+   * otra transacción haya hecho mientras esperábamos el lock. El lock se
+   * libera solo al commit/rollback.
+   *
+   * `$queryRaw` no pasa por la extensión tenantScopedQuery de
+   * TenantPrismaService, por eso el `tenantId` va explícito en el WHERE
+   * (mismo principio que PrismaService crudo en los endpoints públicos). En
+   * la práctica id/tenantId vienen de buscarPorToken, que sí está
+   * tenant-scoped.
+   */
+  private async bloquearTarjeta(
+    tx: Prisma.TransactionClient,
+    tarjeta: Pick<LoyaltyCard, 'id' | 'tenantId'>,
+  ): Promise<LoyaltyCard> {
+    await tx.$queryRaw`SELECT "id" FROM "loyalty_cards" WHERE "id" = ${tarjeta.id} AND "tenantId" = ${tarjeta.tenantId} FOR UPDATE`;
+    return tx.loyaltyCard.findUniqueOrThrow({ where: { id: tarjeta.id } });
   }
 
   /**

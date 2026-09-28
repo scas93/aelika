@@ -533,9 +533,6 @@ export interface TenantSettings {
   // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
   // Cliente) — null = usa el default del backend (7 días).
   candadoMarketingDias: number | null;
-  // Nunca el PIN en sí (hasheado, nunca se expone) — solo si ya hay uno
-  // configurado. Ver setLealtadPin.
-  pinLealtadConfigurado: boolean;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
@@ -1092,14 +1089,6 @@ export function regenerateBotApiKey(token: string) {
   return request<TenantSettings>("/tenant/me/regenerate-bot-key", {
     method: "POST",
     headers: authHeaders(token),
-  });
-}
-
-export function setLealtadPin(token: string, pin: string) {
-  return request<TenantSettings>("/tenant/me/lealtad-pin", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ pin }),
   });
 }
 
@@ -1856,19 +1845,19 @@ export function altaClienteLealtad(token: string, nombre: string, telefono: stri
 
 // `qrToken` es LoyaltyCard.token (leído del QR), no confundir con el JWT de
 // sesión (`token`, primer parámetro, igual que en el resto de este archivo).
-export function registrarCompraLealtad(token: string, qrToken: string, pin: string) {
+export function registrarCompraLealtad(token: string, qrToken: string) {
   return request<LealtadRespuesta>("/lealtad/registrar-compra", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ token: qrToken, pin }),
+    body: JSON.stringify({ token: qrToken }),
   });
 }
 
-export function redimirPremioLealtad(token: string, qrToken: string, pin: string) {
+export function redimirPremioLealtad(token: string, qrToken: string) {
   return request<LealtadRespuesta>("/lealtad/redimir-premio", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ token: qrToken, pin }),
+    body: JSON.stringify({ token: qrToken }),
   });
 }
 
