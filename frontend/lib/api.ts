@@ -1861,6 +1861,26 @@ export function redimirPremioLealtad(token: string, qrToken: string) {
   });
 }
 
+// Fila del listado de clientes inscritos (GET /lealtad/clientes). El backend
+// nunca manda LoyaltyCard.token aquí (es la credencial del QR) — `id` es
+// LoyaltyCard.id, solo como key de la fila. Ya viene en el orden final
+// (premio pendiente → último sello → sin sellos, ver
+// backend/src/lealtad/clientes-inscritos.ts); el frontend no reordena.
+export interface ClienteInscritoLealtad {
+  id: string;
+  nombre: string;
+  telefono: string;
+  contador: number;
+  estado: LoyaltyCardEstado;
+  // null = inscrito, pero sin ningún sello todavía.
+  ultimoSelloAt: string | null;
+  inscritoAt: string;
+}
+
+export function fetchClientesInscritosLealtad(token: string) {
+  return request<ClienteInscritoLealtad[]>("/lealtad/clientes", { headers: authHeaders(token) });
+}
+
 // Auto-registro público (sin sesión, `/lealtad/[slug]`) — el tenant se
 // identifica por el slug de la URL, no por un token de sesión, así que no
 // lleva authHeaders como las 3 funciones de arriba.

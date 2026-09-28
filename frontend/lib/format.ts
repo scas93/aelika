@@ -25,3 +25,24 @@ export function formatTelefono(telefono: string): string {
   if (telefono.length !== 10) return telefono;
   return `${telefono.slice(0, 2)} ${telefono.slice(2, 6)} ${telefono.slice(6)}`;
 }
+
+// Fecha corta sin hora ("28 sept"; "14 ago 2025" si no es del año en curso)
+// — el año solo aparece cuando hace falta para no ser ambiguo. Siempre en
+// America/Mexico_City (misma zona que usa el backend, ver fechaEnMexico),
+// no en la del navegador: así el día mostrado es el mismo "día" con el que
+// el backend decide "1 sello por día", sin importar dónde se abra el panel.
+const ZONA_NEGOCIO = "America/Mexico_City";
+const FECHA_CORTA = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: ZONA_NEGOCIO });
+const FECHA_CORTA_CON_ANIO = new Intl.DateTimeFormat("es-MX", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: ZONA_NEGOCIO,
+});
+const ANIO = new Intl.DateTimeFormat("es-MX", { year: "numeric", timeZone: ZONA_NEGOCIO });
+
+export function formatFechaCorta(iso: string, ahora: Date = new Date()): string {
+  const fecha = new Date(iso);
+  const mismoAnio = ANIO.format(fecha) === ANIO.format(ahora);
+  return (mismoAnio ? FECHA_CORTA : FECHA_CORTA_CON_ANIO).format(fecha);
+}

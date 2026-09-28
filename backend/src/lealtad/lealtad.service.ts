@@ -6,6 +6,7 @@ import { generateApiKey } from '../common/api-key';
 import { fechaEnMexico } from '../common/horario';
 import { Cliente, LoyaltyCard, LoyaltyCardEstado, Prisma } from '../../generated/prisma/client';
 import { LealtadErrorCode, lealtadConflict, lealtadNotFound } from './lealtad-errors';
+import { ClienteInscrito, ordenarInscritos } from './clientes-inscritos';
 
 const SELLOS_PARA_PREMIO = 10;
 
@@ -71,6 +72,42 @@ export class LealtadService {
     });
 
     return { loyaltyCard, pase };
+  }
+
+  /**
+   * GET /lealtad/clientes — todos los clientes inscritos del tenant (existe
+   * LoyaltyCard) con su último sello. Una sola query: la fecha del último
+   * sello sale de un LEFT JOIN LATERAL que, por tarjeta, toma la visita más
+   * reciente con ORDER BY createdAt DESC LIMIT 1 — resuelto con el índice
+   * (loyaltyCardId, createdAt) de LoyaltyVisit como una búsqueda puntual
+   * por tarjeta, sin recorrer todo el historial de visitas del tenant.
+   *
+   * `$queryRaw` no pasa por tenantScopedQuery, así que `tenantId` va
+   * explícito en el WHERE (viene del JWT, ver LealtadController). El SELECT
+   * enumera columnas a mano: nunca LoyaltyCard.token (credencial del QR).
+   * El orden final se aplica en TS, ver ordenarInscritos.
+   */
+  async listarInscritos(tenantId: string): Promise<ClienteInscrito[]> {
+    const filas = await this.tenantPrisma.client.$queryRaw<ClienteInscrito[]>`
+      SELECT lc."id",
+             c."nombre",
+             c."telefono",
+             lc."contador",
+             lc."estado"::text AS "estado",
+             lc."createdAt" AS "inscritoAt",
+             uv."createdAt" AS "ultimoSelloAt"
+      FROM "loyalty_cards" lc
+      JOIN "clientes" c ON c."id" = lc."clienteId" AND c."tenantId" = lc."tenantId"
+      LEFT JOIN LATERAL (
+        SELECT v."createdAt"
+        FROM "loyalty_visits" v
+        WHERE v."loyaltyCardId" = lc."id"
+        ORDER BY v."createdAt" DESC
+        LIMIT 1
+      ) uv ON true
+      WHERE lc."tenantId" = ${tenantId}
+    `;
+    return ordenarInscritos(filas);
   }
 
   /**

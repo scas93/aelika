@@ -999,6 +999,10 @@ model LoyaltyVisit {
   loyaltyCard LoyaltyCard @relation(fields: [loyaltyCardId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
+  // "La visita más reciente de cada tarjeta": la usa el listado de clientes
+  // inscritos (LealtadService.listarInscritos, LATERAL + ORDER BY createdAt
+  // DESC LIMIT 1) y el chequeo de "¿ya hay sello hoy?" de registrarCompra.
+  @@index([loyaltyCardId, createdAt])
   @@map("loyalty_visits")
 }
 
