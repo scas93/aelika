@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "resolvePackageJsonExports": false,
+    "allowJs": true,
+    "declaration": false,
+    "incremental": false
+  },
+  "include": ["../../src/**/*", "../../generated/**/*", "./**/*"]
+}
