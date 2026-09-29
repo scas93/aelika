@@ -151,6 +151,7 @@ model Tenant {
   promotions                Promotion[]
   orders                    Order[]
   orderItems                OrderItem[]
+  detallesB2c               DetalleB2C[]
   puntosEnvio               PuntoEnvio[]
   modifierGroups            ModifierGroup[]
   modifierOptions           ModifierOption[]
@@ -320,7 +321,10 @@ model PuntoEnvio {
   updatedAt    DateTime @updatedAt
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // DEPRECADA (Etapa 1): inversa de Order.puntoEnvioId (columna vieja). Se elimina en 1b.
   orders Order[]
+  // Inversa de DetalleB2C.puntoEnvioId (la fuente actual).
+  detallesB2c DetalleB2C[]
 
   @@index([tenantId])
   @@map("puntos_envio")
@@ -434,6 +438,15 @@ model NotificacionEventoConfig {
   @@map("notificacion_evento_configs")
 }
 
+// Tipo de orden (Etapa 1 del refactor de órdenes centralizadas). Hoy solo B2C
+// vive en Order; B2B se usa a partir de la etapa 2 (PedidoB2b se integra a
+// Order) y RESERVA se agrega en la etapa 3. Distinto de ClienteCanal (que
+// clasifica al Cliente, no a la orden) y de CanalOrigen (por dónde entró).
+enum TipoOrden {
+  B2C
+  B2B
+}
+
 model Order {
   id                    String           @id @default(uuid())
   tenantId              String
@@ -457,6 +470,9 @@ model Order {
   // cliente (ver architecture.md §5).
   clienteId             String
   notas                 String?
+  // DEPRECADO (Etapa 1): vive en DetalleB2C. Se sigue escribiendo aquí (escritura
+  // doble) y sirve de respaldo de lectura solo hasta la Etapa 1b, que borra
+  // estas columnas — NO quitarlas del schema antes: migrate dev generaría un DROP.
   horaRecogidaTipo      HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
   // "HH:mm", same-day only (no date picker yet). Only set when
   // horaRecogidaTipo = HORA_ESPECIFICA; null otherwise. Meaningless (and
@@ -474,6 +490,7 @@ model Order {
   // succeeds — see OrdersService.reembolsar. No webhook confirms this in v1;
   // the Stripe API response itself is the confirmation.
   stripeRefundId        String?
+  // DEPRECADO (Etapa 1): vive en DetalleB2C — se elimina en Etapa 1b.
   metodoEntrega         MetodoEntrega    @default(RECOGER)
   // Required (and validated as belonging to this tenant + activo) only when
   // metodoEntrega = DOMICILIO; null for RECOGER. onDelete: Restrict — unlike
@@ -485,6 +502,7 @@ model Order {
   // DOMICILIO (see PublicService.resolverDireccionEntrega), null for RECOGER.
   // Distinct from PuntoEnvio.direccion, which is the zone's own fixed
   // address, not the customer's.
+  // DEPRECADO (Etapa 1): direccion* viven en DetalleB2C — se eliminan en Etapa 1b.
   direccionCalle        String?
   direccionNumero       String?
   direccionColonia      String?
@@ -499,10 +517,15 @@ model Order {
   facturaCodigoPostal   String?
   facturaCorreo         String?
   estadoPedido          EstadoPedido     @default(PENDIENTE_CONFIRMACION)
+  // Etapa 1: tipo de orden. NOT NULL con DEFAULT 'B2C' en la BD (y aquí) hasta la
+  // Etapa 1b, para que el contenedor anterior —que no lo escribe— siga creando
+  // órdenes durante un despliegue/reversa. El código nuevo lo escribe explícito.
+  tipo                  TipoOrden        @default(B2C)
   canalOrigen           CanalOrigen      @default(WEB)
   // Sum of every discount applied at checkout (combos + descuento_producto).
   descuentoTotal        Decimal          @default(0) @db.Decimal(10, 2)
   // Human-readable summary of what was applied, e.g. "Combo Pizza+Refresco x1".
+  // DEPRECADO (Etapa 1): vive en DetalleB2C — se elimina en Etapa 1b.
   notasDescuento        String?
   total                 Decimal          @db.Decimal(10, 2)
   createdAt             DateTime         @default(now())
@@ -517,7 +540,15 @@ model Order {
   // requerida — Cascade borraría pedidos reales si algún día existe un
   // borrado de Cliente, lo cual no debe pasar silenciosamente.
   cliente    Cliente     @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  // DEPRECADO (Etapa 1): relación por la columna vieja puntoEnvioId. Se mantiene
+  // (junto con su FK Restrict) hasta la Etapa 1b, junto a DetalleB2C.puntoEnvio.
   puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
+  // Detalle exclusivo de B2C (1:1). OJO con el casing: el MODELO es `DetalleB2C`
+  // (cliente Prisma: prisma.detalleB2C, clave en TenantPrismaService) y esta
+  // RELACIÓN se llama `detalleB2c` (include: { detalleB2c: true }).
+  // Opcional a nivel de tipos: una orden creada por el contenedor anterior (antes
+  // de la Etapa 1b) puede no tenerlo — ver aRespuestaOrder (respaldo de lectura).
+  detalleB2c DetalleB2C?
   items      OrderItem[]
   payments   Payment[]
 
@@ -534,6 +565,37 @@ model Order {
   @@index([puntoEnvioId])
   @@index([clienteId])
   @@map("orders")
+}
+
+// Etapa 1 del refactor de órdenes centralizadas: lo exclusivo de un pedido B2C
+// (pickup / envío a domicilio) vive aquí, 1:1 con Order, no en la orden base.
+// Mismos tipos, nulabilidad y defaults que tenían estas columnas en Order.
+// tenantId denormalizado (convención del proyecto, como OrderItem) para
+// registrarlo en TenantPrismaService. onDelete: Cascade con la orden; la FK a
+// PuntoEnvio es Restrict (borrar un punto con pedidos sigue dando 409 vía P2003,
+// ver PuntosEnvioService). Las columnas equivalentes de Order siguen existiendo
+// (deprecadas) hasta la Etapa 1b.
+model DetalleB2C {
+  id                   String           @id @default(uuid())
+  tenantId             String
+  orderId              String           @unique
+  horaRecogidaTipo     HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
+  horaRecogida         String?
+  metodoEntrega        MetodoEntrega    @default(RECOGER)
+  puntoEnvioId         String?
+  direccionCalle       String?
+  direccionNumero      String?
+  direccionColonia     String?
+  direccionReferencias String?
+  notasDescuento       String?
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  puntoEnvio PuntoEnvio? @relation(fields: [puntoEnvioId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([puntoEnvioId])
+  @@map("detalles_b2c")
 }
 
 // Snapshots nombreProducto/precioUnitario at order time (see CLAUDE.md) so a

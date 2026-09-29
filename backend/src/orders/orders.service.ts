@@ -16,6 +16,7 @@ import {
   MetodoPago,
   NotificacionEvento,
 } from '../../generated/prisma/enums';
+import { aRespuestaOrder } from './order-respuesta';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
@@ -68,8 +69,8 @@ export class OrdersService {
     private readonly reglaEventoPedidoService: ReglaEventoPedidoService,
   ) {}
 
-  findAll(query: ListOrdersQueryDto) {
-    return this.tenantPrisma.client.order.findMany({
+  async findAll(query: ListOrdersQueryDto) {
+    const ordenes = await this.tenantPrisma.client.order.findMany({
       where: {
         estadoPedido: query.estadoPedido,
         createdAt:
@@ -81,8 +82,9 @@ export class OrdersService {
             : undefined,
       },
       orderBy: { createdAt: 'desc' },
-      include: { items: true },
+      include: { items: true, detalleB2c: true },
     });
+    return ordenes.map(aRespuestaOrder);
   }
 
   async summary(query: SummaryQueryDto) {
@@ -255,12 +257,12 @@ export class OrdersService {
   async findOne(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, detalleB2c: true },
     });
     if (!order) {
       throw new NotFoundException('Pedido no encontrado');
     }
-    return order;
+    return aRespuestaOrder(order);
   }
 
   async avanzar(id: string) {
@@ -285,8 +287,12 @@ export class OrdersService {
             modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } },
           },
         },
+        detalleB2c: true,
       },
     });
+    // Forma plana (campos B2C tomados de DetalleB2C, con respaldo a las columnas
+    // viejas si la orden no tiene detalle) — la usan la respuesta y el contexto de reglas.
+    const respuesta = aRespuestaOrder(actualizado);
 
     const evento = EVENTO_POR_ESTADO[siguiente];
     if (evento) {
@@ -343,15 +349,15 @@ export class OrdersService {
         estatus: actualizado.estadoPedido,
         createdAt: actualizado.createdAt,
         items: actualizado.items.map((item) => ({ nombreProducto: item.nombreProducto, cantidad: item.cantidad })),
-        metodoEntrega: actualizado.metodoEntrega,
-        direccionCalle: actualizado.direccionCalle,
-        direccionNumero: actualizado.direccionNumero,
-        direccionColonia: actualizado.direccionColonia,
+        metodoEntrega: respuesta.metodoEntrega,
+        direccionCalle: respuesta.direccionCalle,
+        direccionNumero: respuesta.direccionNumero,
+        direccionColonia: respuesta.direccionColonia,
         metodoPago: actualizado.metodoPago,
       },
     });
 
-    return actualizado;
+    return respuesta;
   }
 
   /**
@@ -505,11 +511,12 @@ export class OrdersService {
         reverse_transfer: true,
       });
 
-      return this.tenantPrisma.client.order.update({
+      const reembolsada = await this.tenantPrisma.client.order.update({
         where: { id },
         data: { estadoPago: EstadoPago.REEMBOLSADO, stripeRefundId: refund.id },
-        include: { items: true },
+        include: { items: true, detalleB2c: true },
       });
+      return aRespuestaOrder(reembolsada);
     } catch (error) {
       // balance_insufficient: the connected account's Stripe balance can't
       // cover reverse_transfer pulling the money back — the one failure mode

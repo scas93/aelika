@@ -17,8 +17,10 @@ import {
   NotificacionEvento,
   Prisma,
   PromotionTipo,
+  TipoOrden,
   TipoSeleccion,
 } from '../../generated/prisma/client';
+import { aRespuestaOrder } from '../orders/order-respuesta';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import type { DescuentoProductoConfigDto } from '../promotions/dto/descuento-producto-config.dto';
 import type { ComboConfigDto } from '../promotions/dto/combo-config.dto';
@@ -373,6 +375,8 @@ export class PublicService {
       }
     }
 
+    const notasDescuento = resumenDescuentos.length > 0 ? resumenDescuentos.join('; ') : null;
+
     const order = await this.prisma.$transaction(async (tx) => {
       const folio = await this.nextFolio(tx, tenant.id);
 
@@ -412,9 +416,28 @@ export class PublicService {
           ...factura,
           estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION,
           canalOrigen: CanalOrigen.WEB,
+          tipo: TipoOrden.B2C,
           descuentoTotal,
-          notasDescuento: resumenDescuentos.length > 0 ? resumenDescuentos.join('; ') : undefined,
+          notasDescuento: notasDescuento ?? undefined,
           total,
+          // Etapa 1: lo exclusivo de B2C vive en DetalleB2C, creado en la MISMA
+          // transacción que la orden (nested create con tenantId explícito: la
+          // extensión de tenant no lo inyecta en escrituras anidadas, y aquí ni
+          // siquiera se usa TenantPrismaService).
+          // TEMPORAL — escritura doble: los mismos valores también se guardan en
+          // las columnas viejas de Order (arriba) hasta la Etapa 1b, para que el
+          // contenedor anterior y una reversa las lean bien. Se retira en 1b.
+          detalleB2c: {
+            create: {
+              tenantId: tenant.id,
+              horaRecogidaTipo,
+              horaRecogida,
+              metodoEntrega,
+              puntoEnvioId: puntoEnvio?.id,
+              ...direccionEntrega,
+              notasDescuento: notasDescuento ?? undefined,
+            },
+          },
           items: {
             // One OrderItem per raw cart line (not per distinct product) —
             // see the comment above modifiersExtraTotal for why lines can't
@@ -450,6 +473,7 @@ export class PublicService {
               modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } },
             },
           },
+          detalleB2c: true,
         },
       });
 
@@ -492,10 +516,11 @@ export class PublicService {
             items: {
               include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } },
             },
+            detalleB2c: true,
           },
         });
 
-        return { ...orderConPago, clientSecret: paymentIntent.client_secret };
+        return { ...aRespuestaOrder(orderConPago), clientSecret: paymentIntent.client_secret };
       } catch (err) {
         // The order stays on record as FALLIDO rather than silently
         // disappearing — same "never lose a real customer action" principle
@@ -509,7 +534,7 @@ export class PublicService {
     // en la transacción de arriba y no cambia después — encolar aquí mismo.
     void this.encolarPedidoRecibido(tenant.id, tenant.nombre, order);
 
-    return order;
+    return aRespuestaOrder(order);
   }
 
   /**
@@ -531,7 +556,7 @@ export class PublicService {
   private async encolarPedidoRecibido(
     tenantId: string,
     tenantNombre: string,
-    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } }; detalleB2c: true } }>,
   ): Promise<void> {
     const productIds = order.items.map((item) => item.productId).filter((id): id is string => id !== null);
     const categoriaPorProducto = await this.resolverCategoriasPorProducto(productIds);
@@ -593,6 +618,7 @@ export class PublicService {
       include: {
         tenant: { select: { nombre: true } },
         items: { include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } } },
+        detalleB2c: true,
       },
     });
     if (!order) {
@@ -661,9 +687,12 @@ export class PublicService {
    */
   private construirReciboPedidoRecibido(
     tenantNombre: string,
-    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } } } }>,
+    order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } }; detalleB2c: true } }>,
     categoriaPorProducto: Map<string, string>,
   ): string {
+    // Hora de recogida: del DetalleB2C (o, sin detalle, de la columna vieja de Order) —
+    // ver aRespuestaOrder. TEMPORAL hasta la Etapa 1b.
+    const { horaRecogidaTipo, horaRecogida } = aRespuestaOrder(order);
     const lineas: string[] = [
       `NUEVO PEDIDO #${order.folio} - ${tenantNombre}`,
       this.construirIndicadorPago({ metodoPago: order.metodoPago, estadoPago: order.estadoPago }),
@@ -672,8 +701,8 @@ export class PublicService {
       `Telefono: ${order.clienteTelefono}`,
     ];
 
-    if (order.horaRecogidaTipo === HoraRecogidaTipo.HORA_ESPECIFICA && order.horaRecogida) {
-      lineas.push(`Llega en: ${order.horaRecogida}`);
+    if (horaRecogidaTipo === HoraRecogidaTipo.HORA_ESPECIFICA && horaRecogida) {
+      lineas.push(`Llega en: ${horaRecogida}`);
     }
 
     lineas.push('');

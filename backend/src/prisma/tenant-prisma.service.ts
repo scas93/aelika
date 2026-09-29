@@ -82,6 +82,9 @@ export class TenantPrismaService {
           orderItem: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          detalleB2C: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           puntoEnvio: {
             $allOperations: tenantScopedQuery(tenantId),
           },
