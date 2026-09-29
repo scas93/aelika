@@ -90,7 +90,8 @@ describe('B2C · Cliente derivado del pedido', () => {
     await waitForCalls(s.h.fakes.queueAdd, 2);
   });
 
-  it('BUG CONGELADO: un pedido TARJETA que luego falla ya contó en totalPedidos del Cliente', async () => {
+  // A2 (cambia a propósito): un pedido TARJETA que falla al crear el PaymentIntent ya NO cuenta en totalPedidos.
+  it('un pedido TARJETA que luego falla NO cuenta en totalPedidos del Cliente (queda en 0, con fecha de alta)', async () => {
     // El Cliente se sincroniza al crear el pedido, antes de saber si el pago prospera.
     const { conectarStripe } = await import('./db');
     await conectarStripe(s.h.prisma, s.base.tenant.id);
@@ -99,7 +100,9 @@ describe('B2C · Cliente derivado del pedido', () => {
     expect(res.status).toBe(500);
     const clientes = await s.h.prisma.cliente.findMany();
     expect(clientes).toHaveLength(1);
-    expect(clientes[0].totalPedidos).toBe(1);
+    expect(clientes[0].totalPedidos).toBe(0);
+    expect(clientes[0].primerPedidoAt).toStrictEqual(clientes[0].createdAt);
+    expect(clientes[0].ultimoPedidoAt).toStrictEqual(clientes[0].createdAt);
     // ...y el pedido quedó registrado como FALLIDO, no se pierde.
     const orden = await s.h.prisma.order.findMany();
     expect(orden).toHaveLength(1);

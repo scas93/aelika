@@ -108,8 +108,9 @@ function InicioB2C() {
 
     // Top clientes reutiliza el directorio paginado existente (mismo
     // ordenarPor=totalPedidos que ya soporta /dashboard/clientes) — no hay
-    // un endpoint de agregación aparte para esto, ver CLAUDE.md.
-    fetchClientes(token, { ordenarPor: "totalPedidos", orden: "desc", limit: 5 })
+    // un endpoint de agregación aparte para esto, ver CLAUDE.md. conPedidos: el
+    // ranking excluye a los clientes con totalPedidos = 0 (el directorio no).
+    fetchClientes(token, { ordenarPor: "totalPedidos", orden: "desc", limit: 5, conPedidos: true })
       .then((res) => setTopClientes(res.data))
       .catch((err) => {
         setTopClientesError(err instanceof ApiError ? err.message : "No se pudo cargar el ranking");

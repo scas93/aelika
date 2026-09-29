@@ -1,0 +1,57 @@
+import { ClienteCanal, EstadoPago, Prisma } from '../../generated/prisma/client';
+
+/** Lo mínimo que necesita el recálculo: sirve el cliente Prisma raíz, una transacción o el de tenant (con cast). */
+export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'order' | 'pedidoB2b'>;
+
+/**
+ * Única fuente de verdad de `Cliente.totalPedidos` / `primerPedidoAt` / `ultimoPedidoAt`
+ * — se recalculan DESDE los pedidos del cliente, nunca con incrementos sueltos:
+ *
+ *  - Canal B2C: cuentan los `Order` con `estadoPago = PAGADO`. Un TARJETA
+ *    PENDIENTE/PROCESANDO/FALLIDO es un intento de pago, no un pedido, y un
+ *    REEMBOLSADO deja de contar (el cliente pierde esa visita).
+ *  - Canal B2B: cuentan los `PedidoB2b` con `cancelado = false`, sin importar
+ *    `estadoPago` (un pedido B2B es real desde que nace; en AL_FINAL se cobra
+ *    después de surtir).
+ *  - Fechas = `createdAt` del pedido (no la fecha de pago). Consecuencia
+ *    declarada: un pedido creado a las 23:58 y pagado a las 00:03 cuenta en el
+ *    día en que se creó.
+ *  - Sin pedidos contables: totalPedidos = 0 y ambas fechas = fecha de alta del
+ *    Cliente (`createdAt`) — las columnas son NOT NULL, y es lo mismo que ya
+ *    hace el alta por Lealtad.
+ *
+ * Idempotente: correrlo N veces deja el mismo resultado. Se llama al crear un
+ * pedido que ya cuenta, al confirmarse el pago (webhook), al reembolsar y al
+ * cancelar/marcar pagado un pedido B2B. Dos recálculos exactamente simultáneos
+ * podrían pisarse (lectura y escritura no son atómicas); el siguiente recálculo
+ * o el script de corrección de datos lo repara.
+ */
+export async function recalcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<void> {
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { canal: true, createdAt: true } });
+  if (!cliente) return;
+
+  const agregado =
+    cliente.canal === ClienteCanal.B2B
+      ? await db.pedidoB2b.aggregate({
+          where: { clienteId, cancelado: false },
+          _count: true,
+          _min: { createdAt: true },
+          _max: { createdAt: true },
+        })
+      : await db.order.aggregate({
+          where: { clienteId, estadoPago: EstadoPago.PAGADO },
+          _count: true,
+          _min: { createdAt: true },
+          _max: { createdAt: true },
+        });
+
+  const total = agregado._count;
+  await db.cliente.update({
+    where: { id: clienteId },
+    data: {
+      totalPedidos: total,
+      primerPedidoAt: total > 0 ? agregado._min.createdAt! : cliente.createdAt,
+      ultimoPedidoAt: total > 0 ? agregado._max.createdAt! : cliente.createdAt,
+    },
+  });
+}

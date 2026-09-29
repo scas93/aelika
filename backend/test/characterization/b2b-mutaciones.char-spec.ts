@@ -305,7 +305,8 @@ describe('B2B · mutaciones', () => {
   });
 
   describe('PATCH /pedidos-b2b/:id/cancelar', () => {
-    it('marca cancelado + canceladoAt, NO toca `estado`, no dispara reglas ni cambia al Cliente', async () => {
+    // A2 (cambia a propósito): cancelar un pedido B2B ya recalcula al Cliente — deja de contarlo.
+    it('marca cancelado + canceladoAt, NO toca `estado`, no dispara reglas y el Cliente deja de contarlo (totalPedidos 0)', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
       jest.setSystemTime(new Date('2026-09-30T18:30:00.000Z'));
       const res = await api().patch(`/pedidos-b2b/${p.id}/cancelar`);
@@ -315,8 +316,11 @@ describe('B2B · mutaciones', () => {
       await cederEventLoop();
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
       expect(s.h.fakes.queueAdd).not.toHaveBeenCalled();
-      // BUG CONGELADO: cancelar no decrementa Cliente.totalPedidos
-      expect((await s.h.prisma.cliente.findMany())[0].totalPedidos).toBe(1);
+      // A2: cancelar recalcula — sin pedidos contables, totalPedidos 0 y fechas = fecha de alta.
+      const cliente = (await s.h.prisma.cliente.findMany())[0];
+      expect(cliente.totalPedidos).toBe(0);
+      expect(cliente.primerPedidoAt).toStrictEqual(cliente.createdAt);
+      expect(cliente.ultimoPedidoAt).toStrictEqual(cliente.createdAt);
     });
 
     it('rechazos: ya cancelado, ya despachado, id inexistente', async () => {

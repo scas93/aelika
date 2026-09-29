@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Cliente, ClienteCanal, Prisma } from '../../generated/prisma/client';
+import { Cliente, ClienteCanal, EstadoPago, Prisma } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
@@ -15,7 +15,7 @@ interface SincronizarClienteInput {
 }
 
 /**
- * Mantiene la entidad Cliente sincronizada cada vez que se crea un pedido
+ * Resuelve (crea o actualiza nombre/correo de) la entidad Cliente cada vez que se crea un pedido
  * (Order o PedidoB2b) — ver los 3 call sites en PublicService.createOrder,
  * PublicPedidosB2bService.createPedido y PedidosB2bService.create. Siempre
  * se llama dentro de la misma transacción que crea el pedido (recibe `tx`,
@@ -48,7 +48,7 @@ export class ClientesService {
   async findAll(query: ListClientesQueryDto) {
     const q = query.q?.trim();
     const digits = q ? q.replace(/\D/g, '') : '';
-    const where: Prisma.ClienteWhereInput = q
+    const busqueda: Prisma.ClienteWhereInput = q
       ? {
           OR: [
             { nombre: { contains: q, mode: 'insensitive' } },
@@ -56,6 +56,9 @@ export class ClientesService {
           ],
         }
       : {};
+    // conPedidos: solo clientes con al menos un pedido contable (Top clientes). Sin el
+    // parámetro el directorio muestra también a los de totalPedidos = 0.
+    const where: Prisma.ClienteWhereInput = query.conPedidos ? { AND: [busqueda, { totalPedidos: { gt: 0 } }] } : busqueda;
 
     const skip = (query.page - 1) * query.limit;
 
@@ -100,8 +103,9 @@ export class ClientesService {
       return { fecha: desde.toISOString().slice(0, 10), desde, hasta };
     });
 
+    // Solo pedidos PAGADO: un intento de pago no cuenta como cliente del día.
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy } },
+      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
       select: { createdAt: true, clienteId: true },
     });
 
@@ -149,7 +153,9 @@ export class ClientesService {
     const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000);
 
     const clientesActivos = await this.tenantPrisma.client.cliente.count({
-      where: { ultimoPedidoAt: { gte: desde } },
+      // totalPedidos > 0: un cliente sin pedidos contables (solo intentos de pago, o
+      // dado de alta en Lealtad) tiene ultimoPedidoAt = fecha de alta, no un pedido.
+      where: { ultimoPedidoAt: { gte: desde }, totalPedidos: { gt: 0 } },
     });
 
     return { clientesActivos };
@@ -164,14 +170,10 @@ export class ClientesService {
    * pisarse solo porque alguien lo dio de alta en Lealtad).
    *
    * `totalPedidos: 0` y `primerPedidoAt`/`ultimoPedidoAt` = fecha de alta
-   * son placeholders deliberados, no "un pedido fantasma": si este mismo
-   * Cliente hace después un pedido real, `sincronizarDesdePedido` lo
-   * encontrará por el mismo unique `[tenantId, canal, telefono]` e
-   * incrementará `totalPedidos` a 1 correctamente — pero `primerPedidoAt`
-   * seguirá reflejando la fecha de alta en Lealtad, no la del primer
-   * pedido real. Es una desviación conocida y aceptada en el dashboard
-   * "nuevos vs. recurrentes" (ClientesService.summaryDaily), acotada a
-   * clientes que se dan de alta en Lealtad antes de su primer pedido.
+   * son el mismo estado que tiene cualquier Cliente sin pedidos contables
+   * (ver cliente-contadores.ts). Cuando este Cliente hace su primer pedido
+   * contable, `recalcularContadoresCliente` lo recalcula desde sus pedidos:
+   * totalPedidos 1 y primerPedidoAt/ultimoPedidoAt = fecha de ese pedido.
    */
   async buscarOCrearParaLealtad(nombre: string, telefonoCrudo: string): Promise<Cliente> {
     const telefono = normalizarTelefono(telefonoCrudo);
@@ -284,9 +286,12 @@ export class ClientesService {
         telefono,
         nombre: input.nombre,
         correo: input.correo ?? null,
+        // Contadores en 0 y fechas = fecha de alta: el pedido que se crea justo
+        // después NO cuenta todavía (puede ser un intento de pago TARJETA). Si
+        // cuenta, el caller llama recalcularContadoresCliente en la misma tx.
         primerPedidoAt: input.fechaPedido,
         ultimoPedidoAt: input.fechaPedido,
-        totalPedidos: 1,
+        totalPedidos: 0,
       },
       update: {
         nombre: input.nombre,
@@ -294,8 +299,7 @@ export class ClientesService {
         // lo capturó (Order.clienteCorreo es opcional) no debe borrar un
         // correo ya conocido de un pedido anterior del mismo cliente.
         ...(input.correo ? { correo: input.correo } : {}),
-        ultimoPedidoAt: input.fechaPedido,
-        totalPedidos: { increment: 1 },
+        // Contadores intactos a propósito (ver cliente-contadores.ts).
       },
     });
   }

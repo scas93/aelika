@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { round2 } from '../common/money';
 import { resolverFacturacion } from '../common/facturacion';
 import { ClienteCanal } from '../../generated/prisma/client';
+import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
 import {
   estaEnVentana,
@@ -262,6 +263,9 @@ export class PublicPedidosB2bService {
           ...factura,
         },
       });
+
+      // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
+      await recalcularContadoresCliente(tx as unknown as ClienteContadoresDb, cliente.id);
 
       await crearItems(tx, tenant.id, pedido.id, resueltos);
 

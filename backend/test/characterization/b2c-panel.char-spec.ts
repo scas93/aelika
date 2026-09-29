@@ -253,13 +253,14 @@ describe('B2C · panel', () => {
   });
 
   describe('resúmenes (valores exactos con reloj fijo)', () => {
-    it('GET /orders/summary: BUG CONGELADO — el pedido TARJETA sin pagar cuenta como ingreso', async () => {
+    // A2 (cambia a propósito): el intento de pago TARJETA PENDIENTE ya no cuenta como pedido ni como ingreso.
+    it('GET /orders/summary: solo PAGADO — el pedido TARJETA sin pagar NO cuenta como ingreso', async () => {
       const res = await api().get(`/orders/summary?desde=${HOY.desde}&hasta=${HOY.hasta}`).expect(200);
-      // hoy: o3 (90) + o4 (45, TARJETA PENDIENTE de pago) + o5 (30.5) = 165.5 en 3 pedidos
+      // hoy: o3 (90) + o5 (30.5) = 120.5 en 2 pedidos; o4 (45, TARJETA PENDIENTE) queda fuera
       expect(res.body).toStrictEqual({
-        pedidosHoy: 3,
-        ingresosHoy: '165.50',
-        ticketPromedioHoy: '55.17',
+        pedidosHoy: 2,
+        ingresosHoy: '120.50',
+        ticketPromedioHoy: '60.25',
         promocionesActivas: 0,
       });
     });
@@ -269,7 +270,8 @@ describe('B2C · panel', () => {
       expect(res.body).toStrictEqual({ pedidosHoy: 0, ingresosHoy: '0.00', ticketPromedioHoy: '0.00', promocionesActivas: 0 });
     });
 
-    it('GET /orders/summary/daily: 10 días terminando hoy', async () => {
+    // A2 (cambia a propósito): el conteo diario excluye el intento de pago TARJETA (o4).
+    it('GET /orders/summary/daily: 10 días terminando hoy (solo pedidos PAGADO)', async () => {
       const res = await api().get(`/orders/summary/daily?desde=${HOY.desde}&hasta=${HOY.hasta}`).expect(200);
       expect(res.body).toStrictEqual([
         { fecha: '2026-09-21', pedidos: 0 },
@@ -281,14 +283,15 @@ describe('B2C · panel', () => {
         { fecha: '2026-09-27', pedidos: 0 },
         { fecha: '2026-09-28', pedidos: 1 },
         { fecha: '2026-09-29', pedidos: 1 },
-        { fecha: '2026-09-30', pedidos: 3 },
+        { fecha: '2026-09-30', pedidos: 2 },
       ]);
     });
 
-    it('GET /orders/summary/estatus: siempre los 4 estados, incluso en 0', async () => {
+    // A2 (cambia a propósito): el conteo por estatus excluye el intento de pago TARJETA (o4, PENDIENTE_CONFIRMACION).
+    it('GET /orders/summary/estatus: siempre los 4 estados, incluso en 0 (solo PAGADO)', async () => {
       const hoy = await api().get(`/orders/summary/estatus?desde=${HOY.desde}&hasta=${HOY.hasta}`).expect(200);
       expect(hoy.body).toStrictEqual([
-        { estadoPedido: 'PENDIENTE_CONFIRMACION', conteo: 2 },
+        { estadoPedido: 'PENDIENTE_CONFIRMACION', conteo: 1 },
         { estadoPedido: 'CONFIRMADO_SURTIENDO', conteo: 1 },
         { estadoPedido: 'LISTO_ENTREGA', conteo: 0 },
         { estadoPedido: 'DESPACHADO', conteo: 0 },
@@ -297,7 +300,7 @@ describe('B2C · panel', () => {
         .get('/orders/summary/estatus?desde=2026-09-28T06:00:00.000Z&hasta=2026-10-01T05:59:59.999Z')
         .expect(200);
       expect(tres.body).toStrictEqual([
-        { estadoPedido: 'PENDIENTE_CONFIRMACION', conteo: 2 },
+        { estadoPedido: 'PENDIENTE_CONFIRMACION', conteo: 1 },
         { estadoPedido: 'CONFIRMADO_SURTIENDO', conteo: 2 },
         { estadoPedido: 'LISTO_ENTREGA', conteo: 0 },
         { estadoPedido: 'DESPACHADO', conteo: 1 },
@@ -315,14 +318,15 @@ describe('B2C · panel', () => {
   describe('clientes', () => {
     const clientes = {
       diego: clienteEsperado({ telefono: '5566667777', nombre: 'Diego Prueba' }),
-      carla: clienteEsperado({ telefono: '5544445555', nombre: 'Carla Prueba', correo: 'carla@test.com' }),
+      // A2: Carla solo tiene un intento de pago (TARJETA PENDIENTE) → totalPedidos 0 (sigue en el directorio).
+      carla: clienteEsperado({ telefono: '5544445555', nombre: 'Carla Prueba', correo: 'carla@test.com', totalPedidos: 0 }),
       ana: clienteEsperado({ telefono: '5511112222', nombre: 'Ana Prueba', totalPedidos: 2 }),
       beto: clienteEsperado({ telefono: '5522223333', nombre: 'Beto Prueba' }),
     };
     const pagina = (body: any) => ({ total: body.total, page: body.page, limit: body.limit, totalPages: body.totalPages });
     const norm = (v: unknown) => normalizar(v, { [s.base.tenant.id]: 'tenant' });
 
-    it('GET /clientes: forma paginada exacta, orden por último pedido desc', async () => {
+    it('GET /clientes: forma paginada exacta, orden por último pedido desc (incluye al cliente con 0 pedidos)', async () => {
       const res = await api().get('/clientes').expect(200);
       expect(Object.keys(res.body).sort()).toEqual(['data', 'limit', 'page', 'total', 'totalPages']);
       expect(pagina(res.body)).toStrictEqual({ total: 4, page: 1, limit: 25, totalPages: 1 });
@@ -340,19 +344,34 @@ describe('B2C · panel', () => {
       expect(norm(q2.body.data)).toStrictEqual([clientes.carla]);
     });
 
-    it('GET /clientes/summary/daily: nuevos vs. recurrentes por día (clientes distintos, no pedidos)', async () => {
+    it('GET /clientes?conPedidos=true: excluye a los de totalPedidos 0 (Top clientes); el directorio sin el parámetro los conserva', async () => {
+      const top = await api().get('/clientes?ordenarPor=totalPedidos&orden=desc&conPedidos=true').expect(200);
+      expect(pagina(top.body)).toStrictEqual({ total: 3, page: 1, limit: 25, totalPages: 1 });
+      // Diego y Beto empatan en 1 pedido: el orden entre ellos no está definido, se compara sin orden.
+      expect(top.body.data[0].nombre).toBe('Ana Prueba');
+      expect(top.body.data.map((c: any) => c.nombre).sort()).toStrictEqual(['Ana Prueba', 'Beto Prueba', 'Diego Prueba']);
+      const busq = await api().get('/clientes?q=carla&conPedidos=true').expect(200);
+      expect(pagina(busq.body)).toStrictEqual({ total: 0, page: 1, limit: 25, totalPages: 0 });
+      const sin = await api().get('/clientes?conPedidos=false').expect(200);
+      expect(sin.body.total).toBe(4);
+      expectError(await api().get('/clientes?conPedidos=quizas'), 400, ['conPedidos must be a boolean value']);
+    });
+
+    // A2 (cambia a propósito): Carla solo tiene un intento de pago — ya no cuenta como cliente nuevo del día.
+    it('GET /clientes/summary/daily: nuevos vs. recurrentes por día (solo pedidos PAGADO)', async () => {
       const res = await api().get(`/clientes/summary/daily?desde=${HOY.desde}&hasta=${HOY.hasta}`).expect(200);
       expect(res.body).toStrictEqual([
         ...['21', '22', '23', '24', '25', '26', '27'].map((d) => ({ fecha: `2026-09-${d}`, nuevos: 0, recurrentes: 0 })),
         { fecha: '2026-09-28', nuevos: 1, recurrentes: 0 },
         { fecha: '2026-09-29', nuevos: 1, recurrentes: 0 },
-        { fecha: '2026-09-30', nuevos: 2, recurrentes: 1 }, // Carla, Diego nuevos; Ana recurrente
+        { fecha: '2026-09-30', nuevos: 1, recurrentes: 1 }, // Diego nuevo; Ana recurrente (Carla, solo intento de pago, no cuenta)
       ]);
     });
 
-    it('GET /clientes/activos: clientes con pedido en los últimos 7 días', async () => {
+    // A2 (cambia a propósito): activos exige totalPedidos > 0 — Carla (0 pedidos contables) sale.
+    it('GET /clientes/activos: clientes con pedido contable en los últimos 7 días', async () => {
       const res = await api().get('/clientes/activos').expect(200);
-      expect(res.body).toStrictEqual({ clientesActivos: 4 });
+      expect(res.body).toStrictEqual({ clientesActivos: 3 });
     });
 
     it('los 3 roles pueden leer /clientes; sin token 401 exacto', async () => {

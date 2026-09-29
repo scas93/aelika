@@ -117,7 +117,8 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
     });
   });
 
-  it('su primer pedido B2C: totalPedidos pasa a 1, ultimoPedidoAt = fecha del pedido, PERO primerPedidoAt sigue siendo la fecha de alta (desviación conocida) y el nombre lo pisa el pedido', async () => {
+  // A2 (cambia a propósito): primerPedidoAt ya no se queda en la fecha de alta de Lealtad; se recalcula desde el primer pedido pagado.
+  it('su primer pedido B2C: totalPedidos pasa a 1, primer y último pedido = fecha del pedido (ya no la de alta) y el nombre lo pisa el pedido', async () => {
     await alta();
     jest.setSystemTime(new Date('2026-09-30T18:00:00.000Z'));
     const res = await postCheckout(
@@ -136,7 +137,7 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
       telefono: '5544445555',
       nombre: 'Alberto Pedido',
       correo: 'beto@test.com',
-      primerPedidoAt: '2026-09-30T16:00:00.000Z', // BUG CONGELADO: fecha de ALTA en Lealtad, no del primer pedido real
+      primerPedidoAt: '2026-09-30T18:00:00.000Z', // A2: fecha del primer pedido pagado (antes: la de alta en Lealtad)
       ultimoPedidoAt: '2026-09-30T18:00:00.000Z',
       totalPedidos: 1,
       createdAt: '2026-09-30T16:00:00.000Z',

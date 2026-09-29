@@ -7,6 +7,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
 import { PublicService } from '../public/public.service';
 import { EstadoPago, NotificacionEvento } from '../../generated/prisma/client';
 
@@ -144,11 +145,33 @@ export class StripeWebhookController {
       );
     }
 
+    // PAGADO: el pedido pasa a contar en los contadores del Cliente. Best-effort, igual
+    // que el Payment de arriba — nunca debe tumbar el 200 que Stripe espera. FALLIDO no
+    // cambia ningún conteo (el pedido nunca contó).
+    if (estadoPago === EstadoPago.PAGADO) {
+      await this.recalcularCliente(paymentIntent);
+    }
+
     // FALLIDO: de cara al negocio este pedido nunca "existió" — no se
     // dispara ninguna notificación (ni PEDIDO_RECIBIDO ni PAGO_CONFIRMADO).
     if (estadoPago === EstadoPago.PAGADO) {
       await this.encolarPagoConfirmado(paymentIntent);
       await this.encolarPedidoRecibido(paymentIntent);
+    }
+  }
+
+  private async recalcularCliente(paymentIntent: Stripe.PaymentIntent) {
+    try {
+      const order = await this.prisma.order.findFirst({
+        where: { stripePaymentIntentId: paymentIntent.id },
+        select: { clienteId: true },
+      });
+      if (!order) return;
+      await recalcularContadoresCliente(this.prisma, order.clienteId);
+    } catch (error) {
+      this.logger.error(
+        `No se pudo recalcular el Cliente para PaymentIntent ${paymentIntent.id}: ${(error as Error).message}`,
+      );
     }
   }
 

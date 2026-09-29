@@ -1796,6 +1796,8 @@ export interface ListClientesFilter {
   q?: string;
   ordenarPor?: ClienteOrdenarPor;
   orden?: "asc" | "desc";
+  // Solo clientes con totalPedidos > 0 (Top clientes); sin esto el directorio incluye a los de 0.
+  conPedidos?: boolean;
   page?: number;
   limit?: number;
 }
@@ -1805,6 +1807,7 @@ export function fetchClientes(token: string, filter?: ListClientesFilter) {
   if (filter?.q) params.set("q", filter.q);
   if (filter?.ordenarPor) params.set("ordenarPor", filter.ordenarPor);
   if (filter?.orden) params.set("orden", filter.orden);
+  if (filter?.conPedidos) params.set("conPedidos", "true");
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
   const query = params.toString();

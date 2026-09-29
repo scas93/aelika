@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import Stripe from 'stripe';
@@ -22,6 +23,7 @@ import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
 import { ExportOrdersHistoricoQueryDto } from './dto/export-orders-historico-query.dto';
 import { toCsv } from '../common/csv';
+import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
 import {
   ESTADOS_PANEL_ACTIVO,
   ESTADOS_POR_GRUPO,
@@ -69,6 +71,8 @@ const EVENTO_TITULO: Record<NotificacionEvento, { titulo: string; subtitulo?: st
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly stripeService: StripeService,
@@ -96,8 +100,11 @@ export class OrdersService {
   }
 
   async summary(query: SummaryQueryDto) {
+    // Solo PAGADO: los intentos de pago TARJETA y los REEMBOLSADO no cuentan
+    // como pedidos ni como ingreso.
     const where = {
       createdAt: { gte: new Date(query.desde), lte: new Date(query.hasta) },
+      estadoPago: EstadoPago.PAGADO,
     };
 
     const [aggregate, promocionesActivas] = await Promise.all([
@@ -141,7 +148,7 @@ export class OrdersService {
     // (tenantId, createdAt) composite index) — grouped by day in memory
     // instead of $queryRaw, per the volume confirmed in Fase 9a/10a.
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy } },
+      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
       select: { createdAt: true },
     });
 
@@ -164,6 +171,7 @@ export class OrdersService {
   async summaryPorEstatus(query: SummaryQueryDto) {
     const where = {
       createdAt: { gte: new Date(query.desde), lte: new Date(query.hasta) },
+      estadoPago: EstadoPago.PAGADO,
     };
 
     const grupos = await this.tenantPrisma.client.order.groupBy({
@@ -530,6 +538,17 @@ export class OrdersService {
         data: { estadoPago: EstadoPago.REEMBOLSADO, stripeRefundId: refund.id },
         include: { items: true, detalleB2c: true },
       });
+      // El cliente pierde esa visita en totalPedidos (REEMBOLSADO ya no cuenta).
+      // Best-effort: el reembolso en Stripe y el update de arriba ya ocurrieron — un fallo
+      // aquí no debe convertirse en un 500 "no se pudo procesar" (el script de A3 lo repara).
+      try {
+        await recalcularContadoresCliente(
+          this.tenantPrisma.client as unknown as ClienteContadoresDb,
+          reembolsada.clienteId,
+        );
+      } catch (recalcError) {
+        this.logger.error(`No se pudo recalcular el Cliente tras reembolsar el pedido ${id}: ${(recalcError as Error).message}`);
+      }
       return aRespuestaOrder(reembolsada);
     } catch (error) {
       // balance_insufficient: the connected account's Stripe balance can't

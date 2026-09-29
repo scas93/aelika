@@ -1,5 +1,6 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -41,4 +42,11 @@ export class ListClientesQueryDto {
   @Min(1)
   @Max(100)
   limit: number = 25;
+
+  // Solo clientes con totalPedidos > 0 (Top clientes del Dashboard). Opcional:
+  // sin él, el directorio conserva a los clientes con 0 pedidos.
+  @IsOptional()
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  conPedidos?: boolean;
 }

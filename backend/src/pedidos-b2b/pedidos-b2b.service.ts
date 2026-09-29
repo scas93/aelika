@@ -12,6 +12,7 @@ import {
   PedidoB2bEstado,
   Prisma,
 } from '../../generated/prisma/client';
+import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
 import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
 import { PedidoContexto } from '../notificaciones-reglas/plantilla-variable.type';
@@ -484,6 +485,9 @@ export class PedidosB2bService {
         } as any,
       });
 
+      // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
+      await recalcularContadoresCliente(tx as unknown as ClienteContadoresDb, cliente.id);
+
       await crearItems(tx, tenantId, pedido.id, resueltos);
 
       return tx.pedidoB2b.findUniqueOrThrow({
@@ -652,6 +656,10 @@ export class PedidosB2bService {
       });
     }
 
+    // No cambia el conteo (B2B cuenta por no cancelado, no por estadoPago); se recalcula
+    // por consistencia con el resto de los ganchos — es idempotente.
+    await recalcularContadoresCliente(this.tenantPrisma.client as unknown as ClienteContadoresDb, actualizado.clienteId);
+
     return actualizado;
   }
 
@@ -675,11 +683,14 @@ export class PedidosB2bService {
       throw new ConflictException('No puedes cancelar un pedido ya despachado');
     }
 
-    return this.tenantPrisma.client.pedidoB2b.update({
+    const cancelado = await this.tenantPrisma.client.pedidoB2b.update({
       where: { id },
       data: { cancelado: true, canceladoAt: new Date() },
       include: { items: { include: { distribucion: true } } },
     });
+    // Un pedido cancelado deja de contar en los contadores del Cliente.
+    await recalcularContadoresCliente(this.tenantPrisma.client as unknown as ClienteContadoresDb, cancelado.clienteId);
+    return cancelado;
   }
 
   private assertActivo(pedido: { cancelado: boolean }) {

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
+import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
@@ -476,6 +477,13 @@ export class PublicService {
           detalleB2c: true,
         },
       });
+
+      // EFECTIVO/TRANSFERENCIA nacen PAGADO: este pedido cuenta ya. Un TARJETA nace
+      // PENDIENTE y solo cuenta cuando el webhook lo pasa a PAGADO (ver
+      // StripeWebhookController) — el Cliente ya existe, con sus contadores intactos.
+      if (nuevoOrder.estadoPago === EstadoPago.PAGADO) {
+        await recalcularContadoresCliente(tx, cliente.id);
+      }
 
       return nuevoOrder;
     });
