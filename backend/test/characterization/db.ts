@@ -33,7 +33,14 @@ export interface BaseSeed {
  */
 export async function seedBase(
   prisma: PrismaService,
-  opts: { slug?: string; horario?: unknown; facturacionModo?: 'OBLIGATORIO' | 'OPCIONAL' | 'DESACTIVADO' } = {},
+  opts: {
+    slug?: string;
+    horario?: unknown;
+    facturacionModo?: 'OBLIGATORIO' | 'OPCIONAL' | 'DESACTIVADO';
+    /** RETAIL_B2B además configura el módulo B2B con un mínimo BAJO (10 piezas, no el default 100). */
+    tipoStorefront?: 'RETAIL_B2C' | 'RETAIL_B2B';
+    b2b?: ConfigB2b;
+  } = {},
 ): Promise<BaseSeed> {
   const slug = opts.slug ?? 'cafe-test';
   const tenant = await prisma.tenant.create({
@@ -43,6 +50,8 @@ export async function seedBase(
       botApiKey: `key-${slug}`,
       horarioAtencion: (opts.horario ?? horarioAbierto()) as Prisma.InputJsonValue,
       facturacionModo: opts.facturacionModo ?? 'DESACTIVADO',
+      tipoStorefront: opts.tipoStorefront ?? 'RETAIL_B2C',
+      ...(opts.tipoStorefront === 'RETAIL_B2B' || opts.b2b ? datosConfigB2b({ modoCobro: 'AL_FINAL', minimoPiezas: 10, ...opts.b2b }) : {}),
     },
   });
   const mkUser = (rol: 'DUENO' | 'OPERADOR') =>
@@ -143,5 +152,66 @@ export async function conectarStripe(prisma: PrismaService, tenantId: string, ch
   await prisma.tenant.update({
     where: { id: tenantId },
     data: { stripeAccountId: `acct_char_${tenantId.slice(0, 8)}`, stripeChargesEnabled: chargesEnabled },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Módulo B2B (PedidoB2b). Configuración del tenant y catálogo de códigos.
+// ---------------------------------------------------------------------------
+
+export interface ConfigB2b {
+  modoCobro?: 'AL_INICIO' | 'AL_FINAL';
+  /** Mínimo de piezas para confirmar. El default de la BD es 100: aquí los tests lo fijan explícito. */
+  minimoPiezas?: number;
+  /** null = sin ventana de recepción (siempre abierto). */
+  ventana?: {
+    aperturaDia: string;
+    aperturaHora: string;
+    cierreDia: string;
+    cierreHora: string;
+  } | null;
+}
+
+function datosConfigB2b(c: ConfigB2b): Prisma.TenantUncheckedUpdateInput {
+  return {
+    ...(c.modoCobro ? { pedidoB2bModoCobro: c.modoCobro } : {}),
+    ...(c.minimoPiezas !== undefined ? { pedidoB2bMinimoPiezas: c.minimoPiezas } : {}),
+    ...(c.ventana === null
+      ? {
+          pedidoB2bVentanaAperturaDia: null,
+          pedidoB2bVentanaAperturaHora: null,
+          pedidoB2bVentanaCierreDia: null,
+          pedidoB2bVentanaCierreHora: null,
+        }
+      : c.ventana
+        ? {
+            pedidoB2bVentanaAperturaDia: c.ventana.aperturaDia as any,
+            pedidoB2bVentanaAperturaHora: c.ventana.aperturaHora,
+            pedidoB2bVentanaCierreDia: c.ventana.cierreDia as any,
+            pedidoB2bVentanaCierreHora: c.ventana.cierreHora,
+          }
+        : {}),
+  };
+}
+
+/** Cambia la configuración B2B de un tenant a media prueba (p. ej. pasar a AL_INICIO). */
+export async function configurarB2b(prisma: PrismaService, tenantId: string, c: ConfigB2b) {
+  await prisma.tenant.update({ where: { id: tenantId }, data: datosConfigB2b(c) as any });
+}
+
+export async function seedCodigoDescuento(
+  prisma: PrismaService,
+  tenantId: string,
+  opts: { codigo?: string; porcentaje?: string; activo?: boolean; usosMaximos?: number | null; fechaLimite?: string | null } = {},
+) {
+  return prisma.pedidoB2bCodigoDescuento.create({
+    data: {
+      tenantId,
+      codigo: opts.codigo ?? 'PROMO10',
+      descuentoPorcentaje: opts.porcentaje ?? '10.00',
+      activo: opts.activo ?? true,
+      usosMaximos: opts.usosMaximos ?? null,
+      fechaLimite: opts.fechaLimite ? new Date(`${opts.fechaLimite}T00:00:00.000Z`) : null,
+    },
   });
 }
