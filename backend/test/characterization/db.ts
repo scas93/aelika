@@ -72,3 +72,76 @@ export async function seedBase(
     productoB: { id: productoB.id, nombre: productoB.nombre, precio: '30.50' },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Datos base adicionales (catálogo/config). También inserción directa: no son
+// pedidos. Ajustar aquí si el refactor cambia la forma de estas tablas.
+// ---------------------------------------------------------------------------
+
+export async function seedPuntoEnvio(
+  prisma: PrismaService,
+  tenantId: string,
+  opts: { nombre?: string; direccion?: string; pedidoMinimo?: string | null; activo?: boolean } = {},
+) {
+  return prisma.puntoEnvio.create({
+    data: {
+      tenantId,
+      nombre: opts.nombre ?? 'Zona Centro',
+      direccion: opts.direccion ?? 'Av. Reforma 100, Centro',
+      pedidoMinimo: opts.pedidoMinimo === undefined ? null : opts.pedidoMinimo,
+      activo: opts.activo ?? true,
+    },
+  });
+}
+
+/** Grupo de modificadores con opciones, asignado a un producto. */
+export async function seedModificadores(
+  prisma: PrismaService,
+  tenantId: string,
+  productId: string,
+  opts: {
+    nombre?: string;
+    tipoSeleccion?: 'UNICA' | 'MULTIPLE';
+    obligatorio?: boolean;
+    orden?: number;
+    opciones: { nombre: string; precioAdicional: string }[];
+  },
+) {
+  const grupo = await prisma.modifierGroup.create({
+    data: {
+      tenantId,
+      nombre: opts.nombre ?? 'Tamaño',
+      tipoSeleccion: opts.tipoSeleccion ?? 'UNICA',
+      obligatorio: opts.obligatorio ?? false,
+    },
+  });
+  const opciones = [];
+  for (const o of opts.opciones) {
+    opciones.push(
+      await prisma.modifierOption.create({
+        data: { tenantId, modifierGroupId: grupo.id, nombre: o.nombre, precioAdicional: o.precioAdicional },
+      }),
+    );
+  }
+  await prisma.productModifierGroup.create({
+    data: { productId, modifierGroupId: grupo.id, orden: opts.orden ?? 0 },
+  });
+  return { grupo, opciones };
+}
+
+export async function seedPromocion(
+  prisma: PrismaService,
+  tenantId: string,
+  tipo: 'COMBO' | 'DESCUENTO_PRODUCTO',
+  config: Prisma.InputJsonValue,
+) {
+  return prisma.promotion.create({ data: { tenantId, tipo, config } });
+}
+
+/** Marca el tenant como con Stripe Connect activo (habilita TARJETA). */
+export async function conectarStripe(prisma: PrismaService, tenantId: string, chargesEnabled = true) {
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { stripeAccountId: `acct_char_${tenantId.slice(0, 8)}`, stripeChargesEnabled: chargesEnabled },
+  });
+}

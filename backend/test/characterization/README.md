@@ -33,6 +33,22 @@ Es independiente de `npm test` (unitario, `src/**/*.spec.ts`).
 | Reglas EVENTO_PEDIDO / Botpress | `dispararSeguro` mock; el barrido `@Cron` se anula |
 | Redis (token de Telegram) | provider sustituido |
 
+## Cero red saliente (`network-guard.ts` + `after-env.ts`)
+
+Todo socket (http, https, tls, fetch, Stripe, Resend, Telegram, Botpress)
+pasa por `net.Socket.prototype.connect`. Cualquier host que no sea local se
+bloquea y se registra; `after-env.ts` hace **fallar el test** que lo provocó
+aunque el código bajo prueba haya tragado el error. Postgres y el servidor
+efímero de supertest (locales) sí se permiten. Auto-verificado en
+`network-guard.char-spec.ts`.
+
+## Snapshots
+
+Los textos largos (recibo de Telegram, HTML del correo, CSV) se congelan con
+`toMatchSnapshot()` en `__snapshots__/`. Si el refactor cambia una salida, el
+test falla: NO correr `jest -u` para "arreglarlo"; el objetivo es que el
+texto no cambie.
+
 ## Reloj
 
 Solo se falsea `Date` (`freezeClock`); timers reales. Nota: Prisma genera

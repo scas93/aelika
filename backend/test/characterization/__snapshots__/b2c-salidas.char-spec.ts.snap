@@ -1,0 +1,299 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`B2C · salidas HTML del correo (avanzar: PEDIDO_CONFIRMADO / PEDIDO_EN_CAMINO / PEDIDO_ENTREGADO) con modificadores, descuento y correo del cliente: HTML exacto de las 3 transiciones 1`] = `
+[
+  {
+    "evento": "PEDIDO_CONFIRMADO",
+    "html": "
+<div style="max-width:520px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;background:#ffffff;">
+  <div style="background:#111111;padding:20px 24px;">
+    <span style="color:#ffffff;font-size:16px;font-weight:700;">Negocio cafe-test</span>
+  </div>
+
+  <div style="padding:24px;">
+    <p style="font-size:20px;font-weight:700;color:#111111;margin:0 0 4px;">🎉 ¡Tu pedido fue confirmado!</p>
+    <p style="font-size:14px;color:#666666;margin:0 0 16px;">Ya lo estamos preparando</p>
+
+    <p style="font-size:13px;color:#666666;margin:16px 0;">
+      Pedido #1 · Ana Prueba · +52 55 1111 2222
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eeeeee;">
+      
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Café americano
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $150.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Tamaño: Grande</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Concha
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $61.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Sin modificadores</div>
+            </td>
+          </tr>
+      <tr>
+             <td style="padding:6px 0;font-size:14px;color:#c0392b;text-align:right;" colspan="2">
+               Descuento: -$6.10
+             </td>
+           </tr>
+      <tr>
+        <td style="padding:14px 0 4px;font-size:16px;font-weight:700;color:#111111;text-align:right;" colspan="2">
+          TOTAL: $204.90 MXN
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#f5f5f5;border-radius:6px;padding:10px 14px;margin-top:20px;font-size:13px;color:#555555;">
+      Recibido: 30/09/2026 10:00
+    </div>
+  </div>
+
+  <div style="padding:16px 24px;border-top:1px solid #eeeeee;">
+    <span style="font-size:11px;color:#aaaaaa;">Enviado con Aelika</span>
+  </div>
+</div>",
+  },
+  {
+    "evento": "PEDIDO_EN_CAMINO",
+    "html": "
+<div style="max-width:520px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;background:#ffffff;">
+  <div style="background:#111111;padding:20px 24px;">
+    <span style="color:#ffffff;font-size:16px;font-weight:700;">Negocio cafe-test</span>
+  </div>
+
+  <div style="padding:24px;">
+    <p style="font-size:20px;font-weight:700;color:#111111;margin:0 0 4px;">🚚 Tu pedido va en camino</p>
+    
+
+    <p style="font-size:13px;color:#666666;margin:16px 0;">
+      Pedido #1 · Ana Prueba · +52 55 1111 2222
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eeeeee;">
+      
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Café americano
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $150.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Tamaño: Grande</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Concha
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $61.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Sin modificadores</div>
+            </td>
+          </tr>
+      <tr>
+             <td style="padding:6px 0;font-size:14px;color:#c0392b;text-align:right;" colspan="2">
+               Descuento: -$6.10
+             </td>
+           </tr>
+      <tr>
+        <td style="padding:14px 0 4px;font-size:16px;font-weight:700;color:#111111;text-align:right;" colspan="2">
+          TOTAL: $204.90 MXN
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#f5f5f5;border-radius:6px;padding:10px 14px;margin-top:20px;font-size:13px;color:#555555;">
+      Recibido: 30/09/2026 10:00
+    </div>
+  </div>
+
+  <div style="padding:16px 24px;border-top:1px solid #eeeeee;">
+    <span style="font-size:11px;color:#aaaaaa;">Enviado con Aelika</span>
+  </div>
+</div>",
+  },
+  {
+    "evento": "PEDIDO_ENTREGADO",
+    "html": "
+<div style="max-width:520px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;background:#ffffff;">
+  <div style="background:#111111;padding:20px 24px;">
+    <span style="color:#ffffff;font-size:16px;font-weight:700;">Negocio cafe-test</span>
+  </div>
+
+  <div style="padding:24px;">
+    <p style="font-size:20px;font-weight:700;color:#111111;margin:0 0 4px;">✅ Tu pedido fue entregado</p>
+    
+
+    <p style="font-size:13px;color:#666666;margin:16px 0;">
+      Pedido #1 · Ana Prueba · +52 55 1111 2222
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eeeeee;">
+      
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Café americano
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $150.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Tamaño: Grande</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid #eeeeee;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#111111;font-weight:600;">
+                    2x Concha
+                  </td>
+                  <td style="font-size:14px;color:#111111;font-weight:600;text-align:right;white-space:nowrap;">
+                    $61.00
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px;color:#888888;margin-top:2px;">Sin modificadores</div>
+            </td>
+          </tr>
+      <tr>
+             <td style="padding:6px 0;font-size:14px;color:#c0392b;text-align:right;" colspan="2">
+               Descuento: -$6.10
+             </td>
+           </tr>
+      <tr>
+        <td style="padding:14px 0 4px;font-size:16px;font-weight:700;color:#111111;text-align:right;" colspan="2">
+          TOTAL: $204.90 MXN
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#f5f5f5;border-radius:6px;padding:10px 14px;margin-top:20px;font-size:13px;color:#555555;">
+      Recibido: 30/09/2026 10:00
+    </div>
+  </div>
+
+  <div style="padding:16px 24px;border-top:1px solid #eeeeee;">
+    <span style="font-size:11px;color:#aaaaaa;">Enviado con Aelika</span>
+  </div>
+</div>",
+  },
+]
+`;
+
+exports[`B2C · salidas recibo de Telegram ("Pedido recibido") DOMICILIO: el recibo no menciona entrega ni dirección (congelado tal cual) 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+
+1x Café americano (Bebidas) - $45.00 c/u = $45.00
+
+------------------------------
+TOTAL: $45.00 MXN
+
+Recibido: 30/09/2026 10:00"
+`;
+
+exports[`B2C · salidas recibo de Telegram ("Pedido recibido") EFECTIVO, lo antes posible: sin línea "Llega en", indicador de cobro pendiente 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+
+1x Café americano (Bebidas) - $45.00 c/u = $45.00
+
+------------------------------
+TOTAL: $45.00 MXN
+
+Recibido: 30/09/2026 10:00"
+`;
+
+exports[`B2C · salidas recibo de Telegram ("Pedido recibido") TARJETA: solo se envía al confirmarse el pago, con el indicador "PAGADO CON TARJETA" 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+✅ PAGADO CON TARJETA
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+
+1x Café americano (Bebidas) - $45.00 c/u = $45.00
+
+------------------------------
+TOTAL: $45.00 MXN
+
+Recibido: 30/09/2026 10:00"
+`;
+
+exports[`B2C · salidas recibo de Telegram ("Pedido recibido") hora específica + varias líneas (con la categoría junto al nombre) 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+Llega en: 10:45
+
+2x Café americano (Bebidas) - $45.00 c/u = $90.00
+
+3x Concha (Bebidas) - $30.50 c/u = $91.50
+
+------------------------------
+TOTAL: $181.50 MXN
+
+Recibido: 30/09/2026 10:00"
+`;
+
+exports[`B2C · salidas recibo de Telegram ("Pedido recibido") modificadores por línea + descuento de combo 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+
+1x Café americano (Bebidas) - $45.00 c/u = $85.00
+   Tamaño: Grande
+   Extras: Shot extra
+
+1x Concha (Bebidas) - $30.50 c/u = $30.50
+
+Descuento: -$15.50
+------------------------------
+TOTAL: $100.00 MXN
+
+Recibido: 30/09/2026 10:00"
+`;

@@ -1,4 +1,7 @@
 import { resolveTestDatabaseUrl } from './db-guard';
+import { instalarBloqueoDeRed } from './network-guard';
+
+instalarBloqueoDeRed();
 
 // Corre en cada worker ANTES de cargar la app. ConfigModule (dotenv) no pisa
 // variables ya definidas, así que fijar todo aquí evita que valores de

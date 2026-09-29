@@ -14,4 +14,5 @@ module.exports = {
   testTimeout: 30000,
   globalSetup: '<rootDir>/test/characterization/global-setup.ts',
   setupFiles: ['<rootDir>/test/characterization/setup-env.ts'],
+  setupFilesAfterEnv: ['<rootDir>/test/characterization/after-env.ts'],
 };

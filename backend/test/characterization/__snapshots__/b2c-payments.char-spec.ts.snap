@@ -1,0 +1,9 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`B2C · payments CSV: cabeceras y contenido exacto 1`] = `
+"﻿Folio,Monto,Moneda,Estado,Método,Fecha de captura
+3,90.00,mxn,FALLIDO,card,2026-09-21T14:13:20.000Z
+2,45.00,mxn,PAGADO,card,2026-09-21T14:13:20.000Z
+1,45.00,mxn,PAGADO,card,2026-09-21T14:13:20.000Z
+1,45.00,mxn,FALLIDO,card,2026-09-21T14:13:20.000Z"
+`;

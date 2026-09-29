@@ -9,9 +9,14 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
  * el string real que serializa la API).
  */
 export function normalizar(valor: unknown, etiquetas: Record<string, string> = {}): unknown {
-  if (Array.isArray(valor)) return valor.map((v) => normalizar(v, etiquetas));
+  // Pasa por JSON: filas de Prisma traen Decimal/Date; así se comparan con su serialización real.
+  return normalizarRec(JSON.parse(JSON.stringify(valor)), etiquetas);
+}
+
+function normalizarRec(valor: unknown, etiquetas: Record<string, string>): unknown {
+  if (Array.isArray(valor)) return valor.map((v) => normalizarRec(v, etiquetas));
   if (valor && typeof valor === 'object') {
-    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, normalizar(v, etiquetas)]));
+    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, normalizarRec(v, etiquetas)]));
   }
   if (typeof valor === 'string') {
     if (etiquetas[valor]) return `<${etiquetas[valor]}>`;

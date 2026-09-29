@@ -1,0 +1,10 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`B2C · panel GET /orders/historico/export (CSV) cabeceras y contenido exacto (orden de columnas) 1`] = `
+"﻿Folio,Cliente,Fecha,Estado,Método de pago,Total
+5,Diego Prueba,2026-09-30T18:00:00.000Z,CONFIRMADO_SURTIENDO,TARJETA,30.50
+4,Carla Prueba,2026-09-30T17:00:00.000Z,PENDIENTE_CONFIRMACION,TARJETA,45.00
+3,Ana Prueba,2026-09-30T16:00:00.000Z,PENDIENTE_CONFIRMACION,EFECTIVO,90.00
+2,Beto Prueba,2026-09-29T15:00:00.000Z,CONFIRMADO_SURTIENDO,EFECTIVO,61.00
+1,Ana Prueba,2026-09-28T15:00:00.000Z,DESPACHADO,EFECTIVO,45.00"
+`;
