@@ -10,6 +10,8 @@ import { NOTIFICACIONES_QUEUE } from '../../src/notificaciones/queue/notificacio
 import { NotificacionesProcessor } from '../../src/notificaciones/queue/notificaciones.processor';
 import { ReglaEventoPedidoService } from '../../src/notificaciones-reglas/regla-evento-pedido.service';
 import { TelegramTokenService } from '../../src/notificaciones/telegram/telegram-token.service';
+import { ReglaEnvioService } from '../../src/notificaciones-reglas/regla-envio.service';
+import { WalletPassService } from '../../src/lealtad/wallet-pass.service';
 import { ReglaBarridoService } from '../../src/notificaciones-reglas/regla-barrido.service';
 
 export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
@@ -21,13 +23,20 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
  *  - stripe.*: el cliente Stripe es el real (para que la verificación de
  *    firma del webhook sea la ruta real) pero paymentIntents.create y
  *    refunds.create son mocks — nada sale a la red.
- *  - dispararSeguro: Reglas EVENTO_PEDIDO (Botpress nunca se contacta).
+ *  - dispararSeguro: Reglas EVENTO_PEDIDO (Botpress nunca se contacta). Solo en el modo
+ *    por defecto; con `reglasReales` el ReglaEventoPedidoService es el REAL.
+ *  - reglaEnvio: frontera con Botpress (ReglaEnvioService.enviar) — siempre sustituida.
+ *    Recibe (tenant, cliente, regla, contexto?).
+ *  - walletCrearPase / walletActualizarPase: WalletWallet API (Lealtad) — siempre sustituida.
  */
 export interface Fakes {
   queueAdd: jest.Mock;
   paymentIntentsCreate: jest.Mock;
   refundsCreate: jest.Mock;
   dispararSeguro: jest.Mock;
+  reglaEnvio: jest.Mock;
+  walletCrearPase: jest.Mock;
+  walletActualizarPase: jest.Mock;
   reset(): void;
 }
 
@@ -67,7 +76,7 @@ export function restoreClock() {
   jest.useRealTimers();
 }
 
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(opts: { reglasReales?: boolean } = {}): Promise<Harness> {
   const stripe = new Stripe('sk_test_characterization');
   const paymentIntentsCreate = jest.fn();
   const refundsCreate = jest.fn();
@@ -76,12 +85,18 @@ export async function createHarness(): Promise<Harness> {
 
   const queueAdd = jest.fn().mockResolvedValue(undefined);
   const dispararSeguro = jest.fn().mockResolvedValue(undefined);
+  const reglaEnvio = jest.fn();
+  const walletCrearPase = jest.fn();
+  const walletActualizarPase = jest.fn();
 
   const fakes: Fakes = {
     queueAdd,
     paymentIntentsCreate,
     refundsCreate,
     dispararSeguro,
+    reglaEnvio,
+    walletCrearPase,
+    walletActualizarPase,
     reset() {
       queueAdd.mockReset().mockResolvedValue(undefined);
       dispararSeguro.mockReset().mockResolvedValue(undefined);
@@ -91,26 +106,43 @@ export async function createHarness(): Promise<Harness> {
         return { id: `pi_char_${n}`, client_secret: `pi_char_${n}_secret_x` };
       });
       refundsCreate.mockReset().mockResolvedValue({ id: 're_char_1' });
+      reglaEnvio.mockReset().mockResolvedValue({ id: 'envio-char' });
+      let w = 0;
+      walletCrearPase.mockReset().mockImplementation(async () => {
+        w += 1;
+        return {
+          serialNumber: `serial-char-${w}`,
+          googleSaveUrl: `https://wallet.test/google/${w}`,
+          applePass: `apple-pass-${w}`,
+          shareUrl: `https://wallet.test/share/${w}`,
+        };
+      });
+      walletActualizarPase.mockReset().mockResolvedValue(null);
     },
   };
   fakes.reset();
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(getQueueToken(NOTIFICACIONES_QUEUE))
     .useValue({ add: queueAdd })
     .overrideProvider(NotificacionesProcessor)
     .useValue({})
     .overrideProvider(StripeService)
     .useValue({ client: stripe })
-    .overrideProvider(ReglaEventoPedidoService)
-    .useValue({ dispararSeguro })
     // Abre su propio cliente ioredis (REDIS_URL): se sustituye para que ningún
     // test toque Redis ni deje reintentos de conexión vivos.
     .overrideProvider(TelegramTokenService)
     .useValue({})
+    .overrideProvider(ReglaEnvioService)
+    .useValue({ enviar: reglaEnvio })
+    .overrideProvider(WalletPassService)
+    .useValue({ crearPase: walletCrearPase, actualizarPase: walletActualizarPase })
     .overrideProvider(ReglaBarridoService)
-    .useValue({})
-    .compile();
+    .useValue({});
+  if (!opts.reglasReales) {
+    builder = builder.overrideProvider(ReglaEventoPedidoService).useValue({ dispararSeguro });
+  }
+  const moduleRef = await builder.compile();
 
   // Igual que main.ts: rawBody para verificar la firma de Stripe + el mismo
   // ValidationPipe global (whitelist descarta precios que mande el cliente).

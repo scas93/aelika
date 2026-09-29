@@ -144,11 +144,11 @@ export interface Suite {
 }
 
 /** beforeAll/afterAll/beforeEach estándar: app, reloj fijo, base limpia + datos base. */
-export function usarSuite(opts: { seed?: Parameters<typeof seedBase>[1] } = {}): Suite {
+export function usarSuite(opts: { seed?: Parameters<typeof seedBase>[1]; reglasReales?: boolean } = {}): Suite {
   const ctx = {} as Suite;
   beforeAll(async () => {
     freezeClock(AHORA);
-    ctx.h = await createHarness();
+    ctx.h = await createHarness({ reglasReales: opts.reglasReales });
   });
   afterAll(async () => {
     await ctx.h.close();
