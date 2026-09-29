@@ -2,7 +2,8 @@ import request from 'supertest';
 import { conectarStripe, seedBase } from './db';
 import { bodyCheckout, cederEventLoop, crearPedidoTarjeta, eventoPaymentIntent, postCheckout, postWebhook, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
-import { claves, normalizar } from './normalizar';
+import { normalizar } from './normalizar';
+import { etiquetasOrder, expectError, expectExacto, ordenEsperada } from './exacto';
 
 // Área 7 · Webhook de Stripe v1 firmado (cuerpo crudo + HMAC real) y getEstadoPago público.
 describe('B2C · webhook de Stripe (payment_intent.*)', () => {
@@ -131,15 +132,13 @@ describe('B2C · webhook de Stripe (payment_intent.*)', () => {
   describe('verificación de firma', () => {
     it('sin cabecera stripe-signature: 400', async () => {
       const res = await postWebhook(s.h, evento('payment_intent.succeeded', 'pi_x'), { sinFirma: true });
-      expect(res.status).toBe(400);
-      expect(res.body).toEqual({ message: 'Falta la firma del webhook', error: 'Bad Request', statusCode: 400 });
+      expectError(res, 400, 'Falta la firma del webhook');
     });
 
     it('firma con un secreto equivocado: 400 y el pedido no cambia', async () => {
       const { order, piId } = await pedido();
       const res = await postWebhook(s.h, evento('payment_intent.succeeded', piId), { secreto: 'whsec_otro' });
-      expect(res.status).toBe(400);
-      expect(res.body).toEqual({ message: 'Firma de webhook inválida', error: 'Bad Request', statusCode: 400 });
+      expectError(res, 400, 'Firma de webhook inválida');
       expect(await estado(order.id)).toBe('PENDIENTE');
     });
   });
@@ -147,7 +146,7 @@ describe('B2C · webhook de Stripe (payment_intent.*)', () => {
   describe('EFECTIVO no pasa por el webhook', () => {
     it('nace PAGADO y un evento con su id inexistente no lo toca', async () => {
       const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base));
-      expect(res.body).toMatchObject({ estadoPago: 'PAGADO', stripePaymentIntentId: null });
+      expectExacto(res.body, ordenEsperada({}, { mod: true }), etiquetasOrder(s.base, res.body));
       await waitForCalls(s.h.fakes.queueAdd);
     });
   });
@@ -169,7 +168,6 @@ describe('B2C · GET /public/tenants/:slug/orders/:id/estado-pago', () => {
     await postWebhook(s.h, eventoPaymentIntent('payment_intent.succeeded', piId, 4500)).expect(200);
     res = await get().expect(200);
     expect(res.body).toEqual({ estadoPago: 'PAGADO' });
-    expect(claves(res.body)).toEqual(['estadoPago']);
     await waitForCalls(s.h.fakes.queueAdd, 2);
   });
 
@@ -179,10 +177,12 @@ describe('B2C · GET /public/tenants/:slug/orders/:id/estado-pago', () => {
     await waitForCalls(s.h.fakes.queueAdd);
     await request(s.h.app.getHttpServer()).get(url(s.base.tenant.slug, res.body.id)).expect(200);
 
-    const otroTenant = await request(s.h.app.getHttpServer()).get(url(otro.tenant.slug, res.body.id)).expect(404);
-    expect(otroTenant.body).toEqual({ message: 'Pedido no encontrado', error: 'Not Found', statusCode: 404 });
-    await request(s.h.app.getHttpServer()).get(url(s.base.tenant.slug, '00000000-0000-4000-8000-000000000000')).expect(404);
-    const sinNegocio = await request(s.h.app.getHttpServer()).get(url('no-existe', res.body.id)).expect(404);
-    expect(sinNegocio.body.message).toBe('Negocio no encontrado');
+    expectError(await request(s.h.app.getHttpServer()).get(url(otro.tenant.slug, res.body.id)), 404, 'Pedido no encontrado');
+    expectError(
+      await request(s.h.app.getHttpServer()).get(url(s.base.tenant.slug, '00000000-0000-4000-8000-000000000000')),
+      404,
+      'Pedido no encontrado',
+    );
+    expectError(await request(s.h.app.getHttpServer()).get(url('no-existe', res.body.id)), 404, 'Negocio no encontrado');
   });
 });

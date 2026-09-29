@@ -1,4 +1,5 @@
 import { seedBase } from './db';
+import { etiquetasOrder, expectExacto, ordenEsperada } from './exacto';
 import { bodyCheckout, postCheckout, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
 
@@ -11,6 +12,7 @@ describe('B2C · folio', () => {
     for (let i = 0; i < 3; i++) {
       const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base));
       expect(res.status).toBe(201);
+      expectExacto(res.body, ordenEsperada({ folio: String(folios.length + 1) }, { mod: true }), etiquetasOrder(s.base, res.body));
       folios.push(res.body.folio);
     }
     expect(folios).toEqual(['1', '2', '3']);

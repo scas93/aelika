@@ -1,42 +1,48 @@
-import { claves, normalizar } from './normalizar';
 import { conectarStripe, seedModificadores, seedPromocion, seedPuntoEnvio } from './db';
-import { bodyCheckout, CLAVES_ITEM, CLAVES_ORDER, cederEventLoop, postCheckout, usarSuite } from './helpers';
+import { etiquetasOrder, expectExacto, itemEsperado, ordenEsperada } from './exacto';
+import { bodyCheckout, cederEventLoop, postCheckout, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
+import { normalizar } from './normalizar';
 
 // Área 1 · Checkout, casos válidos (el caso base EFECTIVO/RECOGER está en b2c-checkout.char-spec.ts).
+// Todas las respuestas se comparan con igualdad estricta (claves + valores).
 describe('B2C · checkout, casos válidos', () => {
   const s = usarSuite();
+  const post = (extra: Record<string, unknown> = {}) => postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, extra));
+  const et = (order: { id: string; clienteId: string }, extra: Record<string, string> = {}) => etiquetasOrder(s.base, order, extra);
+  // Item con `modificadores` (el checkout siempre los incluye).
+  const item = (ov: Record<string, unknown> = {}) => itemEsperado(ov, true);
 
   it('EFECTIVO + RECOGER con hora específica: guarda la hora y encola PEDIDO_RECIBIDO', async () => {
-    const res = await postCheckout(
-      s.h,
-      s.base.tenant.slug,
-      bodyCheckout(s.base, { horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30', notas: 'Sin azúcar' }),
-    );
+    const res = await post({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30', notas: 'Sin azúcar' });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({
-      horaRecogidaTipo: 'HORA_ESPECIFICA',
-      horaRecogida: '10:30',
-      notas: 'Sin azúcar',
-      metodoEntrega: 'RECOGER',
-    });
+    expectExacto(
+      res.body,
+      ordenEsperada({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30', notas: 'Sin azúcar', items: [item()] }, { mod: true }),
+      et(res.body),
+    );
     await waitForCalls(s.h.fakes.queueAdd);
   });
 
   it('TARJETA: crea el PaymentIntent (destination charge, sin comisión), responde con clientSecret y NO encola PEDIDO_RECIBIDO', async () => {
     await conectarStripe(s.h.prisma, s.base.tenant.id);
-    const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { metodoPago: 'TARJETA' }));
+    const res = await post({ metodoPago: 'TARJETA' });
 
     expect(res.status).toBe(201);
-    // Conjunto exacto de claves: las de Order + clientSecret.
-    expect(claves(res.body)).toEqual([...CLAVES_ORDER, 'clientSecret'].sort());
-    expect(res.body).toMatchObject({
-      metodoPago: 'TARJETA',
-      estadoPago: 'PENDIENTE',
-      stripePaymentIntentId: 'pi_char_1',
-      clientSecret: 'pi_char_1_secret_x',
-      total: '45',
-    });
+    expectExacto(
+      res.body,
+      ordenEsperada(
+        {
+          metodoPago: 'TARJETA',
+          estadoPago: 'PENDIENTE',
+          stripePaymentIntentId: 'pi_char_1',
+          clientSecret: 'pi_char_1_secret_x',
+          items: [item()],
+        },
+        { mod: true },
+      ),
+      et(res.body),
+    );
 
     expect(s.h.fakes.paymentIntentsCreate).toHaveBeenCalledTimes(1);
     expect(s.h.fakes.paymentIntentsCreate.mock.calls[0][0]).toEqual({
@@ -46,7 +52,6 @@ describe('B2C · checkout, casos válidos', () => {
       automatic_payment_methods: { enabled: true },
       metadata: { orderId: res.body.id, tenantId: s.base.tenant.id, slug: s.base.tenant.slug, folio: '1' },
     });
-
     // Sin application_fee_amount (0% de comisión) y sin notificación hasta que el webhook confirme el pago.
     expect(s.h.fakes.paymentIntentsCreate.mock.calls[0][0]).not.toHaveProperty('application_fee_amount');
     await cederEventLoop();
@@ -55,53 +60,68 @@ describe('B2C · checkout, casos válidos', () => {
 
   it('DOMICILIO con punto de envío y dirección: recorta espacios y fuerza hora a LO_ANTES_POSIBLE/null', async () => {
     const punto = await seedPuntoEnvio(s.h.prisma, s.base.tenant.id, { pedidoMinimo: '50.00' });
-    const res = await postCheckout(
-      s.h,
-      s.base.tenant.slug,
-      bodyCheckout(s.base, {
-        metodoEntrega: 'DOMICILIO',
-        puntoEnvioId: punto.id,
-        direccionCalle: '  Calle Roble  ',
-        direccionNumero: ' 12-B ',
-        direccionColonia: ' Del Valle ',
-        direccionReferencias: ' Portón azul ',
-        // Lo que mande el cliente para hora se ignora en DOMICILIO.
-        horaRecogidaTipo: 'HORA_ESPECIFICA',
-        horaRecogida: '11:00',
-        items: [{ productId: s.base.productoA.id, cantidad: 2 }],
-      }),
-    );
-
-    expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({
+    const res = await post({
       metodoEntrega: 'DOMICILIO',
       puntoEnvioId: punto.id,
-      direccionCalle: 'Calle Roble',
-      direccionNumero: '12-B',
-      direccionColonia: 'Del Valle',
-      direccionReferencias: 'Portón azul',
-      horaRecogidaTipo: 'LO_ANTES_POSIBLE',
-      horaRecogida: null,
-      total: '90',
+      direccionCalle: '  Calle Roble  ',
+      direccionNumero: ' 12-B ',
+      direccionColonia: ' Del Valle ',
+      direccionReferencias: ' Portón azul ',
+      // Lo que mande el cliente para hora se ignora en DOMICILIO.
+      horaRecogidaTipo: 'HORA_ESPECIFICA',
+      horaRecogida: '11:00',
+      items: [{ productId: s.base.productoA.id, cantidad: 2 }],
     });
+
+    expect(res.status).toBe(201);
+    expectExacto(
+      res.body,
+      ordenEsperada(
+        {
+          metodoEntrega: 'DOMICILIO',
+          puntoEnvioId: '<punto>',
+          direccionCalle: 'Calle Roble',
+          direccionNumero: '12-B',
+          direccionColonia: 'Del Valle',
+          direccionReferencias: 'Portón azul',
+          horaRecogidaTipo: 'LO_ANTES_POSIBLE',
+          horaRecogida: null,
+          total: '90',
+          items: [item({ cantidad: 2 })],
+        },
+        { mod: true },
+      ),
+      et(res.body, { [punto.id]: 'punto' }),
+    );
     await waitForCalls(s.h.fakes.queueAdd);
   });
 
   it('DOMICILIO sin referencias: direccionReferencias queda null', async () => {
     const punto = await seedPuntoEnvio(s.h.prisma, s.base.tenant.id);
-    const res = await postCheckout(
-      s.h,
-      s.base.tenant.slug,
-      bodyCheckout(s.base, {
-        metodoEntrega: 'DOMICILIO',
-        puntoEnvioId: punto.id,
-        direccionCalle: 'Calle Roble',
-        direccionNumero: '12',
-        direccionColonia: 'Del Valle',
-      }),
-    );
+    const res = await post({
+      metodoEntrega: 'DOMICILIO',
+      puntoEnvioId: punto.id,
+      direccionCalle: 'Calle Roble',
+      direccionNumero: '12',
+      direccionColonia: 'Del Valle',
+    });
     expect(res.status).toBe(201);
-    expect(res.body.direccionReferencias).toBeNull();
+    expectExacto(
+      res.body,
+      ordenEsperada(
+        {
+          metodoEntrega: 'DOMICILIO',
+          puntoEnvioId: '<punto>',
+          direccionCalle: 'Calle Roble',
+          direccionNumero: '12',
+          direccionColonia: 'Del Valle',
+          direccionReferencias: null,
+          items: [item()],
+        },
+        { mod: true },
+      ),
+      et(res.body, { [punto.id]: 'punto' }),
+    );
     await waitForCalls(s.h.fakes.queueAdd);
   });
 
@@ -115,43 +135,36 @@ describe('B2C · checkout, casos válidos', () => {
       facturaCodigoPostal: '06000',
       facturaCorreo: 'facturas@cafes.test',
     };
+    const conFactura = () => ordenEsperada({ ...factura, items: [item()] }, { mod: true });
 
     it('OPCIONAL + requiereFactura=true: guarda los 6 campos fiscales', async () => {
       await s.h.prisma.tenant.update({ where: { id: s.base.tenant.id }, data: { facturacionModo: 'OPCIONAL' } });
-      const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, factura));
+      const res = await post(factura);
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject(factura);
+      expectExacto(res.body, conFactura(), et(res.body));
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
     it('OPCIONAL sin requiereFactura: ignora los campos fiscales aunque vengan', async () => {
       await s.h.prisma.tenant.update({ where: { id: s.base.tenant.id }, data: { facturacionModo: 'OPCIONAL' } });
-      const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { ...factura, requiereFactura: false }));
+      const res = await post({ ...factura, requiereFactura: false });
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({
-        requiereFactura: false,
-        facturaRazonSocial: null,
-        facturaRfc: null,
-        facturaRegimenFiscal: null,
-        facturaUsoCfdi: null,
-        facturaCodigoPostal: null,
-        facturaCorreo: null,
-      });
+      expectExacto(res.body, ordenEsperada({ items: [item()] }, { mod: true }), et(res.body));
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
     it('OBLIGATORIO con datos completos: guarda la factura', async () => {
       await s.h.prisma.tenant.update({ where: { id: s.base.tenant.id }, data: { facturacionModo: 'OBLIGATORIO' } });
-      const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, factura));
+      const res = await post(factura);
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject(factura);
+      expectExacto(res.body, conFactura(), et(res.body));
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
     it('DESACTIVADO: ignora por completo los campos fiscales', async () => {
-      const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, factura));
+      const res = await post(factura);
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ requiereFactura: false, facturaRfc: null, facturaCorreo: null });
+      expectExacto(res.body, ordenEsperada({ items: [item()] }, { mod: true }), et(res.body));
       await waitForCalls(s.h.fakes.queueAdd);
     });
   });
@@ -183,28 +196,36 @@ describe('B2C · checkout, casos válidos', () => {
 
     it('suma el extra completo (× cantidad), ordena por grupo y guarda snapshot en OrderItemModifier', async () => {
       const { tam, extras } = await seedGrupos();
-      const [chica, grande] = tam.opciones;
+      const grande = tam.opciones[1];
       const [shot, avena] = extras.opciones;
-      void chica;
 
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, {
-          // Orden "desordenado" a propósito: lo persistido sigue ProductModifierGroup.orden, no el del body.
-          items: [{ productId: s.base.productoA.id, cantidad: 2, modifierOptionIds: [shot.id, grande.id, avena.id] }],
-        }),
-      );
+      const res = await post({
+        // Orden "desordenado" a propósito: lo persistido sigue ProductModifierGroup.orden, no el del body.
+        items: [{ productId: s.base.productoA.id, cantidad: 2, modifierOptionIds: [shot.id, grande.id, avena.id] }],
+      });
 
       expect(res.status).toBe(201);
       // subtotal 2×45 = 90; extra por unidad 30+10+8.5 = 48.5 ×2 = 97 → 187
-      expect(res.body.total).toBe('187');
-      expect(claves(res.body.items[0])).toEqual([...CLAVES_ITEM, 'modificadores'].sort());
-      expect(res.body.items[0].modificadores).toEqual([
-        { nombreGrupo: 'Tamaño', nombre: 'Grande', precioAdicional: '30' },
-        { nombreGrupo: 'Extras', nombre: 'Shot extra', precioAdicional: '10' },
-        { nombreGrupo: 'Extras', nombre: 'Leche de avena', precioAdicional: '8.5' },
-      ]);
+      expectExacto(
+        res.body,
+        ordenEsperada(
+          {
+            total: '187',
+            items: [
+              item({
+                cantidad: 2,
+                modificadores: [
+                  { nombreGrupo: 'Tamaño', nombre: 'Grande', precioAdicional: '30' },
+                  { nombreGrupo: 'Extras', nombre: 'Shot extra', precioAdicional: '10' },
+                  { nombreGrupo: 'Extras', nombre: 'Leche de avena', precioAdicional: '8.5' },
+                ],
+              }),
+            ],
+          },
+          { mod: true },
+        ),
+        et(res.body),
+      );
 
       const filas = await s.h.prisma.orderItemModifier.findMany({ orderBy: { nombre: 'asc' } });
       expect(
@@ -220,43 +241,55 @@ describe('B2C · checkout, casos válidos', () => {
     it('dos líneas del mismo producto con modificadores distintos = dos OrderItem (no se fusionan)', async () => {
       const { tam } = await seedGrupos();
       const [chica, grande] = tam.opciones;
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, {
-          items: [
-            { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [chica.id] },
-            { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [grande.id] },
-          ],
-        }),
-      );
+      const res = await post({
+        items: [
+          { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [chica.id] },
+          { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [grande.id] },
+        ],
+      });
       expect(res.status).toBe(201);
-      expect(res.body.items).toHaveLength(2);
-      expect(res.body.total).toBe('120'); // 45 + 45 + 30
+      expectExacto(
+        res.body,
+        ordenEsperada(
+          {
+            total: '120', // 45 + 45 + 30
+            items: [
+              item({ modificadores: [{ nombreGrupo: 'Tamaño', nombre: 'Chica', precioAdicional: '0' }] }),
+              item({ modificadores: [{ nombreGrupo: 'Tamaño', nombre: 'Grande', precioAdicional: '30' }] }),
+            ],
+          },
+          { mod: true },
+        ),
+        et(res.body),
+      );
       await waitForCalls(s.h.fakes.queueAdd);
     });
   });
 
   describe('descuentos', () => {
+    const itemB = (ov: Record<string, unknown> = {}) => item({ productId: '<productoB>', nombreProducto: 'Concha', precioUnitario: '30.5', ...ov });
+
     it('combo: aplica el precio del combo y arma notasDescuento', async () => {
       await seedPromocion(s.h.prisma, s.base.tenant.id, 'COMBO', {
         productIds: [s.base.productoA.id, s.base.productoB.id],
         precioCombo: 60,
       });
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, {
-          items: [
-            { productId: s.base.productoA.id, cantidad: 1 },
-            { productId: s.base.productoB.id, cantidad: 1 },
-          ],
-        }),
-      );
+      const res = await post({
+        items: [
+          { productId: s.base.productoA.id, cantidad: 1 },
+          { productId: s.base.productoB.id, cantidad: 1 },
+        ],
+      });
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ descuentoTotal: '15.5', notasDescuento: 'Combo Café americano + Concha x1', total: '60' });
       // Precio de lista congelado por línea (el descuento vive en la orden, no en el item).
-      expect(res.body.items.map((i: any) => i.precioUnitario).sort()).toEqual(['30.5', '45']);
+      expectExacto(
+        res.body,
+        ordenEsperada(
+          { descuentoTotal: '15.5', notasDescuento: 'Combo Café americano + Concha x1', total: '60', items: [item(), itemB()] },
+          { mod: true },
+        ),
+        et(res.body),
+      );
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
@@ -266,12 +299,12 @@ describe('B2C · checkout, casos válidos', () => {
         tipoDescuento: 'porcentaje',
         valor: 10,
       });
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, { items: [{ productId: s.base.productoA.id, cantidad: 2 }] }),
+      const res = await post({ items: [{ productId: s.base.productoA.id, cantidad: 2 }] });
+      expectExacto(
+        res.body,
+        ordenEsperada({ descuentoTotal: '9', notasDescuento: 'Café americano x2 (-10%)', total: '81', items: [item({ cantidad: 2 })] }, { mod: true }),
+        et(res.body),
       );
-      expect(res.body).toMatchObject({ descuentoTotal: '9', notasDescuento: 'Café americano x2 (-10%)', total: '81' });
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
@@ -281,12 +314,12 @@ describe('B2C · checkout, casos válidos', () => {
         tipoDescuento: 'monto_fijo',
         valor: 5,
       });
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, { items: [{ productId: s.base.productoA.id, cantidad: 2 }] }),
+      const res = await post({ items: [{ productId: s.base.productoA.id, cantidad: 2 }] });
+      expectExacto(
+        res.body,
+        ordenEsperada({ descuentoTotal: '10', notasDescuento: 'Café americano x2 (-$5)', total: '80', items: [item({ cantidad: 2 })] }, { mod: true }),
+        et(res.body),
       );
-      expect(res.body).toMatchObject({ descuentoTotal: '10', notasDescuento: 'Café americano x2 (-$5)', total: '80' });
       await waitForCalls(s.h.fakes.queueAdd);
     });
 
@@ -298,45 +331,42 @@ describe('B2C · checkout, casos válidos', () => {
       const { opciones } = await seedModificadores(s.h.prisma, s.base.tenant.id, s.base.productoA.id, {
         opciones: [{ nombre: 'Grande', precioAdicional: '30.00' }],
       });
-      const res = await postCheckout(
-        s.h,
-        s.base.tenant.slug,
-        bodyCheckout(s.base, {
-          items: [
-            { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [opciones[0].id] },
-            { productId: s.base.productoB.id, cantidad: 1 },
-          ],
-        }),
-      );
+      const res = await post({
+        items: [
+          { productId: s.base.productoA.id, cantidad: 1, modifierOptionIds: [opciones[0].id] },
+          { productId: s.base.productoB.id, cantidad: 1 },
+        ],
+      });
       // 75.5 subtotal + 30 extra − 15.5 descuento del combo = 90
-      expect(res.body).toMatchObject({ descuentoTotal: '15.5', total: '90' });
+      expectExacto(
+        res.body,
+        ordenEsperada(
+          {
+            descuentoTotal: '15.5',
+            notasDescuento: 'Combo Café americano + Concha x1',
+            total: '90',
+            items: [item({ modificadores: [{ nombreGrupo: 'Tamaño', nombre: 'Grande', precioAdicional: '30' }] }), itemB()],
+          },
+          { mod: true },
+        ),
+        et(res.body),
+      );
       await waitForCalls(s.h.fakes.queueAdd);
     });
   });
 
   it('un body con precio/total/estado inventados no altera lo que calcula el servidor', async () => {
-    const res = await postCheckout(
-      s.h,
-      s.base.tenant.slug,
-      bodyCheckout(s.base, {
-        total: 1,
-        precio: 1,
-        descuentoTotal: 999,
-        estadoPago: 'FALLIDO',
-        estadoPedido: 'DESPACHADO',
-        folio: '999',
-        items: [{ productId: s.base.productoA.id, cantidad: 1, precioUnitario: 1, precio: 1 }],
-      }),
-    );
-    expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({
-      total: '45',
-      descuentoTotal: '0',
-      estadoPago: 'PAGADO',
-      estadoPedido: 'PENDIENTE_CONFIRMACION',
-      folio: '1',
+    const res = await post({
+      total: 1,
+      precio: 1,
+      descuentoTotal: 999,
+      estadoPago: 'FALLIDO',
+      estadoPedido: 'DESPACHADO',
+      folio: '999',
+      items: [{ productId: s.base.productoA.id, cantidad: 1, precioUnitario: 1, precio: 1 }],
     });
-    expect(res.body.items[0].precioUnitario).toBe('45');
+    expect(res.status).toBe(201);
+    expectExacto(res.body, ordenEsperada({ items: [item()] }, { mod: true }), et(res.body));
     await waitForCalls(s.h.fakes.queueAdd);
   });
 });

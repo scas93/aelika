@@ -1,4 +1,5 @@
 import { conectarStripe, horarioAbierto, seedBase, seedModificadores, seedPuntoEnvio } from './db';
+import { expectError } from './exacto';
 import { bodyCheckout, cederEventLoop, postCheckout, usarSuite } from './helpers';
 
 // Área 2 · Checkout, rechazos. Cada rechazo NO deja rastro: sin Order, sin Cliente, sin job, sin PaymentIntent.
@@ -16,25 +17,18 @@ describe('B2C · checkout, rechazos', () => {
 
   async function rechaza(body: Record<string, unknown>, status: number, message: string | string[]) {
     const res = await postCheckout(s.h, s.base.tenant.slug, body);
-    expect(res.status).toBe(status);
-    expect(res.body.message).toEqual(message);
+    expectError(res, status, message); // cuerpo completo: { message, error, statusCode }
     await sinEfectos();
     return res;
   }
 
   it('forma completa del error (Nest): { message, error, statusCode }', async () => {
-    const res = await rechaza(bodyCheckout(s.base, { metodoPago: 'TRANSFERENCIA' }), 409, 'Ese método de pago no está disponible todavía');
-    expect(res.body).toEqual({
-      message: 'Ese método de pago no está disponible todavía',
-      error: 'Conflict',
-      statusCode: 409,
-    });
+    await rechaza(bodyCheckout(s.base, { metodoPago: 'TRANSFERENCIA' }), 409, 'Ese método de pago no está disponible todavía');
   });
 
   it('negocio inexistente: 404', async () => {
     const res = await postCheckout(s.h, 'no-existe', bodyCheckout(s.base));
-    expect(res.status).toBe(404);
-    expect(res.body.message).toBe('Negocio no encontrado');
+    expectError(res, 404, 'Negocio no encontrado');
   });
 
   it('negocio cerrado en este momento: 409', async () => {
