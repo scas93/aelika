@@ -1,4 +1,4 @@
-import type { EstadoPago, EstadoPedido } from "@/lib/api";
+import type { EstadoPago, EstadoPedido, GrupoEstadoPago } from "@/lib/api";
 import type { BadgeVariant } from "../_components/Badge";
 
 export const ESTADO_LABEL: Record<EstadoPedido, string> = {
@@ -52,3 +52,26 @@ export const ESTADO_PAGO_VARIANT: Record<EstadoPago, BadgeVariant> = {
   FALLIDO: "peligro",
   REEMBOLSADO: "peligro",
 };
+
+// Estado de pago tal como lo ve el negocio (histórico, filtro): PENDIENTE,
+// PROCESANDO y FALLIDO se muestran igual, "Pago no completado" — un intento
+// de pago, no un pedido. Espejo de backend/src/common/estado-pago.ts.
+export const GRUPOS_ESTADO_PAGO: GrupoEstadoPago[] = ["PAGADO", "NO_COMPLETADO", "REEMBOLSADO"];
+
+export const GRUPO_ESTADO_PAGO_LABEL: Record<GrupoEstadoPago, string> = {
+  PAGADO: "Pagado",
+  NO_COMPLETADO: "Pago no completado",
+  REEMBOLSADO: "Reembolsado",
+};
+
+export const GRUPO_ESTADO_PAGO_VARIANT: Record<GrupoEstadoPago, BadgeVariant> = {
+  PAGADO: "exito",
+  NO_COMPLETADO: "advertencia",
+  REEMBOLSADO: "peligro",
+};
+
+export function grupoDeEstadoPago(estado: EstadoPago): GrupoEstadoPago {
+  if (estado === "PAGADO") return "PAGADO";
+  if (estado === "REEMBOLSADO") return "REEMBOLSADO";
+  return "NO_COMPLETADO";
+}

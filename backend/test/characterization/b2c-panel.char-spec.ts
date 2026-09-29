@@ -37,12 +37,16 @@ const PEDIDOS: Record<string, Record<string, unknown>> = {
 const pedidos = (...folios: string[]) => folios.map((f) => PEDIDOS[f]);
 
 /** Fila del histórico (id se quita antes de comparar). */
-const fila = (folio: string, clienteNombre: string, estadoPedido: string, metodoPago: string, total: string, createdAt: string) => ({
-  folio, clienteNombre, estadoPedido, metodoPago, total, createdAt,
+// Parte A1 (pedidos TARJETA no pagados): la fila del histórico ahora incluye `estadoPago` (valor crudo).
+const fila = (
+  folio: string, clienteNombre: string, estadoPedido: string, metodoPago: string, total: string, createdAt: string,
+  estadoPago = 'PAGADO',
+) => ({
+  folio, clienteNombre, estadoPedido, metodoPago, estadoPago, total, createdAt,
 });
 const HIST: Record<string, ReturnType<typeof fila>> = {
   '5': fila('5', 'Diego Prueba', 'CONFIRMADO_SURTIENDO', 'TARJETA', '30.5', '2026-09-30T18:00:00.000Z'),
-  '4': fila('4', 'Carla Prueba', 'PENDIENTE_CONFIRMACION', 'TARJETA', '45', '2026-09-30T17:00:00.000Z'),
+  '4': fila('4', 'Carla Prueba', 'PENDIENTE_CONFIRMACION', 'TARJETA', '45', '2026-09-30T17:00:00.000Z', 'PENDIENTE'),
   '3': fila('3', 'Ana Prueba', 'PENDIENTE_CONFIRMACION', 'EFECTIVO', '90', '2026-09-30T16:00:00.000Z'),
   '2': fila('2', 'Beto Prueba', 'CONFIRMADO_SURTIENDO', 'EFECTIVO', '61', '2026-09-29T15:00:00.000Z'),
   '1': fila('1', 'Ana Prueba', 'DESPACHADO', 'EFECTIVO', '45', '2026-09-28T15:00:00.000Z'),
@@ -89,6 +93,44 @@ describe('B2C · panel', () => {
       exacto(res.body, pedidos('5', '4', '3'));
     });
 
+    // Parte A1: parámetro nuevo y opcional — sin él, el contrato es el de siempre (tests de arriba intactos).
+    it('soloPagados=true: excluye los intentos de pago (TARJETA PENDIENTE); pagados y de EFECTIVO se quedan', async () => {
+      exacto((await api().get('/orders?soloPagados=true').expect(200)).body, pedidos('5', '3', '2', '1'));
+    });
+
+    it('soloPagados=false o ausente: igual que hoy (incluye el TARJETA pendiente)', async () => {
+      exacto((await api().get('/orders?soloPagados=false').expect(200)).body, pedidos('5', '4', '3', '2', '1'));
+    });
+
+    it('soloPagados=true se combina con estadoPedido y fechas', async () => {
+      exacto((await api().get('/orders?soloPagados=true&estadoPedido=PENDIENTE_CONFIRMACION').expect(200)).body, pedidos('3'));
+      exacto((await api().get(`/orders?soloPagados=true&desde=${HOY.desde}&hasta=${HOY.hasta}`).expect(200)).body, pedidos('5', '3'));
+    });
+
+    it('soloPagados=true: un TARJETA que pasa a PAGADO por el webhook aparece; uno REEMBOLSADO se queda; FALLIDO/PROCESANDO no', async () => {
+      const { eventoPaymentIntent, postWebhook } = await import('./helpers');
+      const o4 = await s.h.prisma.order.findUniqueOrThrow({ where: { id: e.ids.o4 } });
+      await postWebhook(s.h, eventoPaymentIntent('payment_intent.processing', o4.stripePaymentIntentId!, 4500)).expect(200);
+      expect((await s.h.prisma.order.findUniqueOrThrow({ where: { id: e.ids.o4 } })).estadoPago).toBe('PROCESANDO');
+      exacto((await api().get('/orders?soloPagados=true').expect(200)).body, pedidos('5', '3', '2', '1'));
+
+      await postWebhook(s.h, eventoPaymentIntent('payment_intent.payment_failed', o4.stripePaymentIntentId!, 4500)).expect(200);
+      expect((await s.h.prisma.order.findUniqueOrThrow({ where: { id: e.ids.o4 } })).estadoPago).toBe('FALLIDO');
+      exacto((await api().get('/orders?soloPagados=true').expect(200)).body, pedidos('5', '3', '2', '1'));
+
+      await postWebhook(s.h, eventoPaymentIntent('payment_intent.succeeded', o4.stripePaymentIntentId!, 4500)).expect(200);
+      const con = (await api().get('/orders?soloPagados=true').expect(200)).body;
+      expect(con.map((o: any) => o.folio)).toStrictEqual(['5', '4', '3', '2', '1']);
+
+      await s.h.prisma.order.update({ where: { id: e.ids.o4 }, data: { estadoPago: 'REEMBOLSADO' } });
+      expect(((await api().get('/orders?soloPagados=true').expect(200)).body).map((o: any) => o.folio)).toStrictEqual(['5', '4', '3', '2', '1']);
+    });
+
+    it('soloPagados inválido: 400; los 3 roles pueden usarlo', async () => {
+      expectError(await api().get('/orders?soloPagados=quizas'), 400, ['soloPagados must be a boolean value']);
+      exacto((await auth(s.h, e.tokenOperador).get('/orders?soloPagados=true').expect(200)).body, pedidos('5', '3', '2', '1'));
+    });
+
     it('estadoPedido inválido: 400', async () => {
       const res = await api().get('/orders?estadoPedido=NOPE');
       expectError(res, 400, [
@@ -130,7 +172,7 @@ describe('B2C · panel', () => {
       });
       // Conjunto exacto de claves de cada fila (incluye `id`) y valores exactos.
       expect(res.body.data.map((f: any) => Object.keys(f).sort())).toStrictEqual(
-        Array(5).fill(['clienteNombre', 'createdAt', 'estadoPedido', 'folio', 'id', 'metodoPago', 'total']),
+        Array(5).fill(['clienteNombre', 'createdAt', 'estadoPago', 'estadoPedido', 'folio', 'id', 'metodoPago', 'total']),
       );
       expect(res.body.data.map((f: any) => f.createdAt)).toStrictEqual(hist('5', '4', '3', '2', '1').map((f) => f.createdAt));
       expect(filas).toStrictEqual(hist('5', '4', '3', '2', '1').map((f) => ({ ...f, createdAt: '<iso>' })));
@@ -144,6 +186,28 @@ describe('B2C · panel', () => {
       expect(await filasDe('operador=MAYOR_IGUAL&valor=60')).toStrictEqual(hist('3', '2'));
       expect(await filasDe('operador=ENTRE&valor=40&valorHasta=61')).toStrictEqual(hist('4', '2', '1'));
       expect(await filasDe('metodoPago=EFECTIVO&operador=MENOR_IGUAL&valor=61')).toStrictEqual(hist('2', '1'));
+    });
+
+    it('estadoPago (agrupado): Pagado / Pago no completado / Reembolsado, combinable con otros filtros', async () => {
+      const filasDe = async (qs: string) => (await conFila(qs)).res.body.data.map(({ id, ...r }: any) => r);
+      expect(await filasDe('estadoPago=PAGADO')).toStrictEqual(hist('5', '3', '2', '1'));
+      expect(await filasDe('estadoPago=NO_COMPLETADO')).toStrictEqual(hist('4'));
+      expect(await filasDe('estadoPago=REEMBOLSADO')).toStrictEqual([]);
+      expect(await filasDe('estadoPago=PAGADO&metodoPago=TARJETA')).toStrictEqual(hist('5'));
+      // PROCESANDO y FALLIDO caen en el mismo grupo que PENDIENTE.
+      await s.h.prisma.order.update({ where: { id: e.ids.o4 }, data: { estadoPago: 'FALLIDO' } });
+      await s.h.prisma.order.update({ where: { id: e.ids.o3 }, data: { estadoPago: 'PROCESANDO' } });
+      expect((await filasDe('estadoPago=NO_COMPLETADO')).map((f: any) => f.folio)).toStrictEqual(['4', '3']);
+      await s.h.prisma.order.update({ where: { id: e.ids.o1 }, data: { estadoPago: 'REEMBOLSADO' } });
+      expect((await filasDe('estadoPago=REEMBOLSADO')).map((f: any) => f.folio)).toStrictEqual(['1']);
+      // El histórico sigue mostrando TODOS los pedidos sin filtro.
+      expect((await filasDe('')).map((f: any) => f.folio)).toStrictEqual(['5', '4', '3', '2', '1']);
+    });
+
+    it('estadoPago inválido (un valor crudo no es un grupo): 400', async () => {
+      expectError(await api().get('/orders/historico?estadoPago=PENDIENTE'), 400, [
+        'estadoPago must be one of the following values: PAGADO, NO_COMPLETADO, REEMBOLSADO',
+      ]);
     });
 
     it('paginación', async () => {
@@ -173,9 +237,18 @@ describe('B2C · panel', () => {
       expect(res.text).toMatchSnapshot();
     });
 
+    it('columna "Estado de pago" al final, con la etiqueta agrupada en español y el filtro estadoPago', async () => {
+      await s.h.prisma.order.update({ where: { id: e.ids.o1 }, data: { estadoPago: 'REEMBOLSADO' } });
+      const todo = (await api().get('/orders/historico/export').expect(200)).text.split('\r\n');
+      expect(todo[0]).toBe('﻿Folio,Cliente,Fecha,Estado,Método de pago,Total,Estado de pago');
+      expect(todo.map((l) => l.split(',').pop())).toStrictEqual(['Estado de pago', 'Pagado', 'Pago no completado', 'Pagado', 'Pagado', 'Reembolsado']);
+      const nc = (await api().get('/orders/historico/export?estadoPago=NO_COMPLETADO').expect(200)).text.split('\r\n');
+      expect(nc.slice(1)).toStrictEqual(['4,Carla Prueba,2026-09-30T17:00:00.000Z,PENDIENTE_CONFIRMACION,TARJETA,45.00,Pago no completado']);
+    });
+
     it('respeta los filtros', async () => {
       const res = await api().get('/orders/historico/export?estadoPedido=DESPACHADO').expect(200);
-      expect(res.text.split('\n').slice(1)).toStrictEqual(['1,Ana Prueba,2026-09-28T15:00:00.000Z,DESPACHADO,EFECTIVO,45.00']);
+      expect(res.text.split('\n').slice(1)).toStrictEqual(['1,Ana Prueba,2026-09-28T15:00:00.000Z,DESPACHADO,EFECTIVO,45.00,Pagado']);
     });
   });
 

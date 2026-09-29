@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { EstadoPedido, MetodoPago } from '../../../generated/prisma/enums';
+import { GRUPOS_ESTADO_PAGO, type GrupoEstadoPago } from '../../common/estado-pago';
 import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
 
 // desde/hasta filter on Order.createdAt, same field ListOrdersQueryDto already
@@ -14,6 +15,11 @@ export class ListOrdersHistoricoQueryDto extends FiltroImporteQueryDto {
   @IsOptional()
   @IsEnum(MetodoPago)
   metodoPago?: MetodoPago;
+
+  // Estado de pago agrupado (ver common/estado-pago.ts), no los 5 valores crudos.
+  @IsOptional()
+  @IsIn(GRUPOS_ESTADO_PAGO)
+  estadoPago?: GrupoEstadoPago;
 
   @IsOptional()
   @IsDateString()

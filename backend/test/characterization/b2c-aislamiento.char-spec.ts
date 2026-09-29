@@ -69,6 +69,7 @@ describe('B2C · aislamiento multi-tenant', () => {
           createdAt: '<iso>',
           estadoPedido: 'PENDIENTE_CONFIRMACION',
           metodoPago: 'EFECTIVO',
+          estadoPago: 'PAGADO',
           total: '45',
         },
       ],
@@ -79,7 +80,7 @@ describe('B2C · aislamiento multi-tenant', () => {
     });
 
     const csv = await apiB().get('/orders/historico/export').expect(200);
-    expect(csv.text).toBe('﻿Folio,Cliente,Fecha,Estado,Método de pago,Total\r\n1,Cliente de B,2026-09-30T16:00:00.000Z,PENDIENTE_CONFIRMACION,EFECTIVO,45.00');
+    expect(csv.text).toBe('﻿Folio,Cliente,Fecha,Estado,Método de pago,Total,Estado de pago\r\n1,Cliente de B,2026-09-30T16:00:00.000Z,PENDIENTE_CONFIRMACION,EFECTIVO,45.00,Pagado');
 
     expect((await apiB().get(`/orders/summary?${RANGO}`).expect(200)).body).toStrictEqual({
       pedidosHoy: 1,

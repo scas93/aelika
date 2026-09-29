@@ -59,8 +59,10 @@ export default function PedidosPage() {
     try {
       const { desde, hasta } = rangoHoyISO();
       const [todos, despachadosHoy] = await Promise.all([
-        fetchOrders(token, {}),
-        fetchOrders(token, { estadoPedido: "DESPACHADO", desde, hasta }),
+        // soloPagados: el panel activo muestra pedidos pagados (y reembolsados, con su
+        // badge); los intentos de pago TARJETA no completados viven solo en el histórico.
+        fetchOrders(token, { soloPagados: true }),
+        fetchOrders(token, { estadoPedido: "DESPACHADO", soloPagados: true, desde, hasta }),
       ]);
       setActivos(todos.filter((o) => o.estadoPedido !== "DESPACHADO"));
       setEntregadosHoy(despachadosHoy);

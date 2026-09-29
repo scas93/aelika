@@ -9,6 +9,7 @@ import {
   METODO_PAGO_LABEL,
   type EstadoPedido,
   type FiltroImporte,
+  type GrupoEstadoPago,
   type MetodoPago,
   type Order,
   type PaginatedOrders,
@@ -21,7 +22,15 @@ import {
   rangoUltimas4SemanasISO,
   rangoUltimos7DiasISO,
 } from "@/lib/fecha";
-import { ESTADO_LABEL, ESTADO_VARIANT, ESTADOS } from "../estado";
+import {
+  ESTADO_LABEL,
+  ESTADO_VARIANT,
+  ESTADOS,
+  GRUPO_ESTADO_PAGO_LABEL,
+  GRUPO_ESTADO_PAGO_VARIANT,
+  GRUPOS_ESTADO_PAGO,
+  grupoDeEstadoPago,
+} from "../estado";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Modal from "../../_components/Modal";
@@ -58,6 +67,14 @@ const COLUMNS: TableColumn<Order>[] = [
     render: (order) => <Badge variant={ESTADO_VARIANT[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>,
   },
   { key: "metodoPago", header: "Método de pago", render: (order) => METODO_PAGO_LABEL[order.metodoPago] },
+  {
+    key: "estadoPago",
+    header: "Estado de pago",
+    render: (order) => {
+      const grupo = grupoDeEstadoPago(order.estadoPago);
+      return <Badge variant={GRUPO_ESTADO_PAGO_VARIANT[grupo]}>{GRUPO_ESTADO_PAGO_LABEL[grupo]}</Badge>;
+    },
+  },
   { key: "total", header: "Total", align: "right", render: (order) => formatMoney(order.total) },
 ];
 
@@ -68,6 +85,7 @@ export default function PedidosHistoricoPage() {
   const [page, setPage] = useState(1);
   const [estadoPedido, setEstadoPedido] = useState<EstadoPedido | null>(null);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(null);
+  const [estadoPago, setEstadoPago] = useState<GrupoEstadoPago | null>(null);
   const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
   const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
@@ -79,7 +97,7 @@ export default function PedidosHistoricoPage() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   const { desde, hasta } = resolverFiltroFecha(fecha);
-  const hayFiltrosActivos = Boolean(estadoPedido || metodoPago || desde || hasta || importe);
+  const hayFiltrosActivos = Boolean(estadoPedido || metodoPago || estadoPago || desde || hasta || importe);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +105,7 @@ export default function PedidosHistoricoPage() {
     fetchOrdersHistorico(token, {
       estadoPedido: estadoPedido ?? undefined,
       metodoPago: metodoPago ?? undefined,
+      estadoPago: estadoPago ?? undefined,
       desde,
       hasta,
       operador: importe?.operador,
@@ -104,7 +123,7 @@ export default function PedidosHistoricoPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, page, estadoPedido, metodoPago, desde, hasta, importe]);
+  }, [token, page, estadoPedido, metodoPago, estadoPago, desde, hasta, importe]);
 
   // Cada Aplicar de un pill llama esto — mismo criterio "autoaplica" que ya
   // tenía esta pantalla (cambiar un <select> disparaba la consulta de
@@ -146,6 +165,7 @@ export default function PedidosHistoricoPage() {
       const blob = await exportOrdersHistoricoCsv(token, {
         estadoPedido: estadoPedido || undefined,
         metodoPago: metodoPago || undefined,
+        estadoPago: estadoPago || undefined,
         desde: rangoDesde,
         hasta: rangoHasta,
       });
@@ -200,6 +220,22 @@ export default function PedidosHistoricoPage() {
                 opciones={METODOS_PAGO.map((metodo) => ({ value: metodo, label: METODO_PAGO_LABEL[metodo] }))}
                 valorAplicado={metodoPago}
                 onAplicar={(value) => handleFilterChange(setMetodoPago, value)}
+                close={close}
+              />
+            )}
+          </FilterPill>
+
+          <FilterPill
+            filterKey="estadoPago"
+            label="Estado de pago"
+            valueLabel={estadoPago ? GRUPO_ESTADO_PAGO_LABEL[estadoPago] : null}
+            onClear={() => handleFilterChange(setEstadoPago, null)}
+          >
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={GRUPOS_ESTADO_PAGO.map((grupo) => ({ value: grupo, label: GRUPO_ESTADO_PAGO_LABEL[grupo] }))}
+                valorAplicado={estadoPago}
+                onAplicar={(value) => handleFilterChange(setEstadoPago, value)}
                 close={close}
               />
             )}

@@ -22,6 +22,13 @@ import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
 import { ExportOrdersHistoricoQueryDto } from './dto/export-orders-historico-query.dto';
 import { toCsv } from '../common/csv';
+import {
+  ESTADOS_PANEL_ACTIVO,
+  ESTADOS_POR_GRUPO,
+  ETIQUETA_GRUPO_ESTADO_PAGO,
+  grupoDeEstadoPago,
+  type GrupoEstadoPago,
+} from '../common/estado-pago';
 import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 
 // Sequential, one-way status flow (see CLAUDE.md) — no arbitrary jumps, no
@@ -73,6 +80,7 @@ export class OrdersService {
     const ordenes = await this.tenantPrisma.client.order.findMany({
       where: {
         estadoPedido: query.estadoPedido,
+        estadoPago: query.soloPagados ? { in: ESTADOS_PANEL_ACTIVO } : undefined,
         createdAt:
           query.desde || query.hasta
             ? {
@@ -174,6 +182,7 @@ export class OrdersService {
   private buildHistoricoWhere(query: {
     estadoPedido?: EstadoPedido;
     metodoPago?: ListOrdersHistoricoQueryDto['metodoPago'];
+    estadoPago?: GrupoEstadoPago;
     desde?: string;
     hasta?: string;
     operador?: FiltroImporteOperador;
@@ -183,6 +192,7 @@ export class OrdersService {
     return {
       estadoPedido: query.estadoPedido,
       metodoPago: query.metodoPago,
+      estadoPago: query.estadoPago ? { in: ESTADOS_POR_GRUPO[query.estadoPago] } : undefined,
       createdAt:
         query.desde || query.hasta
           ? {
@@ -211,6 +221,7 @@ export class OrdersService {
           createdAt: true,
           estadoPedido: true,
           metodoPago: true,
+          estadoPago: true,
           total: true,
         },
       }),
@@ -240,6 +251,7 @@ export class OrdersService {
         createdAt: true,
         estadoPedido: true,
         metodoPago: true,
+        estadoPago: true,
         total: true,
       },
     });
@@ -251,6 +263,8 @@ export class OrdersService {
       { header: 'Estado', value: (o) => o.estadoPedido },
       { header: 'Método de pago', value: (o) => o.metodoPago },
       { header: 'Total', value: (o) => Number(o.total).toFixed(2) },
+      // Al final a propósito: no mueve las columnas que ya existían.
+      { header: 'Estado de pago', value: (o) => ETIQUETA_GRUPO_ESTADO_PAGO[grupoDeEstadoPago(o.estadoPago)] },
     ]);
   }
 

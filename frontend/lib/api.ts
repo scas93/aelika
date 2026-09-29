@@ -420,8 +420,14 @@ export interface Order extends PublicOrder {
   updatedAt: string;
 }
 
+// Agrupación de EstadoPago que usa el negocio (espejo de backend/src/common/estado-pago.ts):
+// NO_COMPLETADO = PENDIENTE + PROCESANDO + FALLIDO (un intento de pago, no un pedido).
+export type GrupoEstadoPago = "PAGADO" | "NO_COMPLETADO" | "REEMBOLSADO";
+
 export interface OrdersFilter {
   estadoPedido?: EstadoPedido;
+  // Panel activo: solo pagados + reembolsados. Sin esto el backend devuelve todo, como siempre.
+  soloPagados?: boolean;
   desde?: string;
   hasta?: string;
 }
@@ -448,6 +454,7 @@ function appendFiltroImporte(params: URLSearchParams, filter?: FiltroImporte) {
 export interface HistoricoOrdersFilter extends FiltroImporte {
   estadoPedido?: EstadoPedido;
   metodoPago?: MetodoPago;
+  estadoPago?: GrupoEstadoPago;
   desde?: string;
   hasta?: string;
   page?: number;
@@ -949,6 +956,7 @@ export function fetchPublicEstadoPago(slug: string, orderId: string) {
 export function fetchOrders(token: string, filter?: OrdersFilter) {
   const params = new URLSearchParams();
   if (filter?.estadoPedido) params.set("estadoPedido", filter.estadoPedido);
+  if (filter?.soloPagados) params.set("soloPagados", "true");
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   const query = params.toString();
@@ -959,6 +967,7 @@ export function fetchOrdersHistorico(token: string, filter?: HistoricoOrdersFilt
   const params = new URLSearchParams();
   if (filter?.estadoPedido) params.set("estadoPedido", filter.estadoPedido);
   if (filter?.metodoPago) params.set("metodoPago", filter.metodoPago);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.page) params.set("page", String(filter.page));
@@ -1018,6 +1027,7 @@ export async function exportOrdersHistoricoCsv(
   const params = new URLSearchParams();
   if (filter?.estadoPedido) params.set("estadoPedido", filter.estadoPedido);
   if (filter?.metodoPago) params.set("metodoPago", filter.metodoPago);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   const query = params.toString();
