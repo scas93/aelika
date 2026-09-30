@@ -26,9 +26,21 @@ export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'or
  * podrían pisarse (lectura y escritura no son atómicas); el siguiente recálculo
  * o el script de corrección de datos lo repara.
  */
-export async function recalcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<void> {
+export interface ContadoresCliente {
+  totalPedidos: number;
+  primerPedidoAt: Date;
+  ultimoPedidoAt: Date;
+}
+
+/**
+ * Calcula (sin escribir) los contadores que le corresponden al cliente según sus pedidos
+ * contables. `recalcularContadoresCliente` los escribe; el script de corrección
+ * (`scripts/corregir-contadores.ts`) usa este mismo cálculo para el dry-run y la verificación.
+ * Devuelve `null` si el cliente no existe.
+ */
+export async function calcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<ContadoresCliente | null> {
   const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { canal: true, createdAt: true } });
-  if (!cliente) return;
+  if (!cliente) return null;
 
   const agregado =
     cliente.canal === ClienteCanal.B2B
@@ -46,12 +58,15 @@ export async function recalcularContadoresCliente(db: ClienteContadoresDb, clien
         });
 
   const total = agregado._count;
-  await db.cliente.update({
-    where: { id: clienteId },
-    data: {
-      totalPedidos: total,
-      primerPedidoAt: total > 0 ? agregado._min.createdAt! : cliente.createdAt,
-      ultimoPedidoAt: total > 0 ? agregado._max.createdAt! : cliente.createdAt,
-    },
-  });
+  return {
+    totalPedidos: total,
+    primerPedidoAt: total > 0 ? agregado._min.createdAt! : cliente.createdAt,
+    ultimoPedidoAt: total > 0 ? agregado._max.createdAt! : cliente.createdAt,
+  };
+}
+
+export async function recalcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<void> {
+  const contadores = await calcularContadoresCliente(db, clienteId);
+  if (!contadores) return;
+  await db.cliente.update({ where: { id: clienteId }, data: contadores });
 }
