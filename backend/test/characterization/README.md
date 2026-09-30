@@ -64,3 +64,9 @@ Solo tenant, usuarios, catálogo (y punto de envío) se insertan directo, en
 
 Lo que termina después de la respuesta HTTP (`encolarPedidoRecibido`,
 `dispararSeguro`, etc.) se espera con `waitForCalls(mock)`, sin `sleep`.
+
+## Servidor de pruebas: enlace exacto a 127.0.0.1
+`harness.ts` hace `app.listen(0, '127.0.0.1')` una sola vez en vez de `app.init()`. Sin eso, supertest hace `listen(0)` por
+cada petición (Node enlaza en `::`), y en macOS un proceso ajeno con el mismo puerto en 127.0.0.1 (los reenvíos SSH de
+Lima/Docker) recibe la conexión y responde un banner `SSH-2.0-OpenSSH…`: el test falla con
+`Parse Error: Expected HTTP/, RTSP/ or ICE/`, ~1 de cada 6000 peticiones, en tests distintos cada vez.

@@ -148,7 +148,13 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
   // ValidationPipe global (whitelist descarta precios que mande el cliente).
   const app = moduleRef.createNestApplication({ rawBody: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  await app.init();
+  // Escucha UNA vez, explícitamente en 127.0.0.1 (puerto efímero). Si no, supertest hace `listen(0)` por cada
+  // petición: Node enlaza en `::` (doble pila) y, en macOS, un proceso ajeno que ya tenga 127.0.0.1:<mismo puerto>
+  // (aquí: los reenvíos SSH de Lima/Docker, que devuelven un banner "SSH-2.0-OpenSSH…") gana las conexiones a
+  // 127.0.0.1 → el cliente HTTP falla con "Parse Error: Expected HTTP/, RTSP/ or ICE/". Fallaba ~1 de cada
+  // 6000 peticiones (≈1 de cada 6 corridas completas), en tests distintos cada vez. Con un enlace exacto a
+  // 127.0.0.1 el sistema nunca entrega un puerto que otro proceso tenga ahí, y supertest reutiliza este servidor.
+  await app.listen(0, '127.0.0.1');
 
   return {
     app,
