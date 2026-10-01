@@ -4,7 +4,7 @@
 // (idempotencia, plan, guardas de notificaciones). Ver README.md.
 //
 //   node sembrar-b2b-staging.mjs                 (= --dry-run, solo lectura, no necesita credenciales)
-//   node sembrar-b2b-staging.mjs --aplicar
+//   node sembrar-b2b-staging.mjs --aplicar [--permitir-notificaciones]
 //   node sembrar-b2b-staging.mjs --restaurar [--modo-original=AL_FINAL]
 //
 // Credenciales (solo del entorno; nunca se imprimen ni se guardan):
@@ -15,6 +15,7 @@ import { Client, guardaProyecto, trunc } from './comun.mjs';
 const args = process.argv.slice(2);
 const APLICAR = args.includes('--aplicar');
 const RESTAURAR = args.includes('--restaurar');
+const PERMITIR_NOTIF = args.includes('--permitir-notificaciones');
 if (APLICAR && RESTAURAR) { console.error('Usa solo un modo.'); process.exit(1); }
 const MODO = RESTAURAR ? 'restaurar' : APLICAR ? 'aplicar' : 'dry-run';
 const MODO_ORIGINAL = (args.find((a) => a.startsWith('--modo-original=')) ?? '--modo-original=AL_FINAL').split('=')[1];
@@ -228,10 +229,13 @@ async function restaurar() {
 
 async function aplicar(db, estado) {
   const bloqueos = revisarNotificaciones(estado);
-  if (bloqueos.length) {
+  if (bloqueos.length && PERMITIR_NOTIF) {
+    log('[notificaciones] --permitir-notificaciones: se continúa pese a reglas/webhook (los clientes sembrados tienen teléfonos ficticios):');
+    bloqueos.forEach((b) => log('  - ' + b));
+  } else if (bloqueos.length) {
     log('ABORTO: hay reglas/webhook que podrían enviar mensajes reales al avanzar/cancelar pedidos:');
     bloqueos.forEach((b) => log('  - ' + b));
-    log('No se escribió nada. Decide qué hacer y vuelve a correr.');
+    log('No se escribió nada. Decide qué hacer y vuelve a correr (o usa --permitir-notificaciones).');
     process.exit(3);
   }
   const auth = { [SLUG_B]: await login(SLUG_B), [SLUG_D]: await login(SLUG_D) };
@@ -332,7 +336,7 @@ async function aplicar(db, estado) {
     await restaurarSeguro();
     if (modoReg.durante === null) modoReg.despues = await modoTenant(auth[SLUG_D]);
   }
-  console.log(JSON.stringify({ modo: 'aplicar', pedidoB2bModoCobro_dominique: modoReg, resultados }, null, 1));
+  console.log(JSON.stringify({ modo: 'aplicar', notificaciones_permitidas: PERMITIR_NOTIF ? bloqueos : [], pedidoB2bModoCobro_dominique: modoReg, resultados }, null, 1));
   if (modoReg.despues !== MODO_ORIGINAL) process.exit(1);
 }
 

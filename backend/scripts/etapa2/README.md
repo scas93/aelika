@@ -41,7 +41,7 @@ $RW sh -c "$PREP && node /tmp/e2/auditar-b2b-staging.mjs; rm -rf /tmp/e2"
 $RW sh -c "$PREP && $ENVS node /tmp/e2/sembrar-b2b-staging.mjs --restaurar --modo-original=AL_FINAL; rm -rf /tmp/e2"
 ```
 `--aplicar` se niega (exit 3, sin escribir nada) si algún tenant tiene reglas `EVENTO_PEDIDO` activas o webhook de
-Botpress configurado: `avanzar`/`cancelar`/`marcar-pagado` podrían mandar mensajes reales. Es idempotente: la clave
+Botpress configurado: `avanzar`/`cancelar`/`marcar-pagado` podrían mandar mensajes reales. Con `--aplicar --permitir-notificaciones` continúa y lo declara en la salida (`notificaciones_permitidas`); úsalo solo si staging es desechable (los clientes sembrados tienen teléfonos ficticios). Es idempotente: la clave
 es el marcador de variante, no la fecha; una corrida interrumpida se reanuda donde quedó. Si encuentra
 `dominique-ansel` en `AL_INICIO` (corrida interrumpida), lo restaura antes de empezar.
 
