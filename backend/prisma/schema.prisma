@@ -486,6 +486,9 @@ model Order {
   // created (same request, second write — see PublicService.createOrder).
   // Unique so the webhook can look up the order by PaymentIntent id.
   stripePaymentIntentId String?          @unique
+  // Huella SHA-256 del "intento de compra" (solo TARJETA; null en el resto y en todo pedido
+  // anterior a la Parte B1, que por eso nunca se reutiliza). Ver common/huella-checkout.ts.
+  huellaCheckout        String?
   // Set only when estadoPago = REEMBOLSADO, right after stripe.refunds.create
   // succeeds — see OrdersService.reembolsar. No webhook confirms this in v1;
   // the Stripe API response itself is the confirmation.
@@ -562,6 +565,7 @@ model Order {
   // queries behind /orders/summary (Fase 9b) and any future date-filtered
   // listing.
   @@index([tenantId, createdAt])
+  @@index([tenantId, huellaCheckout])
   @@index([puntoEnvioId])
   @@index([clienteId])
   @@map("orders")

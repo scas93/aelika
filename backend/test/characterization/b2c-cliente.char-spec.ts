@@ -97,7 +97,9 @@ describe('B2C · Cliente derivado del pedido', () => {
     await conectarStripe(s.h.prisma, s.base.tenant.id);
     s.h.fakes.paymentIntentsCreate.mockRejectedValueOnce(new Error('stripe caído'));
     const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { metodoPago: 'TARJETA' }));
-    expect(res.status).toBe(500);
+    // Parte B1 (cambia a propósito): fallo al crear el PaymentIntent → 503 con mensaje claro, ya no un 500 sin manejar.
+    expect(res.status).toBe(503);
+    expect(res.body.message).toBe('No pudimos iniciar el pago con tarjeta, intenta de nuevo');
     const clientes = await s.h.prisma.cliente.findMany();
     expect(clientes).toHaveLength(1);
     expect(clientes[0].totalPedidos).toBe(0);

@@ -30,13 +30,14 @@ const CAMPOS_DETALLE_B2C = [
  * TEMPORAL — el respaldo y la escritura doble se retiran en la Etapa 1b, junto
  * con las columnas viejas de Order.
  */
-export function aRespuestaOrder<T extends { tipo?: unknown; detalleB2c?: DetalleB2C | null }>(
+export function aRespuestaOrder<T extends { tipo?: unknown; detalleB2c?: DetalleB2C | null; huellaCheckout?: unknown }>(
   order: T,
-): Omit<T, 'tipo' | 'detalleB2c'> {
-  const { tipo: _tipo, detalleB2c, ...resto } = order;
+): Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout'> {
+  // huellaCheckout (Parte B1) es interna del servidor — nunca viaja en la API ni en las salidas internas.
+  const { tipo: _tipo, huellaCheckout: _huella, detalleB2c, ...resto } = order;
   if (!detalleB2c) {
     return resto;
   }
   const campos = Object.fromEntries(CAMPOS_DETALLE_B2C.map((campo) => [campo, detalleB2c[campo]]));
-  return { ...resto, ...campos } as Omit<T, 'tipo' | 'detalleB2c'>;
+  return { ...resto, ...campos } as Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout'>;
 }

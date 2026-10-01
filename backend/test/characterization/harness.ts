@@ -21,8 +21,11 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
  *  - queueAdd: cola BullMQ de notificaciones (Telegram/correo se despachan
  *    desde el processor, que aquí no corre). Recibe (nombreJob, data).
  *  - stripe.*: el cliente Stripe es el real (para que la verificación de
- *    firma del webhook sea la ruta real) pero paymentIntents.create y
- *    refunds.create son mocks — nada sale a la red.
+ *    firma del webhook sea la ruta real) pero paymentIntents.create/retrieve/cancel
+ *    y refunds.create son mocks — nada sale a la red. (Parte B1) Los PaymentIntent
+ *    viven en `piStore` (id → objeto) y `create` respeta la llave de idempotencia
+ *    (`{ idempotencyKey }`): la misma llave devuelve el MISMO PaymentIntent, como
+ *    Stripe. Un test puede forzar `status`/`amount`/`transfer_data` en el store.
  *  - dispararSeguro: Reglas EVENTO_PEDIDO (Botpress nunca se contacta). Solo en el modo
  *    por defecto; con `reglasReales` el ReglaEventoPedidoService es el REAL.
  *  - reglaEnvio: frontera con Botpress (ReglaEnvioService.enviar) — siempre sustituida.
@@ -32,6 +35,10 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
 export interface Fakes {
   queueAdd: jest.Mock;
   paymentIntentsCreate: jest.Mock;
+  paymentIntentsRetrieve: jest.Mock;
+  paymentIntentsCancel: jest.Mock;
+  /** PaymentIntent falsos por id (Parte B1). */
+  piStore: Map<string, any>;
   refundsCreate: jest.Mock;
   dispararSeguro: jest.Mock;
   reglaEnvio: jest.Mock;
@@ -79,8 +86,13 @@ export function restoreClock() {
 export async function createHarness(opts: { reglasReales?: boolean } = {}): Promise<Harness> {
   const stripe = new Stripe('sk_test_characterization');
   const paymentIntentsCreate = jest.fn();
+  const paymentIntentsRetrieve = jest.fn();
+  const paymentIntentsCancel = jest.fn();
+  const piStore = new Map<string, any>();
   const refundsCreate = jest.fn();
   (stripe.paymentIntents as any).create = paymentIntentsCreate;
+  (stripe.paymentIntents as any).retrieve = paymentIntentsRetrieve;
+  (stripe.paymentIntents as any).cancel = paymentIntentsCancel;
   (stripe.refunds as any).create = refundsCreate;
 
   const queueAdd = jest.fn().mockResolvedValue(undefined);
@@ -92,6 +104,9 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
   const fakes: Fakes = {
     queueAdd,
     paymentIntentsCreate,
+    paymentIntentsRetrieve,
+    paymentIntentsCancel,
+    piStore,
     refundsCreate,
     dispararSeguro,
     reglaEnvio,
@@ -101,9 +116,36 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
       queueAdd.mockReset().mockResolvedValue(undefined);
       dispararSeguro.mockReset().mockResolvedValue(undefined);
       let n = 0;
-      paymentIntentsCreate.mockReset().mockImplementation(async () => {
+      piStore.clear();
+      const porLlave = new Map<string, string>();
+      paymentIntentsCreate.mockReset().mockImplementation(async (params: any, opts?: { idempotencyKey?: string }) => {
+        const llave = opts?.idempotencyKey;
+        if (llave && porLlave.has(llave)) return piStore.get(porLlave.get(llave)!);
         n += 1;
-        return { id: `pi_char_${n}`, client_secret: `pi_char_${n}_secret_x` };
+        const pi = {
+          id: `pi_char_${n}`,
+          client_secret: `pi_char_${n}_secret_x`,
+          status: 'requires_payment_method',
+          amount: params?.amount,
+          transfer_data: params?.transfer_data,
+        };
+        piStore.set(pi.id, pi);
+        if (llave) porLlave.set(llave, pi.id);
+        return pi;
+      });
+      paymentIntentsRetrieve.mockReset().mockImplementation(async (id: string) => {
+        const pi = piStore.get(id);
+        if (!pi) throw Object.assign(new Error(`No such payment_intent: ${id}`), { code: 'resource_missing' });
+        return pi;
+      });
+      paymentIntentsCancel.mockReset().mockImplementation(async (id: string) => {
+        const pi = piStore.get(id);
+        if (!pi) throw Object.assign(new Error(`No such payment_intent: ${id}`), { code: 'resource_missing' });
+        if (pi.status === 'succeeded' || pi.status === 'canceled') {
+          throw Object.assign(new Error(`cannot cancel a ${pi.status} payment_intent`), { code: 'payment_intent_unexpected_state' });
+        }
+        pi.status = 'canceled';
+        return pi;
       });
       refundsCreate.mockReset().mockResolvedValue({ id: 're_char_1' });
       reglaEnvio.mockReset().mockResolvedValue({ id: 'envio-char' });

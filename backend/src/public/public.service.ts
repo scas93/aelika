@@ -1,4 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
@@ -7,6 +15,7 @@ import { ClientesService } from '../clientes/clientes.service';
 import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
+import { calcularHuellaCheckout, normalizarNombre } from '../common/huella-checkout';
 import {
   CanalOrigen,
   ClienteCanal,
@@ -43,6 +52,29 @@ const DIRECCION_VACIA: DireccionFields = {
   direccionColonia: null,
   direccionReferencias: null,
 };
+
+// Parte B1 — reutilización de pedidos TARJETA pendientes (ver createOrder). Ventana contada desde el
+// createdAt del pedido pendiente; no es una expiración, solo decide si es elegible.
+export const VENTANA_REUTILIZACION_MS = 2 * 60 * 60 * 1000;
+// Espera del request que pierde el reclamo de un pedido FALLIDO sin PaymentIntent. Mutable a propósito
+// (los tests lo acortan); nada fuera de las pruebas lo cambia.
+export const TIEMPOS_ESPERA_PI = { intervaloMs: 250, maxMs: 3000 };
+// Un pedido PENDIENTE sin PaymentIntent solo se da por abandonado (proceso muerto) pasado este tiempo.
+export const PEDIDO_SIN_PI_ABANDONADO_MS = 2 * 60 * 1000;
+const MSG_PAGO_NO_INICIADO = 'No pudimos iniciar el pago con tarjeta, intenta de nuevo';
+const MSG_PAGO_EN_PROCESO = 'Tu pago anterior sigue procesándose';
+const MSG_REINTENTA = 'Reintenta en un momento';
+// Estados de un PaymentIntent cuyo clientSecret aún sirve para cobrar.
+const ESTADOS_PI_REUTILIZABLES = ['requires_payment_method', 'requires_confirmation', 'requires_action'];
+
+const includeOrder = {
+  items: {
+    include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } },
+  },
+  detalleB2c: true,
+} satisfies Prisma.OrderInclude;
+type OrderCompleto = Prisma.OrderGetPayload<{ include: typeof includeOrder }>;
+type ResultadoReutilizacion = { tipo: 'ok'; order: OrderCompleto; clientSecret: string | null } | { tipo: 'rechazado' };
 
 // Pickup needs lead time for the kitchen — a specific pickup time can't be
 // requested for right now or for a time that's already passed.
@@ -378,7 +410,29 @@ export class PublicService {
 
     const notasDescuento = resumenDescuentos.length > 0 ? resumenDescuentos.join('; ') : null;
 
-    const order = await this.prisma.$transaction(async (tx) => {
+    // Parte B1: huella del intento (solo TARJETA), sobre valores ya resueltos — ver common/huella-checkout.ts.
+    const huella =
+      dto.metodoPago === MetodoPago.TARJETA
+        ? calcularHuellaCheckout({
+            tenantId: tenant.id,
+            clienteTelefono: dto.clienteTelefono,
+            clienteNombre: dto.clienteNombre,
+            clienteCorreo: dto.clienteCorreo,
+            items: dto.items.map((i) => ({
+              productId: i.productId,
+              cantidad: i.cantidad,
+              modifierOptionIds: i.modifierOptionIds,
+            })),
+            metodoEntrega,
+            puntoEnvioId: puntoEnvio?.id,
+            direccion: direccionEntrega,
+            notas: dto.notas,
+            factura,
+            total,
+          })
+        : null;
+
+    const crearNuevo = async (tx: Prisma.TransactionClient) => {
       const folio = await this.nextFolio(tx, tenant.id);
 
       // Se resuelve antes de crear el Order — clienteId es una FK requerida
@@ -415,6 +469,7 @@ export class PublicService {
           puntoEnvioId: puntoEnvio?.id,
           ...direccionEntrega,
           ...factura,
+          huellaCheckout: huella,
           estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION,
           canalOrigen: CanalOrigen.WEB,
           tipo: TipoOrden.B2C,
@@ -486,63 +541,293 @@ export class PublicService {
       }
 
       return nuevoOrder;
-    });
+    };
 
-    // TARJETA: the order already exists (folio assigned, PENDIENTE) — now
-    // create the PaymentIntent and attach its id/clientSecret. Deliberately
-    // outside the transaction above: a network call to Stripe has no
-    // business holding the advisory lock/row locks that folio assignment
-    // needs. A destination charge (transfer_data.destination = the tenant's
-    // connected account, no application_fee_amount) — Aelika takes 0% per
-    // order (subscription-only), and already pays Stripe's own fees/losses
-    // per the account's `defaults.responsibilities` (see
-    // TenantService.createOrContinueStripeAccount), so nothing is deducted here.
-    //
-    // "Pedido recibido" (audiencia NEGOCIO) ya NO se encola aquí para
-    // TARJETA — se pospone hasta que el webhook de Stripe confirme el pago
-    // (`payment_intent.succeeded`, ver StripeWebhookController), sin
-    // importar cuánto tarde en resolverse. Antes se encolaba en este punto
-    // con el PENDIENTE optimista con el que nace el pedido, lo que dejaba el
-    // mensaje de Telegram congelado en "en proceso" si el pago se resolvía
-    // mal (o tarde) después. Si el intento de cobro falla de entrada (catch
-    // abajo) tampoco se notifica nada — de cara al negocio, ese pedido nunca
-    // existió.
     if (dto.metodoPago === MetodoPago.TARJETA) {
-      try {
-        const paymentIntent = await this.stripeService.client.paymentIntents.create({
-          amount: Math.round(Number(order.total) * 100),
-          currency: 'mxn',
-          transfer_data: { destination: tenant.stripeAccountId! },
-          automatic_payment_methods: { enabled: true },
-          metadata: { orderId: order.id, tenantId: tenant.id, slug, folio: order.folio },
-        });
-
-        const orderConPago = await this.prisma.order.update({
-          where: { id: order.id },
-          data: { stripePaymentIntentId: paymentIntent.id },
-          include: {
-            items: {
-              include: { modificadores: { select: { nombreGrupo: true, nombre: true, precioAdicional: true } } },
-            },
-            detalleB2c: true,
-          },
-        });
-
-        return { ...aRespuestaOrder(orderConPago), clientSecret: paymentIntent.client_secret };
-      } catch (err) {
-        // The order stays on record as FALLIDO rather than silently
-        // disappearing — same "never lose a real customer action" principle
-        // as everywhere else in this service.
-        await this.prisma.order.update({ where: { id: order.id }, data: { estadoPago: EstadoPago.FALLIDO } });
-        throw err;
-      }
+      return this.crearOReutilizarTarjeta({
+        tenant,
+        slug,
+        huella: huella!,
+        total,
+        horaRecogidaTipo,
+        horaRecogida,
+        crearNuevo,
+      });
     }
+
+    const order = await this.prisma.$transaction(crearNuevo);
 
     // EFECTIVO/TRANSFERENCIA: estadoPago ya nació PAGADO/lo que corresponda
     // en la transacción de arriba y no cambia después — encolar aquí mismo.
     void this.encolarPedidoRecibido(tenant.id, tenant.nombre, order);
 
     return aRespuestaOrder(order);
+  }
+
+  /**
+   * TARJETA (Parte B1): un solo pedido por intento de compra. Todo corre DESPUÉS de las validaciones de
+   * createOrder (negocio abierto, hora, método de pago, mínimo de envío, precios), así que un pedido solo se
+   * reutiliza si el envío actual sigue siendo válido.
+   *
+   *  1. Bajo un candado por (tenant, huella) —tomado ANTES del candado del folio, siempre en ese orden— se busca
+   *     el pedido más reciente con esa huella dentro de la ventana de 2 h. Si no es elegible (o no existe) se crea
+   *     uno nuevo en la misma transacción.
+   *  2. Un candidato PENDIENTE/FALLIDO se valida contra Stripe FUERA de la transacción (no se sostiene un candado
+   *     durante una llamada de red). Si Stripe lo rechaza (cancelado, monto o destino distinto) se vuelve a
+   *     entrar a la transacción: bajo el candado se busca otra vez el más reciente — si ya es otro, otro request
+   *     lo reemplazó y se reutiliza ese; si sigue siendo el rechazado, se crea el nuevo.
+   *  3. El PaymentIntent se crea fuera de la transacción con llave de idempotencia (`pi-<orderId>`), así dos
+   *     requests concurrentes sobre el mismo pedido obtienen el mismo PaymentIntent.
+   *
+   * "Pedido recibido" (audiencia NEGOCIO) NO se encola aquí: para TARJETA lo dispara el webhook al confirmarse el
+   * pago (`payment_intent.succeeded`, ver StripeWebhookController). Reutilizar no toca folio, Cliente ni
+   * contadores: el pedido no está pagado, la regla de la Parte A queda intacta.
+   */
+  private async crearOReutilizarTarjeta(ctx: {
+    tenant: { id: string; stripeAccountId: string | null };
+    slug: string;
+    huella: string;
+    total: number;
+    horaRecogidaTipo: HoraRecogidaTipo;
+    horaRecogida: string | null;
+    crearNuevo: (tx: Prisma.TransactionClient) => Promise<OrderCompleto>;
+  }) {
+    const { tenant, slug, huella, total } = ctx;
+    const MAX_CANDIDATOS = 3;
+    let rechazadoId: string | null = null;
+
+    for (let intento = 0; ; intento++) {
+      const paso = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenant.id}:${huella}`}))`;
+        const candidato = await tx.order.findFirst({
+          where: {
+            tenantId: tenant.id,
+            huellaCheckout: huella,
+            metodoPago: MetodoPago.TARJETA,
+            createdAt: { gte: new Date(Date.now() - VENTANA_REUTILIZACION_MS) },
+          },
+          orderBy: { createdAt: 'desc' },
+          include: includeOrder,
+        });
+        if (candidato && candidato.id !== rechazadoId && intento < MAX_CANDIDATOS) {
+          if (candidato.estadoPago === EstadoPago.PROCESANDO) return { tipo: 'procesando' as const };
+          if (candidato.estadoPago === EstadoPago.PENDIENTE || candidato.estadoPago === EstadoPago.FALLIDO) {
+            return { tipo: 'candidato' as const, order: candidato };
+          }
+          // PAGADO / REEMBOLSADO: el intento anterior ya terminó, esto es una compra nueva.
+        }
+        return { tipo: 'nuevo' as const, order: await ctx.crearNuevo(tx) };
+      });
+
+      if (paso.tipo === 'procesando') {
+        throw new ConflictException(MSG_PAGO_EN_PROCESO);
+      }
+
+      if (paso.tipo === 'nuevo') {
+        // Destination charge (transfer_data.destination = cuenta conectada del negocio, sin
+        // application_fee_amount): Aelika cobra 0% por pedido (solo suscripción) y ya paga las comisiones de
+        // Stripe según `defaults.responsibilities` (ver TenantService.createOrContinueStripeAccount).
+        const pi = await this.crearPaymentIntent(paso.order, tenant, slug, `pi-${paso.order.id}`);
+        await this.cancelarIntentosHuerfanos(tenant.id, paso.order);
+        const orderConPago = await this.recargarOrder(paso.order.id);
+        return { ...aRespuestaOrder(orderConPago), clientSecret: pi.client_secret };
+      }
+
+      const resultado = await this.reutilizarCandidato(paso.order, ctx);
+      if (resultado.tipo === 'rechazado') {
+        rechazadoId = paso.order.id;
+        continue;
+      }
+      return { ...aRespuestaOrder(resultado.order), clientSecret: resultado.clientSecret };
+    }
+  }
+
+  private async recargarOrder(id: string): Promise<OrderCompleto> {
+    return this.prisma.order.findUniqueOrThrow({ where: { id }, include: includeOrder });
+  }
+
+  /**
+   * Crea el PaymentIntent y guarda su id. Si Stripe falla, el pedido queda FALLIDO sin PaymentIntent (no se
+   * pierde, mismo principio de "nunca perder una acción real del cliente") y el cliente recibe 503, no 500.
+   */
+  private async crearPaymentIntent(
+    order: { id: string; total: Prisma.Decimal; folio: string },
+    tenant: { id: string; stripeAccountId: string | null },
+    slug: string,
+    idempotencyKey: string,
+  ) {
+    try {
+      const pi = await this.stripeService.client.paymentIntents.create(
+        {
+          amount: Math.round(Number(order.total) * 100),
+          currency: 'mxn',
+          transfer_data: { destination: tenant.stripeAccountId! },
+          automatic_payment_methods: { enabled: true },
+          metadata: { orderId: order.id, tenantId: tenant.id, slug, folio: order.folio },
+        },
+        { idempotencyKey },
+      );
+      await this.prisma.order.update({ where: { id: order.id }, data: { stripePaymentIntentId: pi.id } });
+      return pi;
+    } catch (err) {
+      this.logger.error(`No se pudo crear el PaymentIntent del pedido ${order.id}: ${(err as Error)?.message}`);
+      try {
+        // Solo si sigue pendiente y sin PaymentIntent: nunca pisar un PAGADO/PaymentIntent ya guardado
+        // por otro request concurrente con la misma llave.
+        await this.prisma.order.updateMany({
+          where: { id: order.id, estadoPago: EstadoPago.PENDIENTE, stripePaymentIntentId: null },
+          data: { estadoPago: EstadoPago.FALLIDO },
+        });
+      } catch (e) {
+        this.logger.error(`Tampoco se pudo marcar FALLIDO el pedido ${order.id}: ${(e as Error)?.message}`);
+      }
+      throw new ServiceUnavailableException(MSG_PAGO_NO_INICIADO);
+    }
+  }
+
+  /** Decide si un pedido pendiente con la misma huella puede reutilizarse y devuelve su clientSecret vigente. */
+  private async reutilizarCandidato(
+    cand: OrderCompleto,
+    ctx: {
+      tenant: { id: string; stripeAccountId: string | null };
+      slug: string;
+      total: number;
+      horaRecogidaTipo: HoraRecogidaTipo;
+      horaRecogida: string | null;
+    },
+  ): Promise<ResultadoReutilizacion> {
+    const { tenant, slug } = ctx;
+    let piId = cand.stripePaymentIntentId;
+    let recienCreado: { id: string; client_secret: string | null } | null = null;
+
+    if (!piId) {
+      if (cand.estadoPago === EstadoPago.FALLIDO) {
+        // FALLIDO sin PaymentIntent: solo quien gana el reclamo atómico llama a Stripe. Llave con uuid para que
+        // Stripe no repita el error guardado de la llave original.
+        const reclamo = await this.prisma.order.updateMany({
+          where: { id: cand.id, estadoPago: EstadoPago.FALLIDO, stripePaymentIntentId: null },
+          data: { estadoPago: EstadoPago.PENDIENTE },
+        });
+        if (reclamo.count === 1) {
+          recienCreado = await this.crearPaymentIntent(cand, tenant, slug, `pi-${cand.id}-${randomUUID()}`);
+        } else {
+          piId = await this.esperarPaymentIntent(cand.id);
+          if (!piId) throw new ConflictException(MSG_REINTENTA);
+        }
+      } else {
+        // PENDIENTE sin PaymentIntent: otro request lo está creando en este momento (el creador original, con
+        // `pi-<orderId>`, o el ganador de un reclamo, con llave propia) o el proceso murió antes de crearlo.
+        // Crear aquí de inmediato podría generar un SEGUNDO PaymentIntent (llaves distintas), así que primero se
+        // espera; solo si no aparece a tiempo y el pedido sigue pendiente se crea con la llave `pi-<orderId>`
+        // (que también recupera un PaymentIntent ya creado por una ejecución que murió antes de guardarlo).
+        // "No está en vuelo" = sin tocarse hace más de PEDIDO_SIN_PI_ABANDONADO_MS: un PaymentIntent creado
+        // fuera de ese pedido y nunca guardado dejaría un cobro sin pedido, peor que un 409 temporal.
+        piId = await this.esperarPaymentIntent(cand.id);
+        if (!piId) {
+          const fila = await this.prisma.order.findUnique({
+            where: { id: cand.id },
+            select: { estadoPago: true, stripePaymentIntentId: true, updatedAt: true },
+          });
+          if (fila?.stripePaymentIntentId) {
+            piId = fila.stripePaymentIntentId;
+          } else if (
+            fila?.estadoPago === EstadoPago.PENDIENTE &&
+            Date.now() - fila.updatedAt.getTime() > PEDIDO_SIN_PI_ABANDONADO_MS
+          ) {
+            recienCreado = await this.crearPaymentIntent(cand, tenant, slug, `pi-${cand.id}`);
+          } else {
+            throw new ConflictException(MSG_REINTENTA);
+          }
+        }
+      }
+    }
+
+    let clientSecret: string | null;
+    if (recienCreado) {
+      clientSecret = recienCreado.client_secret;
+    } else {
+      let pi;
+      try {
+        pi = await this.stripeService.client.paymentIntents.retrieve(piId!);
+      } catch (err) {
+        if ((err as { code?: string })?.code === 'resource_missing') return { tipo: 'rechazado' };
+        this.logger.error(`No se pudo recuperar el PaymentIntent ${piId}: ${(err as Error)?.message}`);
+        throw new ServiceUnavailableException(MSG_PAGO_NO_INICIADO);
+      }
+      if (pi.status === 'processing' || pi.status === 'succeeded') {
+        throw new ConflictException(MSG_PAGO_EN_PROCESO);
+      }
+      const destino = pi.transfer_data?.destination;
+      const destinoId = typeof destino === 'string' ? destino : (destino?.id ?? null);
+      const sirve =
+        ESTADOS_PI_REUTILIZABLES.includes(pi.status) &&
+        pi.amount === Math.round(ctx.total * 100) &&
+        destinoId === tenant.stripeAccountId;
+      if (!sirve) return { tipo: 'rechazado' };
+      clientSecret = pi.client_secret;
+    }
+
+    // La hora del último envío prevalece. Escritura doble (Order + DetalleB2C) hasta la Etapa 1b.
+    if (cand.horaRecogida !== ctx.horaRecogida || cand.horaRecogidaTipo !== ctx.horaRecogidaTipo) {
+      await this.prisma.$transaction([
+        this.prisma.order.update({
+          where: { id: cand.id },
+          data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
+        }),
+        this.prisma.detalleB2C.updateMany({
+          where: { orderId: cand.id },
+          data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
+        }),
+      ]);
+    }
+    return { tipo: 'ok', order: await this.recargarOrder(cand.id), clientSecret };
+  }
+
+  /** Espera (polling) a que el request ganador guarde el PaymentIntent del pedido. null si no aparece a tiempo. */
+  private async esperarPaymentIntent(orderId: string): Promise<string | null> {
+    // Se cuenta por iteraciones, no con Date.now(): el reloj de la aplicación se falsea en los tests.
+    const intentos = Math.max(1, Math.ceil(TIEMPOS_ESPERA_PI.maxMs / TIEMPOS_ESPERA_PI.intervaloMs));
+    for (let i = 0; ; i++) {
+      const fila = await this.prisma.order.findUnique({ where: { id: orderId }, select: { stripePaymentIntentId: true } });
+      if (fila?.stripePaymentIntentId) return fila.stripePaymentIntentId;
+      if (i >= intentos) return null;
+      await new Promise((resolve) => setTimeout(resolve, TIEMPOS_ESPERA_PI.intervaloMs));
+    }
+  }
+
+  /**
+   * Best-effort: al crear un pedido nuevo, cancela en Stripe el cobro de los pedidos pendientes del mismo Cliente
+   * (mismo teléfono normalizado) Y mismo nombre normalizado dentro de la ventana. El nombre se exige porque el
+   * teléfono no está autenticado: sin él, cualquiera con el teléfono ajeno podría cancelar el cobro de otra
+   * persona. Solo se cancela el cobro, no el pedido (queda PENDIENTE). Cualquier error se ignora (ya pagado,
+   * ya cancelado...); el webhook ignora `payment_intent.canceled`.
+   */
+  private async cancelarIntentosHuerfanos(tenantId: string, nuevo: { id: string; clienteId: string; clienteNombre: string }) {
+    try {
+      const huerfanos = await this.prisma.order.findMany({
+        where: {
+          tenantId,
+          clienteId: nuevo.clienteId,
+          id: { not: nuevo.id },
+          metodoPago: MetodoPago.TARJETA,
+          estadoPago: { in: [EstadoPago.PENDIENTE, EstadoPago.FALLIDO] },
+          stripePaymentIntentId: { not: null },
+          createdAt: { gte: new Date(Date.now() - VENTANA_REUTILIZACION_MS) },
+        },
+        select: { id: true, clienteNombre: true, stripePaymentIntentId: true },
+      });
+      const nombre = normalizarNombre(nuevo.clienteNombre);
+      for (const h of huerfanos) {
+        if (normalizarNombre(h.clienteNombre) !== nombre) continue;
+        try {
+          await this.stripeService.client.paymentIntents.cancel(h.stripePaymentIntentId!);
+        } catch (err) {
+          this.logger.warn(`No se canceló el PaymentIntent ${h.stripePaymentIntentId} del pedido ${h.id}: ${(err as Error)?.message}`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`No se pudieron revisar los cobros huérfanos de ${nuevo.id}: ${(err as Error)?.message}`);
+    }
   }
 
   /**

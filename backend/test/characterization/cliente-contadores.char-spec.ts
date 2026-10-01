@@ -72,8 +72,11 @@ describe('Cliente · contadores derivados de pedidos contables', () => {
 
   it('cliente con solo intentos de pago: 0 pedidos, sigue en el directorio, fuera de activos, nuevos y top', async () => {
     await conectarStripe(s.h.prisma, s.base.tenant.id);
+    // Parte B1 (cambia a propósito): dos envíos idénticos ya son UN solo pedido (se reutiliza). Para seguir
+    // probando "dos intentos no pagados" el segundo lleva otro carrito (otra huella → pedido nuevo).
     await crearPedidoTarjeta(s.h, s.base);
-    await crearPedidoTarjeta(s.h, s.base);
+    await crearPedidoTarjeta(s.h, s.base, { items: [{ productId: s.base.productoA.id, cantidad: 2 }] });
+    expect(await s.h.prisma.order.count()).toBe(2);
     expect((await clientes())[0].totalPedidos).toBe(0);
     const api = dueno();
     expect((await api.get('/clientes').expect(200)).body.total).toBe(1);
