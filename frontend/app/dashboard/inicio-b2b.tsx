@@ -7,7 +7,7 @@ import { useSession } from "@/lib/session-context";
 import { ApiError, fetchPedidosB2bResumen, type PedidoB2bResumen } from "@/lib/api";
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import Card from "./_components/Card";
-import SummaryCard from "./_components/SummaryCard";
+import SummaryCard, { SUMMARY_GRID } from "./_components/SummaryCard";
 
 // Cada folio de este módulo enlaza a la lista de Pedidos activos — no al
 // detalle directo (fuera de alcance de este widget, ver auditoría) — con el
@@ -50,7 +50,7 @@ export default function InicioB2B() {
       <section className="flex flex-col gap-3">
         <SeccionTitulo titulo="Semana en curso" inicio={semanaEnCurso.inicio} fin={semanaEnCurso.fin} />
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className={SUMMARY_GRID}>
           <SummaryCard label="Pendientes de confirmación" value={semanaEnCurso.pendientesConfirmacion} error={null} />
           <SummaryCard label="Confirmados y surtiendo" value={semanaEnCurso.confirmadosSurtiendo} error={null} />
           <SummaryCard label="Piezas de la semana" value={semanaEnCurso.totalPiezas} error={null} />
@@ -67,7 +67,7 @@ export default function InicioB2B() {
       <section className="flex flex-col gap-3">
         <SeccionTitulo titulo="Próxima semana" inicio={proximaSemana.inicio} fin={proximaSemana.fin} />
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className={SUMMARY_GRID}>
           <SummaryCard label="Pedidos recibidos" value={proximaSemana.totalPedidos} error={null} />
           <SummaryCard label="Piezas acumuladas" value={proximaSemana.totalPiezas} error={null} />
         </div>

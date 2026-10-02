@@ -19,7 +19,7 @@ import {
 } from "@/lib/api";
 import { rangoHoyISO } from "@/lib/fecha";
 import Card from "./_components/Card";
-import SummaryCard from "./_components/SummaryCard";
+import SummaryCard, { SUMMARY_GRID } from "./_components/SummaryCard";
 import Badge from "./_components/Badge";
 import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS } from "./pedidos/estado";
 import InicioB2B from "./inicio-b2b";
@@ -133,7 +133,7 @@ function InicioB2C() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className={SUMMARY_GRID}>
         <SummaryCard label="Pedidos hoy" value={summary?.pedidosHoy} error={summaryError} />
         <SummaryCard label="Ingresos hoy" value={summary ? formatMoney(summary.ingresosHoy) : undefined} error={summaryError} />
         <SummaryCard
