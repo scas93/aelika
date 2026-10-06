@@ -21,7 +21,7 @@ Script: `src/scripts/etapa2-b2b.ts` (se compila a `dist/src/scripts/etapa2-b2b.j
 
 ## Guarda de entorno
 Dentro de Railway exige `--proyecto-esperado <nombre>` y aborta **antes de conectarse** si no coincide con `RAILWAY_PROJECT_NAME`.
-Esta etapa es **solo staging** (`merry-compassion`). **El enlace de la CLI de Railway es por directorio**: pasa siempre `-p/-e`
+Esta etapa es **solo staging** (`aelika-staging`). **El enlace de la CLI de Railway es por directorio**: pasa siempre `-p/-e`
 (IDs en `scripts/etapa1/README.md`) y verifica el dominio que imprime la guarda.
 
 ## Modos
@@ -56,7 +56,7 @@ En el traslape de contenedores el viejo puede crear un pedido en `pedidos_b2b`; 
 ## Comandos (Railway)
 ```bash
 cd backend
-P=e2686010-d4f1-4431-91c2-89c880dbd243; E=b073bd1a-4f41-4707-a64c-68c1f93f0469; NOMBRE=merry-compassion
+P=e2686010-d4f1-4431-91c2-89c880dbd243; E=b073bd1a-4f41-4707-a64c-68c1f93f0469; NOMBRE=aelika-staging
 RW="railway ssh -p $P -e $E -s aelika --"
 $RW sh -c "cd /app && node dist/src/scripts/etapa2-b2b.js planificar --proyecto-esperado $NOMBRE" > e2-plan.ndjson 2> e2-plan.txt
 $RW sh -c "cd /app && node dist/src/scripts/etapa2-b2b.js auditar --proyecto-esperado $NOMBRE"   > e2-auditoria-antes.ndjson 2> e2-auditoria-antes.txt
