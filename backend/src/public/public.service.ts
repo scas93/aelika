@@ -30,7 +30,7 @@ import {
   TipoOrden,
   TipoSeleccion,
 } from '../../generated/prisma/client';
-import { aRespuestaOrder } from '../orders/order-respuesta';
+import { aRespuestaOrder, exigirDetalleB2C } from '../orders/order-respuesta';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import type { DescuentoProductoConfigDto } from '../promotions/dto/descuento-producto-config.dto';
 import type { ComboConfigDto } from '../promotions/dto/combo-config.dto';
@@ -457,32 +457,25 @@ export class PublicService {
           clienteTelefono: dto.clienteTelefono,
           clienteCorreo: dto.clienteCorreo,
           notas: dto.notas,
-          horaRecogidaTipo,
-          horaRecogida,
           metodoPago: dto.metodoPago,
           // EFECTIVO/TRANSFERENCIA are settled in person — nothing for this
           // system to track, so they're born PAGADO. TARJETA starts
           // PENDIENTE and is flipped by the Stripe webhook once the
           // PaymentIntent created just below actually resolves.
           estadoPago: dto.metodoPago === MetodoPago.TARJETA ? EstadoPago.PENDIENTE : EstadoPago.PAGADO,
-          metodoEntrega,
-          puntoEnvioId: puntoEnvio?.id,
-          ...direccionEntrega,
           ...factura,
           huellaCheckout: huella,
           estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION,
           canalOrigen: CanalOrigen.WEB,
           tipo: TipoOrden.B2C,
           descuentoTotal,
-          notasDescuento: notasDescuento ?? undefined,
           total,
           // Etapa 1: lo exclusivo de B2C vive en DetalleB2C, creado en la MISMA
           // transacción que la orden (nested create con tenantId explícito: la
           // extensión de tenant no lo inyecta en escrituras anidadas, y aquí ni
-          // siquiera se usa TenantPrismaService).
-          // TEMPORAL — escritura doble: los mismos valores también se guardan en
-          // las columnas viejas de Order (arriba) hasta la Etapa 1b, para que el
-          // contenedor anterior y una reversa las lean bien. Se retira en 1b.
+          // siquiera se usa TenantPrismaService). Desde la Etapa 1b-a es la ÚNICA
+          // escritura de estos campos: las columnas viejas de Order ya no se escriben
+          // (siguen en el esquema, deprecadas, hasta la 1b-b).
           detalleB2c: {
             create: {
               tenantId: tenant.id,
@@ -767,18 +760,14 @@ export class PublicService {
       clientSecret = pi.client_secret;
     }
 
-    // La hora del último envío prevalece. Escritura doble (Order + DetalleB2C) hasta la Etapa 1b.
-    if (cand.horaRecogida !== ctx.horaRecogida || cand.horaRecogidaTipo !== ctx.horaRecogidaTipo) {
-      await this.prisma.$transaction([
-        this.prisma.order.update({
-          where: { id: cand.id },
-          data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
-        }),
-        this.prisma.detalleB2C.updateMany({
-          where: { orderId: cand.id },
-          data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
-        }),
-      ]);
+    // La hora del último envío prevalece. Se lee y se escribe SOLO en el DetalleB2C (Etapa 1b-a): las columnas
+    // viejas de Order ya no se tocan.
+    const detalle = exigirDetalleB2C(cand).detalleB2c;
+    if (detalle.horaRecogida !== ctx.horaRecogida || detalle.horaRecogidaTipo !== ctx.horaRecogidaTipo) {
+      await this.prisma.detalleB2C.update({
+        where: { orderId: cand.id },
+        data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
+      });
     }
     return { tipo: 'ok', order: await this.recargarOrder(cand.id), clientSecret };
   }
@@ -854,12 +843,22 @@ export class PublicService {
     const productIds = order.items.map((item) => item.productId).filter((id): id is string => id !== null);
     const categoriaPorProducto = await this.resolverCategoriasPorProducto(productIds);
 
+    // Fire-and-forget: ningún fallo al armar el recibo debe convertirse en un rechazo sin manejar ni afectar
+    // al pedido. Una orden sin DetalleB2C (inconsistencia; ya registrada por exigirDetalleB2C) no genera recibo.
+    let texto: string;
+    try {
+      texto = this.construirReciboPedidoRecibido(tenantNombre, order, categoriaPorProducto);
+    } catch (err) {
+      this.logger.error(`No se pudo armar el recibo de Telegram del pedido ${order.id}: ${err instanceof Error ? err.message : err}`);
+      return;
+    }
+
     void this.notificacionesQueueService.encolarSeguro({
       tenantId,
       evento: NotificacionEvento.PEDIDO_RECIBIDO,
       mensaje: {
         asunto: `Nuevo pedido #${order.folio}`,
-        texto: this.construirReciboPedidoRecibido(tenantNombre, order, categoriaPorProducto),
+        texto,
       },
     });
   }
@@ -983,8 +982,7 @@ export class PublicService {
     order: Prisma.OrderGetPayload<{ include: { items: { include: { modificadores: true } }; detalleB2c: true } }>,
     categoriaPorProducto: Map<string, string>,
   ): string {
-    // Hora de recogida: del DetalleB2C (o, sin detalle, de la columna vieja de Order) —
-    // ver aRespuestaOrder. TEMPORAL hasta la Etapa 1b.
+    // Hora de recogida: del DetalleB2C vía aRespuestaOrder (sin detalle lanza; encolarPedidoRecibido lo captura y no tumba el pedido).
     const { horaRecogidaTipo, horaRecogida } = aRespuestaOrder(order);
     const lineas: string[] = [
       `NUEVO PEDIDO #${order.folio} - ${tenantNombre}`,

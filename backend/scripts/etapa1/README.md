@@ -30,6 +30,13 @@ DATABASE_URL=postgresql://... node scripts/etapa1/verificar-runner.mjs --compara
 ```
 Salida con código 0 = todo correcto, 1 = alguna verificación falló.
 
+**Etapa 1b-a — `--hasta <fecha ISO>`.** Desde que se retiró la escritura doble, las órdenes nuevas dejan las columnas viejas
+de `orders` en su valor por defecto, así que compararlas contra el detalle marcaría diferencias falsas. Con `--hasta` (el
+instante del despliegue de la 1b-a, ej. `--hasta 2026-10-07T18:00:00Z`) la comparación campo a campo solo cubre las órdenes
+creadas ANTES de ese instante; el resto de las verificaciones (conteos, sin detalle, huérfanos, duplicados, tipo B2C) no cambia.
+El runner imprime cuántas órdenes quedaron fuera. Sin `--hasta` compara todas, como antes. En Railway:
+`VERIFICAR_SQL_B64=$S node /tmp/v.mjs --hasta <fecha>` (los argumentos van después de `/tmp/v.mjs`).
+
 ### En Railway (sin `psql`, sin proxy público): por `railway ssh`
 El contenedor trae `pg` (dependencia de producción). Se envía el runner y el SQL en base64 (no depende de que
 `scripts/` esté desplegado). **Ajusta `-p`/`-e` al entorno destino** (tabla de arriba):
@@ -60,7 +67,7 @@ railway ssh -p <PROJECT_ID> -e <ENVIRONMENT_ID> -s aelika -- sh -c \
 5. Borra las bases `etapa1_*` y el worktree al terminar.
 
 ## Reversa
-No hay script: la escritura doble deja las columnas viejas de `orders` siempre al día. Volver al contenedor
+No hay script: la escritura doble dejaba las columnas viejas de `orders` siempre al día. Volver al contenedor
 anterior no pierde nada (su cliente Prisma ignora la tabla y la columna nuevas; `orders.tipo` tiene DEFAULT).
-Las órdenes que cree el contenedor anterior sin detalle se leen por el respaldo de lectura
-(`aRespuestaOrder`) y la Etapa 1b las rellena antes de borrar las columnas viejas.
+Las órdenes que cree el contenedor anterior sin detalle se leían por el respaldo de lectura
+(`aRespuestaOrder`) — respaldo retirado en la Etapa 1b-a (ver `scripts/etapa1/` y `orders/order-respuesta.ts`).

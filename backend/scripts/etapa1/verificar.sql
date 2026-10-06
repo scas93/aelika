@@ -4,8 +4,13 @@
 --
 -- Corte: finished_at de la migración en _prisma_migrations. Las órdenes SIN detalle creadas
 -- ANTES del corte deben ser 0 (las cubrió el backfill). Las creadas DESPUÉS son las del
--- traslape de despliegue: las cubre el respaldo de lectura y la Etapa 1b las rellena antes
--- de borrar las columnas viejas.
+-- traslape del despliegue de la Etapa 1 (ya se rellenaron; desde la 1b-a una orden sin detalle es una
+-- inconsistencia y la API responde 500 / la omite de las listas, ver orders/order-respuesta.ts).
+--
+-- Etapa 1b-a: desde que se retira la escritura doble, las órdenes NUEVAS dejan las columnas viejas en su valor
+-- por defecto, así que compararlas contra el detalle marcaría diferencias falsas. El runner sustituye
+-- __CORTE_1BA__ por el parámetro --hasta (momento del despliegue de la 1b-a): la comparación de campos solo
+-- cubre órdenes creadas ANTES de ese instante. Sin --hasta es 'infinity' (comportamiento anterior).
 
 -- @conteos: orders vs detalles_b2c
 SELECT
@@ -43,7 +48,7 @@ WHERE o."id" IS NULL;
 SELECT count(*) AS ordenes_con_mas_de_un_detalle
 FROM (SELECT "orderId" FROM "detalles_b2c" GROUP BY "orderId" HAVING count(*) > 1) x;
 
--- @campos_distintos: por campo, cuantos detalles difieren de la columna vieja de su orden (TODOS DEBEN ser 0; IS DISTINCT FROM trata NULL bien)
+-- @campos_distintos: por campo, cuantos detalles difieren de la columna vieja de su orden, solo ordenes anteriores al corte 1b-a (TODOS DEBEN ser 0; IS DISTINCT FROM trata NULL bien)
 SELECT
   count(*) AS filas_comparadas,
   count(*) FILTER (WHERE d."tenantId" IS DISTINCT FROM o."tenantId") AS "tenantId",
@@ -56,7 +61,11 @@ SELECT
   count(*) FILTER (WHERE d."direccionColonia" IS DISTINCT FROM o."direccionColonia") AS "direccionColonia",
   count(*) FILTER (WHERE d."direccionReferencias" IS DISTINCT FROM o."direccionReferencias") AS "direccionReferencias",
   count(*) FILTER (WHERE d."notasDescuento" IS DISTINCT FROM o."notasDescuento") AS "notasDescuento"
-FROM "detalles_b2c" d JOIN "orders" o ON o."id" = d."orderId";
+FROM "detalles_b2c" d JOIN "orders" o ON o."id" = d."orderId"
+WHERE o."createdAt" < __CORTE_1BA__;
+
+-- @ordenes_desde_el_corte: ordenes creadas desde el corte de la 1b-a (excluidas de la comparacion de campos; solo informativo)
+SELECT count(*) AS ordenes_desde_el_corte_1ba FROM "orders" o WHERE o."createdAt" >= __CORTE_1BA__;
 
 -- @suma_total_por_tenant: ordenes y suma de total por tenant (comparar contra la linea base previa)
 SELECT "tenantId", count(*) AS ordenes, sum("total") AS suma_total FROM "orders" GROUP BY "tenantId" ORDER BY "tenantId";

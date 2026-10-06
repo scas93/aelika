@@ -109,17 +109,13 @@ async function ensureOrder(tenantId: string, folio: string, input: OrderSeedInpu
       clienteNombre: input.clienteNombre,
       clienteTelefono: input.clienteTelefono,
       notas: input.notas,
-      // Escritura doble (Etapa 1, temporal hasta la 1b): mismos valores en las
-      // columnas viejas de Order y en DetalleB2C — igual que PublicService.createOrder.
-      horaRecogidaTipo: input.horaRecogidaTipo,
-      horaRecogida: input.horaRecogida,
       metodoPago: MetodoPago.EFECTIVO,
       estadoPedido: input.estadoPedido,
       canalOrigen: CanalOrigen.WEB,
       tipo: TipoOrden.B2C,
       descuentoTotal: input.descuentoTotal,
-      notasDescuento: input.notasDescuento,
       total: subtotal - input.descuentoTotal,
+      // Etapa 1b-a: lo exclusivo de B2C solo se escribe en DetalleB2C (igual que PublicService.createOrder).
       detalleB2c: {
         create: {
           tenantId,

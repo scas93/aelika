@@ -17,7 +17,7 @@ import {
   MetodoPago,
   NotificacionEvento,
 } from '../../generated/prisma/enums';
-import { aRespuestaOrder } from './order-respuesta';
+import { aRespuestaOrder, aRespuestaOrdenes, exigirDetalleB2C } from './order-respuesta';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
@@ -96,7 +96,7 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       include: { items: true, detalleB2c: true },
     });
-    return ordenes.map(aRespuestaOrder);
+    return aRespuestaOrdenes(ordenes);
   }
 
   async summary(query: SummaryQueryDto) {
@@ -290,10 +290,13 @@ export class OrdersService {
   async avanzar(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id },
+      include: { detalleB2c: true },
     });
     if (!order) {
       throw new NotFoundException('Pedido no encontrado');
     }
+    // Etapa 1b-a: una orden B2C sin detalle es una inconsistencia — se falla ANTES de cambiar el estatus.
+    exigirDetalleB2C(order);
 
     const siguiente = SIGUIENTE_ESTADO[order.estadoPedido];
     if (!siguiente) {
@@ -312,8 +315,7 @@ export class OrdersService {
         detalleB2c: true,
       },
     });
-    // Forma plana (campos B2C tomados de DetalleB2C, con respaldo a las columnas
-    // viejas si la orden no tiene detalle) — la usan la respuesta y el contexto de reglas.
+    // Forma plana (campos B2C tomados solo de DetalleB2C) — la usan la respuesta y el contexto de reglas.
     const respuesta = aRespuestaOrder(actualizado);
 
     const evento = EVENTO_POR_ESTADO[siguiente];
@@ -513,10 +515,13 @@ export class OrdersService {
   async reembolsar(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id },
+      include: { detalleB2c: true },
     });
     if (!order) {
       throw new NotFoundException('Pedido no encontrado');
     }
+    // Etapa 1b-a: se falla ANTES de tocar Stripe si la orden no tiene detalle (nunca reembolsar y luego dar 500).
+    exigirDetalleB2C(order);
 
     if (
       order.metodoPago !== MetodoPago.TARJETA ||

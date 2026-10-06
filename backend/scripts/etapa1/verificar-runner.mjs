@@ -6,6 +6,9 @@
 //                                                            no toca detalles_b2c, que aún no existe)
 //                 ... --comparar antes.json                (DESPUÉS: verificar.sql completo + compara contra la línea base)
 //                 ... --guardar-linea-base f.json          (DESPUÉS: además guarda la línea base actual)
+//                 ... --hasta 2026-10-07T18:00:00Z         (Etapa 1b-a: la comparación detalle ↔ columnas viejas solo cubre
+//                                                            órdenes creadas ANTES de ese instante, el del despliegue de la 1b-a;
+//                                                            sin él se comparan todas, como antes)
 // En Railway:     ver scripts/etapa1/README.md (railway ssh, sin psql, sin proxy público).
 //
 // El SQL se lee de verificar.sql junto a este archivo, o de VERIFICAR_SQL_B64 (base64) si se ejecuta
@@ -21,10 +24,23 @@ const { Client } = require('pg');
 const args = process.argv.slice(2);
 const opt = (n) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined);
 
+// Corte de la 1b-a como literal SQL ya validado (nunca texto libre del usuario dentro del SQL).
+function corteSql() {
+  const v = opt('--hasta');
+  if (v === undefined) return "'infinity'::timestamptz";
+  const t = Date.parse(v);
+  if (!/^\d{4}-\d{2}-\d{2}/.test(v) || Number.isNaN(t)) {
+    console.error(`--hasta "${v}" no es una fecha válida (ej. 2026-10-07T18:00:00Z)`);
+    process.exit(2);
+  }
+  return `'${new Date(t).toISOString()}'::timestamptz`;
+}
+
 function leerSql() {
-  if (process.env.VERIFICAR_SQL_B64) return Buffer.from(process.env.VERIFICAR_SQL_B64, 'base64').toString('utf8');
-  const aqui = path.dirname(fileURLToPath(import.meta.url));
-  return fs.readFileSync(path.join(aqui, 'verificar.sql'), 'utf8');
+  let sql;
+  if (process.env.VERIFICAR_SQL_B64) sql = Buffer.from(process.env.VERIFICAR_SQL_B64, 'base64').toString('utf8');
+  else sql = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'verificar.sql'), 'utf8');
+  return sql.replaceAll('__CORTE_1BA__', corteSql());
 }
 
 function bloques(sql) {
@@ -96,6 +112,8 @@ try {
   marca(num(resultados.detalles_duplicados[0].ordenes_con_mas_de_un_detalle) === 0, 'órdenes con más de un detalle = 0');
   const cd = resultados.campos_distintos[0];
   const distintos = Object.entries(cd).filter(([k, v]) => k !== 'filas_comparadas' && num(v) > 0);
+  const desde = resultados.ordenes_desde_el_corte[0].ordenes_desde_el_corte_1ba;
+  console.log(`  INFO   corte 1b-a: ${opt('--hasta') ?? '(sin --hasta: se comparan todas)'} — ${desde} órdenes desde el corte quedan fuera de la comparación de campos`);
   marca(distintos.length === 0, `campos del detalle iguales a la columna vieja en ${cd.filas_comparadas} filas${distintos.length ? ' — difieren: ' + distintos.map(([k, v]) => `${k}=${v}`).join(', ') : ''}`);
   marca(resultados.conteo_por_tipo.every((r) => r.tipo === 'B2C'), `todas las órdenes con tipo B2C (${resultados.conteo_por_tipo.map((r) => `${r.tipo}:${r.ordenes}`).join(', ')})`);
 
