@@ -1,0 +1,1955 @@
+{
+  "_nota": "Generado contra el c\u00f3digo previo a la Etapa 2. No regenerar para arreglar un fallo. \u00danica edici\u00f3n manual posterior: se quit\u00f3 la consulta 'lista?limit=2' (su contenido depend\u00eda del orden de los empates de semanaInicio, sin contrato antes ni despu\u00e9s; la paginaci\u00f3n la cubre b2b-panel).",
+  "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+  "productoA": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+  "productoB": "da6b89a8-7201-4bfb-8048-38a753a5b817",
+  "ids": {
+    "p1": "f1cc8e62-63c6-4ad7-afbb-205336d13bfe",
+    "p2": "81e15a4d-0455-4d21-8251-fb082b35bfe4",
+    "p3": "bf0bcd30-c42c-4048-9732-04ba067036b4",
+    "p4": "c66f88ed-3cc0-4377-8330-fc6ef564a645",
+    "p5": "9c7f2ecd-b83b-44ae-b8af-15eb5d034537",
+    "p6": "d4090710-5f57-4503-9996-edaf71904dc0"
+  },
+  "codigoId": "b3f5cbaf-a179-4f30-8c93-315f56772ba2",
+  "consultas": {
+    "lista": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p6>",
+            "folio": "6",
+            "negocioNombre": "Fonda Seis",
+            "contactoNombre": "Seis",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_INICIO",
+            "cancelado": false,
+            "totalPiezas": 20,
+            "total": "900",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p4>",
+            "folio": "4",
+            "negocioNombre": "Deli Cuatro",
+            "contactoNombre": "Cuatro",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 15,
+            "total": "542.25",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p5>",
+            "folio": "5",
+            "negocioNombre": "Express Cinco",
+            "contactoNombre": "Cinco",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": true,
+            "totalPiezas": 10,
+            "total": "450",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p3>",
+            "folio": "3",
+            "negocioNombre": "Cafeter\u00eda Tres",
+            "contactoNombre": "Tres",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 10,
+            "total": "305",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p1>",
+            "folio": "1",
+            "negocioNombre": "Abarrotes Uno",
+            "contactoNombre": "Uno",
+            "semanaInicio": "<iso>",
+            "estado": "DESPACHADO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 6,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?estado=CONFIRMADO": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p6>",
+            "folio": "6",
+            "negocioNombre": "Fonda Seis",
+            "contactoNombre": "Seis",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_INICIO",
+            "cancelado": false,
+            "totalPiezas": 20,
+            "total": "900",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 2,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?estados+cancelado=false": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p6>",
+            "folio": "6",
+            "negocioNombre": "Fonda Seis",
+            "contactoNombre": "Seis",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_INICIO",
+            "cancelado": false,
+            "totalPiezas": 20,
+            "total": "900",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p4>",
+            "folio": "4",
+            "negocioNombre": "Deli Cuatro",
+            "contactoNombre": "Cuatro",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 15,
+            "total": "542.25",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p3>",
+            "folio": "3",
+            "negocioNombre": "Cafeter\u00eda Tres",
+            "contactoNombre": "Tres",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 10,
+            "total": "305",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p1>",
+            "folio": "1",
+            "negocioNombre": "Abarrotes Uno",
+            "contactoNombre": "Uno",
+            "semanaInicio": "<iso>",
+            "estado": "DESPACHADO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 5,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?cancelado=true": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p5>",
+            "folio": "5",
+            "negocioNombre": "Express Cinco",
+            "contactoNombre": "Cinco",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": true,
+            "totalPiezas": 10,
+            "total": "450",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?negocio=dos": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?semanas": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p4>",
+            "folio": "4",
+            "negocioNombre": "Deli Cuatro",
+            "contactoNombre": "Cuatro",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 15,
+            "total": "542.25",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p5>",
+            "folio": "5",
+            "negocioNombre": "Express Cinco",
+            "contactoNombre": "Cinco",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": true,
+            "totalPiezas": 10,
+            "total": "450",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p3>",
+            "folio": "3",
+            "negocioNombre": "Cafeter\u00eda Tres",
+            "contactoNombre": "Tres",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 10,
+            "total": "305",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 4,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?importe>=540": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p6>",
+            "folio": "6",
+            "negocioNombre": "Fonda Seis",
+            "contactoNombre": "Seis",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_INICIO",
+            "cancelado": false,
+            "totalPiezas": 20,
+            "total": "900",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p4>",
+            "folio": "4",
+            "negocioNombre": "Deli Cuatro",
+            "contactoNombre": "Cuatro",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 15,
+            "total": "542.25",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p1>",
+            "folio": "1",
+            "negocioNombre": "Abarrotes Uno",
+            "contactoNombre": "Uno",
+            "semanaInicio": "<iso>",
+            "estado": "DESPACHADO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 4,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "lista?importe entre": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<p4>",
+            "folio": "4",
+            "negocioNombre": "Deli Cuatro",
+            "contactoNombre": "Cuatro",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 15,
+            "total": "542.25",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p5>",
+            "folio": "5",
+            "negocioNombre": "Express Cinco",
+            "contactoNombre": "Cinco",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": true,
+            "totalPiezas": 10,
+            "total": "450",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p2>",
+            "folio": "2",
+            "negocioNombre": "Bodega Dos",
+            "contactoNombre": "Dos",
+            "semanaInicio": "<iso>",
+            "estado": "CONFIRMADO_SURTIENDO",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p3>",
+            "folio": "3",
+            "negocioNombre": "Cafeter\u00eda Tres",
+            "contactoNombre": "Tres",
+            "semanaInicio": "<iso>",
+            "estado": "PENDIENTE_CONFIRMACION",
+            "estadoPago": "PENDIENTE",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 10,
+            "total": "305",
+            "createdAt": "<iso>"
+          },
+          {
+            "id": "<p1>",
+            "folio": "1",
+            "negocioNombre": "Abarrotes Uno",
+            "contactoNombre": "Uno",
+            "semanaInicio": "<iso>",
+            "estado": "DESPACHADO",
+            "estadoPago": "PAGADO",
+            "modoCobro": "AL_FINAL",
+            "cancelado": false,
+            "totalPiezas": 12,
+            "total": "540",
+            "createdAt": "<iso>"
+          }
+        ],
+        "total": 5,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 1
+      }
+    },
+    "export": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Semana,Estado,Modo de cobro,Estado de pago,Cancelado,Piezas,Total",
+        "1,Abarrotes Uno,Uno,2026-09-14,DESPACHADO,AL_FINAL,PAGADO,No,12,540.00",
+        "2,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00",
+        "3,Cafeter\u00eda Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00",
+        "4,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25",
+        "5,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,S\u00ed,10,450.00",
+        "6,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00"
+      ]
+    },
+    "export?estados": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Semana,Estado,Modo de cobro,Estado de pago,Cancelado,Piezas,Total",
+        "2,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00",
+        "3,Cafeter\u00eda Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00",
+        "4,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25",
+        "6,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00"
+      ]
+    },
+    "resumen": {
+      "status": 200,
+      "body": {
+        "semanaEnCurso": {
+          "inicio": "2026-09-28",
+          "fin": "2026-10-04",
+          "pendientesConfirmacion": 1,
+          "confirmadosSurtiendo": 1,
+          "totalPiezas": 22,
+          "entregasHoy": [
+            {
+              "folio": "2",
+              "negocioNombre": "Bodega Dos",
+              "cantidad": 6
+            },
+            {
+              "folio": "3",
+              "negocioNombre": "Cafeter\u00eda Tres",
+              "cantidad": 10
+            }
+          ],
+          "entregasManana": [],
+          "pendientesMasAntiguos": [
+            {
+              "id": "<p3>",
+              "folio": "3",
+              "negocioNombre": "Cafeter\u00eda Tres",
+              "diasPendiente": 4
+            },
+            {
+              "id": "<p4>",
+              "folio": "4",
+              "negocioNombre": "Deli Cuatro",
+              "diasPendiente": 2
+            }
+          ]
+        },
+        "proximaSemana": {
+          "inicio": "2026-10-05",
+          "fin": "2026-10-11",
+          "totalPedidos": 1,
+          "totalPiezas": 15
+        },
+        "rankingProductos": [
+          {
+            "nombreProducto": "Caf\u00e9 americano",
+            "cantidadTotal": 22
+          },
+          {
+            "nombreProducto": "Concha",
+            "cantidadTotal": 15
+          }
+        ]
+      }
+    },
+    "detalle p1": {
+      "status": 200,
+      "body": {
+        "id": "<p1>",
+        "tenantId": "<tenant>",
+        "folio": "1",
+        "negocioNombre": "Abarrotes Uno",
+        "contactoNombre": "Uno",
+        "contactoTelefono": "5511000001",
+        "contactoCorreo": "uno@negocio.test",
+        "clienteId": "<cliente_p1>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_FINAL",
+        "estado": "DESPACHADO",
+        "estadoPago": "PAGADO",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 12,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "540",
+        "descuentoTotal": "0",
+        "total": "540",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p1.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p1>",
+            "productId": "<productoA>",
+            "nombreProducto": "Caf\u00e9 americano",
+            "precioUnitario": "45",
+            "cantidadTotal": 12,
+            "distribucion": [
+              {
+                "id": "<p1.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p1.i0>",
+                "dia": "LUNES",
+                "cantidad": 12
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": null
+      }
+    },
+    "detalle p2": {
+      "status": 200,
+      "body": {
+        "id": "<p2>",
+        "tenantId": "<tenant>",
+        "folio": "2",
+        "negocioNombre": "Bodega Dos",
+        "contactoNombre": "Dos",
+        "contactoTelefono": "5511000002",
+        "contactoCorreo": "dos@negocio.test",
+        "clienteId": "<cliente_p2>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_FINAL",
+        "estado": "CONFIRMADO_SURTIENDO",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 12,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "540",
+        "descuentoTotal": "0",
+        "total": "540",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p2.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p2>",
+            "productId": "<productoA>",
+            "nombreProducto": "Caf\u00e9 americano",
+            "precioUnitario": "45",
+            "cantidadTotal": 12,
+            "distribucion": [
+              {
+                "id": "<p2.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p2.i0>",
+                "dia": "LUNES",
+                "cantidad": 6
+              },
+              {
+                "id": "<p2.i0.d1>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p2.i0>",
+                "dia": "MIERCOLES",
+                "cantidad": 6
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": null
+      }
+    },
+    "detalle p3": {
+      "status": 200,
+      "body": {
+        "id": "<p3>",
+        "tenantId": "<tenant>",
+        "folio": "3",
+        "negocioNombre": "Cafeter\u00eda Tres",
+        "contactoNombre": "Tres",
+        "contactoTelefono": "5511000003",
+        "contactoCorreo": "tres@negocio.test",
+        "clienteId": "<cliente_p3>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 10,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "305",
+        "descuentoTotal": "0",
+        "total": "305",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p3.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p3>",
+            "productId": "<productoB>",
+            "nombreProducto": "Concha",
+            "precioUnitario": "30.5",
+            "cantidadTotal": 10,
+            "distribucion": [
+              {
+                "id": "<p3.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p3.i0>",
+                "dia": "MIERCOLES",
+                "cantidad": 10
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": null
+      }
+    },
+    "detalle p4": {
+      "status": 200,
+      "body": {
+        "id": "<p4>",
+        "tenantId": "<tenant>",
+        "folio": "4",
+        "negocioNombre": "Deli Cuatro",
+        "contactoNombre": "Cuatro",
+        "contactoTelefono": "5511000004",
+        "contactoCorreo": "cuatro@negocio.test",
+        "clienteId": "<cliente_p4>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 15,
+        "codigoDescuentoId": "<codigo>",
+        "codigoDescuentoTexto": "PROMO10",
+        "descuentoPorcentajeAplicado": "10",
+        "subtotal": "602.5",
+        "descuentoTotal": "60.25",
+        "total": "542.25",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p4.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p4>",
+            "productId": "<productoA>",
+            "nombreProducto": "Caf\u00e9 americano",
+            "precioUnitario": "45",
+            "cantidadTotal": 10,
+            "distribucion": [
+              {
+                "id": "<p4.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p4.i0>",
+                "dia": "LUNES",
+                "cantidad": 10
+              }
+            ]
+          },
+          {
+            "id": "<p4.i1>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p4>",
+            "productId": "<productoB>",
+            "nombreProducto": "Concha",
+            "precioUnitario": "30.5",
+            "cantidadTotal": 5,
+            "distribucion": [
+              {
+                "id": "<p4.i1.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p4.i1>",
+                "dia": "JUEVES",
+                "cantidad": 5
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": {
+          "id": "<codigo>",
+          "tenantId": "<tenant>",
+          "codigo": "PROMO10",
+          "descuentoPorcentaje": "10",
+          "activo": true,
+          "usosMaximos": null,
+          "fechaLimite": null,
+          "createdAt": "<iso>",
+          "updatedAt": "<iso>"
+        }
+      }
+    },
+    "detalle p5": {
+      "status": 200,
+      "body": {
+        "id": "<p5>",
+        "tenantId": "<tenant>",
+        "folio": "5",
+        "negocioNombre": "Express Cinco",
+        "contactoNombre": "Cinco",
+        "contactoTelefono": "5511000005",
+        "contactoCorreo": "cinco@negocio.test",
+        "clienteId": "<cliente_p5>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": true,
+        "canceladoAt": "<iso>",
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 10,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "450",
+        "descuentoTotal": "0",
+        "total": "450",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p5.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p5>",
+            "productId": "<productoA>",
+            "nombreProducto": "Caf\u00e9 americano",
+            "precioUnitario": "45",
+            "cantidadTotal": 10,
+            "distribucion": [
+              {
+                "id": "<p5.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p5.i0>",
+                "dia": "LUNES",
+                "cantidad": 10
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": null
+      }
+    },
+    "detalle p6": {
+      "status": 200,
+      "body": {
+        "id": "<p6>",
+        "tenantId": "<tenant>",
+        "folio": "6",
+        "negocioNombre": "Fonda Seis",
+        "contactoNombre": "Seis",
+        "contactoTelefono": "5511000006",
+        "contactoCorreo": "seis@negocio.test",
+        "clienteId": "<cliente_p6>",
+        "semanaInicio": "<iso>",
+        "modoCobro": "AL_INICIO",
+        "estado": "CONFIRMADO_SURTIENDO",
+        "estadoPago": "PAGADO",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 20,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "900",
+        "descuentoTotal": "0",
+        "total": "900",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "<iso>",
+        "updatedAt": "<iso>",
+        "items": [
+          {
+            "id": "<p6.i0>",
+            "tenantId": "<tenant>",
+            "pedidoB2bId": "<p6>",
+            "productId": "<productoA>",
+            "nombreProducto": "Caf\u00e9 americano",
+            "precioUnitario": "45",
+            "cantidadTotal": 20,
+            "distribucion": [
+              {
+                "id": "<p6.i0.d0>",
+                "tenantId": "<tenant>",
+                "pedidoB2bItemId": "<p6.i0>",
+                "dia": "MARTES",
+                "cantidad": 20
+              }
+            ]
+          }
+        ],
+        "codigoDescuento": null
+      }
+    },
+    "dia 2026-09-14": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-15": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-16": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-17": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-18": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-19": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-20": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-21": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-22": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-23": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-24": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-25": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-26": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-27": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-28": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<p2>",
+          "folio": "2",
+          "negocioNombre": "Bodega Dos",
+          "contactoNombre": "Dos",
+          "contactoTelefono": "5511000002",
+          "estado": "CONFIRMADO_SURTIENDO",
+          "items": [
+            {
+              "productId": "<productoA>",
+              "nombreProducto": "Caf\u00e9 americano",
+              "precioUnitario": "45",
+              "cantidad": 6
+            }
+          ]
+        }
+      ]
+    },
+    "dia 2026-09-29": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-09-30": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<p2>",
+          "folio": "2",
+          "negocioNombre": "Bodega Dos",
+          "contactoNombre": "Dos",
+          "contactoTelefono": "5511000002",
+          "estado": "CONFIRMADO_SURTIENDO",
+          "items": [
+            {
+              "productId": "<productoA>",
+              "nombreProducto": "Caf\u00e9 americano",
+              "precioUnitario": "45",
+              "cantidad": 6
+            }
+          ]
+        },
+        {
+          "id": "<p3>",
+          "folio": "3",
+          "negocioNombre": "Cafeter\u00eda Tres",
+          "contactoNombre": "Tres",
+          "contactoTelefono": "5511000003",
+          "estado": "PENDIENTE_CONFIRMACION",
+          "items": [
+            {
+              "productId": "<productoB>",
+              "nombreProducto": "Concha",
+              "precioUnitario": "30.5",
+              "cantidad": 10
+            }
+          ]
+        }
+      ]
+    },
+    "dia 2026-10-01": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-02": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-03": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-04": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-05": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<p4>",
+          "folio": "4",
+          "negocioNombre": "Deli Cuatro",
+          "contactoNombre": "Cuatro",
+          "contactoTelefono": "5511000004",
+          "estado": "PENDIENTE_CONFIRMACION",
+          "items": [
+            {
+              "productId": "<productoA>",
+              "nombreProducto": "Caf\u00e9 americano",
+              "precioUnitario": "45",
+              "cantidad": 10
+            }
+          ]
+        }
+      ]
+    },
+    "dia 2026-10-06": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-07": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-08": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<p4>",
+          "folio": "4",
+          "negocioNombre": "Deli Cuatro",
+          "contactoNombre": "Cuatro",
+          "contactoTelefono": "5511000004",
+          "estado": "PENDIENTE_CONFIRMACION",
+          "items": [
+            {
+              "productId": "<productoB>",
+              "nombreProducto": "Concha",
+              "precioUnitario": "30.5",
+              "cantidad": 5
+            }
+          ]
+        }
+      ]
+    },
+    "dia 2026-10-09": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-10": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-11": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-12": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-13": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<p6>",
+          "folio": "6",
+          "negocioNombre": "Fonda Seis",
+          "contactoNombre": "Seis",
+          "contactoTelefono": "5511000006",
+          "estado": "CONFIRMADO_SURTIENDO",
+          "items": [
+            {
+              "productId": "<productoA>",
+              "nombreProducto": "Caf\u00e9 americano",
+              "precioUnitario": "45",
+              "cantidad": 20
+            }
+          ]
+        }
+      ]
+    },
+    "dia 2026-10-14": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-15": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-16": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-17": {
+      "status": 200,
+      "body": []
+    },
+    "dia 2026-10-18": {
+      "status": 200,
+      "body": []
+    },
+    "dia export 2026-09-28": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Tel\u00e9fono,Producto,Cantidad",
+        "2,Bodega Dos,Dos,5511000002,Caf\u00e9 americano,6"
+      ]
+    },
+    "dia export 2026-09-30": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Tel\u00e9fono,Producto,Cantidad",
+        "2,Bodega Dos,Dos,5511000002,Caf\u00e9 americano,6",
+        "3,Cafeter\u00eda Tres,Tres,5511000003,Concha,10"
+      ]
+    },
+    "dia export 2026-10-05": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Tel\u00e9fono,Producto,Cantidad",
+        "4,Deli Cuatro,Cuatro,5511000004,Caf\u00e9 americano,10"
+      ]
+    },
+    "dia export 2026-10-12": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Negocio,Contacto,Tel\u00e9fono,Producto,Cantidad"
+      ]
+    },
+    "codigos": {
+      "status": 200,
+      "body": [
+        {
+          "id": "<codigo>",
+          "tenantId": "<tenant>",
+          "codigo": "PROMO10",
+          "descuentoPorcentaje": "10",
+          "activo": true,
+          "usosMaximos": null,
+          "fechaLimite": null,
+          "createdAt": "<iso>",
+          "updatedAt": "<iso>",
+          "usosActuales": 1
+        }
+      ]
+    },
+    "clientes": {
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "<cliente_p1>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000001",
+            "nombre": "Uno",
+            "correo": "uno@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 1,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          },
+          {
+            "id": "<cliente_p2>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000002",
+            "nombre": "Dos",
+            "correo": "dos@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 1,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          },
+          {
+            "id": "<cliente_p3>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000003",
+            "nombre": "Tres",
+            "correo": "tres@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 1,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          },
+          {
+            "id": "<cliente_p4>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000004",
+            "nombre": "Cuatro",
+            "correo": "cuatro@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 1,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          },
+          {
+            "id": "<cliente_p5>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000005",
+            "nombre": "Cinco",
+            "correo": "cinco@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 0,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          },
+          {
+            "id": "<cliente_p6>",
+            "tenantId": "<tenant>",
+            "canal": "B2B",
+            "telefono": "5511000006",
+            "nombre": "Seis",
+            "correo": "seis@negocio.test",
+            "primerPedidoAt": "<iso>",
+            "ultimoPedidoAt": "<iso>",
+            "totalPedidos": 1,
+            "createdAt": "<iso>",
+            "updatedAt": "<iso>"
+          }
+        ],
+        "total": 6,
+        "page": 1,
+        "limit": 100,
+        "totalPages": 1
+      }
+    },
+    "clientes activos": {
+      "status": 200,
+      "body": {
+        "clientesActivos": 4
+      }
+    },
+    "clientes summary/daily": {
+      "status": 200,
+      "body": [
+        {
+          "fecha": "2026-09-21",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-22",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-23",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-24",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-25",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-26",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-27",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-28",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-29",
+          "nuevos": 0,
+          "recurrentes": 0
+        },
+        {
+          "fecha": "2026-09-30",
+          "nuevos": 0,
+          "recurrentes": 0
+        }
+      ]
+    },
+    "B2C /orders": {
+      "status": 200,
+      "body": []
+    },
+    "B2C /orders?soloPagados": {
+      "status": 200,
+      "body": []
+    },
+    "B2C summary": {
+      "status": 200,
+      "body": {
+        "pedidosHoy": 0,
+        "ingresosHoy": "0.00",
+        "ticketPromedioHoy": "0.00",
+        "promocionesActivas": 0
+      }
+    },
+    "B2C summary/daily": {
+      "status": 200,
+      "body": [
+        {
+          "fecha": "2026-09-21",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-22",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-23",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-24",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-25",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-26",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-27",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-28",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-29",
+          "pedidos": 0
+        },
+        {
+          "fecha": "2026-09-30",
+          "pedidos": 0
+        }
+      ]
+    },
+    "B2C summary/estatus": {
+      "status": 200,
+      "body": [
+        {
+          "estadoPedido": "PENDIENTE_CONFIRMACION",
+          "conteo": 0
+        },
+        {
+          "estadoPedido": "CONFIRMADO_SURTIENDO",
+          "conteo": 0
+        },
+        {
+          "estadoPedido": "LISTO_ENTREGA",
+          "conteo": 0
+        },
+        {
+          "estadoPedido": "DESPACHADO",
+          "conteo": 0
+        }
+      ]
+    },
+    "B2C historico": {
+      "status": 200,
+      "body": {
+        "data": [],
+        "total": 0,
+        "page": 1,
+        "limit": 25,
+        "totalPages": 0
+      }
+    },
+    "B2C historico/export": {
+      "status": 200,
+      "texto": [
+        "\ufeffFolio,Cliente,Fecha,Estado,M\u00e9todo de pago,Total,Estado de pago"
+      ]
+    },
+    "p\u00fablica info": {
+      "status": 200,
+      "body": {
+        "nombre": "Negocio cafe-test",
+        "logoUrl": null,
+        "pedidoB2bModoCobro": "AL_FINAL",
+        "pedidoB2bMinimoPiezas": 10,
+        "abierto": true,
+        "ventanaCerradaMensaje": null,
+        "facturacionModo": "DESACTIVADO",
+        "semanaDestino": {
+          "inicio": "2026-10-05",
+          "fin": "2026-10-11"
+        }
+      }
+    },
+    "p\u00fablica cat\u00e1logo": {
+      "status": 200,
+      "body": {
+        "categories": [
+          {
+            "id": "<uuid>",
+            "nombre": "Bebidas",
+            "products": [
+              {
+                "id": "<productoA>",
+                "nombre": "Caf\u00e9 americano",
+                "descripcion": null,
+                "precio": "45",
+                "fotoUrl": null,
+                "disponible": true
+              },
+              {
+                "id": "<productoB>",
+                "nombre": "Concha",
+                "descripcion": null,
+                "precio": "30.5",
+                "fotoUrl": null,
+                "disponible": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "p\u00fablica c\u00f3digo": {
+      "status": 200,
+      "body": {
+        "descuentoPorcentaje": 10
+      }
+    }
+  },
+  "legacy": {
+    "codigos": [
+      {
+        "id": "b3f5cbaf-a179-4f30-8c93-315f56772ba2",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "codigo": "PROMO10",
+        "descuentoPorcentaje": "10",
+        "activo": true,
+        "usosMaximos": null,
+        "fechaLimite": null,
+        "createdAt": "2026-09-30T16:00:00.000Z",
+        "updatedAt": "2026-09-30T16:00:00.000Z"
+      }
+    ],
+    "clientes": [
+      {
+        "id": "ff599a5a-cc8d-482b-b710-b25ce3ee1b90",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000001",
+        "nombre": "Uno",
+        "correo": "uno@negocio.test",
+        "primerPedidoAt": "2026-09-10T15:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-10T15:00:00.000Z",
+        "totalPedidos": 1,
+        "createdAt": "2026-09-10T15:00:00.000Z",
+        "updatedAt": "2026-09-10T15:00:00.000Z"
+      },
+      {
+        "id": "dcff64fc-b055-48ed-88a9-91eab0041824",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000002",
+        "nombre": "Dos",
+        "correo": "dos@negocio.test",
+        "primerPedidoAt": "2026-09-25T15:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-25T15:00:00.000Z",
+        "totalPedidos": 1,
+        "createdAt": "2026-09-25T15:00:00.000Z",
+        "updatedAt": "2026-09-25T15:00:00.000Z"
+      },
+      {
+        "id": "613b777e-b4d5-42a5-959a-7ca01adb3386",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000003",
+        "nombre": "Tres",
+        "correo": "tres@negocio.test",
+        "primerPedidoAt": "2026-09-26T15:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-26T15:00:00.000Z",
+        "totalPedidos": 1,
+        "createdAt": "2026-09-26T15:00:00.000Z",
+        "updatedAt": "2026-09-26T15:00:00.000Z"
+      },
+      {
+        "id": "2c98e32c-aa32-43bc-b3b7-b88c4f64fcc9",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000004",
+        "nombre": "Cuatro",
+        "correo": "cuatro@negocio.test",
+        "primerPedidoAt": "2026-09-28T15:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-28T15:00:00.000Z",
+        "totalPedidos": 1,
+        "createdAt": "2026-09-28T15:00:00.000Z",
+        "updatedAt": "2026-09-28T15:00:00.000Z"
+      },
+      {
+        "id": "ee16e494-47ab-4374-b65d-c07adad88a4b",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000005",
+        "nombre": "Cinco",
+        "correo": "cinco@negocio.test",
+        "primerPedidoAt": "2026-09-29T15:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-29T15:00:00.000Z",
+        "totalPedidos": 0,
+        "createdAt": "2026-09-29T15:00:00.000Z",
+        "updatedAt": "2026-09-29T15:00:00.000Z"
+      },
+      {
+        "id": "27cca589-1252-44f2-bb07-695948d42174",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "canal": "B2B",
+        "telefono": "5511000006",
+        "nombre": "Seis",
+        "correo": "seis@negocio.test",
+        "primerPedidoAt": "2026-09-29T17:00:00.000Z",
+        "ultimoPedidoAt": "2026-09-29T17:00:00.000Z",
+        "totalPedidos": 1,
+        "createdAt": "2026-09-29T17:00:00.000Z",
+        "updatedAt": "2026-09-29T17:00:00.000Z"
+      }
+    ],
+    "pedidos": [
+      {
+        "id": "f1cc8e62-63c6-4ad7-afbb-205336d13bfe",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "1",
+        "negocioNombre": "Abarrotes Uno",
+        "contactoNombre": "Uno",
+        "contactoTelefono": "5511000001",
+        "contactoCorreo": "uno@negocio.test",
+        "clienteId": "ff599a5a-cc8d-482b-b710-b25ce3ee1b90",
+        "semanaInicio": "2026-09-14T00:00:00.000Z",
+        "modoCobro": "AL_FINAL",
+        "estado": "DESPACHADO",
+        "estadoPago": "PAGADO",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 12,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "540",
+        "descuentoTotal": "0",
+        "total": "540",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-10T15:00:00.000Z",
+        "updatedAt": "2026-09-10T15:00:00.000Z"
+      },
+      {
+        "id": "81e15a4d-0455-4d21-8251-fb082b35bfe4",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "2",
+        "negocioNombre": "Bodega Dos",
+        "contactoNombre": "Dos",
+        "contactoTelefono": "5511000002",
+        "contactoCorreo": "dos@negocio.test",
+        "clienteId": "dcff64fc-b055-48ed-88a9-91eab0041824",
+        "semanaInicio": "2026-09-28T00:00:00.000Z",
+        "modoCobro": "AL_FINAL",
+        "estado": "CONFIRMADO_SURTIENDO",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 12,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "540",
+        "descuentoTotal": "0",
+        "total": "540",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-25T15:00:00.000Z",
+        "updatedAt": "2026-09-25T15:00:00.000Z"
+      },
+      {
+        "id": "bf0bcd30-c42c-4048-9732-04ba067036b4",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "3",
+        "negocioNombre": "Cafeter\u00eda Tres",
+        "contactoNombre": "Tres",
+        "contactoTelefono": "5511000003",
+        "contactoCorreo": "tres@negocio.test",
+        "clienteId": "613b777e-b4d5-42a5-959a-7ca01adb3386",
+        "semanaInicio": "2026-09-28T00:00:00.000Z",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 10,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "305",
+        "descuentoTotal": "0",
+        "total": "305",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-26T15:00:00.000Z",
+        "updatedAt": "2026-09-26T15:00:00.000Z"
+      },
+      {
+        "id": "c66f88ed-3cc0-4377-8330-fc6ef564a645",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "4",
+        "negocioNombre": "Deli Cuatro",
+        "contactoNombre": "Cuatro",
+        "contactoTelefono": "5511000004",
+        "contactoCorreo": "cuatro@negocio.test",
+        "clienteId": "2c98e32c-aa32-43bc-b3b7-b88c4f64fcc9",
+        "semanaInicio": "2026-10-05T00:00:00.000Z",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 15,
+        "codigoDescuentoId": "b3f5cbaf-a179-4f30-8c93-315f56772ba2",
+        "codigoDescuentoTexto": "PROMO10",
+        "descuentoPorcentajeAplicado": "10",
+        "subtotal": "602.5",
+        "descuentoTotal": "60.25",
+        "total": "542.25",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-28T15:00:00.000Z",
+        "updatedAt": "2026-09-28T15:00:00.000Z"
+      },
+      {
+        "id": "9c7f2ecd-b83b-44ae-b8af-15eb5d034537",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "5",
+        "negocioNombre": "Express Cinco",
+        "contactoNombre": "Cinco",
+        "contactoTelefono": "5511000005",
+        "contactoCorreo": "cinco@negocio.test",
+        "clienteId": "ee16e494-47ab-4374-b65d-c07adad88a4b",
+        "semanaInicio": "2026-10-05T00:00:00.000Z",
+        "modoCobro": "AL_FINAL",
+        "estado": "PENDIENTE_CONFIRMACION",
+        "estadoPago": "PENDIENTE",
+        "cancelado": true,
+        "canceladoAt": "2026-09-29T15:00:00.000Z",
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 10,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "450",
+        "descuentoTotal": "0",
+        "total": "450",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-29T15:00:00.000Z",
+        "updatedAt": "2026-09-29T15:00:00.000Z"
+      },
+      {
+        "id": "d4090710-5f57-4503-9996-edaf71904dc0",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "folio": "6",
+        "negocioNombre": "Fonda Seis",
+        "contactoNombre": "Seis",
+        "contactoTelefono": "5511000006",
+        "contactoCorreo": "seis@negocio.test",
+        "clienteId": "27cca589-1252-44f2-bb07-695948d42174",
+        "semanaInicio": "2026-10-12T00:00:00.000Z",
+        "modoCobro": "AL_INICIO",
+        "estado": "CONFIRMADO_SURTIENDO",
+        "estadoPago": "PAGADO",
+        "cancelado": false,
+        "canceladoAt": null,
+        "minimoPiezasAplicado": 10,
+        "totalPiezas": 20,
+        "codigoDescuentoId": null,
+        "codigoDescuentoTexto": null,
+        "descuentoPorcentajeAplicado": null,
+        "subtotal": "900",
+        "descuentoTotal": "0",
+        "total": "900",
+        "requiereFactura": false,
+        "facturaRazonSocial": null,
+        "facturaRfc": null,
+        "facturaRegimenFiscal": null,
+        "facturaUsoCfdi": null,
+        "facturaCodigoPostal": null,
+        "facturaCorreo": null,
+        "createdAt": "2026-09-29T17:00:00.000Z",
+        "updatedAt": "2026-09-29T17:00:00.000Z"
+      }
+    ],
+    "items": [
+      {
+        "id": "a18c9e36-6398-4c42-9697-3b9d470af880",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "f1cc8e62-63c6-4ad7-afbb-205336d13bfe",
+        "productId": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+        "nombreProducto": "Caf\u00e9 americano",
+        "precioUnitario": "45",
+        "cantidadTotal": 12
+      },
+      {
+        "id": "1222ee2a-1986-491b-8299-da1394df1206",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "81e15a4d-0455-4d21-8251-fb082b35bfe4",
+        "productId": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+        "nombreProducto": "Caf\u00e9 americano",
+        "precioUnitario": "45",
+        "cantidadTotal": 12
+      },
+      {
+        "id": "9f6efb97-98a0-45b6-be39-e7f0bb42580a",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "bf0bcd30-c42c-4048-9732-04ba067036b4",
+        "productId": "da6b89a8-7201-4bfb-8048-38a753a5b817",
+        "nombreProducto": "Concha",
+        "precioUnitario": "30.5",
+        "cantidadTotal": 10
+      },
+      {
+        "id": "454296f5-6147-47de-8cb9-993967bdff91",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "c66f88ed-3cc0-4377-8330-fc6ef564a645",
+        "productId": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+        "nombreProducto": "Caf\u00e9 americano",
+        "precioUnitario": "45",
+        "cantidadTotal": 10
+      },
+      {
+        "id": "31890cd9-2962-48e5-9070-9251abc8a2e1",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "c66f88ed-3cc0-4377-8330-fc6ef564a645",
+        "productId": "da6b89a8-7201-4bfb-8048-38a753a5b817",
+        "nombreProducto": "Concha",
+        "precioUnitario": "30.5",
+        "cantidadTotal": 5
+      },
+      {
+        "id": "045615c6-0334-459b-9142-e69436ab6abd",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "9c7f2ecd-b83b-44ae-b8af-15eb5d034537",
+        "productId": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+        "nombreProducto": "Caf\u00e9 americano",
+        "precioUnitario": "45",
+        "cantidadTotal": 10
+      },
+      {
+        "id": "450b53f8-14bb-4343-86d6-76ebfb92c0e6",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bId": "d4090710-5f57-4503-9996-edaf71904dc0",
+        "productId": "34651cd4-d6c1-48a2-ad7b-9b291054fcbe",
+        "nombreProducto": "Caf\u00e9 americano",
+        "precioUnitario": "45",
+        "cantidadTotal": 20
+      }
+    ],
+    "itemsDia": [
+      {
+        "id": "597d203e-e24d-40b9-9409-56207dc8b44e",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "a18c9e36-6398-4c42-9697-3b9d470af880",
+        "dia": "LUNES",
+        "cantidad": 12
+      },
+      {
+        "id": "5fdd7194-857f-498d-872e-a487b4ec3a6b",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "1222ee2a-1986-491b-8299-da1394df1206",
+        "dia": "LUNES",
+        "cantidad": 6
+      },
+      {
+        "id": "7403c4c3-e3be-4dde-8ff4-2f69dc43905c",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "1222ee2a-1986-491b-8299-da1394df1206",
+        "dia": "MIERCOLES",
+        "cantidad": 6
+      },
+      {
+        "id": "c7f60292-a32b-4ee0-8a17-d505908737e1",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "9f6efb97-98a0-45b6-be39-e7f0bb42580a",
+        "dia": "MIERCOLES",
+        "cantidad": 10
+      },
+      {
+        "id": "89b4f11c-1674-42b1-b191-43316c295779",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "454296f5-6147-47de-8cb9-993967bdff91",
+        "dia": "LUNES",
+        "cantidad": 10
+      },
+      {
+        "id": "da08fe8c-5966-4ea5-8567-1ee177a9ca21",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "31890cd9-2962-48e5-9070-9251abc8a2e1",
+        "dia": "JUEVES",
+        "cantidad": 5
+      },
+      {
+        "id": "d05c1713-6acb-47eb-b221-ad8f551ed1f4",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "045615c6-0334-459b-9142-e69436ab6abd",
+        "dia": "LUNES",
+        "cantidad": 10
+      },
+      {
+        "id": "6033b197-a36f-4641-921e-1ee9b4e2f51b",
+        "tenantId": "6cd63c55-d2b5-4ab4-84c8-9daba0ba85e4",
+        "pedidoB2bItemId": "450b53f8-14bb-4343-86d6-76ebfb92c0e6",
+        "dia": "MARTES",
+        "cantidad": 20
+      }
+    ]
+  }
+}

@@ -152,6 +152,9 @@ model Tenant {
   orders                    Order[]
   orderItems                OrderItem[]
   detallesB2c               DetalleB2C[]
+  detallesB2b               DetalleB2B[]
+  entregas                  Entrega[]
+  entregaItems              EntregaItem[]
   puntosEnvio               PuntoEnvio[]
   modifierGroups            ModifierGroup[]
   modifierOptions           ModifierOption[]
@@ -184,7 +187,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Etapa 2: entregas cuyo estado cambió este usuario (SetNull al borrarlo).
+  entregasCambiadas Entrega[]
 
   @@index([tenantId])
   @@map("users")
@@ -320,9 +325,9 @@ model PuntoEnvio {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // DEPRECADA (Etapa 1): inversa de Order.puntoEnvioId (columna vieja). Se elimina en 1b.
-  orders Order[]
+  orders      Order[]
   // Inversa de DetalleB2C.puntoEnvioId (la fuente actual).
   detallesB2c DetalleB2C[]
 
@@ -478,7 +483,10 @@ model Order {
   // horaRecogidaTipo = HORA_ESPECIFICA; null otherwise. Meaningless (and
   // ignored) when metodoEntrega = DOMICILIO — see PublicService.
   horaRecogida          String?
-  metodoPago            MetodoPago       @default(EFECTIVO)
+  // Etapa 2: nullable porque una orden B2B no tiene método de pago (se cobra a crédito, confirmación
+  // manual). Una CHECK en la base garantiza que las órdenes B2C nunca queden en null (migración
+  // etapa2_ordenes_b2b); Prisma no la modela. El default se conserva para no cambiar nada del flujo B2C.
+  metodoPago            MetodoPago?      @default(EFECTIVO)
   // See EstadoPago. Only meaningful for TARJETA — EFECTIVO/TRANSFERENCIA
   // are created as PAGADO and never transition.
   estadoPago            EstadoPago       @default(PAGADO)
@@ -520,6 +528,11 @@ model Order {
   facturaCodigoPostal   String?
   facturaCorreo         String?
   estadoPedido          EstadoPedido     @default(PENDIENTE_CONFIRMACION)
+  // Etapa 2: cancelación como flag ortogonal a estadoPedido (mismo criterio que tuvo PedidoB2b.cancelado:
+  // no es un estado más de la secuencia). B2C nunca la usa (sin cancelación en MVP) y no la expone en su API
+  // (ver aRespuestaOrder). La escribe el módulo B2B.
+  cancelado             Boolean          @default(false)
+  canceladoAt           DateTime?
   // Etapa 1: tipo de orden. NOT NULL con DEFAULT 'B2C' en la BD (y aquí) hasta la
   // Etapa 1b, para que el contenedor anterior —que no lo escribe— siga creando
   // órdenes durante un despliegue/reversa. El código nuevo lo escribe explícito.
@@ -552,12 +565,15 @@ model Order {
   // Opcional a nivel de tipos: una orden creada por el contenedor anterior (antes
   // de la Etapa 1b) puede no tenerlo — ver aRespuestaOrder (respaldo de lectura).
   detalleB2c DetalleB2C?
+  // Etapa 2: detalle exclusivo de B2B (1:1) y entregas (1:N). Mismo cuidado de casing que detalleB2c.
+  detalleB2b DetalleB2B?
+  entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
 
-  // folio is short and human-facing (read over the phone/counter), so it only
-  // needs to be unique within a tenant, not globally.
-  @@unique([tenantId, folio])
+  // folio is short and human-facing (read over the phone/counter). Etapa 2: único por (tenant, tipo) —
+  // B2C y B2B llevan secuencias independientes (un tenant puede tener ambos tipos de orden).
+  @@unique([tenantId, tipo, folio])
   // Composite index replaces the old standalone @@index([tenantId]) — a
   // Postgres B-tree index on (tenantId, createdAt) already satisfies
   // tenantId-only lookups via the leftmost-prefix rule, so keeping both
@@ -602,6 +618,91 @@ model DetalleB2C {
   @@map("detalles_b2c")
 }
 
+// Etapa 2: lo exclusivo de un pedido B2B (mayoreo semanal a crédito) vive aquí, 1:1 con Order. Reemplaza a
+// PedidoB2b (que se deja de escribir pero NO se borra en esta etapa). tenantId denormalizado (convención del
+// proyecto) para registrarlo en TenantPrismaService.
+model DetalleB2B {
+  id                          String             @id @default(uuid())
+  tenantId                    String
+  orderId                     String             @unique
+  // Id del PedidoB2b del que viene (migración de la Etapa 2). TEMPORAL: sirve de clave de idempotencia de la
+  // migración de datos y de la reversa; se elimina junto con PedidoB2b en una etapa posterior.
+  legacyPedidoB2bId           String?            @unique
+  negocioNombre               String
+  // Lunes de la semana que cubre el pedido (fecha, sin hora).
+  semanaInicio                DateTime           @db.Date
+  // Snapshots de la config del tenant al crear el pedido (ver Tenant.pedidoB2bModoCobro/MinimoPiezas).
+  modoCobro                   PedidoB2bModoCobro
+  minimoPiezasAplicado        Int
+  // Suma de las cantidades de los ítems — denormalizado, igual que antes en PedidoB2b.totalPiezas.
+  totalPiezas                 Int                @default(0)
+  subtotal                    Decimal            @default(0) @db.Decimal(10, 2)
+  codigoDescuentoId           String?
+  codigoDescuentoTexto        String?
+  descuentoPorcentajeAplicado Decimal?           @db.Decimal(5, 2)
+
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  codigoDescuento PedidoB2bCodigoDescuento? @relation(fields: [codigoDescuentoId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, semanaInicio])
+  @@index([codigoDescuentoId])
+  @@map("detalles_b2b")
+}
+
+enum EstadoEntrega {
+  PENDIENTE
+  LISTA
+  ENTREGADA
+  CANCELADA
+}
+
+// Etapa 2: una entrega es lo que se lleva en una fecha concreta de una orden. En B2B hay una por cada día con
+// productos. SIN restricción única (orden, fecha) a propósito: hora y destino son opcionales para que otros tipos
+// de orden puedan tener más de una entrega el mismo día; "una por fecha" es una regla de la lógica B2B.
+model Entrega {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  orderId             String
+  fecha               DateTime      @db.Date
+  estado              EstadoEntrega @default(PENDIENTE)
+  nota                String?
+  // "HH:mm" y texto libre, ambos opcionales (sin FK a PuntoEnvio).
+  hora                String?
+  destino             String?
+  estadoCambiadoAt    DateTime?
+  estadoCambiadoPorId String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  estadoCambiadoPor User?         @relation(fields: [estadoCambiadoPorId], references: [id], onDelete: SetNull)
+  items             EntregaItem[]
+
+  @@index([orderId, fecha])
+  @@index([tenantId, fecha])
+  @@map("entregas")
+}
+
+// Cuánto de cada ítem de la orden va en cada entrega. Un solo registro por (entrega, ítem).
+model EntregaItem {
+  id          String @id @default(uuid())
+  tenantId    String
+  entregaId   String
+  orderItemId String
+  cantidad    Int
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entrega   Entrega   @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([entregaId, orderItemId])
+  @@index([tenantId])
+  @@index([orderItemId])
+  @@map("entrega_items")
+}
+
 // Snapshots nombreProducto/precioUnitario at order time (see CLAUDE.md) so a
 // later catalog edit — or even deleting the product — never changes historical
 // order data. productId is therefore nullable with onDelete: SetNull: losing
@@ -614,11 +715,15 @@ model OrderItem {
   nombreProducto String
   precioUnitario Decimal @db.Decimal(10, 2)
   cantidad       Int
+  // Etapa 2: posición del ítem dentro de su orden. Solo la puebla B2B (para conservar un orden estable al editar
+  // por diff); B2C la deja en 0 y no la expone (ver aRespuestaOrder).
+  orden          Int     @default(0)
 
   tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product       Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
   modificadores OrderItemModifier[]
+  entregaItems  EntregaItem[]
 
   @@index([tenantId])
   @@index([orderId])
@@ -948,8 +1053,10 @@ model PedidoB2bCodigoDescuento {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pedidos PedidoB2b[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidos     PedidoB2b[]
+  // Etapa 2: los usos se cuentan desde aquí (DetalleB2B); `pedidos` queda solo para el histórico legacy.
+  detallesB2b DetalleB2B[]
 
   @@unique([tenantId, codigo])
   @@index([tenantId])

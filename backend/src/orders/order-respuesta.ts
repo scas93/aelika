@@ -32,12 +32,28 @@ const CAMPOS_DETALLE_B2C = [
  */
 export function aRespuestaOrder<T extends { tipo?: unknown; detalleB2c?: DetalleB2C | null; huellaCheckout?: unknown }>(
   order: T,
-): Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout'> {
+): Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout' | 'cancelado' | 'canceladoAt'> {
   // huellaCheckout (Parte B1) es interna del servidor — nunca viaja en la API ni en las salidas internas.
-  const { tipo: _tipo, huellaCheckout: _huella, detalleB2c, ...resto } = order;
+  // cancelado/canceladoAt (Etapa 2) son del módulo B2B: B2C no tiene cancelación y su contrato no cambia.
+  const {
+    tipo: _tipo,
+    huellaCheckout: _huella,
+    cancelado: _cancelado,
+    canceladoAt: _canceladoAt,
+    detalleB2c,
+    ...resto
+  } = order as T & { cancelado?: unknown; canceladoAt?: unknown };
+  const base = sinOrdenEnItems(resto);
   if (!detalleB2c) {
-    return resto;
+    return base as Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout' | 'cancelado' | 'canceladoAt'>;
   }
   const campos = Object.fromEntries(CAMPOS_DETALLE_B2C.map((campo) => [campo, detalleB2c[campo]]));
-  return { ...resto, ...campos } as Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout'>;
+  return { ...base, ...campos } as Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout' | 'cancelado' | 'canceladoAt'>;
+}
+
+/** `OrderItem.orden` (Etapa 2) solo lo puebla B2B: no se expone en los ítems de una orden B2C. */
+function sinOrdenEnItems<R extends object>(resto: R): R {
+  const items = (resto as { items?: unknown }).items;
+  if (!Array.isArray(items)) return resto;
+  return { ...resto, items: items.map(({ orden: _orden, ...item }) => item) };
 }

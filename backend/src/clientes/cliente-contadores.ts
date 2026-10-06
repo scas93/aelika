@@ -1,4 +1,4 @@
-import { ClienteCanal, EstadoPago, Prisma } from '../../generated/prisma/client';
+import { ClienteCanal, EstadoPago, Prisma, TipoOrden } from '../../generated/prisma/client';
 
 /** Lo mínimo que necesita el recálculo: sirve el cliente Prisma raíz, una transacción o el de tenant (con cast). */
 export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'order' | 'pedidoB2b'>;
@@ -51,7 +51,8 @@ export async function calcularContadoresCliente(db: ClienteContadoresDb, cliente
           _max: { createdAt: true },
         })
       : await db.order.aggregate({
-          where: { clienteId, estadoPago: EstadoPago.PAGADO },
+          // Etapa 2: los pedidos B2B vivirán en Order (tipo B2B); el contador B2C nunca los cuenta.
+          where: { clienteId, tipo: TipoOrden.B2C, estadoPago: EstadoPago.PAGADO },
           _count: true,
           _min: { createdAt: true },
           _max: { createdAt: true },

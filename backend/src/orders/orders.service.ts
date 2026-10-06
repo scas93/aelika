@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import Stripe from 'stripe';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma, TipoOrden } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
@@ -83,6 +83,8 @@ export class OrdersService {
   async findAll(query: ListOrdersQueryDto) {
     const ordenes = await this.tenantPrisma.client.order.findMany({
       where: {
+        // Etapa 2: los pedidos B2B viven en Order (tipo B2B) pero tienen su propio módulo; nunca en el panel B2C.
+        tipo: TipoOrden.B2C,
         estadoPedido: query.estadoPedido,
         estadoPago: query.soloPagados ? { in: ESTADOS_PANEL_ACTIVO } : undefined,
         createdAt:
@@ -103,6 +105,7 @@ export class OrdersService {
     // Solo PAGADO: los intentos de pago TARJETA y los REEMBOLSADO no cuentan
     // como pedidos ni como ingreso.
     const where = {
+      tipo: TipoOrden.B2C,
       createdAt: { gte: new Date(query.desde), lte: new Date(query.hasta) },
       estadoPago: EstadoPago.PAGADO,
     };
@@ -148,7 +151,7 @@ export class OrdersService {
     // (tenantId, createdAt) composite index) — grouped by day in memory
     // instead of $queryRaw, per the volume confirmed in Fase 9a/10a.
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
+      where: { tipo: TipoOrden.B2C, createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
       select: { createdAt: true },
     });
 
@@ -170,6 +173,7 @@ export class OrdersService {
   // frontend no tenga que rellenar huecos.
   async summaryPorEstatus(query: SummaryQueryDto) {
     const where = {
+      tipo: TipoOrden.B2C,
       createdAt: { gte: new Date(query.desde), lte: new Date(query.hasta) },
       estadoPago: EstadoPago.PAGADO,
     };
@@ -198,6 +202,7 @@ export class OrdersService {
     valorHasta?: number;
   }): Prisma.OrderWhereInput {
     return {
+      tipo: TipoOrden.B2C,
       estadoPedido: query.estadoPedido,
       metodoPago: query.metodoPago,
       estadoPago: query.estadoPago ? { in: ESTADOS_POR_GRUPO[query.estadoPago] } : undefined,
@@ -278,7 +283,7 @@ export class OrdersService {
 
   async findOne(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
-      where: { id },
+      where: { id, tipo: TipoOrden.B2C },
       include: { items: true, detalleB2c: true },
     });
     if (!order) {
@@ -289,7 +294,7 @@ export class OrdersService {
 
   async avanzar(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
-      where: { id },
+      where: { id, tipo: TipoOrden.B2C },
     });
     if (!order) {
       throw new NotFoundException('Pedido no encontrado');
@@ -375,7 +380,8 @@ export class OrdersService {
         direccionCalle: respuesta.direccionCalle,
         direccionNumero: respuesta.direccionNumero,
         direccionColonia: respuesta.direccionColonia,
-        metodoPago: actualizado.metodoPago,
+        // Etapa 2: metodoPago es nullable solo por B2B; estas órdenes son B2C (la CHECK de la base lo garantiza).
+        metodoPago: actualizado.metodoPago ?? MetodoPago.EFECTIVO,
       },
     });
 
@@ -512,7 +518,7 @@ export class OrdersService {
    */
   async reembolsar(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
-      where: { id },
+      where: { id, tipo: TipoOrden.B2C },
     });
     if (!order) {
       throw new NotFoundException('Pedido no encontrado');

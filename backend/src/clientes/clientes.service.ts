@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Cliente, ClienteCanal, EstadoPago, Prisma } from '../../generated/prisma/client';
+import { Cliente, ClienteCanal, EstadoPago, Prisma, TipoOrden } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
@@ -105,7 +105,7 @@ export class ClientesService {
 
     // Solo pedidos PAGADO: un intento de pago no cuenta como cliente del día.
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: { createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
+      where: { tipo: TipoOrden.B2C, createdAt: { gte: dias[0].desde, lte: hastaHoy }, estadoPago: EstadoPago.PAGADO },
       select: { createdAt: true, clienteId: true },
     });
 

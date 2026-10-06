@@ -236,7 +236,7 @@ export class PublicService {
     }
 
     const order = await this.prisma.order.findFirst({
-      where: { id: orderId, tenantId: tenant.id },
+      where: { id: orderId, tenantId: tenant.id, tipo: TipoOrden.B2C },
       select: { estadoPago: true },
     });
     if (!order) {
@@ -933,7 +933,7 @@ export class PublicService {
    * implementado (deshabilitado en el checkout) — se trata igual que
    * EFECTIVO por seguridad si llegara a aparecer, no debería ocurrir hoy.
    */
-  private construirIndicadorPago(order: { metodoPago: MetodoPago; estadoPago: EstadoPago }): string {
+  private construirIndicadorPago(order: { metodoPago: MetodoPago | null; estadoPago: EstadoPago }): string {
     if (order.metodoPago === MetodoPago.TARJETA) {
       switch (order.estadoPago) {
         case EstadoPago.PAGADO:
@@ -1260,7 +1260,7 @@ export class PublicService {
   private async nextFolio(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
     const rows = await tx.$queryRaw<{ max: number | null }[]>`
-      SELECT MAX(CAST(folio AS INTEGER)) AS max FROM orders WHERE "tenantId" = ${tenantId}
+      SELECT MAX(CAST(folio AS INTEGER)) AS max FROM orders WHERE "tenantId" = ${tenantId} AND tipo = 'B2C'
     `;
     const next = (rows[0]?.max ?? 0) + 1;
     return String(next);
