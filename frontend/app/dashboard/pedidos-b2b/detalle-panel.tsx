@@ -324,16 +324,23 @@ export default function DetallePanel({
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-7 gap-1">
+                    {/* 7 columnas iguales que nunca desbordan (minmax(0,1fr)). .admin-input trae padding 12px 16px sin capa,
+                        que (igual que `color`) gana a las utilidades de Tailwind: por eso el padding y el color van con `!` — si no, se comía el
+                        espacio del número. Sin las flechas nativas del input para dar el ancho al texto (las flechas del
+                        teclado ↑/↓ siguen funcionando). Un 0 se atenúa para ver de un vistazo qué días tienen pedido. */}
+                    <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
                       {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => (
-                        <label key={value} className="flex flex-col items-center gap-1">
+                        <label key={value} className="flex min-w-0 flex-col items-center gap-1">
                           <span className="text-[10px] font-medium text-admin-ink-soft">{label.slice(0, 3)}</span>
                           <input
                             type="number"
                             min={0}
+                            inputMode="numeric"
                             value={item.distribucion[value]}
                             onChange={(e) => setCantidadDia(item.localId, value, Number(e.target.value) || 0)}
-                            className="admin-input w-full px-1 py-1 text-center text-xs"
+                            className={`admin-input w-full min-w-0 px-0! py-1.5! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+                              item.distribucion[value] > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"
+                            }`}
                           />
                         </label>
                       ))}

@@ -57,7 +57,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/pagos", label: "Pagos", icon: IconCreditCard },
   // Solo RETAIL_B2B (ver getNavItems abajo).
   { href: "/dashboard/pedidos-b2b", label: "Pedidos activos", icon: IconPackage },
-  { href: "/dashboard/pedidos-b2b/dia", label: "Pedidos del día", icon: IconTruckDelivery },
+  { href: "/dashboard/pedidos-b2b/dia", label: "Entregas del día", icon: IconTruckDelivery },
   { href: "/dashboard/pedidos-b2b/historico", label: "Históricos", icon: IconHistory },
   { href: "/dashboard/catalogo", label: "Catálogo", icon: IconClipboardList },
   { href: "/dashboard/clientes", label: "Clientes", icon: IconUsers },
