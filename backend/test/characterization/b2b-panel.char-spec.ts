@@ -214,7 +214,7 @@ describe('B2B · panel', () => {
     });
 
     it('sin pedidos: ceros y listas vacías (forma exacta)', async () => {
-      await s.h.prisma.pedidoB2b.deleteMany();
+      await s.h.prisma.order.deleteMany({ where: { tipo: 'B2B' } });
       const res = await api().get('/pedidos-b2b/resumen').expect(200);
       expect(res.body).toStrictEqual({
         semanaEnCurso: {

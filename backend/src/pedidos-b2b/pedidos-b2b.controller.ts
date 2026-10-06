@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { PedidosB2bService } from './pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
@@ -17,12 +18,14 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../../generated/prisma/enums';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
+import { TenantB2bPanelGuard } from './tenant-b2b.guard';
 
 // Escritura (crear/editar/avanzar/pagar/cancelar) restringida a
 // Gerente/Dueño — mismo criterio que Catálogo/Promociones: a diferencia de
 // Pedidos (pickup), este es un flujo de gestión de negocio, no de
 // surtido rutinario. GET abierto a los 3 roles para que Operador pueda ver
 // contexto igual que en el resto de la app.
+@UseGuards(TenantB2bPanelGuard)
 @Controller('pedidos-b2b')
 export class PedidosB2bController {
   constructor(private readonly pedidosB2bService: PedidosB2bService) {}
@@ -83,8 +86,8 @@ export class PedidosB2bController {
 
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/avanzar')
-  avanzar(@Param('id') id: string) {
-    return this.pedidosB2bService.avanzar(id);
+  avanzar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.pedidosB2bService.avanzar(id, user.sub);
   }
 
   @Roles(Role.GERENTE, Role.DUENO)
@@ -95,7 +98,7 @@ export class PedidosB2bController {
 
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/cancelar')
-  cancelar(@Param('id') id: string) {
-    return this.pedidosB2bService.cancelar(id);
+  cancelar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.pedidosB2bService.cancelar(id, user.sub);
   }
 }

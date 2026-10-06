@@ -1,25 +1,43 @@
 import request from 'supertest';
-import { expectExacto, ordenEsperada, etiquetasOrder } from './exacto';
+import { expectError, expectExacto, ordenEsperada, etiquetasOrder } from './exacto';
 import { bodyCheckout, cederEventLoop, postCheckout, usarSuite } from './helpers';
-import { apiRol, bodyB2b, crearAdminB2b, crearPublicoB2b, etiquetasB2b, pedidoB2bEsperado, postPublicoB2b } from './b2b-helpers';
+import { apiRol, bodyB2b, crearAdminB2b, crearPublicoB2b, postPublicoB2b } from './b2b-helpers';
 
 // 0b-2 · Área 11 · Tipo de pedido vs tipo de storefront.
 //
-// !!! SE ESPERA QUE CAMBIE EN LA ETAPA 2 !!!  Hoy NINGUNA creación valida Tenant.tipoStorefront: solo oculta la
-// navegación del panel. La etapa 2 validará el tipo contra el storefront a propósito; estos tests documentan el
-// comportamiento actual y deberán actualizarse (no son una regresión si cambian por ese motivo).
+// CAMBIO PERMITIDO DE LA ETAPA 2 (acordado): antes NINGUNA creación validaba Tenant.tipoStorefront (solo ocultaba la
+// navegación del panel). Ahora los endpoints de pedidos B2B (panel y públicos) exigen un tenant RETAIL_B2B:
+// panel → 403, públicos → 404 (mismo mensaje que un slug inexistente). El checkout B2C sigue abierto para cualquier tipo.
 describe('Transversal · tipo de pedido vs tipo de storefront', () => {
   describe('tenant RETAIL_B2C', () => {
     const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2C', b2b: {} } });
 
-    it('acepta POST /pedidos-b2b (admin) y el POST público de mayoreo (se espera que cambie en la etapa 2)', async () => {
-      const admin = await apiRol(s.h, s.base, 'DUENO').post('/pedidos-b2b', bodyB2b(s.base));
-      expect(admin.status).toBe(201);
-      expectExacto(admin.body, pedidoB2bEsperado(), etiquetasB2b(s.base, admin.body));
+    it('los endpoints de pedidos B2B del panel responden 403 y no crean nada', async () => {
+      const MSG = 'Los pedidos de mayoreo no están habilitados para este negocio';
+      const dueno = apiRol(s.h, s.base, 'DUENO');
+      expectError(await dueno.post('/pedidos-b2b', bodyB2b(s.base)), 403, MSG);
+      expectError(await dueno.get('/pedidos-b2b'), 403, MSG);
+      expectError(await dueno.get('/pedidos-b2b/resumen'), 403, MSG);
+      expectError(await dueno.get('/pedidos-b2b/export'), 403, MSG);
+      expectError(await dueno.get('/pedidos-b2b/dia/2026-09-30'), 403, MSG);
+      expectError(await dueno.get('/pedidos-b2b/00000000-0000-0000-0000-000000000000'), 403, MSG);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
+    });
 
-      const publico = await postPublicoB2b(s.h, s.base.tenant.slug, bodyB2b(s.base, { contactoTelefono: '5500000001' }));
-      expect(publico.status).toBe(201);
-      expectExacto(publico.body, pedidoB2bEsperado({ folio: '2', contactoTelefono: '5500000001' }), etiquetasB2b(s.base, publico.body));
+    it('el storefront público de mayoreo responde 404 "Negocio no encontrado" (como un slug inexistente)', async () => {
+      const slug = s.base.tenant.slug;
+      const publico = await postPublicoB2b(s.h, slug, bodyB2b(s.base));
+      expectError(publico, 404, 'Negocio no encontrado');
+      for (const ruta of ['', '/catalog', '/codigos-descuento/PROMO10']) {
+        expectError(await request(s.h.app.getHttpServer()).get(`/public/pedidos-b2b/tenants/${slug}${ruta}`), 404, 'Negocio no encontrado');
+      }
+      expectError(await request(s.h.app.getHttpServer()).get('/public/pedidos-b2b/tenants/no-existe'), 404, 'Negocio no encontrado');
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
+    });
+
+    it('el CRUD de códigos de descuento B2B queda fuera del guard (decisión acordada)', async () => {
+      const res = await apiRol(s.h, s.base, 'DUENO').get('/codigos-descuento-b2b');
+      expect(res.status).toBe(200);
     });
 
     it('sigue aceptando el checkout B2C (su tipo natural)', async () => {
@@ -56,8 +74,8 @@ describe('Transversal · tipo de pedido vs tipo de storefront', () => {
       expect([o1, o2].map((r) => r.body.folio)).toStrictEqual(['1', '2']);
       expect([p1, p2, p3].map((p) => p.folio)).toStrictEqual(['1', '2', '3']);
       // ambos tipos comparten folio "1" en el mismo tenant, en tablas distintas
-      expect(await s.h.prisma.order.count({ where: { folio: '1' } })).toBe(1);
-      expect(await s.h.prisma.pedidoB2b.count({ where: { folio: '1' } })).toBe(1);
+      expect(await s.h.prisma.order.count({ where: { folio: '1', tipo: 'B2C' } })).toBe(1);
+      expect(await s.h.prisma.order.count({ where: { folio: '1', tipo: 'B2B' } })).toBe(1);
       await cederEventLoop();
     });
 

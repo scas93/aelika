@@ -67,7 +67,8 @@ describe('Transversal · Cliente entre canales (mismo teléfono)', () => {
 });
 
 describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', () => {
-  const s = usarSuite();
+  // Etapa 2: los pedidos B2B exigen un tenant RETAIL_B2B (mínimo 100, el default de la base, como antes).
+  const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2B', b2b: { minimoPiezas: 100 } } });
   const alta = (rol: 'DUENO' | 'OPERADOR' = 'OPERADOR') => apiRol(s.h, s.base, rol).post('/lealtad/clientes', { nombre: 'Beto Lealtad', telefono: '55 4444 5555' });
 
   it('alta por el panel: Cliente B2C con totalPedidos 0 (fechas = fecha de alta), tarjeta y pase; forma exacta de la respuesta', async () => {

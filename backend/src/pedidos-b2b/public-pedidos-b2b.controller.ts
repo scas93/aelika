@@ -1,13 +1,15 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { Public } from '../auth/decorators/public.decorator';
+import { TenantB2bPublicGuard } from './tenant-b2b.guard';
 
 // Storefront público de pedidos B2B — mismo patrón que PublicController
 // (public/): @Public() a nivel de clase, tenant resuelto por slug, sin JWT.
 // Prefijo propio (public/pedidos-b2b/...) para no tocar/chocar con las
 // rutas de PublicController (public/tenants/...).
 @Public()
+@UseGuards(TenantB2bPublicGuard)
 @Controller('public/pedidos-b2b')
 export class PublicPedidosB2bController {
   constructor(

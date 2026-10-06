@@ -12,7 +12,7 @@ import { apiRol, crearAdminB2b, crearPublicoB2b } from './b2b-helpers';
 // que llama a ReglasFiltroService.evaluar — el MISMO método que usa el barrido @Cron (reglas.service.ts:201 y
 // regla-barrido.service.ts:116/145). El barrido en sí (cron) no se ejecuta en los tests.
 describe('Transversal · Reglas de notificación', () => {
-  const s = usarSuite({ reglasReales: true, seed: { b2b: {} } }); // tenant RETAIL_B2C con módulo B2B configurado (mínimo 10)
+  const s = usarSuite({ reglasReales: true, seed: { tipoStorefront: 'RETAIL_B2B', b2b: {} } }); // Etapa 2: los pedidos B2B exigen un tenant RETAIL_B2B (mínimo 10, igual que antes)
   const dueno = () => apiRol(s.h, s.base, 'DUENO');
 
   const reglaBody = (extra: Record<string, unknown> = {}) => ({

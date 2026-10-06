@@ -24,18 +24,18 @@ function parseFechaLimite(fechaLimite: string | null | undefined): Date | null |
 export class CodigosDescuentoB2bService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
-  // usosActuales es derivado (conteo de la relación `pedidos`, incluyendo
+  // usosActuales es derivado (conteo de la relación `detallesB2b` (Etapa 2), incluyendo
   // cancelados — ver resolverCodigoDescuento), nunca un campo persistido —
   // se calcula aquí solo para mostrarlo en el listado, no hay contador que
   // mantener sincronizado.
   async findAll() {
     const codigos = await this.tenantPrisma.client.pedidoB2bCodigoDescuento.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { pedidos: true } } },
+      include: { _count: { select: { detallesB2b: true } } },
     });
     return codigos.map(({ _count, ...codigo }) => ({
       ...codigo,
-      usosActuales: _count.pedidos,
+      usosActuales: _count.detallesB2b,
     }));
   }
 

@@ -45,7 +45,7 @@ describe('B2B · folio', () => {
     expect(res.map((r) => r.status)).toStrictEqual(Array(N).fill(201));
     const folios = res.map((r) => Number(r.body.folio)).sort((a, b) => a - b);
     expect(folios).toStrictEqual(Array.from({ length: N }, (_, i) => i + 1));
-    expect(new Set((await s.h.prisma.pedidoB2b.findMany({ select: { folio: true } })).map((p) => p.folio)).size).toBe(N);
+    expect(new Set((await s.h.prisma.order.findMany({ where: { tipo: 'B2B' }, select: { folio: true } })).map((p) => p.folio)).size).toBe(N);
   });
 
   it('creaciones simultáneas MEZCLADAS (4 públicas + 4 admin): una sola secuencia sin duplicados', async () => {

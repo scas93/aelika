@@ -46,8 +46,8 @@ describe('B2B · aislamiento multi-tenant', () => {
       404,
       NF,
     );
-    const fila = await s.h.prisma.pedidoB2b.findUniqueOrThrow({ where: { id: a1.id }, include: { items: true } });
-    expect({ estado: fila.estado, estadoPago: fila.estadoPago, cancelado: fila.cancelado, items: fila.items.length, total: String(fila.total) }).toStrictEqual({
+    const fila = await s.h.prisma.order.findUniqueOrThrow({ where: { id: a1.id }, include: { items: true } });
+    expect({ estado: fila.estadoPedido, estadoPago: fila.estadoPago, cancelado: fila.cancelado, items: fila.items.length, total: String(fila.total) }).toStrictEqual({
       estado: 'PENDIENTE_CONFIRMACION',
       estadoPago: 'PENDIENTE',
       cancelado: false,

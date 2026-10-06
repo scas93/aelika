@@ -63,7 +63,7 @@ export function assertLunes(semanaInicioStr: string): Date {
 
 // Orden fijo lunes-domingo — índice = offset en días desde el lunes de la
 // semana (PedidoB2b.semanaInicio).
-const DIAS_EN_ORDEN: DiaSemana[] = [
+export const DIAS_EN_ORDEN: DiaSemana[] = [
   DiaSemana.LUNES,
   DiaSemana.MARTES,
   DiaSemana.MIERCOLES,
@@ -123,7 +123,14 @@ export async function resolverItems(
   let totalPiezas = 0;
   let subtotal = 0;
 
-  const resueltos = items.map((item) => {
+  // Etapa 2: un mismo producto repetido en el carrito se consolida en UN solo ítem (cantidades por día sumadas).
+  // Cada línea de entrada se valida por separado, antes de consolidar, para conservar los mismos 400 de siempre.
+  const consolidados = new Map<
+    string,
+    { productId: string; nombreProducto: string; precioUnitario: Prisma.Decimal; dias: Map<DiaSemana, number> }
+  >();
+
+  for (const item of items) {
     const producto = porId.get(item.productId);
     if (!producto) {
       throw new NotFoundException(
@@ -152,14 +159,24 @@ export async function resolverItems(
     totalPiezas += cantidadTotal;
     subtotal = round2(subtotal + Number(producto.precio) * cantidadTotal);
 
+    const acumulado =
+      consolidados.get(producto.id) ??
+      { productId: producto.id, nombreProducto: producto.nombre, precioUnitario: producto.precio, dias: new Map<DiaSemana, number>() };
+    consolidados.set(producto.id, acumulado);
+    // Solo se persisten los días con cantidad > 0 — un día ausente es equivalente a 0 unidades ese día.
+    for (const dia of item.distribucion) {
+      if (dia.cantidad > 0) acumulado.dias.set(dia.dia, (acumulado.dias.get(dia.dia) ?? 0) + dia.cantidad);
+    }
+  }
+
+  const resueltos = [...consolidados.values()].map((c) => {
+    const distribucion = DIAS_EN_ORDEN.filter((d) => c.dias.has(d)).map((d) => ({ dia: d, cantidad: c.dias.get(d)! }));
     return {
-      productId: producto.id,
-      nombreProducto: producto.nombre,
-      precioUnitario: producto.precio,
-      cantidadTotal,
-      // Solo se persisten los días con cantidad > 0 — un día ausente es
-      // equivalente a 0 unidades ese día.
-      distribucion: item.distribucion.filter((dia) => dia.cantidad > 0),
+      productId: c.productId,
+      nombreProducto: c.nombreProducto,
+      precioUnitario: c.precioUnitario,
+      cantidadTotal: distribucion.reduce((suma, d) => suma + d.cantidad, 0),
+      distribucion,
     };
   });
 
@@ -214,7 +231,8 @@ export async function resolverCodigoDescuento(
   // pedidos cancelados (un pedido cancelado no libera el cupo: el código ya
   // se "gastó" en el momento en que se creó ese pedido).
   if (encontrado.usosMaximos !== null) {
-    const usosActuales = await client.pedidoB2b.count({
+    // Etapa 2: los usos se cuentan desde DetalleB2B (todo pedido B2B migrado o nuevo tiene detalle).
+    const usosActuales = await client.detalleB2B.count({
       where: { tenantId, codigoDescuentoId: encontrado.id },
     });
     if (usosActuales >= encontrado.usosMaximos) {
@@ -234,46 +252,7 @@ export async function resolverCodigoDescuento(
 }
 
 /**
- * No es un solo nested `items: { create: [...] }` — la extensión
- * tenant-scoped de TenantPrismaService solo inyecta tenantId en la
- * operación raíz, no en escrituras anidadas (mismo motivo documentado en
- * ModifierGroupsService.create), y el caller público no tiene esa extensión
- * en absoluto. Cada item se crea como su propia operación raíz con tenantId
- * explícito, y su distribución como un createMany aparte.
- */
-export async function crearItems(
-  tx: Prisma.TransactionClient,
-  tenantId: string,
-  pedidoB2bId: string,
-  resueltos: ItemsResueltos,
-) {
-  for (const item of resueltos) {
-    const createdItem = await tx.pedidoB2bItem.create({
-      data: {
-        tenantId,
-        pedidoB2bId,
-        productId: item.productId,
-        nombreProducto: item.nombreProducto,
-        precioUnitario: item.precioUnitario,
-        cantidadTotal: item.cantidadTotal,
-      } as any,
-    });
-
-    if (item.distribucion.length > 0) {
-      await tx.pedidoB2bItemDia.createMany({
-        data: item.distribucion.map((dia) => ({
-          tenantId,
-          pedidoB2bItemId: createdItem.id,
-          dia: dia.dia,
-          cantidad: dia.cantidad,
-        })) as any,
-      });
-    }
-  }
-}
-
-/**
- * Folio propio por tenant (independiente de Order.folio), mismo patrón de
+ * Folio propio por tenant (independiente del folio B2C: único por (tenantId, tipo, folio)), mismo patrón de
  * advisory lock que PublicService.nextFolio (Order) pero con una clave de
  * lock distinta (tenantId + namespace) para no compartir/serializar contra
  * el lock de Order. Misma clave sin importar si el caller es el flujo
@@ -313,7 +292,7 @@ export async function nextFolioPedidoB2b(
 ): Promise<string> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId} || ':pedidoB2b'))`;
   const rows = await tx.$queryRaw<{ max: number | null }[]>`
-    SELECT MAX(CAST(folio AS INTEGER)) AS max FROM pedidos_b2b WHERE "tenantId" = ${tenantId}
+    SELECT MAX(CAST(folio AS INTEGER)) AS max FROM orders WHERE "tenantId" = ${tenantId} AND tipo = 'B2B'
   `;
   const next = (rows[0]?.max ?? 0) + 1;
   return String(next);

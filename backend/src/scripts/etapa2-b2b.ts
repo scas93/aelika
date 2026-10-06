@@ -14,6 +14,7 @@
  */
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client';
+import { calcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
 import {
   agregados,
   discrepancias,
@@ -26,22 +27,6 @@ import {
   SET_ORDENES_B2B,
   type Tx,
 } from './etapa2/migracion-b2b';
-
-// Release A: la fórmula de contadores B2B vigente en runtime sigue siendo PedidoB2b; aquí se calcula la NUEVA (Order B2B no
-// cancelada) localmente para la paridad de `auditar`. El Release B la mueve a clientes/cliente-contadores.ts.
-async function calcularContadoresCliente(tx: Tx, clienteId: string) {
-  const cliente = await tx.cliente.findUnique({ where: { id: clienteId }, select: { canal: true, createdAt: true } });
-  if (!cliente) return null;
-  const ag =
-    cliente.canal === 'B2B'
-      ? await tx.order.aggregate({ where: { clienteId, tipo: 'B2B', cancelado: false }, _count: true, _min: { createdAt: true }, _max: { createdAt: true } })
-      : await tx.order.aggregate({ where: { clienteId, tipo: 'B2C', estadoPago: 'PAGADO' }, _count: true, _min: { createdAt: true }, _max: { createdAt: true } });
-  return {
-    totalPedidos: ag._count,
-    primerPedidoAt: ag._count > 0 ? ag._min.createdAt! : cliente.createdAt,
-    ultimoPedidoAt: ag._count > 0 ? ag._max.createdAt! : cliente.createdAt,
-  };
-}
 
 const MARCA = 'etapa2-b2b';
 const TX_OPTS = { timeout: 10 * 60_000, maxWait: 30_000 };
@@ -157,7 +142,7 @@ async function main() {
         const contadores: string[] = [];
         const desfasePrevio: string[] = [];
         for (const { id } of cl) {
-          const esperado = await calcularContadoresCliente(tx, id);
+          const esperado = await calcularContadoresCliente(tx as unknown as ClienteContadoresDb, id);
           const [leg] = await tx.$queryRawUnsafe<{ n: number; primero: Date | null; ultimo: Date | null }[]>(
             `SELECT count(*)::int AS n, min("createdAt") AS primero, max("createdAt") AS ultimo FROM pedidos_b2b WHERE "clienteId"='${id}' AND cancelado = false`,
           );

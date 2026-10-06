@@ -57,8 +57,8 @@ describe('B2B · mutaciones', () => {
           ],
         }),
       );
-      expect(await s.h.prisma.pedidoB2bItem.count()).toBe(1);
-      expect(await s.h.prisma.pedidoB2bItemDia.count()).toBe(2);
+      expect(await s.h.prisma.orderItem.count({ where: { order: { tipo: 'B2B' } } })).toBe(1);
+      expect(await s.h.prisma.entregaItem.count()).toBe(2); // Etapa 2: los días son EntregaItem
       await cederEventLoop();
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
       expect(s.h.fakes.queueAdd).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('B2B · mutaciones', () => {
         '"Café americano" no tiene ninguna cantidad asignada en la semana',
       );
       // el pedido original quedó intacto
-      expect(await s.h.prisma.pedidoB2bItem.count()).toBe(2);
+      expect(await s.h.prisma.orderItem.count({ where: { order: { tipo: 'B2B' } } })).toBe(2);
     });
   });
 
@@ -195,7 +195,7 @@ describe('B2B · mutaciones', () => {
     it('rechaza confirmar por debajo del mínimo de piezas (409 con cuántas tiene) y no dispara nada', async () => {
       const p = await pedidoConPiezas(4);
       expectError(await api().patch(`/pedidos-b2b/${p.id}/avanzar`), 409, 'Este pedido no alcanza el mínimo de 10 piezas (tiene 4)');
-      expect((await s.h.prisma.pedidoB2b.findUniqueOrThrow({ where: { id: p.id } })).estado).toBe('PENDIENTE_CONFIRMACION');
+      expect((await s.h.prisma.order.findUniqueOrThrow({ where: { id: p.id } })).estadoPedido).toBe('PENDIENTE_CONFIRMACION');
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
     });
 
@@ -294,8 +294,8 @@ describe('B2B · mutaciones', () => {
         409,
         'Este pedido no alcanza el mínimo de 10 piezas para procesar el pago (tiene 4)',
       );
-      const fila = await s.h.prisma.pedidoB2b.findUniqueOrThrow({ where: { id: p.id } });
-      expect({ estado: fila.estado, estadoPago: fila.estadoPago }).toStrictEqual({ estado: 'PENDIENTE_CONFIRMACION', estadoPago: 'PENDIENTE' });
+      const fila = await s.h.prisma.order.findUniqueOrThrow({ where: { id: p.id } });
+      expect({ estado: fila.estadoPedido, estadoPago: fila.estadoPago }).toStrictEqual({ estado: 'PENDIENTE_CONFIRMACION', estadoPago: 'PENDIENTE' });
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
     });
 

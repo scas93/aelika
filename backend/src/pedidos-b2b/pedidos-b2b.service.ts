@@ -9,8 +9,12 @@ import { round2 } from '../common/money';
 import { toCsv } from '../common/csv';
 import {
   ClienteCanal,
+  EstadoEntrega,
+  EstadoPago,
+  EstadoPedido,
   PedidoB2bEstado,
   Prisma,
+  TipoOrden,
 } from '../../generated/prisma/client';
 import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
@@ -24,7 +28,6 @@ import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-impo
 import {
   assertLunes,
   calcularSemanaDestino,
-  crearItems,
   diasEntreFechasISO,
   fechaMexicoYMD,
   nextFolioPedidoB2b,
@@ -33,23 +36,33 @@ import {
   resolverSemanaYDia,
   sumarDiasISO,
 } from './pedidos-b2b-logica';
+import {
+  aRespuestaPedidoB2b,
+  crearOrdenB2b,
+  fechaDeDia,
+  INCLUDE_PEDIDO,
+  sincronizarOrdenB2b,
+} from './pedidos-b2b-orden';
+
+// Etapa 2: un pedido B2B ES una Order (tipo B2B) + DetalleB2B + OrderItem + Entrega/EntregaItem. Este servicio conserva
+// las rutas, reglas y la forma de las respuestas de siempre; el mapeo a la forma plana de PedidoB2b vive en
+// aRespuestaPedidoB2b (pedidos-b2b-orden.ts).
 
 // Semana en curso = la que ya se está surtiendo/despachando (resolverSemanaYDia
 // de "hoy"), nunca calcularSemanaDestino (que siempre da la semana siguiente,
 // pensada para pedidos nuevos entrando por el storefront). Mismo criterio de
 // "activo" que ya usa findEntregasDia — no despachados, no cancelados.
-const ESTADOS_ACTIVOS: PedidoB2bEstado[] = [
-  PedidoB2bEstado.PENDIENTE_CONFIRMACION,
-  PedidoB2bEstado.CONFIRMADO_SURTIENDO,
+const ESTADOS_ACTIVOS: EstadoPedido[] = [
+  EstadoPedido.PENDIENTE_CONFIRMACION,
+  EstadoPedido.CONFIRMADO_SURTIENDO,
 ];
 
-// Secuencial, sin marcha atrás, independiente de Order/EstadoPedido — ver
-// PedidoB2bEstado en schema.prisma. DESPACHADO no tiene siguiente.
-const SIGUIENTE_ESTADO: Record<PedidoB2bEstado, PedidoB2bEstado | null> = {
-  [PedidoB2bEstado.PENDIENTE_CONFIRMACION]:
-    PedidoB2bEstado.CONFIRMADO_SURTIENDO,
-  [PedidoB2bEstado.CONFIRMADO_SURTIENDO]: PedidoB2bEstado.DESPACHADO,
-  [PedidoB2bEstado.DESPACHADO]: null,
+// Secuencial, sin marcha atrás. B2B nunca usa LISTO_ENTREGA (existe en EstadoPedido por B2C): de Confirmado salta
+// directo a Despachado, igual que siempre. DESPACHADO no tiene siguiente.
+const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, EstadoPedido | null>> = {
+  [EstadoPedido.PENDIENTE_CONFIRMACION]: EstadoPedido.CONFIRMADO_SURTIENDO,
+  [EstadoPedido.CONFIRMADO_SURTIENDO]: EstadoPedido.DESPACHADO,
+  [EstadoPedido.DESPACHADO]: null,
 };
 
 // Forma reportable compartida por findAll/exportCsv — deliberadamente similar
@@ -59,17 +72,34 @@ const SIGUIENTE_ESTADO: Record<PedidoB2bEstado, PedidoB2bEstado | null> = {
 const REPORTABLE_SELECT = {
   id: true,
   folio: true,
-  negocioNombre: true,
-  contactoNombre: true,
-  semanaInicio: true,
-  estado: true,
+  clienteNombre: true,
+  estadoPedido: true,
   estadoPago: true,
-  modoCobro: true,
   cancelado: true,
-  totalPiezas: true,
   total: true,
   createdAt: true,
-} as const;
+  detalleB2b: { select: { negocioNombre: true, semanaInicio: true, modoCobro: true, totalPiezas: true } },
+} satisfies Prisma.OrderSelect;
+
+function aReportable(o: Prisma.OrderGetPayload<{ select: typeof REPORTABLE_SELECT }>) {
+  const d = o.detalleB2b!;
+  return {
+    id: o.id,
+    folio: o.folio,
+    negocioNombre: d.negocioNombre,
+    contactoNombre: o.clienteNombre,
+    semanaInicio: d.semanaInicio,
+    estado: o.estadoPedido,
+    estadoPago: o.estadoPago,
+    modoCobro: d.modoCobro,
+    cancelado: o.cancelado,
+    totalPiezas: d.totalPiezas,
+    total: o.total,
+    createdAt: o.createdAt,
+  };
+}
+
+const comoEstado = (e: PedidoB2bEstado) => e as unknown as EstadoPedido;
 
 @Injectable()
 export class PedidosB2bService {
@@ -90,13 +120,8 @@ export class PedidosB2bService {
     operador?: FiltroImporteOperador;
     valor?: number;
     valorHasta?: number;
-  }): Prisma.PedidoB2bWhereInput {
-    return {
-      // `estados` (multi-valor) tiene prioridad si llega — ver
-      // ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
-      // estatus a la vez, sin pestaña por estatus).
-      estado: query.estados ? { in: query.estados } : query.estado,
-      cancelado: query.cancelado,
+  }): Prisma.OrderWhereInput {
+    const detalle: Prisma.DetalleB2BWhereInput = {
       semanaInicio:
         query.desde || query.hasta
           ? {
@@ -104,7 +129,6 @@ export class PedidosB2bService {
               lte: query.hasta ? new Date(query.hasta) : undefined,
             }
           : undefined,
-      total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
       // Coincidencia parcial, case-insensitive — usado por "Históricos"
       // (Pedidos activos filtra por negocio en el cliente porque trae todo
       // sin paginar; Históricos pagina de verdad, así que esto tiene que
@@ -113,6 +137,17 @@ export class PedidosB2bService {
         ? { contains: query.negocioNombre, mode: 'insensitive' }
         : undefined,
     };
+    return {
+      tipo: TipoOrden.B2B,
+      // `estados` (multi-valor) tiene prioridad si llega — ver
+      // ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
+      // estatus a la vez, sin pestaña por estatus).
+      estadoPedido: query.estados ? { in: query.estados.map(comoEstado) } : query.estado ? comoEstado(query.estado) : undefined,
+      cancelado: query.cancelado,
+      total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
+      // Siempre hay detalle en una orden B2B; el filtro solo se agrega si realmente se filtra por él.
+      ...(detalle.semanaInicio || detalle.negocioNombre ? { detalleB2b: detalle } : {}),
+    };
   }
 
   async findAll(query: ListPedidosB2bQueryDto) {
@@ -120,18 +155,18 @@ export class PedidosB2bService {
     const skip = (query.page - 1) * query.limit;
 
     const [data, total] = await Promise.all([
-      this.tenantPrisma.client.pedidoB2b.findMany({
+      this.tenantPrisma.client.order.findMany({
         where,
-        orderBy: { semanaInicio: 'desc' },
+        orderBy: { detalleB2b: { semanaInicio: 'desc' } },
         skip,
         take: query.limit,
         select: REPORTABLE_SELECT,
       }),
-      this.tenantPrisma.client.pedidoB2b.count({ where }),
+      this.tenantPrisma.client.order.count({ where }),
     ]);
 
     return {
-      data,
+      data: data.map(aReportable),
       total,
       page: query.page,
       limit: query.limit,
@@ -142,11 +177,13 @@ export class PedidosB2bService {
   async exportCsv(query: ExportPedidosB2bQueryDto): Promise<string> {
     const where = this.buildWhere(query);
 
-    const pedidos = await this.tenantPrisma.client.pedidoB2b.findMany({
-      where,
-      orderBy: { semanaInicio: 'desc' },
-      select: REPORTABLE_SELECT,
-    });
+    const pedidos = (
+      await this.tenantPrisma.client.order.findMany({
+        where,
+        orderBy: { detalleB2b: { semanaInicio: 'desc' } },
+        select: REPORTABLE_SELECT,
+      })
+    ).map(aReportable);
 
     return toCsv(pedidos, [
       { header: 'Folio', value: (p) => p.folio },
@@ -169,39 +206,35 @@ export class PedidosB2bService {
    * "Pedidos del día" — todos los pedidos activos (no despachados/cancelados)
    * con algo programado para entregarse en `fechaStr`, con `items` ya
    * recortados a solo las cantidades de ese día (nunca el pedido completo).
-   * Ver resolverSemanaYDia: la fecha se resuelve a semanaInicio + DiaSemana,
-   * PedidoB2bItemDia no guarda una fecha real.
+   * Etapa 2: la fecha es la de una Entrega real (antes se derivaba de semanaInicio + día de la semana).
    */
   async findEntregasDia(fechaStr: string) {
     const { semanaInicio, dia } = resolverSemanaYDia(fechaStr);
+    const fecha = fechaDeDia(semanaInicio, dia);
 
-    const pedidos = await this.tenantPrisma.client.pedidoB2b.findMany({
+    const pedidos = await this.tenantPrisma.client.order.findMany({
       where: {
-        semanaInicio,
+        tipo: TipoOrden.B2B,
         cancelado: false,
-        estado: {
-          in: [
-            PedidoB2bEstado.PENDIENTE_CONFIRMACION,
-            PedidoB2bEstado.CONFIRMADO_SURTIENDO,
-          ],
-        },
+        estadoPedido: { in: ESTADOS_ACTIVOS },
+        entregas: { some: { fecha } },
       },
-      orderBy: { negocioNombre: 'asc' },
+      orderBy: { detalleB2b: { negocioNombre: 'asc' } },
       select: {
         id: true,
         folio: true,
-        negocioNombre: true,
-        contactoNombre: true,
-        contactoTelefono: true,
-        estado: true,
+        clienteNombre: true,
+        clienteTelefono: true,
+        estadoPedido: true,
+        detalleB2b: { select: { negocioNombre: true } },
         items: {
+          orderBy: [{ orden: 'asc' }, { id: 'asc' }],
           select: {
             productId: true,
             nombreProducto: true,
             precioUnitario: true,
-            // Filtrado a un solo día — @@unique([pedidoB2bItemId, dia]),
-            // así que esto trae a lo más una fila por item.
-            distribucion: { where: { dia }, select: { cantidad: true } },
+            // Solo las cantidades de esa fecha (a lo más una fila por ítem: regla B2B de una entrega por fecha).
+            entregaItems: { where: { entrega: { fecha } }, select: { cantidad: true } },
           },
         },
       },
@@ -209,15 +242,20 @@ export class PedidosB2bService {
 
     return pedidos
       .map((pedido) => ({
-        ...pedido,
+        id: pedido.id,
+        folio: pedido.folio,
+        negocioNombre: pedido.detalleB2b!.negocioNombre,
+        contactoNombre: pedido.clienteNombre,
+        contactoTelefono: pedido.clienteTelefono,
+        estado: pedido.estadoPedido,
         items: pedido.items
-          .filter((item) => item.distribucion[0]?.cantidad > 0)
           .map((item) => ({
             productId: item.productId,
             nombreProducto: item.nombreProducto,
             precioUnitario: item.precioUnitario,
-            cantidad: item.distribucion[0].cantidad,
-          })),
+            cantidad: item.entregaItems.reduce((suma, ei) => suma + ei.cantidad, 0),
+          }))
+          .filter((item) => item.cantidad > 0),
       }))
       .filter((pedido) => pedido.items.length > 0);
   }
@@ -269,6 +307,13 @@ export class PedidosB2bService {
       `${semanaSiguiente.inicio}T00:00:00.000Z`,
     );
 
+    const b2bSemanaEnCurso = (estados: EstadoPedido[]): Prisma.OrderWhereInput => ({
+      tipo: TipoOrden.B2B,
+      cancelado: false,
+      estadoPedido: { in: estados },
+      detalleB2b: { semanaInicio: semanaEnCursoInicio },
+    });
+
     const [
       pendientesConfirmacion,
       confirmadosSurtiendo,
@@ -279,57 +324,39 @@ export class PedidosB2bService {
       proximaSemanaAgg,
       rankingProductosRaw,
     ] = await Promise.all([
-      this.tenantPrisma.client.pedidoB2b.count({
-        where: {
-          semanaInicio: semanaEnCursoInicio,
-          cancelado: false,
-          estado: PedidoB2bEstado.PENDIENTE_CONFIRMACION,
-        },
-      }),
-      this.tenantPrisma.client.pedidoB2b.count({
-        where: {
-          semanaInicio: semanaEnCursoInicio,
-          cancelado: false,
-          estado: PedidoB2bEstado.CONFIRMADO_SURTIENDO,
-        },
-      }),
-      this.tenantPrisma.client.pedidoB2b.aggregate({
-        where: {
-          semanaInicio: semanaEnCursoInicio,
-          cancelado: false,
-          estado: { in: ESTADOS_ACTIVOS },
-        },
+      this.tenantPrisma.client.order.count({ where: b2bSemanaEnCurso([EstadoPedido.PENDIENTE_CONFIRMACION]) }),
+      this.tenantPrisma.client.order.count({ where: b2bSemanaEnCurso([EstadoPedido.CONFIRMADO_SURTIENDO]) }),
+      this.tenantPrisma.client.detalleB2B.aggregate({
+        where: { semanaInicio: semanaEnCursoInicio, order: b2bSemanaEnCurso(ESTADOS_ACTIVOS) },
         _sum: { totalPiezas: true },
       }),
       this.entregasResumenDia(hoy),
       this.entregasResumenDia(manana),
-      this.tenantPrisma.client.pedidoB2b.findMany({
-        where: {
-          cancelado: false,
-          estado: PedidoB2bEstado.PENDIENTE_CONFIRMACION,
-        },
+      this.tenantPrisma.client.order.findMany({
+        where: { tipo: TipoOrden.B2B, cancelado: false, estadoPedido: EstadoPedido.PENDIENTE_CONFIRMACION },
         orderBy: { createdAt: 'asc' },
         take: 10,
-        select: { id: true, folio: true, negocioNombre: true, createdAt: true },
+        select: { id: true, folio: true, createdAt: true, detalleB2b: { select: { negocioNombre: true } } },
       }),
-      this.tenantPrisma.client.pedidoB2b.aggregate({
-        where: { semanaInicio: semanaSiguienteInicio, cancelado: false },
+      this.tenantPrisma.client.detalleB2B.aggregate({
+        where: { semanaInicio: semanaSiguienteInicio, order: { tipo: TipoOrden.B2B, cancelado: false } },
         _count: true,
         _sum: { totalPiezas: true },
       }),
       // Ranking de productos: semana en curso + próxima semana juntas, solo
       // excluyendo cancelados (no se filtra por estado — a diferencia de los
       // conteos de arriba, esto mide demanda, no pipeline de confirmación).
-      this.tenantPrisma.client.pedidoB2bItem.groupBy({
+      this.tenantPrisma.client.orderItem.groupBy({
         by: ['nombreProducto'],
         where: {
-          pedidoB2b: {
-            semanaInicio: { in: [semanaEnCursoInicio, semanaSiguienteInicio] },
+          order: {
+            tipo: TipoOrden.B2B,
             cancelado: false,
+            detalleB2b: { semanaInicio: { in: [semanaEnCursoInicio, semanaSiguienteInicio] } },
           },
         },
-        _sum: { cantidadTotal: true },
-        orderBy: { _sum: { cantidadTotal: 'desc' } },
+        _sum: { cantidad: true },
+        orderBy: { _sum: { cantidad: 'desc' } },
         take: 6,
       }),
     ]);
@@ -346,7 +373,7 @@ export class PedidosB2bService {
         pendientesMasAntiguos: pendientesMasAntiguosRaw.map((p) => ({
           id: p.id,
           folio: p.folio,
-          negocioNombre: p.negocioNombre,
+          negocioNombre: p.detalleB2b!.negocioNombre,
           diasPendiente: diasEntreFechasISO(fechaMexicoYMD(p.createdAt), hoy),
         })),
       },
@@ -358,7 +385,7 @@ export class PedidosB2bService {
       },
       rankingProductos: rankingProductosRaw.map((r) => ({
         nombreProducto: r.nombreProducto,
-        cantidadTotal: r._sum.cantidadTotal ?? 0,
+        cantidadTotal: r._sum.cantidad ?? 0,
       })),
     };
   }
@@ -373,48 +400,51 @@ export class PedidosB2bService {
    */
   private async entregasResumenDia(fechaStr: string) {
     const { semanaInicio, dia } = resolverSemanaYDia(fechaStr);
+    const fecha = fechaDeDia(semanaInicio, dia);
 
-    const pedidos = await this.tenantPrisma.client.pedidoB2b.findMany({
+    const pedidos = await this.tenantPrisma.client.order.findMany({
       where: {
-        semanaInicio,
+        tipo: TipoOrden.B2B,
         cancelado: false,
-        estado: { in: ESTADOS_ACTIVOS },
+        estadoPedido: { in: ESTADOS_ACTIVOS },
+        entregas: { some: { fecha } },
       },
+      orderBy: { createdAt: 'asc' },
       select: {
         folio: true,
-        negocioNombre: true,
-        items: {
-          select: {
-            distribucion: { where: { dia }, select: { cantidad: true } },
-          },
-        },
+        detalleB2b: { select: { negocioNombre: true } },
+        entregas: { where: { fecha }, select: { items: { select: { cantidad: true } } } },
       },
     });
 
     return pedidos
       .map((pedido) => ({
         folio: pedido.folio,
-        negocioNombre: pedido.negocioNombre,
-        cantidad: pedido.items.reduce(
-          (suma, item) => suma + (item.distribucion[0]?.cantidad ?? 0),
-          0,
-        ),
+        negocioNombre: pedido.detalleB2b!.negocioNombre,
+        cantidad: pedido.entregas.reduce((suma, e) => suma + e.items.reduce((s, i) => s + i.cantidad, 0), 0),
       }))
       .filter((entrega) => entrega.cantidad > 0);
   }
 
-  async findOne(id: string) {
-    const pedido = await this.tenantPrisma.client.pedidoB2b.findUnique({
-      where: { id },
-      include: {
-        items: { include: { distribucion: true } },
-        codigoDescuento: true,
-      },
+  /** Carga una orden B2B del tenant de la sesión (404 si no existe, es de otro tenant o no es B2B). */
+  private async cargar(id: string) {
+    const orden = await this.tenantPrisma.client.order.findFirst({
+      where: { id, tipo: TipoOrden.B2B },
+      include: INCLUDE_PEDIDO,
     });
-    if (!pedido) {
+    if (!orden || !orden.detalleB2b) {
       throw new NotFoundException('Pedido no encontrado');
     }
-    return pedido;
+    return orden;
+  }
+
+  async findOne(id: string) {
+    const orden = await this.cargar(id);
+    const d = orden.detalleB2b!;
+    const codigo = d.codigoDescuentoId
+      ? await this.tenantPrisma.client.pedidoB2bCodigoDescuento.findUnique({ where: { id: d.codigoDescuentoId } })
+      : null;
+    return aRespuestaPedidoB2b(orden, { conCodigo: codigo });
   }
 
   async create(tenantId: string, dto: CreatePedidoB2bDto) {
@@ -459,15 +489,12 @@ export class PedidosB2bService {
         fechaPedido: new Date(),
       });
 
-      const pedido = await tx.pedidoB2b.create({
-        // tenantId es requerido por los tipos generados pero se inyecta en
-        // tiempo de ejecución por la extensión tenant-scoped (ver
-        // TenantPrismaService) — igual que el resto de los servicios.
-        // clienteId sí se pasa explícito: la extensión solo inyecta
-        // tenantId, no otras FKs.
-        data: {
-          clienteId: cliente.id,
+      const orden = await crearOrdenB2b(
+        tx,
+        {
+          tenantId,
           folio,
+          clienteId: cliente.id,
           negocioNombre: dto.negocioNombre,
           contactoNombre: dto.contactoNombre,
           contactoTelefono: dto.contactoTelefono,
@@ -476,72 +503,65 @@ export class PedidosB2bService {
           modoCobro: tenant.pedidoB2bModoCobro,
           minimoPiezasAplicado: tenant.pedidoB2bMinimoPiezas,
           totalPiezas,
-          codigoDescuentoId,
-          codigoDescuentoTexto,
-          descuentoPorcentajeAplicado,
           subtotal,
           descuentoTotal,
           total,
-        } as any,
-      });
+          codigoDescuentoId,
+          codigoDescuentoTexto,
+          descuentoPorcentajeAplicado,
+        },
+        resueltos,
+      );
 
       // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
       await recalcularContadoresCliente(tx as unknown as ClienteContadoresDb, cliente.id);
 
-      await crearItems(tx, tenantId, pedido.id, resueltos);
-
-      return tx.pedidoB2b.findUniqueOrThrow({
-        where: { id: pedido.id },
-        include: { items: { include: { distribucion: true } } },
-      });
+      return aRespuestaPedidoB2b(
+        await tx.order.findUniqueOrThrow({ where: { id: orden.id }, include: INCLUDE_PEDIDO }),
+      );
     });
   }
 
   /**
    * Reemplazo completo de items/distribución sobre un pedido existente — ver
-   * UpdatePedidoB2bItemsDto. El código/porcentaje de descuento no es
-   * editable aquí (no forma parte del alcance de edición descrito), solo se
-   * reaplica sobre el nuevo subtotal.
+   * UpdatePedidoB2bItemsDto: el cliente manda el conjunto completo. Etapa 2: se aplica como DIFF (sincronizarOrdenB2b),
+   * conservando la identidad de los ítems y entregas que siguen existiendo. El código/porcentaje de descuento no es
+   * editable aquí (no forma parte del alcance de edición descrito), solo se reaplica sobre el nuevo subtotal.
    */
   async updateItems(id: string, dto: UpdatePedidoB2bItemsDto) {
-    const pedido = await this.tenantPrisma.client.pedidoB2b.findUnique({
-      where: { id },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido no encontrado');
-    }
+    const pedido = await this.cargar(id);
     this.assertActivo(pedido);
-    if (pedido.estado === PedidoB2bEstado.DESPACHADO) {
+    if (pedido.estadoPedido === EstadoPedido.DESPACHADO) {
       throw new ConflictException('No puedes editar un pedido ya despachado');
     }
     // Si el pedido ya está pagado (modo AL_INICIO), no se edita el mismo
     // pedido — se crea uno nuevo e independiente. Ver CLAUDE.md.
-    if (pedido.estadoPago === 'PAGADO') {
+    if (pedido.estadoPago === EstadoPago.PAGADO) {
       throw new ConflictException(
         'Este pedido ya está pagado — crea un pedido nuevo para agregar más producto',
       );
     }
 
+    const detalle = pedido.detalleB2b!;
     const { resueltos, totalPiezas, subtotal } = await resolverItems(
       this.tenantPrisma.client,
       pedido.tenantId,
       dto.items,
     );
-    const descuentoPorcentaje = pedido.descuentoPorcentajeAplicado
-      ? Number(pedido.descuentoPorcentajeAplicado)
+    const descuentoPorcentaje = detalle.descuentoPorcentajeAplicado
+      ? Number(detalle.descuentoPorcentajeAplicado)
       : 0;
     const descuentoTotal = round2(subtotal * (descuentoPorcentaje / 100));
     const total = round2(subtotal - descuentoTotal);
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
-      await tx.pedidoB2bItem.deleteMany({ where: { pedidoB2bId: id } });
-      await crearItems(tx, pedido.tenantId, id, resueltos);
+      // Serializa ediciones concurrentes del mismo pedido: la regla "una entrega por fecha" vive aquí, no en la base.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      await sincronizarOrdenB2b(tx, pedido.tenantId, id, detalle.semanaInicio, resueltos);
+      await tx.detalleB2B.update({ where: { orderId: id }, data: { totalPiezas, subtotal } });
+      await tx.order.update({ where: { id }, data: { descuentoTotal, total } });
 
-      return tx.pedidoB2b.update({
-        where: { id },
-        data: { totalPiezas, subtotal, descuentoTotal, total },
-        include: { items: { include: { distribucion: true } } },
-      });
+      return aRespuestaPedidoB2b(await tx.order.findUniqueOrThrow({ where: { id }, include: INCLUDE_PEDIDO }));
     });
   }
 
@@ -550,41 +570,45 @@ export class PedidosB2bService {
    * acepta uno explícito del cliente (mismo principio que
    * OrdersService.avanzar). Al salir de PENDIENTE_CONFIRMACION aplica las
    * reglas de mínimo de piezas / modo de cobro descritas en CLAUDE.md.
+   * Al despachar, sus entregas no canceladas pasan a ENTREGADA (un solo sentido, sin UI).
    */
-  async avanzar(id: string) {
-    const pedido = await this.tenantPrisma.client.pedidoB2b.findUnique({
-      where: { id },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido no encontrado');
-    }
+  async avanzar(id: string, usuarioId?: string) {
+    const pedido = await this.cargar(id);
     this.assertActivo(pedido);
+    const detalle = pedido.detalleB2b!;
 
-    const siguiente = SIGUIENTE_ESTADO[pedido.estado];
+    const siguiente = SIGUIENTE_ESTADO[pedido.estadoPedido];
     if (!siguiente) {
       throw new ConflictException('Este pedido ya está despachado');
     }
 
-    if (pedido.estado === PedidoB2bEstado.PENDIENTE_CONFIRMACION) {
-      if (pedido.modoCobro === 'AL_INICIO') {
+    if (pedido.estadoPedido === EstadoPedido.PENDIENTE_CONFIRMACION) {
+      if (detalle.modoCobro === 'AL_INICIO') {
         throw new ConflictException(
           'Este pedido requiere pago para confirmarse — usa /pedidos-b2b/:id/marcar-pagado',
         );
       }
       // AL_FINAL: el mínimo de piezas bloquea la confirmación, y solo aquí —
       // una vez confirmado nunca se vuelve a revalidar (ver updateItems).
-      if (pedido.totalPiezas < pedido.minimoPiezasAplicado) {
+      if (detalle.totalPiezas < detalle.minimoPiezasAplicado) {
         throw new ConflictException(
-          `Este pedido no alcanza el mínimo de ${pedido.minimoPiezasAplicado} piezas (tiene ${pedido.totalPiezas})`,
+          `Este pedido no alcanza el mínimo de ${detalle.minimoPiezasAplicado} piezas (tiene ${detalle.totalPiezas})`,
         );
       }
     }
 
-    const actualizado = await this.tenantPrisma.client.pedidoB2b.update({
-      where: { id },
-      data: { estado: siguiente },
-      include: { items: { include: { distribucion: true } } },
-    });
+    const actualizado = aRespuestaPedidoB2b(
+      await this.tenantPrisma.client.$transaction(async (tx) => {
+        const orden = await tx.order.update({ where: { id }, data: { estadoPedido: siguiente }, include: INCLUDE_PEDIDO });
+        if (siguiente === EstadoPedido.DESPACHADO) {
+          await tx.entrega.updateMany({
+            where: { orderId: id, estado: { not: EstadoEntrega.CANCELADA } },
+            data: { estado: EstadoEntrega.ENTREGADA, estadoCambiadoAt: new Date(), estadoCambiadoPorId: usuarioId ?? null },
+          });
+        }
+        return orden;
+      }),
+    );
 
     // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — ver el mismo comentario en
     // OrdersService.avanzar. void + fire-and-forget: nunca debe sumarle al
@@ -592,7 +616,7 @@ export class PedidosB2bService {
     void this.reglaEventoPedidoService.dispararSeguro({
       tenantId: actualizado.tenantId,
       origen: 'PEDIDO_B2B',
-      estatus: siguiente,
+      estatus: siguiente as unknown as PedidoB2bEstado,
       clienteId: actualizado.clienteId,
       contexto: this.contextoPedidoParaReglas(actualizado),
     });
@@ -609,48 +633,42 @@ export class PedidosB2bService {
    * — no reabre ni revalida el mínimo, y no mueve `estado`.
    */
   async marcarPagado(id: string) {
-    const pedido = await this.tenantPrisma.client.pedidoB2b.findUnique({
-      where: { id },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido no encontrado');
-    }
+    const pedido = await this.cargar(id);
     this.assertActivo(pedido);
+    const detalle = pedido.detalleB2b!;
 
-    if (pedido.estadoPago === 'PAGADO') {
+    if (pedido.estadoPago === EstadoPago.PAGADO) {
       throw new ConflictException('Este pedido ya está pagado');
     }
 
-    const data: Prisma.PedidoB2bUpdateInput = { estadoPago: 'PAGADO' };
+    const data: Prisma.OrderUpdateInput = { estadoPago: EstadoPago.PAGADO };
 
-    if (pedido.modoCobro === 'AL_INICIO') {
-      if (pedido.estado !== PedidoB2bEstado.PENDIENTE_CONFIRMACION) {
+    if (detalle.modoCobro === 'AL_INICIO') {
+      if (pedido.estadoPedido !== EstadoPedido.PENDIENTE_CONFIRMACION) {
         throw new ConflictException('Este pedido ya fue confirmado');
       }
-      if (pedido.totalPiezas < pedido.minimoPiezasAplicado) {
+      if (detalle.totalPiezas < detalle.minimoPiezasAplicado) {
         throw new ConflictException(
-          `Este pedido no alcanza el mínimo de ${pedido.minimoPiezasAplicado} piezas para procesar el pago (tiene ${pedido.totalPiezas})`,
+          `Este pedido no alcanza el mínimo de ${detalle.minimoPiezasAplicado} piezas para procesar el pago (tiene ${detalle.totalPiezas})`,
         );
       }
-      data.estado = PedidoB2bEstado.CONFIRMADO_SURTIENDO;
+      data.estadoPedido = EstadoPedido.CONFIRMADO_SURTIENDO;
     }
 
-    const actualizado = await this.tenantPrisma.client.pedidoB2b.update({
-      where: { id },
-      data,
-      include: { items: { include: { distribucion: true } } },
-    });
+    const actualizado = aRespuestaPedidoB2b(
+      await this.tenantPrisma.client.order.update({ where: { id }, data, include: INCLUDE_PEDIDO }),
+    );
 
     // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — solo si esta llamada de
     // verdad movió `estado` (rama AL_INICIO). En modo AL_FINAL, marcarPagado
     // nunca cambia `estado` (ver comentario del método), así que no hay
     // ningún evento de estatus que disparar aquí — ver también avanzar(),
     // que sí lo cubre para esa transición.
-    if (data.estado) {
+    if (data.estadoPedido) {
       void this.reglaEventoPedidoService.dispararSeguro({
         tenantId: actualizado.tenantId,
         origen: 'PEDIDO_B2B',
-        estatus: data.estado as PedidoB2bEstado,
+        estatus: data.estadoPedido as unknown as PedidoB2bEstado,
         clienteId: actualizado.clienteId,
         contexto: this.contextoPedidoParaReglas(actualizado),
       });
@@ -667,27 +685,32 @@ export class PedidosB2bService {
    * PATCH /:id/cancelar. Cancelación es un flag ortogonal a `estado` (ver
    * schema.prisma) — no hay ninguna regla de anticipación que el sistema
    * valide, es una decisión operativa manual, solo bloqueada una vez
-   * DESPACHADO.
+   * DESPACHADO. Sus entregas no entregadas pasan a CANCELADA (un solo sentido, sin UI).
    */
-  async cancelar(id: string) {
-    const pedido = await this.tenantPrisma.client.pedidoB2b.findUnique({
-      where: { id },
-    });
-    if (!pedido) {
-      throw new NotFoundException('Pedido no encontrado');
-    }
+  async cancelar(id: string, usuarioId?: string) {
+    const pedido = await this.cargar(id);
     if (pedido.cancelado) {
       throw new ConflictException('Este pedido ya está cancelado');
     }
-    if (pedido.estado === PedidoB2bEstado.DESPACHADO) {
+    if (pedido.estadoPedido === EstadoPedido.DESPACHADO) {
       throw new ConflictException('No puedes cancelar un pedido ya despachado');
     }
 
-    const cancelado = await this.tenantPrisma.client.pedidoB2b.update({
-      where: { id },
-      data: { cancelado: true, canceladoAt: new Date() },
-      include: { items: { include: { distribucion: true } } },
-    });
+    const cancelado = aRespuestaPedidoB2b(
+      await this.tenantPrisma.client.$transaction(async (tx) => {
+        const ahora = new Date();
+        const orden = await tx.order.update({
+          where: { id },
+          data: { cancelado: true, canceladoAt: ahora },
+          include: INCLUDE_PEDIDO,
+        });
+        await tx.entrega.updateMany({
+          where: { orderId: id, estado: { notIn: [EstadoEntrega.ENTREGADA, EstadoEntrega.CANCELADA] } },
+          data: { estado: EstadoEntrega.CANCELADA, estadoCambiadoAt: ahora, estadoCambiadoPorId: usuarioId ?? null },
+        });
+        return orden;
+      }),
+    );
     // Un pedido cancelado deja de contar en los contadores del Cliente.
     await recalcularContadoresCliente(this.tenantPrisma.client as unknown as ClienteContadoresDb, cancelado.clienteId);
     return cancelado;
@@ -711,7 +734,7 @@ export class PedidosB2bService {
   private contextoPedidoParaReglas(pedido: {
     folio: string;
     total: Prisma.Decimal;
-    estado: PedidoB2bEstado;
+    estado: EstadoPedido;
     createdAt: Date;
     items: { nombreProducto: string; cantidadTotal: number }[];
   }): PedidoContexto {
@@ -719,7 +742,7 @@ export class PedidosB2bService {
       origen: 'PEDIDO_B2B',
       folio: pedido.folio,
       total: pedido.total,
-      estatus: pedido.estado,
+      estatus: pedido.estado as unknown as PedidoB2bEstado,
       createdAt: pedido.createdAt,
       items: pedido.items.map((item) => ({ nombreProducto: item.nombreProducto, cantidad: item.cantidadTotal })),
     };

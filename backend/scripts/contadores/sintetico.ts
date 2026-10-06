@@ -33,11 +33,9 @@ async function main() {
       data: { tenantId: t, clienteId: c.id, folio: String(++folio), clienteNombre: 'x', clienteTelefono: '0', metodoPago: mp, estadoPago: ep, total: 10, createdAt: d(fecha) },
     });
   const b2b = (t: string, c: { id: string }, cancelado: boolean, fecha: string) =>
-    prisma.pedidoB2b.create({
-      data: {
-        tenantId: t, clienteId: c.id, folio: String(++folio), negocioNombre: 'n', contactoNombre: 'c', contactoTelefono: '0', contactoCorreo: 'x@y.z',
-        semanaInicio: new Date('2026-09-28'), modoCobro: 'AL_FINAL', minimoPiezasAplicado: 1, cancelado, createdAt: d(fecha),
-      } as any,
+    // Etapa 2: un pedido B2B es una Order (tipo B2B); para los contadores solo importan tipo, cancelado y createdAt.
+    prisma.order.create({
+      data: { tenantId: t, clienteId: c.id, folio: String(++folio), tipo: 'B2B', clienteNombre: 'c', clienteTelefono: '0', metodoPago: null, estadoPago: 'PENDIENTE', total: 10, cancelado, createdAt: d(fecha) },
     });
   const tarjeta = (t: string, c: { id: string }) => prisma.loyaltyCard.create({ data: { tenantId: t, clienteId: c.id, token: `tok-${c.id}` } });
 

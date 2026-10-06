@@ -7,7 +7,8 @@ import { auth, bodyCheckout, crearPedidoTarjeta, eventoPaymentIntent, postChecko
 // (B2C = Order PAGADO, B2B = PedidoB2b no cancelado). Fechas = createdAt del pedido;
 // sin pedidos contables = totalPedidos 0 y fecha de alta del Cliente.
 describe('Cliente · contadores derivados de pedidos contables', () => {
-  const s = usarSuite();
+  // Etapa 2: los pedidos B2B exigen un tenant RETAIL_B2B; el mínimo de piezas se fija en 100 (el default de la base) como antes.
+  const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2B', b2b: { minimoPiezas: 100 } } });
   const dueno = () => auth(s.h, tokenFor(s.h.jwt, s.base.dueno, s.base.tenant.id, 'DUENO'));
   const clientes = () => s.h.prisma.cliente.findMany({ orderBy: { createdAt: 'asc' } });
   const iso = (d: Date) => d.toISOString();

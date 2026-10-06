@@ -25,10 +25,10 @@ describe('B2B · creación pública, casos válidos', () => {
     expect(res.status).toBe(201);
     exacto(res.body, pedidoB2bEsperado());
 
-    expect(await s.h.prisma.pedidoB2b.count()).toBe(1);
-    expect(await s.h.prisma.pedidoB2bItem.count()).toBe(2);
-    expect(await s.h.prisma.pedidoB2bItemDia.count()).toBe(3);
-    expect((await s.h.prisma.pedidoB2b.findMany())[0].semanaInicio.toISOString()).toBe('2026-10-05T00:00:00.000Z');
+    expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(1);
+    expect(await s.h.prisma.orderItem.count({ where: { order: { tipo: 'B2B' } } })).toBe(2);
+    expect(await s.h.prisma.entregaItem.count()).toBe(3); // Etapa 2: los días son EntregaItem
+    expect((await s.h.prisma.detalleB2B.findMany())[0].semanaInicio.toISOString()).toBe('2026-10-05T00:00:00.000Z');
 
     const clientes = await s.h.prisma.cliente.findMany();
     expect(clientes).toHaveLength(1);
@@ -123,10 +123,12 @@ describe('B2B · creación pública, casos válidos', () => {
     });
     expect(res.status).toBe(201);
     exacto(res.body, pedidoB2bEsperado());
-    expect(await s.h.prisma.pedidoB2bItemDia.count()).toBe(3);
+    expect(await s.h.prisma.entregaItem.count()).toBe(3);
   });
 
-  it('el mismo producto en dos items se guarda como dos items separados (no se fusionan)', async () => {
+  // CAMBIO PERMITIDO DE LA ETAPA 2 (acordado): antes el mismo producto en dos items se guardaba como dos items
+  // separados; ahora se consolida en UN solo item con las cantidades por día sumadas. Totales y piezas no cambian.
+  it('el mismo producto en dos items se consolida en un solo item (Etapa 2)', async () => {
     const res = await post({
       items: [
         { productId: s.base.productoA.id, distribucion: [{ dia: 'LUNES', cantidad: 5 }] },
@@ -140,10 +142,7 @@ describe('B2B · creación pública, casos válidos', () => {
         totalPiezas: 10,
         subtotal: '450',
         total: '450',
-        items: [
-          itemB2bEsperado({ cantidadTotal: 5, distribucion: [diaEsperado('LUNES', 5, 0)] }, 0),
-          itemB2bEsperado({ cantidadTotal: 5, distribucion: [diaEsperado('MARTES', 5, 1)] }, 1),
-        ],
+        items: [itemB2bEsperado({ cantidadTotal: 10, distribucion: [diaEsperado('LUNES', 5, 0), diaEsperado('MARTES', 5, 0)] }, 0)],
       }),
       etiquetasB2b(s.base, res.body),
     );
@@ -169,7 +168,7 @@ describe('B2B · creación pública, casos válidos', () => {
     const otro = await post({ contactoTelefono: '5500000001' });
     expect(otro.body.minimoPiezasAplicado).toBe(5);
     // el primero no cambia retroactivamente
-    expect((await s.h.prisma.pedidoB2b.findUniqueOrThrow({ where: { id: res.body.id } })).minimoPiezasAplicado).toBe(25);
+    expect((await s.h.prisma.detalleB2B.findUniqueOrThrow({ where: { orderId: res.body.id } })).minimoPiezasAplicado).toBe(25);
   });
 
   it('recompra del mismo contacto (otro formato de teléfono): un solo Cliente B2B con totalPedidos 2', async () => {
@@ -189,9 +188,9 @@ describe('B2B · creación pública, rechazos', () => {
 
   async function sinEfectos() {
     await cederEventLoop();
-    expect(await s.h.prisma.pedidoB2b.count()).toBe(0);
-    expect(await s.h.prisma.pedidoB2bItem.count()).toBe(0);
-    expect(await s.h.prisma.pedidoB2bItemDia.count()).toBe(0);
+    expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
+    expect(await s.h.prisma.orderItem.count({ where: { order: { tipo: 'B2B' } } })).toBe(0);
+    expect(await s.h.prisma.entregaItem.count()).toBe(0);
     expect(await s.h.prisma.cliente.count()).toBe(0);
   }
   async function rechaza(extra: Record<string, unknown>, status: number, message: string | string[]) {
@@ -344,12 +343,12 @@ describe('B2B · creación pública, rechazos', () => {
       await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, { codigo: 'UNICO', usosMaximos: 1 });
       const primero = await postPublicoB2b(s.h, s.base.tenant.slug, bodyB2b(s.base, { codigoDescuento: 'UNICO' }));
       expect(primero.status).toBe(201);
-      const conteo = await s.h.prisma.pedidoB2b.count();
+      const conteo = await s.h.prisma.order.count({ where: { tipo: 'B2B' } });
       // cancelar el primero NO libera el cupo
-      await s.h.prisma.pedidoB2b.update({ where: { id: primero.body.id }, data: { cancelado: true, canceladoAt: new Date() } });
+      await s.h.prisma.order.update({ where: { id: primero.body.id }, data: { cancelado: true, canceladoAt: new Date() } });
       const res = await postPublicoB2b(s.h, s.base.tenant.slug, bodyB2b(s.base, { codigoDescuento: 'UNICO', contactoTelefono: '5500000009' }));
       expectError(res, 409, 'El código de descuento ya alcanzó su límite de usos');
-      expect(await s.h.prisma.pedidoB2b.count()).toBe(conteo);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(conteo);
     });
 
     it('código de otro tenant: 404', async () => {

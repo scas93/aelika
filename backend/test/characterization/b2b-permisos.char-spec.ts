@@ -41,7 +41,7 @@ describe('B2B · permisos por rol', () => {
   describe('escrituras de pedidos: Operador 403 (sin efectos), Gerente y Dueño permitidos, sin token 401', () => {
     it('POST /pedidos-b2b', async () => {
       expectError(await apiRol(s.h, s.base, 'OPERADOR').post('/pedidos-b2b', bodyB2b(s.base)), 403, SIN_PERMISO);
-      expect(await s.h.prisma.pedidoB2b.count()).toBe(0);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
       expect((await apiRol(s.h, s.base, 'GERENTE').post('/pedidos-b2b', bodyB2b(s.base))).status).toBe(201);
       expect((await apiRol(s.h, s.base, 'DUENO').post('/pedidos-b2b', bodyB2b(s.base, { contactoTelefono: '5500000001' }))).status).toBe(201);
       expectError(await anon().post('/pedidos-b2b').send(bodyB2b(s.base)), 401, 'Unauthorized');
@@ -63,8 +63,8 @@ describe('B2B · permisos por rol', () => {
       const r0 = armar(antes.id);
       const op = apiRol(s.h, s.base, 'OPERADOR').patch(r0.url);
       expectError(r0.body ? await op.send(r0.body) : await op, 403, SIN_PERMISO);
-      const fila = await s.h.prisma.pedidoB2b.findUniqueOrThrow({ where: { id: antes.id } });
-      expect({ estado: fila.estado, estadoPago: fila.estadoPago, cancelado: fila.cancelado }).toStrictEqual({
+      const fila = await s.h.prisma.order.findUniqueOrThrow({ where: { id: antes.id } });
+      expect({ estado: fila.estadoPedido, estadoPago: fila.estadoPago, cancelado: fila.cancelado }).toStrictEqual({
         estado: 'PENDIENTE_CONFIRMACION',
         estadoPago: 'PENDIENTE',
         cancelado: false,

@@ -17,9 +17,9 @@ describe('B2B · creación admin', () => {
     expect(res.status).toBe(201);
     exacto(res.body, pedidoB2bEsperado());
 
-    expect(await s.h.prisma.pedidoB2b.count()).toBe(1);
-    expect(await s.h.prisma.pedidoB2bItem.count()).toBe(2);
-    expect(await s.h.prisma.pedidoB2bItemDia.count()).toBe(3);
+    expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(1);
+    expect(await s.h.prisma.orderItem.count({ where: { order: { tipo: 'B2B' } } })).toBe(2);
+    expect(await s.h.prisma.entregaItem.count()).toBe(3); // Etapa 2: los días son EntregaItem
     const clientes = await s.h.prisma.cliente.findMany();
     expect(clientes).toHaveLength(1);
     expect(clientes[0]).toMatchObject({ canal: 'B2B', telefono: '5533334444', totalPedidos: 1 });
@@ -111,14 +111,14 @@ describe('B2B · creación admin', () => {
         'Uno o más productos no existen en este negocio',
       );
       expectError(await crear('DUENO', { codigoDescuento: 'NOEXISTE' }), 404, 'El código de descuento no existe o no está activo');
-      expect(await s.h.prisma.pedidoB2b.count()).toBe(0);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
     });
   });
 
   describe('permisos', () => {
     it('Operador: 403 exacto y no crea nada', async () => {
       expectError(await crear('OPERADOR'), 403, 'No tienes permiso para realizar esta acción');
-      expect(await s.h.prisma.pedidoB2b.count()).toBe(0);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
     });
 
     it('sin token: 401 exacto', async () => {

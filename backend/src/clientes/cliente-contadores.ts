@@ -1,7 +1,7 @@
 import { ClienteCanal, EstadoPago, Prisma, TipoOrden } from '../../generated/prisma/client';
 
 /** Lo mínimo que necesita el recálculo: sirve el cliente Prisma raíz, una transacción o el de tenant (con cast). */
-export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'order' | 'pedidoB2b'>;
+export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'order'>;
 
 /**
  * Única fuente de verdad de `Cliente.totalPedidos` / `primerPedidoAt` / `ultimoPedidoAt`
@@ -10,9 +10,9 @@ export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'or
  *  - Canal B2C: cuentan los `Order` con `estadoPago = PAGADO`. Un TARJETA
  *    PENDIENTE/PROCESANDO/FALLIDO es un intento de pago, no un pedido, y un
  *    REEMBOLSADO deja de contar (el cliente pierde esa visita).
- *  - Canal B2B: cuentan los `PedidoB2b` con `cancelado = false`, sin importar
+ *  - Canal B2B: cuentan las `Order` de tipo B2B con `cancelado = false`, sin importar
  *    `estadoPago` (un pedido B2B es real desde que nace; en AL_FINAL se cobra
- *    después de surtir).
+ *    después de surtir). Desde la Etapa 2 viven en Order (antes, PedidoB2b).
  *  - Fechas = `createdAt` del pedido (no la fecha de pago). Consecuencia
  *    declarada: un pedido creado a las 23:58 y pagado a las 00:03 cuenta en el
  *    día en que se creó.
@@ -44,14 +44,13 @@ export async function calcularContadoresCliente(db: ClienteContadoresDb, cliente
 
   const agregado =
     cliente.canal === ClienteCanal.B2B
-      ? await db.pedidoB2b.aggregate({
-          where: { clienteId, cancelado: false },
+      ? await db.order.aggregate({
+          where: { clienteId, tipo: TipoOrden.B2B, cancelado: false },
           _count: true,
           _min: { createdAt: true },
           _max: { createdAt: true },
         })
       : await db.order.aggregate({
-          // Etapa 2: los pedidos B2B vivirán en Order (tipo B2B); el contador B2C nunca los cuenta.
           where: { clienteId, tipo: TipoOrden.B2C, estadoPago: EstadoPago.PAGADO },
           _count: true,
           _min: { createdAt: true },

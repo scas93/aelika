@@ -32,8 +32,9 @@ describe('Script corregir-contadores', () => {
     const order = (c: { id: string }, mp: 'EFECTIVO' | 'TARJETA', ep: 'PAGADO' | 'PENDIENTE' | 'FALLIDO' | 'REEMBOLSADO', f: string) =>
       s.h.prisma.order.create({ data: { tenantId: t, clienteId: c.id, folio: `s${++folio}`, clienteNombre: 'x', clienteTelefono: '0', metodoPago: mp, estadoPago: ep, total: 10, createdAt: d(f) } });
     const b2b = (c: { id: string }, cancelado: boolean, f: string) =>
-      s.h.prisma.pedidoB2b.create({
-        data: { tenantId: t, clienteId: c.id, folio: `s${++folio}`, negocioNombre: 'n', contactoNombre: 'c', contactoTelefono: '0', contactoCorreo: 'x@y.z', semanaInicio: new Date('2026-09-28'), modoCobro: 'AL_FINAL', minimoPiezasAplicado: 1, cancelado, createdAt: d(f) } as any,
+      // Etapa 2: un pedido B2B es una Order (tipo B2B); para los contadores solo importan tipo, cancelado y createdAt.
+      s.h.prisma.order.create({
+        data: { tenantId: t, clienteId: c.id, folio: `s${++folio}`, tipo: 'B2B', clienteNombre: 'c', clienteTelefono: '0', metodoPago: null, estadoPago: 'PENDIENTE', total: 10, cancelado, createdAt: d(f) },
       });
 
     const c1 = await cliente('B2C', 'tarjeta-pendiente', 1, '10T12:00', '10T12:00'); // → 0

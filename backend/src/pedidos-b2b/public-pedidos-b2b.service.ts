@@ -18,11 +18,11 @@ import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import {
   assertLunes,
   calcularSemanaDestino,
-  crearItems,
   nextFolioPedidoB2b,
   resolverCodigoDescuento,
   resolverItems,
 } from './pedidos-b2b-logica';
+import { aRespuestaPedidoB2b, crearOrdenB2b, INCLUDE_PEDIDO } from './pedidos-b2b-orden';
 
 /**
  * Storefront público del módulo B2B — sin JWT, mismo patrón que
@@ -240,11 +240,12 @@ export class PublicPedidosB2bService {
         fechaPedido: new Date(),
       });
 
-      const pedido = await tx.pedidoB2b.create({
-        data: {
+      const orden = await crearOrdenB2b(
+        tx,
+        {
           tenantId: tenant.id,
-          clienteId: cliente.id,
           folio,
+          clienteId: cliente.id,
           negocioNombre: dto.negocioNombre,
           contactoNombre: dto.contactoNombre,
           contactoTelefono: dto.contactoTelefono,
@@ -254,25 +255,23 @@ export class PublicPedidosB2bService {
           modoCobro: tenant.pedidoB2bModoCobro,
           minimoPiezasAplicado: tenant.pedidoB2bMinimoPiezas,
           totalPiezas,
-          codigoDescuentoId,
-          codigoDescuentoTexto,
-          descuentoPorcentajeAplicado,
           subtotal,
           descuentoTotal,
           total,
-          ...factura,
+          codigoDescuentoId,
+          codigoDescuentoTexto,
+          descuentoPorcentajeAplicado,
+          factura,
         },
-      });
+        resueltos,
+      );
 
       // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
       await recalcularContadoresCliente(tx as unknown as ClienteContadoresDb, cliente.id);
 
-      await crearItems(tx, tenant.id, pedido.id, resueltos);
-
-      return tx.pedidoB2b.findUniqueOrThrow({
-        where: { id: pedido.id },
-        include: { items: { include: { distribucion: true } } },
-      });
+      return aRespuestaPedidoB2b(
+        await tx.order.findUniqueOrThrow({ where: { id: orden.id }, include: INCLUDE_PEDIDO }),
+      );
     });
   }
 }
