@@ -56,26 +56,50 @@ describe('B2C · reutilización de pedidos TARJETA (Parte B1)', () => {
       expect(await pedidos()).toHaveLength(1);
     });
 
-    it('horaRecogida distinta (opción rápida): reutiliza y actualiza la hora en Order y en DetalleB2C', async () => {
+    // Etapa 1b-a (cambia a propósito: antes afirmaba la hora en Order Y en DetalleB2C por la escritura doble): la hora vive
+    // solo en el DetalleB2C; las columnas viejas de Order no se escriben.
+    it('horaRecogida distinta (opción rápida): reutiliza y actualiza la hora en DetalleB2C (las columnas viejas no se tocan)', async () => {
       const a = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30' });
       const b = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:45' });
       expect(b.status).toBe(201);
       expect(b.body.id).toBe(a.body.id);
       expect(b.body.horaRecogida).toBe('10:45');
       const [o] = await s.h.prisma.order.findMany({ include: { detalleB2c: true } });
-      expect(o.horaRecogida).toBe('10:45');
       expect(o.detalleB2c!.horaRecogida).toBe('10:45');
-      expect(o.horaRecogidaTipo).toBe('HORA_ESPECIFICA');
+      expect(o.detalleB2c!.horaRecogidaTipo).toBe('HORA_ESPECIFICA');
+      expect(o.horaRecogida).toBeNull();
+      expect(o.horaRecogidaTipo).toBe('LO_ANTES_POSIBLE'); // default de la columna vieja: ya no se escribe
       expect(await pedidos()).toHaveLength(1);
+    });
+
+    // Etapa 1b-a (test nuevo): la reutilización decide con el DetalleB2C y nunca lee ni escribe las columnas viejas.
+    it('la reutilización compara contra el DetalleB2C, no contra las columnas viejas de la orden existente', async () => {
+      const a = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30' });
+      // Se "envenenan" las columnas viejas: coinciden con la hora del segundo envío (10:45) pero el detalle sigue en 10:30.
+      await s.h.prisma.order.update({ where: { id: a.body.id }, data: { horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:45' } });
+      const b = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:45' });
+      expect(b.status).toBe(201);
+      expect(b.body.id).toBe(a.body.id);
+      const [o] = await s.h.prisma.order.findMany({ include: { detalleB2c: true } });
+      // Si hubiera leído la columna vieja habría concluido "ya está en 10:45" y no habría actualizado el detalle.
+      expect(o.detalleB2c!.horaRecogida).toBe('10:45');
+      expect(b.body.horaRecogida).toBe('10:45');
+      // Y si el detalle ya coincide, las columnas viejas (envenenadas a otro valor) tampoco se escriben.
+      await s.h.prisma.order.update({ where: { id: a.body.id }, data: { horaRecogida: '99:99' } });
+      const c = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:45' });
+      expect(c.status).toBe(201);
+      const [o2] = await s.h.prisma.order.findMany({ include: { detalleB2c: true } });
+      expect(o2.horaRecogida).toBe('99:99');
+      expect(o2.detalleB2c!.horaRecogida).toBe('10:45');
     });
 
     it('la hora enviada sigue validándose en cada request (pasada o sin margen: 400, el pedido no cambia)', async () => {
       const a = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:30' });
       const b = await tarjeta({ horaRecogidaTipo: 'HORA_ESPECIFICA', horaRecogida: '10:05' });
       expect(b.status).toBe(400);
-      const [o] = await pedidos();
+      const [o] = await s.h.prisma.order.findMany({ include: { detalleB2c: true } });
       expect(o.id).toBe(a.body.id);
-      expect(o.horaRecogida).toBe('10:30');
+      expect(o.detalleB2c!.horaRecogida).toBe('10:30'); // Etapa 1b-a: la hora vive en el detalle
     });
 
     it('dentro de la ventana (1 h 59 min) reutiliza y conserva createdAt y folio', async () => {

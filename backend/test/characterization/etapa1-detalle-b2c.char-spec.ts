@@ -3,7 +3,8 @@ import { conectarStripe, seedPromocion, seedPuntoEnvio } from './db';
 import { auth, bodyCheckout, cederEventLoop, crearPedidoTarjeta, postCheckout, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
 
-// Etapa 1 · forma de almacenamiento: DetalleB2C 1:1, escritura doble, `tipo`, cascada y unicidad.
+// Etapa 1 · forma de almacenamiento: DetalleB2C 1:1, `tipo`, cascada y unicidad. Etapa 1b-a: la escritura doble se retiró —
+// los campos B2C solo se escriben en el detalle y las columnas viejas de Order quedan en su default/null.
 describe('B2C · DetalleB2C (almacenamiento, Etapa 1)', () => {
   const s = usarSuite();
   const CAMPOS = [
@@ -18,7 +19,7 @@ describe('B2C · DetalleB2C (almacenamiento, Etapa 1)', () => {
     'notasDescuento',
   ] as const;
 
-  it('un checkout DOMICILIO crea la orden con tipo B2C y UN detalle; los 9 campos coinciden con las columnas viejas (escritura doble)', async () => {
+  it('un checkout DOMICILIO crea la orden con tipo B2C y UN detalle con los 9 campos; las columnas viejas de Order NO se escriben (1b-a)', async () => {
     await seedPromocion(s.h.prisma, s.base.tenant.id, 'DESCUENTO_PRODUCTO', { productId: s.base.productoA.id, tipoDescuento: 'porcentaje', valor: 10 });
     const punto = await seedPuntoEnvio(s.h.prisma, s.base.tenant.id);
     const res = await postCheckout(
@@ -43,7 +44,20 @@ describe('B2C · DetalleB2C (almacenamiento, Etapa 1)', () => {
     const d = orden.detalleB2c!;
     expect(d.tenantId).toBe(s.base.tenant.id);
     expect(d.orderId).toBe(orden.id);
-    for (const c of CAMPOS) expect([c, d[c]]).toStrictEqual([c, orden[c]]);
+    // Etapa 1b-a (cambia a propósito: antes afirmaba que los 9 campos coincidían con las columnas viejas): las columnas
+    // viejas ya no se escriben. DATO FALSO DECLARADO: metodoEntrega queda en su default RECOGER aunque esta orden sea
+    // DOMICILIO (y horaRecogidaTipo en LO_ANTES_POSIBLE). Es inofensivo — nada las lee — y no se corrige: la 1b-b las borra.
+    expect(CAMPOS.map((c) => [c, orden[c]])).toStrictEqual([
+      ['horaRecogidaTipo', 'LO_ANTES_POSIBLE'],
+      ['horaRecogida', null],
+      ['metodoEntrega', 'RECOGER'],
+      ['puntoEnvioId', null],
+      ['direccionCalle', null],
+      ['direccionNumero', null],
+      ['direccionColonia', null],
+      ['direccionReferencias', null],
+      ['notasDescuento', null],
+    ]);
     expect(d).toMatchObject({
       metodoEntrega: 'DOMICILIO',
       puntoEnvioId: punto.id,
