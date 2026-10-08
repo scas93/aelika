@@ -115,11 +115,11 @@ model Tenant {
   // FacturacionModo and PublicService.createOrder.
   facturacionModo              FacturacionModo    @default(DESACTIVADO)
   // Stripe Connect connected account for this tenant (platform = Aelika).
-  // Null until POST /internal/tenants/:slug/stripe-account is called — see
-  // InternalService. chargesEnabled/payoutsEnabled mirror the connected
-  // account's own fields of the same name, refreshed from Stripe (never
-  // trusted as stale) by GET /internal/tenants/:slug/stripe-status and by
-  // the account.updated webhook event.
+  // Null until POST /tenant/me/stripe-account is called — see
+  // TenantService.createOrContinueStripeAccount. chargesEnabled/payoutsEnabled
+  // mirror the connected account's capabilities, refreshed from Stripe (never
+  // trusted as stale) by GET /tenant/me/stripe-status and by the v2
+  // capability_status_updated webhook events.
   stripeAccountId              String?            @unique
   stripeChargesEnabled         Boolean            @default(false)
   stripePayoutsEnabled         Boolean            @default(false)
