@@ -64,7 +64,7 @@ Producción: proyecto `outstanding-compassion` (`api.aelika.com`), ids en `scrip
 (`pedidos_b2b*`). Pasa SIEMPRE `-p/-e` y `--proyecto-esperado outstanding-compassion`; verifica el dominio que imprime la guarda antes de seguir.
 Cada comando de datos: primero dry-run, revisar y pedir OK; después `--aplicar`; después verificar.
 
-1. **Respaldo completo** de la base (snapshot Railway o `pg_dump`) y anotar dónde queda. Confirmar que Etapa 1/1b-a ya están en producción (prerrequisito de la Etapa 2).
+1. **Respaldo completo — lo saca Santiago, a mano, con un snapshot de Railway ANTES de cualquier paso de esta lista.** Desde la sesión de Claude Code no hay `pg_dump` ni acceso público a la base de producción, así que Claude no puede sacarlo; ningún paso siguiente se ejecuta sin que Santiago confirme que el snapshot existe (y anotar cuál es). Claude solo puede exportar las filas B2B que cada script toca (NDJSON), que es un complemento, no un sustituto. Confirmar que Etapa 1/1b-a ya están en producción (prerrequisito de la Etapa 2).
 2. **Etapa 2 · Release A** (esquema aditivo `20261005120000_etapa2_ordenes_b2b` + aislamiento B2C + scripts). El panel B2B sigue sirviéndose desde las tablas legacy.
 3. **Etapa 2 · datos** (`scripts/etapa2/MIGRACION.md`): `planificar` (dry-run + ensayo) → revisar hallazgos → OK → `auditar` (línea base) → `migrar --aplicar` → `auditar`.
 4. **Etapa 2 · Release B** (módulo B2B sobre `Order`).
