@@ -4,7 +4,7 @@ import { expectError, expectExacto } from './exacto';
 import { bodyCheckout, cederEventLoop, postCheckout, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
 import { normalizar } from './normalizar';
-import { apiRol, crearAdminB2b, crearPublicoB2b } from './b2b-helpers';
+import { apiRol, cerrarEntregasB2b, crearAdminB2b, crearPublicoB2b } from './b2b-helpers';
 
 // 0b-2 · Área 14 · Reglas de notificación.
 // Excepción declarada a "solo HTTP": aquí ReglaEventoPedidoService es el REAL; solo ReglaEnvioService.enviar
@@ -235,12 +235,13 @@ describe('Transversal · Reglas de notificación', () => {
       await orden(); // DESPACHADO
       await waitForCalls(s.h.fakes.reglaEnvio, 3);
       expect(llamada(2, ids).regla).toStrictEqual({ id: '<R2>', nombre: 'ORDER/DESPACHADO' });
-      await pedido(); // DESPACHADO
-      await waitForCalls(s.h.fakes.reglaEnvio, 4);
-      expect(llamada(3, ids).regla).toStrictEqual({ id: '<R4>', nombre: 'PEDIDO_B2B/DESPACHADO' });
+      // CAMBIA A PROPÓSITO (estados B2B por entrega): B2B ya no se "despacha" — el segundo avanzar es 409 y NO dispara la regla
+      // PEDIDO_B2B/DESPACHADO (R4 queda configurada pero sin disparar). Cerrar las entregas completa el pedido sin eventos.
+      expect((await dueno().patch(`/pedidos-b2b/${p.id}/avanzar`)).status).toBe(409);
+      await cerrarEntregasB2b(dueno(), p.id);
 
       await cederEventLoop();
-      expect(s.h.fakes.reglaEnvio).toHaveBeenCalledTimes(4); // ninguna de PENDIENTE, inactiva ni de otro tenant
+      expect(s.h.fakes.reglaEnvio).toHaveBeenCalledTimes(3); // ninguna de PENDIENTE, DESPACHADO de B2B, inactiva ni de otro tenant
     });
 
     it('marcarPagado: en AL_FINAL no dispara; en AL_INICIO confirma y dispara la regla CONFIRMADO_SURTIENDO del origen PEDIDO_B2B', async () => {

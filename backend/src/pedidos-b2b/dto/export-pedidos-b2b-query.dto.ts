@@ -2,20 +2,20 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { PedidoB2bEstado } from '../../../generated/prisma/enums';
+import { ESTADOS_B2B_FILTRO, type EstadoB2bFiltro } from '../pedidos-b2b-estados';
 
 // Mismos filtros que ListPedidosB2bQueryDto sin paginación — el export
 // devuelve todas las filas que apliquen, como ExportOrdersHistoricoQueryDto.
 export class ExportPedidosB2bQueryDto {
   @IsOptional()
-  @IsEnum(PedidoB2bEstado)
-  estado?: PedidoB2bEstado;
+  @IsIn(ESTADOS_B2B_FILTRO)
+  estado?: EstadoB2bFiltro;
 
   @IsOptional()
   @IsString()
@@ -34,8 +34,8 @@ export class ExportPedidosB2bQueryDto {
     typeof value === 'string' ? value.split(',') : value,
   )
   @IsArray()
-  @IsEnum(PedidoB2bEstado, { each: true })
-  estados?: PedidoB2bEstado[];
+  @IsIn(ESTADOS_B2B_FILTRO, { each: true })
+  estados?: EstadoB2bFiltro[];
 
   // `@Type(() => Boolean)` NO sirve aquí — Boolean('false') === true en JS
   // (cualquier string no vacío es truthy), así que "?cancelado=false" se

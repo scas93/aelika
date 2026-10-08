@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
+  cerrarEntregaPedidoB2b,
   exportPedidosB2bDiaCsv,
   fetchPedidosB2bDia,
   fetchTenantSettings,
@@ -13,6 +14,8 @@ import { hoyYYYYMMDD } from "@/lib/fecha";
 import { isWebUsbSupported, printComandaB2bDiaWebUsb } from "@/lib/thermal-printer";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
+import Badge from "../../_components/Badge";
+import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
 
 // timeZone: "UTC" en todo este archivo — `fecha` es un string "YYYY-MM-DD"
 // parseado como medianoche UTC (mismo motivo que formatFecha en
@@ -47,6 +50,8 @@ export default function PedidosB2bDiaPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [cerrandoId, setCerrandoId] = useState<string | null>(null);
+  const [cerrarError, setCerrarError] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
@@ -96,6 +101,20 @@ export default function PedidosB2bDiaPage() {
     }
   }
 
+  // Cierra UNA entrega (Entregada / No recogida) y recarga el día. Cualquier rol puede hacerlo.
+  async function handleCerrar(entrega: PedidoB2bEntregaDia, estado: "ENTREGADA" | "NO_RECOGIDA") {
+    setCerrandoId(entrega.entregaId);
+    setCerrarError(null);
+    try {
+      await cerrarEntregaPedidoB2b(token, entrega.id, entrega.entregaId, estado);
+      setEntregas(await fetchPedidosB2bDia(token, fecha));
+    } catch (err) {
+      setCerrarError(err instanceof ApiError ? err.message : "No se pudo cerrar la entrega");
+    } finally {
+      setCerrandoId(null);
+    }
+  }
+
   async function handleImprimir(entrega: PedidoB2bEntregaDia) {
     setPrintingId(entrega.id);
     setPrintError(null);
@@ -142,6 +161,7 @@ export default function PedidosB2bDiaPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
       {printError && <p className="text-sm text-red-600">{printError}</p>}
+      {cerrarError && <p className="text-sm text-red-600">{cerrarError}</p>}
       {!webUsbSupported && (
         <p className="text-sm text-admin-ink-soft">
           Imprimir comandas requiere Chrome o Edge — no está disponible en este navegador.
@@ -161,11 +181,13 @@ export default function PedidosB2bDiaPage() {
           {entregas.map((entrega) => (
             <li key={entrega.id}>
               <Card padding={20}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-base font-bold text-admin-ink">#{entrega.folio}</span>
                       <span className="text-sm font-semibold text-admin-ink">{entrega.negocioNombre}</span>
+                      {entrega.atrasada && <Badge variant="peligro">Atrasada</Badge>}
+                      <Badge variant={ESTADO_ENTREGA_VARIANT[entrega.entregaEstado]}>{ESTADO_ENTREGA_LABEL[entrega.entregaEstado]}</Badge>
                     </div>
                     <ul className="flex flex-col gap-0.5">
                       {entrega.items.map((item, i) => (
@@ -175,14 +197,27 @@ export default function PedidosB2bDiaPage() {
                       ))}
                     </ul>
                   </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleImprimir(entrega)}
-                    disabled={printingId === entrega.id || !webUsbSupported}
-                  >
-                    {printingId === entrega.id ? "Imprimiendo..." : "🖨️ Imprimir"}
-                  </Button>
+                  <div className="flex flex-col items-end gap-2">
+                    {puedeCerrarEntregas(entrega.estado, entrega.cancelado) &&
+                      (entrega.entregaEstado === "PENDIENTE" || entrega.entregaEstado === "LISTA") && (
+                        <div className="flex gap-2">
+                          <Button variant="primary" size="sm" onClick={() => handleCerrar(entrega, "ENTREGADA")} disabled={cerrandoId !== null}>
+                            {cerrandoId === entrega.entregaId ? "Guardando..." : "Entregada"}
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => handleCerrar(entrega, "NO_RECOGIDA")} disabled={cerrandoId !== null}>
+                            No recogida
+                          </Button>
+                        </div>
+                      )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleImprimir(entrega)}
+                      disabled={printingId === entrega.id || !webUsbSupported}
+                    >
+                      {printingId === entrega.id ? "Imprimiendo..." : "🖨️ Imprimir"}
+                    </Button>
+                  </div>
                 </div>
               </Card>
             </li>

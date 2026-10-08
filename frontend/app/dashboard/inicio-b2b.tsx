@@ -51,8 +51,9 @@ export default function InicioB2B() {
         <SeccionTitulo titulo="Semana en curso" inicio={semanaEnCurso.inicio} fin={semanaEnCurso.fin} />
 
         <div className={SUMMARY_GRID}>
-          <SummaryCard label="Pendientes de confirmación" value={semanaEnCurso.pendientesConfirmacion} error={null} />
-          <SummaryCard label="Confirmados y surtiendo" value={semanaEnCurso.confirmadosSurtiendo} error={null} />
+          <SummaryCard label="Por confirmar" value={semanaEnCurso.pendientesConfirmacion} error={null} />
+          <SummaryCard label="Confirmados" value={semanaEnCurso.confirmadosSurtiendo} error={null} />
+          <SummaryCard label="En proceso" value={semanaEnCurso.enProceso} error={null} />
           <SummaryCard label="Piezas de la semana" value={semanaEnCurso.totalPiezas} error={null} />
         </div>
 

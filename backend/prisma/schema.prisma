@@ -264,6 +264,10 @@ enum EstadoPedido {
   CONFIRMADO_SURTIENDO
   LISTO_ENTREGA
   DESPACHADO
+  // Solo B2B (calculados a partir de las entregas, nunca B2C): EN_PROCESO = al menos una entrega cerrada y quedan
+  // pendientes; COMPLETADO = todas las entregas no canceladas cerradas. B2B "Cancelado" NO es un valor: es Order.cancelado.
+  EN_PROCESO
+  COMPLETADO
 }
 
 enum CanalOrigen {
@@ -654,6 +658,8 @@ enum EstadoEntrega {
   PENDIENTE
   LISTA
   ENTREGADA
+  // Cerrada sin que el cliente la recogiera: queda registrada y se cobra igual que ENTREGADA.
+  NO_RECOGIDA
   CANCELADA
 }
 

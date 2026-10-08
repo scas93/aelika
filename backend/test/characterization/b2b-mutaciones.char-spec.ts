@@ -4,6 +4,7 @@ import { cederEventLoop, usarSuite } from './helpers';
 import { normalizar } from './normalizar';
 import {
   apiRol,
+  cerrarEntregasB2b,
   crearAdminB2b,
   crearPublicoB2b,
   diaEsperado,
@@ -110,15 +111,19 @@ describe('B2B · mutaciones', () => {
       });
     });
 
-    it('rechazos: cancelado, despachado, pagado, id inexistente', async () => {
+    it('rechazos: cancelado, completado (reemplazo que toca entregas cerradas), pagado, id inexistente', async () => {
       const cancelado = await crearPublicoB2b(s.h, s.base);
       await api().patch(`/pedidos-b2b/${cancelado.id}/cancelar`).expect(200);
       expectError(await api().patch(`/pedidos-b2b/${cancelado.id}/items`).send(cuerpo()), 409, 'Este pedido está cancelado');
 
-      const despachado = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000001' });
-      await api().patch(`/pedidos-b2b/${despachado.id}/avanzar`).expect(200);
-      await api().patch(`/pedidos-b2b/${despachado.id}/avanzar`).expect(200);
-      expectError(await api().patch(`/pedidos-b2b/${despachado.id}/items`).send(cuerpo()), 409, 'No puedes editar un pedido ya despachado');
+      // CAMBIA A PROPÓSITO: un pedido completado ya SE PUEDE editar (para agregarle una entrega); lo que se rechaza es
+      // cambiar o quitar entregas ya cerradas (aquí, reemplazar todo el contenido las quitaría).
+      const completado = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000001' });
+      await api().patch(`/pedidos-b2b/${completado.id}/avanzar`).expect(200);
+      await cerrarEntregasB2b(api(), completado.id);
+      const rechazo = await api().patch(`/pedidos-b2b/${completado.id}/items`).send(cuerpo());
+      expect(rechazo.status).toBe(409);
+      expect(rechazo.body.message).toMatch(/ya no está pendiente — no se puede modificar/);
 
       const pagado = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000002' });
       await api().patch(`/pedidos-b2b/${pagado.id}/marcar-pagado`).expect(200);
@@ -157,7 +162,7 @@ describe('B2B · mutaciones', () => {
   });
 
   describe('PATCH /pedidos-b2b/:id/avanzar', () => {
-    it('AL_FINAL: PENDIENTE → CONFIRMADO → DESPACHADO → 409; cada paso dispara la regla PEDIDO_B2B con su contexto exacto', async () => {
+    it('AL_FINAL: PENDIENTE → CONFIRMADO (único paso manual, dispara la regla PEDIDO_B2B); avanzar otra vez → 409; cerrar las entregas lo completa sin disparar nada', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
 
       const r1 = await api().patch(`/pedidos-b2b/${p.id}/avanzar`);
@@ -181,13 +186,16 @@ describe('B2B · mutaciones', () => {
         },
       });
 
-      const r2 = await api().patch(`/pedidos-b2b/${p.id}/avanzar`);
-      expect(r2.status).toBe(200);
-      exacto(r2.body, pedidoB2bEsperado({ estado: 'DESPACHADO' }));
-      expect(s.h.fakes.dispararSeguro.mock.calls[1][0]).toMatchObject({ origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' });
-
-      expectError(await api().patch(`/pedidos-b2b/${p.id}/avanzar`), 409, 'Este pedido ya está despachado');
-      expect(s.h.fakes.dispararSeguro).toHaveBeenCalledTimes(2);
+      // CAMBIA A PROPÓSITO (estados B2B por entrega): "despachar" ya no existe. El segundo avanzar es 409; En proceso /
+      // Completado salen de cerrar las entregas y NO disparan reglas (no se agregan eventos nuevos).
+      expectError(
+        await api().patch(`/pedidos-b2b/${p.id}/avanzar`),
+        409,
+        'Este pedido ya está confirmado — su avance depende de cerrar sus entregas (Entregada o No recogida)',
+      );
+      const completo = await cerrarEntregasB2b(api(), p.id);
+      expect(completo.estado).toBe('COMPLETADO');
+      expect(s.h.fakes.dispararSeguro).toHaveBeenCalledTimes(1); // solo la de Confirmado
       await cederEventLoop();
       expect(s.h.fakes.queueAdd).not.toHaveBeenCalled(); // B2B nunca encola notificaciones de evento
     });
@@ -210,14 +218,14 @@ describe('B2B · mutaciones', () => {
       await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
     });
 
-    it('CONGELADO: en AL_FINAL se puede despachar sin haber pagado', async () => {
+    it('CONGELADO: en AL_FINAL se puede completar (cerrando sus entregas) sin haber pagado', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
       await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
-      const res = await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
-      expect({ estado: res.body.estado, estadoPago: res.body.estadoPago }).toStrictEqual({ estado: 'DESPACHADO', estadoPago: 'PENDIENTE' });
+      const res = await cerrarEntregasB2b(api(), p.id);
+      expect({ estado: res.estado, estadoPago: res.estadoPago }).toStrictEqual({ estado: 'COMPLETADO', estadoPago: 'PENDIENTE' });
     });
 
-    it('AL_INICIO: no se confirma con avanzar (409 apunta a marcar-pagado); tras pagar se puede despachar', async () => {
+    it('AL_INICIO: no se confirma con avanzar (409 apunta a marcar-pagado); tras pagar queda confirmado y solo se completa cerrando entregas', async () => {
       await configurarB2b(s.h.prisma, s.base.tenant.id, { modoCobro: 'AL_INICIO' });
       const p = await crearAdminB2b(s.h, s.base);
       expectError(
@@ -228,9 +236,15 @@ describe('B2B · mutaciones', () => {
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
       await api().patch(`/pedidos-b2b/${p.id}/marcar-pagado`).expect(200);
       s.h.fakes.dispararSeguro.mockClear();
-      const res = await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
-      expect(res.body.estado).toBe('DESPACHADO');
-      expect(s.h.fakes.dispararSeguro).toHaveBeenCalledTimes(1);
+      // CAMBIA A PROPÓSITO: antes el segundo avanzar despachaba; ahora pagar ya confirmó y avanzar es 409.
+      expectError(
+        await api().patch(`/pedidos-b2b/${p.id}/avanzar`),
+        409,
+        'Este pedido ya está confirmado — su avance depende de cerrar sus entregas (Entregada o No recogida)',
+      );
+      const res = await cerrarEntregasB2b(api(), p.id);
+      expect(res.estado).toBe('COMPLETADO');
+      expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
     });
 
     it('id inexistente: 404', async () => {
@@ -248,14 +262,14 @@ describe('B2B · mutaciones', () => {
       expectError(await api().patch(`/pedidos-b2b/${p.id}/marcar-pagado`), 409, 'Este pedido ya está pagado');
     });
 
-    it('CONGELADO: en AL_FINAL no se valida el mínimo de piezas y se puede pagar aun despachado', async () => {
+    it('CONGELADO: en AL_FINAL no se valida el mínimo de piezas y se puede pagar aun completado', async () => {
       const poca = await pedidoConPiezas(4);
       await api().patch(`/pedidos-b2b/${poca.id}/marcar-pagado`).expect(200);
       const p = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000001' });
       await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
-      await api().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
+      await cerrarEntregasB2b(api(), p.id);
       const res = await api().patch(`/pedidos-b2b/${p.id}/marcar-pagado`).expect(200);
-      expect({ estado: res.body.estado, estadoPago: res.body.estadoPago }).toStrictEqual({ estado: 'DESPACHADO', estadoPago: 'PAGADO' });
+      expect({ estado: res.body.estado, estadoPago: res.body.estadoPago }).toStrictEqual({ estado: 'COMPLETADO', estadoPago: 'PAGADO' });
     });
 
     it('AL_INICIO: paga, confirma en el mismo paso y dispara la regla con estatus CONFIRMADO_SURTIENDO', async () => {
@@ -306,12 +320,13 @@ describe('B2B · mutaciones', () => {
 
   describe('PATCH /pedidos-b2b/:id/cancelar', () => {
     // A2 (cambia a propósito): cancelar un pedido B2B ya recalcula al Cliente — deja de contarlo.
-    it('marca cancelado + canceladoAt, NO toca `estado`, no dispara reglas y el Cliente deja de contarlo (totalPedidos 0)', async () => {
+    it('marca cancelado + canceladoAt, NO toca `estado`, el total pasa a 0 (solo cuentan entregas no canceladas), no dispara reglas y el Cliente deja de contarlo', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
       jest.setSystemTime(new Date('2026-09-30T18:30:00.000Z'));
       const res = await api().patch(`/pedidos-b2b/${p.id}/cancelar`);
       expect(res.status).toBe(200);
-      exacto(res.body, pedidoB2bEsperado({ cancelado: true, canceladoAt: '<iso>' }));
+      // CAMBIA A PROPÓSITO: las 3 entregas estaban pendientes → quedan Canceladas y el total del pedido cancelado es 0.
+      exacto(res.body, pedidoB2bEsperado({ cancelado: true, canceladoAt: '<iso>', subtotal: '0', total: '0' }));
       expect(res.body.canceladoAt).toBe('2026-09-30T18:30:00.000Z');
       await cederEventLoop();
       expect(s.h.fakes.dispararSeguro).not.toHaveBeenCalled();
@@ -323,15 +338,15 @@ describe('B2B · mutaciones', () => {
       expect(cliente.ultimoPedidoAt).toStrictEqual(cliente.createdAt);
     });
 
-    it('rechazos: ya cancelado, ya despachado, id inexistente', async () => {
+    it('rechazos: ya cancelado, ya completado, id inexistente', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
       await api().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200);
       expectError(await api().patch(`/pedidos-b2b/${p.id}/cancelar`), 409, 'Este pedido ya está cancelado');
 
       const d = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000001' });
       await api().patch(`/pedidos-b2b/${d.id}/avanzar`).expect(200);
-      await api().patch(`/pedidos-b2b/${d.id}/avanzar`).expect(200);
-      expectError(await api().patch(`/pedidos-b2b/${d.id}/cancelar`), 409, 'No puedes cancelar un pedido ya despachado');
+      await cerrarEntregasB2b(api(), d.id);
+      expectError(await api().patch(`/pedidos-b2b/${d.id}/cancelar`), 409, 'No puedes cancelar un pedido ya completado');
       expectError(await api().patch('/pedidos-b2b/00000000-0000-4000-8000-000000000000/cancelar'), 404, 'Pedido no encontrado');
     });
 

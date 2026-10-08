@@ -1,6 +1,6 @@
 import { expectError } from './exacto';
 import { usarSuite } from './helpers';
-import { apiRol, bodyB2b, crearAdminB2b, crearPublicoB2b, SEMANA_PROXIMA } from './b2b-helpers';
+import { apiRol, bodyB2b, cerrarEntregasB2b, crearAdminB2b, crearPublicoB2b, SEMANA_PROXIMA } from './b2b-helpers';
 
 // Etapa 2 · comportamiento NUEVO del modelo de órdenes B2B (no es paridad con el pasado: la paridad la congelan
 // etapa2-dorados y las suites b2b-*). Cubre: estado inicial, entregas, edición por diff con identidad estable,
@@ -181,33 +181,36 @@ describe('Etapa 2 · órdenes B2B sobre la orden centralizada', () => {
     });
   });
 
-  describe('estado del pedido → estado de las entregas (un solo sentido, sin UI)', () => {
-    it('despachar marca ENTREGADA sus entregas no canceladas, con quién y cuándo', async () => {
+  describe('estado del pedido ↔ estado de las entregas', () => {
+    // CAMBIA A PROPÓSITO (estados B2B por entrega): "despachar" ya no existe. Confirmar no toca las entregas y cerrarlas
+    // (una por una) es lo que completa el pedido. El detalle de cierre/cancelación vive en b2b-estados-entrega.char-spec.ts.
+    it('confirmar no toca las entregas; cerrarlas una por una (sin usuario, con fecha) completa el pedido', async () => {
       const p = await crearAdminB2b(s.h, s.base);
       await dueno().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
       expect((await entregas(p.id)).every((e) => e.estado === 'PENDIENTE')).toBe(true); // confirmar no toca las entregas
-      await dueno().patch(`/pedidos-b2b/${p.id}/avanzar`).expect(200);
+      await cerrarEntregasB2b(dueno(), p.id);
       const e = await entregas(p.id);
       expect(e).toHaveLength(3);
-      expect(e.every((x) => x.estado === 'ENTREGADA' && x.estadoCambiadoPorId === s.base.dueno.id && x.estadoCambiadoAt !== null)).toBe(true);
+      expect(e.every((x) => x.estado === 'ENTREGADA' && x.estadoCambiadoPorId === null && x.estadoCambiadoAt !== null)).toBe(true);
+      expect((await prisma().order.findUniqueOrThrow({ where: { id: p.id } })).estadoPedido).toBe('COMPLETADO');
     });
 
-    it('cancelar marca CANCELADA sus entregas no entregadas; el pedido cancelado deja de aparecer en "Pedidos del día"', async () => {
+    it('cancelar marca CANCELADA sus entregas pendientes (sin usuario, con fecha); el pedido cancelado deja de aparecer en "Pedidos del día"', async () => {
       const p = await crearAdminB2b(s.h, s.base);
       expect((await dueno().get('/pedidos-b2b/dia/2026-10-05')).body).toHaveLength(1);
       await dueno().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200);
       const e = await entregas(p.id);
-      expect(e.every((x) => x.estado === 'CANCELADA' && x.estadoCambiadoPorId === s.base.dueno.id && x.estadoCambiadoAt !== null)).toBe(true);
+      expect(e.every((x) => x.estado === 'CANCELADA' && x.estadoCambiadoPorId === null && x.estadoCambiadoAt !== null)).toBe(true);
       expect((await dueno().get('/pedidos-b2b/dia/2026-10-05')).body).toHaveLength(0);
       const o = await prisma().order.findUniqueOrThrow({ where: { id: p.id } });
       expect(o).toMatchObject({ cancelado: true, estadoPedido: 'PENDIENTE_CONFIRMACION' }); // el estado del pedido no se toca
     });
 
-    it('una entrega ya entregada no se cancela (el pedido despachado tampoco se puede cancelar: 409)', async () => {
+    it('un pedido completado no se puede cancelar (409) y sus entregas Entregadas se quedan como están', async () => {
       const p = await crearAdminB2b(s.h, s.base);
       await dueno().patch(`/pedidos-b2b/${p.id}/avanzar`);
-      await dueno().patch(`/pedidos-b2b/${p.id}/avanzar`);
-      expectError(await dueno().patch(`/pedidos-b2b/${p.id}/cancelar`), 409, 'No puedes cancelar un pedido ya despachado');
+      await cerrarEntregasB2b(dueno(), p.id);
+      expectError(await dueno().patch(`/pedidos-b2b/${p.id}/cancelar`), 409, 'No puedes cancelar un pedido ya completado');
       expect((await entregas(p.id)).every((x) => x.estado === 'ENTREGADA')).toBe(true);
     });
   });

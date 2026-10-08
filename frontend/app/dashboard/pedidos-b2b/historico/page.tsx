@@ -8,11 +8,10 @@ import {
   fetchPedidosB2b,
   type FiltroImporte,
   type PaginatedPedidosB2b,
-  type PedidoB2bEstado,
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_LABEL, ESTADO_VARIANT } from "../estado";
+import { ESTADO_LABEL, ESTADO_VARIANT, ESTADO_FILTRO_LABEL, ESTADOS_FILTRO_HISTORICO, type EstadoFiltroHistorico } from "../estado";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
@@ -24,7 +23,6 @@ import { FiltroImportePopover, labelFiltroImporte } from "../../_components/Filt
 import HistoricoDetallePanel from "./historico-detalle-panel";
 
 const LIMIT = 25;
-const ESTADOS_FILTRO: PedidoB2bEstado[] = ["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "DESPACHADO"];
 
 function formatSemana(iso: string): string {
   // timeZone: "UTC" — semanaInicio es un @db.Date sin hora, ver el mismo
@@ -91,9 +89,8 @@ export default function PedidosB2bHistoricoPage() {
   const { token } = useSession();
 
   const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
-  const [estado, setEstado] = useState<PedidoB2bEstado | null>(null);
+  const [estado, setEstado] = useState<EstadoFiltroHistorico | null>(null);
   const [negocioNombre, setNegocioNombre] = useState<string | null>(null);
-  const [cancelado, setCancelado] = useState<boolean | null>(null);
   const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
   // Sin autofetch en cambios de filtro a propósito — no se muestra nada
@@ -124,9 +121,10 @@ export default function PedidosB2bHistoricoPage() {
     return {
       desde,
       hasta,
-      estado: estado ?? undefined,
+      // "Cancelado" es el flag, no un valor de estado; los otros 4 estados excluyen a los cancelados.
+      estado: estado && estado !== "CANCELADO" ? estado : undefined,
       negocioNombre: negocioNombre?.trim() || undefined,
-      cancelado: cancelado ?? undefined,
+      cancelado: estado === "CANCELADO" ? true : estado ? false : undefined,
       operador: importe?.operador,
       valor: importe?.valor,
       valorHasta: importe?.valorHasta,
@@ -174,12 +172,12 @@ export default function PedidosB2bHistoricoPage() {
           <FilterPill
             filterKey="estado"
             label="Estado"
-            valueLabel={estado ? ESTADO_LABEL[estado] : null}
+            valueLabel={estado ? ESTADO_FILTRO_LABEL[estado] : null}
             onClear={() => setEstado(null)}
           >
             {({ close }) => (
               <FiltroSelectPopover
-                opciones={ESTADOS_FILTRO.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
+                opciones={ESTADOS_FILTRO_HISTORICO.map((e) => ({ value: e, label: ESTADO_FILTRO_LABEL[e] }))}
                 valorAplicado={estado}
                 onAplicar={setEstado}
                 close={close}
@@ -197,25 +195,6 @@ export default function PedidosB2bHistoricoPage() {
 
           <FilterPill filterKey="negocio" label="Negocio" valueLabel={negocioNombre?.trim() || null} onClear={() => setNegocioNombre(null)}>
             {({ close }) => <FiltroNegocioPopover valorAplicado={negocioNombre} onAplicar={setNegocioNombre} close={close} />}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="cancelado"
-            label="Cancelado"
-            valueLabel={cancelado === null ? null : cancelado ? "Sí" : "No"}
-            onClear={() => setCancelado(null)}
-          >
-            {({ close }) => (
-              <FiltroSelectPopover
-                opciones={[
-                  { value: "true", label: "Sí" },
-                  { value: "false", label: "No" },
-                ]}
-                valorAplicado={cancelado === null ? null : String(cancelado)}
-                onAplicar={(value) => setCancelado(value === null ? null : value === "true")}
-                close={close}
-              />
-            )}
           </FilterPill>
         </FilterBar>
 

@@ -5,6 +5,7 @@ import { useSession } from "@/lib/session-context";
 import { ApiError, fetchPedidoB2b, DIAS_SEMANA_PEDIDO_B2B, type PedidoB2bDetalle } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { ESTADO_VARIANT, ESTADO_LABEL } from "../estado";
+import EntregasLista from "../entregas-lista";
 import SidePanel from "../../_components/SidePanel";
 import Badge from "../../_components/Badge";
 
@@ -64,6 +65,8 @@ export default function HistoricoDetallePanel({
             </span>
             <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>
           </div>
+
+          {pedido.entregas && pedido.entregas.length > 0 && <EntregasLista entregas={pedido.entregas} />}
 
           <div className="flex flex-col gap-3">
             <span className="text-sm font-bold text-admin-ink">Productos</span>

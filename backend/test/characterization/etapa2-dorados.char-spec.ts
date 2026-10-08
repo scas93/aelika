@@ -3,6 +3,7 @@ import { join } from 'path';
 import { usarSuite } from './helpers';
 import { crearEscenarioB2b } from './escenario-b2b';
 import { capturar, volcarLegacy } from './etapa2-dorados';
+import { adaptarAlDorado, ajustarDorado } from './etapa2-excepciones';
 
 // Etapa 2 · dorados del módulo B2B.
 //
@@ -50,7 +51,9 @@ describe('Etapa 2 · dorados B2B (flujo por API)', () => {
     const dorados = JSON.parse(readFileSync(ARCHIVO, 'utf8'));
     expect(Object.keys(consultas)).toStrictEqual(Object.keys(dorados.consultas));
     for (const nombre of Object.keys(dorados.consultas)) {
-      expect({ nombre, ...(consultas[nombre] as object) }).toStrictEqual({ nombre, ...dorados.consultas[nombre] });
+      // Excepciones deliberadas de "estados B2B por entrega": ver etapa2-excepciones.ts (el golden NO se regenera).
+      const op = { cancelacionRecalcula: true };
+      expect({ nombre, ...adaptarAlDorado(nombre, consultas[nombre], op) }).toStrictEqual({ nombre, ...ajustarDorado(nombre, dorados.consultas[nombre], op) });
     }
   });
 });

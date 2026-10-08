@@ -2,7 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PedidoB2bEstado } from '../../../generated/prisma/enums';
+import { ESTADOS_B2B_FILTRO, type EstadoB2bFiltro } from '../pedidos-b2b-estados';
 import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
 
 // desde/hasta filtran sobre semanaInicio — la dimensión de negocio natural
@@ -21,8 +21,8 @@ import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto
 // GET /pedidos-b2b con el mismo DTO.
 export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   @IsOptional()
-  @IsEnum(PedidoB2bEstado)
-  estado?: PedidoB2bEstado;
+  @IsIn(ESTADOS_B2B_FILTRO)
+  estado?: EstadoB2bFiltro;
 
   // Coincidencia parcial, case-insensitive — ver
   // PedidosB2bService.buildWhere (Prisma `contains` + `mode: 'insensitive'`).

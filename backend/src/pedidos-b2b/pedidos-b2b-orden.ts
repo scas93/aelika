@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { EstadoEntrega, EstadoPago, EstadoPedido, Prisma, TipoOrden } from '../../generated/prisma/client';
 import type { FacturaFields } from '../common/facturacion';
 import { DIAS_EN_ORDEN, ItemsResueltos } from './pedidos-b2b-logica';
+import { entregaAtrasada, estadoB2bVisible } from './pedidos-b2b-estados';
 
 /**
  * Etapa 2 · capa de datos de un pedido B2B sobre la orden centralizada:
@@ -249,7 +250,15 @@ export const INCLUDE_PEDIDO = {
   },
 } satisfies Prisma.OrderInclude;
 
-export type OrdenB2bConDetalle = Prisma.OrderGetPayload<{ include: typeof INCLUDE_PEDIDO }>;
+/** Igual que INCLUDE_PEDIDO + las entregas con su estado: solo para las respuestas del panel (el storefront público no las expone). */
+export const INCLUDE_PEDIDO_ADMIN = {
+  ...INCLUDE_PEDIDO,
+  entregas: { orderBy: { fecha: 'asc' as const } },
+} satisfies Prisma.OrderInclude;
+
+export type OrdenB2bConDetalle = Prisma.OrderGetPayload<{ include: typeof INCLUDE_PEDIDO }> & {
+  entregas?: Prisma.EntregaGetPayload<object>[];
+};
 
 /**
  * ÚNICO punto donde una orden B2B se convierte a la forma plana de PedidoB2b (el contrato de la API no cambió en la
@@ -269,7 +278,8 @@ export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo
     clienteId: orden.clienteId,
     semanaInicio: d.semanaInicio,
     modoCobro: d.modoCobro,
-    estado: orden.estadoPedido,
+    // DESPACHADO (heredado, antes de migrar) se ve como COMPLETADO; "Cancelado" lo da `cancelado`, no este campo.
+    estado: estadoB2bVisible(orden.estadoPedido),
     estadoPago: orden.estadoPago,
     cancelado: orden.cancelado,
     canceladoAt: orden.canceladoAt,
@@ -304,5 +314,19 @@ export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo
         .map(({ ei, dia }) => ({ id: ei.id, tenantId: ei.tenantId, pedidoB2bItemId: ei.orderItemId, dia, cantidad: ei.cantidad })),
     })),
   };
-  return opts.conCodigo === undefined ? respuesta : { ...respuesta, codigoDescuento: opts.conCodigo };
+  // Solo en las respuestas del panel (se cargó con INCLUDE_PEDIDO_ADMIN): cada entrega con su estado y si va atrasada.
+  const conEntregas = orden.entregas
+    ? {
+        ...respuesta,
+        entregas: orden.entregas.map((e) => ({
+          id: e.id,
+          fecha: e.fecha,
+          dia: diaDeFecha(e.fecha, d.semanaInicio),
+          estado: e.estado,
+          cerradaAt: e.estado === EstadoEntrega.ENTREGADA || e.estado === EstadoEntrega.NO_RECOGIDA ? e.estadoCambiadoAt : null,
+          atrasada: entregaAtrasada(e.estado, e.fecha),
+        })),
+      }
+    : respuesta;
+  return opts.conCodigo === undefined ? conEntregas : { ...conEntregas, codigoDescuento: opts.conCodigo };
 }

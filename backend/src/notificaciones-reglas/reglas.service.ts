@@ -1,3 +1,4 @@
+import { ESTADOS_B2C } from '../orders/estados-b2c';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
@@ -293,7 +294,7 @@ export class ReglasService {
 
   private assertEstatusValido(origen: ReglaTriggerOrigenPedido, estatus: string) {
     const valores: string[] =
-      origen === ReglaTriggerOrigenPedido.ORDER ? Object.values(EstadoPedido) : Object.values(PedidoB2bEstado);
+      origen === ReglaTriggerOrigenPedido.ORDER ? ESTADOS_B2C : Object.values(PedidoB2bEstado);
     if (!valores.includes(estatus)) {
       throw new BadRequestException(
         `estatus "${estatus}" no es válido para origen ${origen} (valores válidos: ${valores.join(', ')}).`,

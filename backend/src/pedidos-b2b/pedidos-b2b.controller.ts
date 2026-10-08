@@ -12,6 +12,7 @@ import {
 import { PedidosB2bService } from './pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
+import { CerrarEntregaB2bDto } from './dto/cerrar-entrega-b2b.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -86,8 +87,15 @@ export class PedidosB2bController {
 
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/avanzar')
-  avanzar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.pedidosB2bService.avanzar(id, user.sub);
+  avanzar(@Param('id') id: string) {
+    return this.pedidosB2bService.avanzar(id);
+  }
+
+  // Cerrar una entrega (Entregada / No recogida) es trabajo operativo: abierto a los 3 roles, a diferencia del resto de las
+  // escrituras de este controller (Gerente/Dueño). Sin @Roles a propósito.
+  @Patch(':id/entregas/:entregaId/cerrar')
+  cerrarEntrega(@Param('id') id: string, @Param('entregaId') entregaId: string, @Body() dto: CerrarEntregaB2bDto) {
+    return this.pedidosB2bService.cerrarEntrega(id, entregaId, dto);
   }
 
   @Roles(Role.GERENTE, Role.DUENO)
@@ -98,7 +106,7 @@ export class PedidosB2bController {
 
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/cancelar')
-  cancelar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.pedidosB2bService.cancelar(id, user.sub);
+  cancelar(@Param('id') id: string) {
+    return this.pedidosB2bService.cancelar(id);
   }
 }

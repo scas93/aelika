@@ -2,7 +2,7 @@ import request from 'supertest';
 import { expectError, expectExacto } from './exacto';
 import { usarSuite } from './helpers';
 import { crearEscenarioB2b, EscenarioB2b } from './escenario-b2b';
-import { apiRol, diaEsperado, etiquetasB2b, itemB2bEsperado, pedidoB2bEsperado } from './b2b-helpers';
+import { apiRol, diaEsperado, entregaEsperada, etiquetasB2b, itemB2bEsperado, pedidoB2bEsperado } from './b2b-helpers';
 
 // 0b-1 · Área 6 · Panel B2B: lista + filtros, CSV y exports, entregas del día, resumen, entregas-resumen, findOne.
 // Respuestas exactas; valores exactos en los resúmenes. Los empates de `semanaInicio` no tienen orden
@@ -18,11 +18,11 @@ const fila = (
 ): Fila => ({ folio, negocioNombre, contactoNombre, semanaInicio: `${semana}T00:00:00.000Z`, estado, estadoPago, modoCobro, cancelado, totalPiezas, total, createdAt });
 
 const FILAS: Record<string, Fila> = {
-  '1': fila('1', 'Abarrotes Uno', 'Uno', '2026-09-14', 'DESPACHADO', 'PAGADO', 'AL_FINAL', false, 12, '540', '2026-09-10T15:00:00.000Z'),
+  '1': fila('1', 'Abarrotes Uno', 'Uno', '2026-09-14', 'COMPLETADO', 'PAGADO', 'AL_FINAL', false, 12, '540', '2026-09-10T15:00:00.000Z'),
   '2': fila('2', 'Bodega Dos', 'Dos', '2026-09-28', 'CONFIRMADO_SURTIENDO', 'PENDIENTE', 'AL_FINAL', false, 12, '540', '2026-09-25T15:00:00.000Z'),
   '3': fila('3', 'Cafetería Tres', 'Tres', '2026-09-28', 'PENDIENTE_CONFIRMACION', 'PENDIENTE', 'AL_FINAL', false, 10, '305', '2026-09-26T15:00:00.000Z'),
   '4': fila('4', 'Deli Cuatro', 'Cuatro', '2026-10-05', 'PENDIENTE_CONFIRMACION', 'PENDIENTE', 'AL_FINAL', false, 15, '542.25', '2026-09-28T15:00:00.000Z'),
-  '5': fila('5', 'Express Cinco', 'Cinco', '2026-10-05', 'PENDIENTE_CONFIRMACION', 'PENDIENTE', 'AL_FINAL', true, 10, '450', '2026-09-29T15:00:00.000Z'),
+  '5': fila('5', 'Express Cinco', 'Cinco', '2026-10-05', 'PENDIENTE_CONFIRMACION', 'PENDIENTE', 'AL_FINAL', true, 10, '0', '2026-09-29T15:00:00.000Z'),
   '6': fila('6', 'Fonda Seis', 'Seis', '2026-10-12', 'CONFIRMADO_SURTIENDO', 'PAGADO', 'AL_INICIO', false, 20, '900', '2026-09-29T17:00:00.000Z'),
 };
 const ordenar = <T extends { semanaInicio: string; folio: string }>(rows: T[]) =>
@@ -61,7 +61,9 @@ describe('B2B · panel', () => {
     it('filtros: estado, cancelado, negocio (parcial e insensible), semana (desde/hasta) e importe', async () => {
       expect((await lista('estado=PENDIENTE_CONFIRMACION')).rows).toStrictEqual(filas('3', '4', '5'));
       expect((await lista('estado=CONFIRMADO_SURTIENDO')).rows).toStrictEqual(filas('2', '6'));
-      expect((await lista('estado=DESPACHADO')).rows).toStrictEqual(filas('1'));
+      expect((await lista('estado=COMPLETADO')).rows).toStrictEqual(filas('1'));
+      expect((await lista('estado=DESPACHADO')).rows).toStrictEqual(filas('1')); // alias heredado: abarca COMPLETADO
+      expect((await lista('estado=EN_PROCESO')).rows).toStrictEqual([]);
       expect((await lista('cancelado=true')).rows).toStrictEqual(filas('5'));
       expect((await lista('cancelado=false')).rows).toStrictEqual(filas('1', '2', '3', '4', '6'));
       expect((await lista('negocioNombre=UNO')).rows).toStrictEqual(filas('1'));
@@ -71,7 +73,7 @@ describe('B2B · panel', () => {
     it('filtros de semana e importe', async () => {
       expect((await lista('desde=2026-09-28&hasta=2026-10-05')).rows).toStrictEqual(filas('2', '3', '4', '5'));
       expect((await lista('operador=MAYOR_IGUAL&valor=540')).rows).toStrictEqual(filas('1', '2', '4', '6'));
-      expect((await lista('operador=ENTRE&valor=300&valorHasta=450')).rows).toStrictEqual(filas('3', '5'));
+      expect((await lista('operador=ENTRE&valor=300&valorHasta=450')).rows).toStrictEqual(filas('3')); // p5 cancelado ahora vale 0
       expect((await lista('estado=PENDIENTE_CONFIRMACION&cancelado=false&operador=MENOR_IGUAL&valor=400')).rows).toStrictEqual(filas('3'));
     });
 
@@ -85,7 +87,7 @@ describe('B2B · panel', () => {
     it('validación: limit > 100, estado inválido', async () => {
       expectError(await api().get('/pedidos-b2b?limit=101'), 400, ['limit must not be greater than 100']);
       expectError(await api().get('/pedidos-b2b?estado=NOPE'), 400, [
-        'estado must be one of the following values: PENDIENTE_CONFIRMACION, CONFIRMADO_SURTIENDO, DESPACHADO',
+        'estado must be one of the following values: PENDIENTE_CONFIRMACION, CONFIRMADO_SURTIENDO, EN_PROCESO, COMPLETADO, DESPACHADO',
       ]);
     });
   });
@@ -101,11 +103,11 @@ describe('B2B · panel', () => {
       return rows.sort();
     };
     const R: Record<string, string> = {
-      '1': '1,Abarrotes Uno,Uno,2026-09-14,DESPACHADO,AL_FINAL,PAGADO,No,12,540.00',
+      '1': '1,Abarrotes Uno,Uno,2026-09-14,COMPLETADO,AL_FINAL,PAGADO,No,12,540.00',
       '2': '2,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00',
       '3': '3,Cafetería Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00',
       '4': '4,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25',
-      '5': '5,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,Sí,10,450.00',
+      '5': '5,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,Sí,10,0.00',
       '6': '6,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00',
     };
     const esperado = (...f: string[]) => f.map((x) => R[x]).sort();
@@ -115,36 +117,41 @@ describe('B2B · panel', () => {
     });
 
     it('filtros: estado, estados (varios valores separados por coma), cancelado, negocio, fechas', async () => {
-      expect(await csv('estado=DESPACHADO')).toStrictEqual(esperado('1'));
+      expect(await csv('estado=COMPLETADO')).toStrictEqual(esperado('1'));
       expect(await csv('estados=PENDIENTE_CONFIRMACION,CONFIRMADO_SURTIENDO&cancelado=false')).toStrictEqual(esperado('2', '3', '4', '6'));
-      expect(await csv('estados=DESPACHADO')).toStrictEqual(esperado('1'));
+      expect(await csv('estados=DESPACHADO')).toStrictEqual(esperado('1')); // alias heredado: abarca COMPLETADO
       expect(await csv('cancelado=true')).toStrictEqual(esperado('5'));
       expect(await csv('negocioNombre=cuatro')).toStrictEqual(esperado('4'));
       expect(await csv('desde=2026-10-05&hasta=2026-10-12')).toStrictEqual(esperado('4', '5', '6'));
     });
 
     it('estados tiene prioridad sobre estado si llegan ambos', async () => {
-      expect(await csv('estado=DESPACHADO&estados=CONFIRMADO_SURTIENDO')).toStrictEqual(esperado('2', '6'));
+      expect(await csv('estado=COMPLETADO&estados=CONFIRMADO_SURTIENDO')).toStrictEqual(esperado('2', '6'));
     });
 
     it('validación: estados con un valor inválido', async () => {
       expectError(await api().get('/pedidos-b2b/export?estados=NOPE'), 400, [
-        'each value in estados must be one of the following values: PENDIENTE_CONFIRMACION, CONFIRMADO_SURTIENDO, DESPACHADO',
+        'each value in estados must be one of the following values: PENDIENTE_CONFIRMACION, CONFIRMADO_SURTIENDO, EN_PROCESO, COMPLETADO, DESPACHADO',
       ]);
     });
   });
 
   describe('GET /pedidos-b2b/dia/:fecha (entregas del día)', () => {
-    const entrega = (folio: string, negocio: string, contacto: string, tel: string, estado: string, items: unknown[]) => ({
-      folio, negocioNombre: negocio, contactoNombre: contacto, contactoTelefono: tel, estado, items,
+    // Cada fila lleva ahora su entrega (estado, cierre, atrasada) y `cancelado` del pedido; `entregaId` se quita en sinId.
+    const entrega = (
+      folio: string, negocio: string, contacto: string, tel: string, estado: string, items: unknown[],
+      ent: Record<string, unknown> = {},
+    ) => ({
+      folio, negocioNombre: negocio, contactoNombre: contacto, contactoTelefono: tel, estado, cancelado: false,
+      entregaEstado: 'PENDIENTE', cerradaAt: null, atrasada: false, ...ent, items,
     });
     const it_ = (productId: string, nombre: string, precio: string, cantidad: number) => ({ productId, nombreProducto: nombre, precioUnitario: precio, cantidad });
-    const sinId = (body: any[]) => body.map(({ id, ...r }: any) => r);
+    const sinId = (body: any[]) => body.map(({ id, entregaId, ...r }: any) => r);
 
     it('miércoles: los pedidos activos con algo ese día, items recortados a ese día, ordenados por negocio', async () => {
       const res = await api().get('/pedidos-b2b/dia/2026-09-30').expect(200);
       expect(res.body.map((r: any) => Object.keys(r).sort())).toStrictEqual(
-        Array(2).fill(['contactoNombre', 'contactoTelefono', 'estado', 'folio', 'id', 'items', 'negocioNombre']),
+        Array(2).fill(['atrasada', 'cancelado', 'cerradaAt', 'contactoNombre', 'contactoTelefono', 'entregaEstado', 'entregaId', 'estado', 'folio', 'id', 'items', 'negocioNombre']),
       );
       expect(sinId(res.body)).toStrictEqual([
         entrega('2', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)]),
@@ -152,9 +159,9 @@ describe('B2B · panel', () => {
       ]);
     });
 
-    it('otros días: lunes (solo p2), lunes de la semana próxima (p4; p5 cancelado no aparece), martes vacío', async () => {
+    it('otros días: lunes (solo p2, ya pasado y pendiente → atrasada), lunes de la semana próxima (p4; p5 cancelado no aparece), martes vacío', async () => {
       expect(sinId((await api().get('/pedidos-b2b/dia/2026-09-28').expect(200)).body)).toStrictEqual([
-        entrega('2', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)]),
+        entrega('2', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)], { atrasada: true }),
       ]);
       expect(sinId((await api().get('/pedidos-b2b/dia/2026-10-05').expect(200)).body)).toStrictEqual([
         entrega('4', 'Deli Cuatro', 'Cuatro', '5511000004', 'PENDIENTE_CONFIRMACION', [it_(s.base.productoA.id, 'Café americano', '45', 10)]),
@@ -162,9 +169,18 @@ describe('B2B · panel', () => {
       expect((await api().get('/pedidos-b2b/dia/2026-09-29').expect(200)).body).toStrictEqual([]);
     });
 
-    it('no incluye despachados ni cancelados', async () => {
-      // p1 (DESPACHADO) tenía LUNES 12 en la semana 09-14
-      expect((await api().get('/pedidos-b2b/dia/2026-09-14').expect(200)).body).toStrictEqual([]);
+    it('incluye las entregas cerradas (con su estado) y no las canceladas', async () => {
+      // p1 (COMPLETADO): su entrega del lunes 09-14 quedó Entregada y SIGUE apareciendo, con su estado y la hora del cierre.
+      const [p1] = (await api().get('/pedidos-b2b/dia/2026-09-14').expect(200)).body;
+      expect({ folio: p1.folio, estado: p1.estado, entregaEstado: p1.entregaEstado, atrasada: p1.atrasada, cerrada: p1.cerradaAt !== null }).toStrictEqual({
+        folio: '1',
+        estado: 'COMPLETADO',
+        entregaEstado: 'ENTREGADA',
+        atrasada: false,
+        cerrada: true,
+      });
+      // p5 (cancelado, todas sus entregas CANCELADAS) no aparece el lunes 10-05 (solo p4)
+      expect((await api().get('/pedidos-b2b/dia/2026-10-05').expect(200)).body.map((r: any) => r.folio)).toStrictEqual(['4']);
     });
 
     it('fecha inválida: 400', async () => {
@@ -191,6 +207,7 @@ describe('B2B · panel', () => {
         fin: '2026-10-04',
         pendientesConfirmacion: 1,
         confirmadosSurtiendo: 1,
+        enProceso: 0,
         totalPiezas: 22,
       });
       // sin orden contractual en entregas de hoy
@@ -222,6 +239,7 @@ describe('B2B · panel', () => {
           fin: '2026-10-04',
           pendientesConfirmacion: 0,
           confirmadosSurtiendo: 0,
+          enProceso: 0,
           totalPiezas: 0,
           entregasHoy: [],
           entregasManana: [],
@@ -258,6 +276,7 @@ describe('B2B · panel', () => {
               1,
             ),
           ],
+          entregas: [entregaEsperada('LUNES'), entregaEsperada('JUEVES')],
           codigoDescuento: {
             id: '<codigo>',
             tenantId: '<tenant>',
@@ -293,6 +312,7 @@ describe('B2B · panel', () => {
               0,
             ),
           ],
+          entregas: [entregaEsperada('MIERCOLES')],
           codigoDescuento: null,
         }),
         etiquetasB2b(s.base, res.body),

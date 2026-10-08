@@ -1395,7 +1395,11 @@ export const DIAS_SEMANA_PEDIDO_B2B: { value: DiaSemanaPedidoB2b; label: string 
 ];
 
 export type PedidoB2bModoCobro = "AL_INICIO" | "AL_FINAL";
-export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "DESPACHADO";
+// B2B: Por confirmar / Confirmado / En proceso / Completado. "Cancelado" NO es un valor: lo da `cancelado` (igual que en B2C).
+// El servidor devuelve siempre COMPLETADO; "DESPACHADO" solo se conserva en el tipo porque el enum de reglas de
+// notificación (legado) todavía lo incluye.
+export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "EN_PROCESO" | "COMPLETADO" | "DESPACHADO";
+export type PedidoB2bEstadoEntrega = "PENDIENTE" | "LISTA" | "ENTREGADA" | "NO_RECOGIDA" | "CANCELADA";
 export type PedidoB2bEstadoPago = "PENDIENTE" | "PAGADO";
 
 // Semana calendario (lunes-domingo) a la que aplicará el pedido en curso —
@@ -1564,10 +1568,23 @@ export interface PaginatedPedidosB2b {
 // Detalle completo (GET /pedidos-b2b/:id) — mismos campos que PublicPedidoB2b
 // más los que solo tienen sentido del lado autenticado (cancelado,
 // minimoPiezasAplicado, etc.).
+export interface PedidoB2bEntrega {
+  id: string;
+  fecha: string;
+  dia: DiaSemanaPedidoB2b;
+  estado: PedidoB2bEstadoEntrega;
+  // Fecha y hora del cierre (solo Entregada / No recogida).
+  cerradaAt: string | null;
+  // Pendiente de un día anterior a hoy (hora de Ciudad de México): la calcula el servidor, no se cierra sola.
+  atrasada: boolean;
+}
+
 export interface PedidoB2bDetalle extends PublicPedidoB2b {
   cancelado: boolean;
   canceladoAt: string | null;
   minimoPiezasAplicado: number;
+  // Solo en las respuestas del panel (no en el storefront público).
+  entregas?: PedidoB2bEntrega[];
 }
 
 export interface ListPedidosB2bFilter extends FiltroImporte {
@@ -1630,6 +1647,7 @@ export interface PedidoB2bResumen {
     fin: string;
     pendientesConfirmacion: number;
     confirmadosSurtiendo: number;
+    enProceso: number;
     totalPiezas: number;
     entregasHoy: PedidoB2bEntregaResumen[];
     entregasManana: PedidoB2bEntregaResumen[];
@@ -1660,6 +1678,15 @@ export function avanzarPedidoB2b(token: string, id: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/avanzar`, {
     method: "PATCH",
     headers: authHeaders(token),
+  });
+}
+
+// Cierra UNA entrega (nunca en bloque). Abierto a los 3 roles. Solo pedidos Confirmados o En proceso.
+export function cerrarEntregaPedidoB2b(token: string, pedidoId: string, entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${pedidoId}/entregas/${entregaId}/cerrar`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ estado }),
   });
 }
 
@@ -1737,6 +1764,12 @@ export interface PedidoB2bEntregaDia {
   contactoNombre: string;
   contactoTelefono: string;
   estado: PedidoB2bEstado;
+  cancelado: boolean;
+  // La entrega de ESTE día (id para cerrarla con cerrarEntregaPedidoB2b; las Canceladas no vienen).
+  entregaId: string;
+  entregaEstado: PedidoB2bEstadoEntrega;
+  cerradaAt: string | null;
+  atrasada: boolean;
   items: PedidoB2bEntregaDiaItem[];
 }
 

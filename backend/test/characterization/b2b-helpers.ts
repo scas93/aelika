@@ -47,6 +47,24 @@ export function apiRol(h: Harness, base: BaseSeed, rol: 'DUENO' | 'GERENTE' | 'O
   return auth(h, tokenFor(h.jwt, user, base.tenant.id, rol));
 }
 
+/**
+ * Cierra (una por una, como en el panel) las entregas pendientes de un pedido B2B ya confirmado. Reemplaza al antiguo
+ * "despachar" (segundo `avanzar`) como paso de preparación: con todas cerradas el pedido queda COMPLETADO.
+ * Devuelve el body de la última respuesta.
+ */
+export async function cerrarEntregasB2b(
+  api: ReturnType<typeof apiRol>,
+  pedidoId: string,
+  estado: 'ENTREGADA' | 'NO_RECOGIDA' = 'ENTREGADA',
+) {
+  const detalle = await api.get(`/pedidos-b2b/${pedidoId}`).expect(200);
+  let ultimo = detalle.body;
+  for (const e of detalle.body.entregas.filter((x: { estado: string }) => x.estado === 'PENDIENTE')) {
+    ultimo = (await api.patch(`/pedidos-b2b/${pedidoId}/entregas/${e.id}/cerrar`).send({ estado }).expect(200)).body;
+  }
+  return ultimo;
+}
+
 /** Crea un pedido B2B por el flujo admin (POST /pedidos-b2b) y devuelve el body. */
 export async function crearAdminB2b(h: Harness, base: BaseSeed, extra: Record<string, unknown> = {}) {
   const res = await apiRol(h, base, 'DUENO').post('/pedidos-b2b', bodyB2b(base, extra));
@@ -83,6 +101,11 @@ export function itemB2bEsperado(overrides: Record<string, unknown> = {}, idx = 0
     distribucion: [diaEsperado('LUNES', 6, idx), diaEsperado('MIERCOLES', 6, idx)],
     ...overrides,
   };
+}
+
+/** Una entrega tal como la expone GET /pedidos-b2b/:id (con `fecha`/`id` normalizados). */
+export function entregaEsperada(dia: DiaSemana, overrides: Record<string, unknown> = {}) {
+  return { id: '<uuid>', fecha: '<iso>', dia, estado: 'PENDIENTE', cerradaAt: null, atrasada: false, ...overrides };
 }
 
 /** Pedido B2B por defecto de bodyB2b (AL_FINAL, sin factura ni código, 16 piezas, $662). */

@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { usarSuite } from './helpers';
 import { capturar, cargarLegacy, DoradosArchivo, etiquetasDorado } from './etapa2-dorados';
+import { adaptarAlDorado, ajustarDorado } from './etapa2-excepciones';
 import { apiRol } from './b2b-helpers';
 import {
   agregados,
@@ -132,7 +133,10 @@ describe('Etapa 2 · migración de datos B2B', () => {
       const consultas = await capturar(s, e);
       expect(Object.keys(consultas)).toStrictEqual(Object.keys(dorados.consultas));
       for (const nombre of Object.keys(dorados.consultas)) {
-        expect({ nombre, ...(consultas[nombre] as object) }).toStrictEqual({ nombre, ...dorados.consultas[nombre] });
+        // Excepciones deliberadas de "estados B2B por entrega" (ver etapa2-excepciones.ts). Aquí el total de los cancelados
+        // migrados se conserva ($450): su recálculo lo hace el script b2b-estados, no la migración de la Etapa 2.
+        const op = { cancelacionRecalcula: false };
+        expect({ nombre, ...adaptarAlDorado(nombre, consultas[nombre] as any, op) }).toStrictEqual({ nombre, ...ajustarDorado(nombre, dorados.consultas[nombre], op) });
       }
       void etiquetasDorado;
       void apiRol;

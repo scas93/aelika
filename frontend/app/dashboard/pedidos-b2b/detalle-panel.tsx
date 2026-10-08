@@ -6,6 +6,7 @@ import {
   ApiError,
   avanzarPedidoB2b,
   cancelarPedidoB2b,
+  cerrarEntregaPedidoB2b,
   fetchPedidoB2b,
   fetchProducts,
   updatePedidoB2bItems,
@@ -15,7 +16,8 @@ import {
   type Product,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_VARIANT, ESTADO_LABEL, SIGUIENTE_ESTADO } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, puedeCerrarEntregas } from "./estado";
+import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
@@ -165,7 +167,7 @@ export default function DetallePanel({
     setGuardando(true);
     setActionError(null);
     try {
-      const actualizado = await updatePedidoB2bItems(
+      await updatePedidoB2bItems(
         token,
         pedido.id,
         editItems.map((item) => ({
@@ -176,7 +178,8 @@ export default function DetallePanel({
           })),
         })),
       );
-      setPedido(actualizado);
+      // La respuesta de editar no trae las entregas (solo GET /:id y cerrar las traen): se vuelve a leer el pedido.
+      setPedido(await fetchPedidoB2b(token, pedido.id));
       setEditMode(false);
       onChanged();
     } catch (err) {
@@ -191,8 +194,8 @@ export default function DetallePanel({
     setAvanzando(true);
     setActionError(null);
     try {
-      const actualizado = await avanzarPedidoB2b(token, pedido.id);
-      setPedido(actualizado);
+      await avanzarPedidoB2b(token, pedido.id);
+      setPedido(await fetchPedidoB2b(token, pedido.id));
       onChanged();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "No se pudo confirmar el pedido");
@@ -217,8 +220,17 @@ export default function DetallePanel({
     }
   }
 
-  const siguienteEstado = pedido ? SIGUIENTE_ESTADO[pedido.estado] : undefined;
-  const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION" && Boolean(siguienteEstado);
+  // Por confirmar → Confirmado es lo único manual; En proceso / Completado salen de cerrar entregas.
+  const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION";
+  // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende de canWrite).
+  const puedeCerrar = pedido ? puedeCerrarEntregas(pedido.estado, pedido.cancelado) : false;
+
+  async function handleCerrarEntrega(entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") {
+    if (!pedido) return;
+    const actualizado = await cerrarEntregaPedidoB2b(token, pedido.id, entregaId, estado);
+    setPedido(actualizado);
+    onChanged();
+  }
   const pagado = pedido?.estadoPago === "PAGADO";
 
   const productosDisponibles = products?.filter((p) => !editItems.some((item) => item.productId === p.id)) ?? [];
@@ -232,7 +244,9 @@ export default function DetallePanel({
       {pedido && (
         <div className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
-            <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+            <Badge variant={pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]}>
+              {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
+            </Badge>
             <span className="text-sm text-admin-ink-soft">
               {/* timeZone: "UTC" — ver comentario en pedidos-b2b/page.tsx (formatFecha) */}
               Semana del{" "}
@@ -251,6 +265,10 @@ export default function DetallePanel({
             </span>
             <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>
           </div>
+
+          {!editMode && pedido.entregas && pedido.entregas.length > 0 && (
+            <EntregasLista entregas={pedido.entregas} onCerrar={puedeCerrar ? handleCerrarEntrega : undefined} />
+          )}
 
           {!editMode ? (
             <div className="flex flex-col gap-3">
@@ -409,9 +427,11 @@ export default function DetallePanel({
                   {avanzando ? "Confirmando..." : "Confirmar pedido"}
                 </Button>
               )}
-              <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
-                Cancelar pedido
-              </Button>
+              {pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
+                <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
+                  Cancelar pedido
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -435,7 +455,8 @@ export default function DetallePanel({
         }
       >
         <p className="text-sm text-admin-ink-soft">
-          Esta acción no se puede deshacer. El pedido #{pedido?.folio} de {pedido?.negocioNombre} quedará cancelado.
+          Esta acción no se puede deshacer. El pedido #{pedido?.folio} de {pedido?.negocioNombre} quedará cancelado: las
+          entregas ya cerradas se conservan y se cobran; las pendientes se cancelan y no se cobran.
         </p>
       </Modal>
     </SidePanel>

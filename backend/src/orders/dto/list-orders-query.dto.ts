@@ -1,10 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsOptional } from 'class-validator';
+import { ESTADOS_B2C } from '../estados-b2c';
 import { EstadoPedido } from '../../../generated/prisma/enums';
 
 export class ListOrdersQueryDto {
   @IsOptional()
-  @IsEnum(EstadoPedido)
+  @IsIn(ESTADOS_B2C)
   estadoPedido?: EstadoPedido;
 
   @IsOptional()
