@@ -1,4 +1,14 @@
-import { IsBoolean, IsNumber, IsOptional, IsPositive, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -26,4 +36,14 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   disponible?: boolean;
+
+  // ID del producto en el ERP del negocio (opcional, único por negocio). Vacío = sin ID: se normaliza a null (también al editar,
+  // para poder quitarlo).
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  erpId?: string | null;
 }

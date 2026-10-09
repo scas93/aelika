@@ -1,5 +1,10 @@
 import ExcelJS from 'exceljs';
-import { agregarHoja, fechaExcel, fechaHoraExcelMexico, libroABuffer } from '../common/xlsx';
+import {
+  agregarHoja,
+  fechaExcel,
+  fechaHoraExcelMexico,
+  libroABuffer,
+} from '../common/xlsx';
 import { round2 } from '../common/money';
 
 /**
@@ -13,7 +18,10 @@ const ESTADO_PEDIDO: Record<string, string> = {
   EN_PROCESO: 'En proceso',
   COMPLETADO: 'Completado',
 };
-const ESTADO_PAGO: Record<string, string> = { PENDIENTE: 'Pendiente', PAGADO: 'Pagado' };
+const ESTADO_PAGO: Record<string, string> = {
+  PENDIENTE: 'Pendiente',
+  PAGADO: 'Pagado',
+};
 const ESTADO_ENTREGA: Record<string, string> = {
   PENDIENTE: 'Pendiente',
   LISTA: 'Lista',
@@ -22,14 +30,19 @@ const ESTADO_ENTREGA: Record<string, string> = {
   CANCELADA: 'Cancelada',
 };
 
-export const etiquetaEstadoEntrega = (estado: string) => ESTADO_ENTREGA[estado] ?? estado;
+export const etiquetaEstadoEntrega = (estado: string) =>
+  ESTADO_ENTREGA[estado] ?? estado;
 
 // ---------- Pedidos (Históricos y Pedidos activos) ----------
 
 export interface FilaPedidoExcel {
   folio: string;
+  /** Código del cliente (null en pedidos viejos de clientes sin código). */
+  clienteCodigo: string | null;
   negocioNombre: string;
   semanaInicio: Date;
+  /** Nota libre del cliente al capturar el pedido. */
+  notaCliente: string | null;
   createdAt: Date;
   /** Estado visible del pedido (ya sin DESPACHADO heredado). */
   estado: string;
@@ -43,7 +56,8 @@ export interface FilaPedidoExcel {
   total: number;
 }
 
-const cuenta = (f: FilaPedidoExcel, estado: string) => f.estadosEntregas.filter((e) => e === estado).length;
+const cuenta = (f: FilaPedidoExcel, estado: string) =>
+  f.estadosEntregas.filter((e) => e === estado).length;
 
 export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
@@ -52,8 +66,24 @@ export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
     'Pedidos',
     [
       { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (f) => f.folio },
-      { encabezado: 'Negocio', tipo: 'texto', ancho: 32, valor: (f) => f.negocioNombre },
-      { encabezado: 'Semana (inicio)', tipo: 'fecha', ancho: 16, valor: (f) => fechaExcel(f.semanaInicio) },
+      {
+        encabezado: 'Código del cliente',
+        tipo: 'texto',
+        ancho: 28,
+        valor: (f) => f.clienteCodigo,
+      },
+      {
+        encabezado: 'Negocio',
+        tipo: 'texto',
+        ancho: 32,
+        valor: (f) => f.negocioNombre,
+      },
+      {
+        encabezado: 'Semana (inicio)',
+        tipo: 'fecha',
+        ancho: 16,
+        valor: (f) => fechaExcel(f.semanaInicio),
+      },
       {
         encabezado: 'Semana (fin)',
         tipo: 'fecha',
@@ -64,24 +94,86 @@ export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
           return fin;
         },
       },
-      { encabezado: 'Fecha de creación', tipo: 'fechaHora', ancho: 20, valor: (f) => fechaHoraExcelMexico(f.createdAt) },
-      { encabezado: 'Estado del pedido', tipo: 'texto', ancho: 18, valor: (f) => (f.cancelado ? 'Cancelado' : (ESTADO_PEDIDO[f.estado] ?? f.estado)) },
-      { encabezado: 'Estado de pago', tipo: 'texto', ancho: 16, valor: (f) => ESTADO_PAGO[f.estadoPago] ?? f.estadoPago },
+      {
+        encabezado: 'Fecha de creación',
+        tipo: 'fechaHora',
+        ancho: 20,
+        valor: (f) => fechaHoraExcelMexico(f.createdAt),
+      },
+      {
+        encabezado: 'Estado del pedido',
+        tipo: 'texto',
+        ancho: 18,
+        valor: (f) =>
+          f.cancelado ? 'Cancelado' : (ESTADO_PEDIDO[f.estado] ?? f.estado),
+      },
+      {
+        encabezado: 'Estado de pago',
+        tipo: 'texto',
+        ancho: 16,
+        valor: (f) => ESTADO_PAGO[f.estadoPago] ?? f.estadoPago,
+      },
       {
         encabezado: 'Fecha de pago',
         tipo: 'fechaHora',
         ancho: 20,
         // Pagados antes de que se guardara la fecha: se sabe que están pagados, no cuándo.
-        valor: (f) => (f.pagadoAt ? fechaHoraExcelMexico(f.pagadoAt) : f.estadoPago === 'PAGADO' ? 'No registrada' : null),
+        valor: (f) =>
+          f.pagadoAt
+            ? fechaHoraExcelMexico(f.pagadoAt)
+            : f.estadoPago === 'PAGADO'
+              ? 'No registrada'
+              : null,
       },
-      { encabezado: 'Entregas totales', tipo: 'entero', ancho: 16, valor: (f) => f.estadosEntregas.length },
-      { encabezado: 'Entregadas', tipo: 'entero', ancho: 12, valor: (f) => cuenta(f, 'ENTREGADA') },
-      { encabezado: 'No recogidas', tipo: 'entero', ancho: 14, valor: (f) => cuenta(f, 'NO_RECOGIDA') },
-      { encabezado: 'Canceladas', tipo: 'entero', ancho: 12, valor: (f) => cuenta(f, 'CANCELADA') },
-      { encabezado: 'Subtotal', tipo: 'moneda', ancho: 14, valor: (f) => f.subtotal },
-      { encabezado: 'Descuento %', tipo: 'decimal', ancho: 13, valor: (f) => f.descuentoPorcentaje },
-      { encabezado: 'Descuento $', tipo: 'moneda', ancho: 14, valor: (f) => f.descuentoTotal },
+      {
+        encabezado: 'Entregas totales',
+        tipo: 'entero',
+        ancho: 16,
+        valor: (f) => f.estadosEntregas.length,
+      },
+      {
+        encabezado: 'Entregadas',
+        tipo: 'entero',
+        ancho: 12,
+        valor: (f) => cuenta(f, 'ENTREGADA'),
+      },
+      {
+        encabezado: 'No recogidas',
+        tipo: 'entero',
+        ancho: 14,
+        valor: (f) => cuenta(f, 'NO_RECOGIDA'),
+      },
+      {
+        encabezado: 'Canceladas',
+        tipo: 'entero',
+        ancho: 12,
+        valor: (f) => cuenta(f, 'CANCELADA'),
+      },
+      {
+        encabezado: 'Subtotal',
+        tipo: 'moneda',
+        ancho: 14,
+        valor: (f) => f.subtotal,
+      },
+      {
+        encabezado: 'Descuento %',
+        tipo: 'decimal',
+        ancho: 13,
+        valor: (f) => f.descuentoPorcentaje,
+      },
+      {
+        encabezado: 'Descuento $',
+        tipo: 'moneda',
+        ancho: 14,
+        valor: (f) => f.descuentoTotal,
+      },
       { encabezado: 'Total', tipo: 'moneda', ancho: 14, valor: (f) => f.total },
+      {
+        encabezado: 'Nota del cliente',
+        tipo: 'texto',
+        ancho: 40,
+        valor: (f) => f.notaCliente,
+      },
     ],
     filas,
   );
@@ -93,52 +185,132 @@ export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
 export interface FilaEntregaExcel {
   fecha: Date;
   folio: string;
+  clienteCodigo: string | null;
   negocioNombre: string;
   estadoEntrega: string;
   categoria: string;
   producto: string;
+  /** ID del producto en el ERP (null si no tiene o el producto ya se borró del catálogo). */
+  erpId: string | null;
   cantidad: number;
   precioUnitario: number;
+  notaCliente: string | null;
 }
 
 export interface FilaConsolidadoExcel {
   fecha: Date;
   categoria: string;
   producto: string;
+  erpId: string | null;
   cantidadTotal: number;
   clientes: number;
 }
 
 /** Consolidado: una fila por (categoría, producto) sumando exactamente las filas de la hoja Entregas. Clientes = negocios distintos. */
 export function consolidar(filas: FilaEntregaExcel[]): FilaConsolidadoExcel[] {
-  const grupos = new Map<string, FilaConsolidadoExcel & { negocios: Set<string> }>();
+  const grupos = new Map<
+    string,
+    FilaConsolidadoExcel & { negocios: Set<string> }
+  >();
   for (const f of filas) {
     const clave = `${f.categoria}\u0000${f.producto}`;
-    const g = grupos.get(clave) ?? { fecha: f.fecha, categoria: f.categoria, producto: f.producto, cantidadTotal: 0, clientes: 0, negocios: new Set<string>() };
+    const g = grupos.get(clave) ?? {
+      fecha: f.fecha,
+      categoria: f.categoria,
+      producto: f.producto,
+      erpId: f.erpId,
+      cantidadTotal: 0,
+      clientes: 0,
+      negocios: new Set<string>(),
+    };
     g.cantidadTotal += f.cantidad;
     g.negocios.add(f.negocioNombre);
     grupos.set(clave, g);
   }
   return [...grupos.values()]
     .map(({ negocios, ...g }) => ({ ...g, clientes: negocios.size }))
-    .sort((a, b) => a.categoria.localeCompare(b.categoria, 'es') || a.producto.localeCompare(b.producto, 'es'));
+    .sort(
+      (a, b) =>
+        a.categoria.localeCompare(b.categoria, 'es') ||
+        a.producto.localeCompare(b.producto, 'es'),
+    );
 }
 
-export async function libroEntregasDia(filas: FilaEntregaExcel[]): Promise<Buffer> {
+export async function libroEntregasDia(
+  filas: FilaEntregaExcel[],
+): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
   agregarHoja<FilaEntregaExcel>(
     libro,
     'Entregas',
     [
-      { encabezado: 'Fecha de entrega', tipo: 'fecha', ancho: 17, valor: (f) => f.fecha },
+      {
+        encabezado: 'Fecha de entrega',
+        tipo: 'fecha',
+        ancho: 17,
+        valor: (f) => f.fecha,
+      },
       { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (f) => f.folio },
-      { encabezado: 'Negocio', tipo: 'texto', ancho: 32, valor: (f) => f.negocioNombre },
-      { encabezado: 'Estado de la entrega', tipo: 'texto', ancho: 20, valor: (f) => etiquetaEstadoEntrega(f.estadoEntrega) },
-      { encabezado: 'Categoría', tipo: 'texto', ancho: 24, valor: (f) => f.categoria },
-      { encabezado: 'Producto', tipo: 'texto', ancho: 34, valor: (f) => f.producto },
-      { encabezado: 'Cantidad', tipo: 'entero', ancho: 11, valor: (f) => f.cantidad },
-      { encabezado: 'Precio unitario', tipo: 'moneda', ancho: 15, valor: (f) => f.precioUnitario },
-      { encabezado: 'Subtotal', tipo: 'moneda', ancho: 14, valor: (f) => round2(f.cantidad * f.precioUnitario) },
+      {
+        encabezado: 'Código del cliente',
+        tipo: 'texto',
+        ancho: 28,
+        valor: (f) => f.clienteCodigo,
+      },
+      {
+        encabezado: 'Negocio',
+        tipo: 'texto',
+        ancho: 32,
+        valor: (f) => f.negocioNombre,
+      },
+      {
+        encabezado: 'Estado de la entrega',
+        tipo: 'texto',
+        ancho: 20,
+        valor: (f) => etiquetaEstadoEntrega(f.estadoEntrega),
+      },
+      {
+        encabezado: 'Categoría',
+        tipo: 'texto',
+        ancho: 24,
+        valor: (f) => f.categoria,
+      },
+      {
+        encabezado: 'Producto',
+        tipo: 'texto',
+        ancho: 34,
+        valor: (f) => f.producto,
+      },
+      {
+        encabezado: 'ID del ERP',
+        tipo: 'texto',
+        ancho: 18,
+        valor: (f) => f.erpId,
+      },
+      {
+        encabezado: 'Cantidad',
+        tipo: 'entero',
+        ancho: 11,
+        valor: (f) => f.cantidad,
+      },
+      {
+        encabezado: 'Precio unitario',
+        tipo: 'moneda',
+        ancho: 15,
+        valor: (f) => f.precioUnitario,
+      },
+      {
+        encabezado: 'Subtotal',
+        tipo: 'moneda',
+        ancho: 14,
+        valor: (f) => round2(f.cantidad * f.precioUnitario),
+      },
+      {
+        encabezado: 'Nota del cliente',
+        tipo: 'texto',
+        ancho: 40,
+        valor: (f) => f.notaCliente,
+      },
     ],
     filas,
   );
@@ -147,10 +319,36 @@ export async function libroEntregasDia(filas: FilaEntregaExcel[]): Promise<Buffe
     'Consolidado',
     [
       { encabezado: 'Fecha', tipo: 'fecha', ancho: 14, valor: (f) => f.fecha },
-      { encabezado: 'Categoría', tipo: 'texto', ancho: 24, valor: (f) => f.categoria },
-      { encabezado: 'Producto', tipo: 'texto', ancho: 34, valor: (f) => f.producto },
-      { encabezado: 'Cantidad total', tipo: 'entero', ancho: 16, valor: (f) => f.cantidadTotal },
-      { encabezado: 'Clientes', tipo: 'entero', ancho: 11, valor: (f) => f.clientes },
+      {
+        encabezado: 'Categoría',
+        tipo: 'texto',
+        ancho: 24,
+        valor: (f) => f.categoria,
+      },
+      {
+        encabezado: 'Producto',
+        tipo: 'texto',
+        ancho: 34,
+        valor: (f) => f.producto,
+      },
+      {
+        encabezado: 'ID del ERP',
+        tipo: 'texto',
+        ancho: 18,
+        valor: (f) => f.erpId,
+      },
+      {
+        encabezado: 'Cantidad total',
+        tipo: 'entero',
+        ancho: 16,
+        valor: (f) => f.cantidadTotal,
+      },
+      {
+        encabezado: 'Clientes',
+        tipo: 'entero',
+        ancho: 11,
+        valor: (f) => f.clientes,
+      },
     ],
     consolidar(filas),
   );

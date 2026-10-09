@@ -44,13 +44,15 @@ export default function InstruccionesModal({
 
         <h2 className="mt-5 text-sm font-semibold text-mayoreo-ink">Algunas cosas importantes:</h2>
         <ul className="mt-2 flex flex-col gap-2 text-sm text-mayoreo-ink-soft">
-          <li className="flex gap-2">
-            <span className="text-mayoreo-accent">•</span>
-            <span>
-              Tu pedido debe sumar al menos <strong className="text-mayoreo-ink">{minimoPiezas} piezas</strong> en
-              total entre todos los productos.
-            </span>
-          </li>
+          {minimoPiezas > 0 && (
+            <li className="flex gap-2">
+              <span className="text-mayoreo-accent">•</span>
+              <span>
+                Tu pedido debe sumar al menos <strong className="text-mayoreo-ink">{minimoPiezas} piezas</strong> en
+                total entre todos los productos.
+              </span>
+            </li>
+          )}
           <li className="flex gap-2">
             <span className="text-mayoreo-accent">•</span>
             Los pedidos deben hacerse con al menos 48 horas de anticipación a tu primera entrega de la semana.

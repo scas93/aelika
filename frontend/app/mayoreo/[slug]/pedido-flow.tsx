@@ -295,7 +295,7 @@ export default function PedidoFlow({
           </p>
         )}
 
-        {!alcanzaMinimo && (
+        {minimoPiezas > 0 && !alcanzaMinimo && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Tu pedido tiene {totalPiezas} piezas. Te faltan {faltantePiezas} piezas para alcanzar el mínimo de{" "}
             {minimoPiezas}.
@@ -651,7 +651,7 @@ export default function PedidoFlow({
           </div>
         )}
 
-        {!alcanzaMinimo && (
+        {minimoPiezas > 0 && !alcanzaMinimo && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Tu pedido tiene {totalPiezas} piezas. Te faltan {faltantePiezas} piezas para alcanzar el mínimo de{" "}
             {minimoPiezas}.

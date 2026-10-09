@@ -268,6 +268,7 @@ export class PedidosB2bService {
         total: true,
         descuentoTotal: true,
         createdAt: true,
+        cliente: { select: { codigo: true } },
         detalleB2b: {
           select: {
             negocioNombre: true,
@@ -275,6 +276,7 @@ export class PedidosB2bService {
             subtotal: true,
             descuentoPorcentajeAplicado: true,
             pagadoAt: true,
+            notaCliente: true,
           },
         },
         entregas: { select: { estado: true } },
@@ -282,8 +284,10 @@ export class PedidosB2bService {
     });
     const filas: FilaPedidoExcel[] = pedidos.map((o) => ({
       folio: o.folio,
+      clienteCodigo: o.cliente.codigo,
       negocioNombre: o.detalleB2b!.negocioNombre,
       semanaInicio: o.detalleB2b!.semanaInicio,
+      notaCliente: o.detalleB2b!.notaCliente,
       createdAt: o.createdAt,
       estado: estadoB2bVisible(o.estadoPedido),
       cancelado: o.cancelado,
@@ -311,14 +315,17 @@ export class PedidosB2bService {
       orderBy: [{ detalleB2b: { negocioNombre: 'asc' } }, { createdAt: 'asc' }],
       select: {
         folio: true,
-        detalleB2b: { select: { negocioNombre: true } },
+        cliente: { select: { codigo: true } },
+        detalleB2b: { select: { negocioNombre: true, notaCliente: true } },
         entregas: { where: vigente, select: { estado: true } },
         items: {
           orderBy: [{ orden: 'asc' }, { id: 'asc' }],
           select: {
             nombreProducto: true,
             precioUnitario: true,
-            product: { select: { category: { select: { nombre: true } } } },
+            product: {
+              select: { erpId: true, category: { select: { nombre: true } } },
+            },
             entregaItems: {
               where: { entrega: vigente },
               select: { cantidad: true },
@@ -333,10 +340,13 @@ export class PedidosB2bService {
         .map((item) => ({
           fecha: fechaExcel(fecha),
           folio: pedido.folio,
+          clienteCodigo: pedido.cliente.codigo,
           negocioNombre: pedido.detalleB2b!.negocioNombre,
           estadoEntrega: pedido.entregas[0].estado,
           categoria: item.product?.category?.nombre ?? 'Sin categoría',
           producto: item.nombreProducto,
+          erpId: item.product?.erpId ?? null,
+          notaCliente: pedido.detalleB2b!.notaCliente,
           cantidad: item.entregaItems.reduce(
             (suma, ei) => suma + ei.cantidad,
             0,

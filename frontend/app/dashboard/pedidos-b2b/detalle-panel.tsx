@@ -498,9 +498,12 @@ export default function DetallePanel({
               <span>Total</span>
               <span>{formatMoney(pedido.total)}</span>
             </div>
-            <span className="text-xs text-admin-ink-soft">
-              {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
-            </span>
+            {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
+            {pedido.minimoPiezasAplicado > 0 && (
+              <span className="text-xs text-admin-ink-soft">
+                {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
+              </span>
+            )}
           </div>
 
           {actionError && <p className="text-sm text-red-600">{actionError}</p>}

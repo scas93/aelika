@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsPositive,
+  Min,
   IsString,
   IsUrl,
   MaxLength,
@@ -54,7 +55,7 @@ export class UpdateTenantDto {
 
   @IsOptional()
   @IsInt()
-  @IsPositive()
+  @Min(0) // 0 = sin mínimo
   pedidoB2bMinimoPiezas?: number;
 
   // Todo-o-nada: si se manda, deben venir los 4 campos (validados dentro de

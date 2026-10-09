@@ -488,7 +488,10 @@ function ProductsSection({
                     >
                       {product.nombre}
                     </span>
-                    <span className="text-sm text-admin-ink-soft">${product.precio}</span>
+                    <span className="text-sm text-admin-ink-soft">
+                      ${product.precio}
+                      {product.erpId ? ` · ERP ${product.erpId}` : ""}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Link href={`/dashboard/catalogo/productos/${product.id}`} className={LINK_BTN_SECONDARY}>
@@ -565,6 +568,8 @@ interface ProductFormValues {
   descripcion?: string;
   precio: number;
   fotoUrl?: string;
+  // ID del ERP: '' al editar quita el ID; al crear, undefined si está vacío.
+  erpId?: string;
   categoryId: string;
 }
 
@@ -583,6 +588,7 @@ function ProductForm({
   const [descripcion, setDescripcion] = useState(initial.descripcion ?? "");
   const [precio, setPrecio] = useState<number | string>(initial.precio);
   const [fotoUrl, setFotoUrl] = useState(initial.fotoUrl ?? "");
+  const [erpId, setErpId] = useState(initial.erpId ?? "");
   const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -600,6 +606,7 @@ function ProductForm({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        erpId: erpId.trim(),
         categoryId,
       });
     } catch (err) {
@@ -653,6 +660,13 @@ function ProductForm({
         Foto (URL, opcional)
         <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} placeholder="https://..." className="admin-input" />
       </label>
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+        ID del ERP (opcional)
+        <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
+        <span className="text-xs font-normal text-admin-ink-soft">
+          Para integraciones. No puede repetirse en otro producto de tu negocio; vacío = sin ID.
+        </span>
+      </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -687,6 +701,7 @@ function NewProductPanel({
   const [descripcion, setDescripcion] = useState("");
   const [precio, setPrecio] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
+  const [erpId, setErpId] = useState("");
   const [categoryId, setCategoryId] = useState(defaultCategoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -697,6 +712,7 @@ function NewProductPanel({
     setDescripcion("");
     setPrecio("");
     setFotoUrl("");
+    setErpId("");
     setCategoryId(defaultCategoryId);
     setError(null);
   }
@@ -721,12 +737,14 @@ function NewProductPanel({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        erpId: erpId.trim() || undefined,
         categoryId,
       });
       setNombre("");
       setDescripcion("");
       setPrecio("");
       setFotoUrl("");
+      setErpId("");
       setCategoryId(defaultCategoryId);
       if (keepOpen) {
         firstFieldRef.current?.focus();
@@ -801,6 +819,13 @@ function NewProductPanel({
             placeholder="https://..."
             className="admin-input"
           />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          ID del ERP (opcional)
+          <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
+          <span className="text-xs font-normal text-admin-ink-soft">
+            Para integraciones. No puede repetirse en otro producto de tu negocio; vacío = sin ID.
+          </span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

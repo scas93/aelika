@@ -98,7 +98,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes/pagos", label: "Cobros con tarjeta", icon: IconCreditCard },
   { href: "/dashboard/ajustes/conexion-whatsapp", label: "Conexión WhatsApp", icon: IconRobot },
   { href: "/dashboard/ajustes/envios", label: "Puntos de envío", icon: IconTruckDelivery },
-  { href: "/dashboard/ajustes/pedidos-b2b", label: "Ventana de recepción de pedidos", icon: IconClock },
+  { href: "/dashboard/ajustes/pedidos-b2b", label: "Pedidos de mayoreo", icon: IconClock },
   { href: "/dashboard/ajustes/codigos-descuento", label: "Códigos de descuento", icon: IconTag },
   { href: "/dashboard/ajustes/notificaciones", label: "Canales de notificación", icon: IconBell },
 

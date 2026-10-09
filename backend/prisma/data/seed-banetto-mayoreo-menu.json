@@ -45,7 +45,7 @@
       }
     },
     "pedidoB2b": {
-      "minimoPiezas": 100,
+      "minimoPiezas": 0,
       "modoCobro": "AL_FINAL",
       "ventanaAperturaDia": "LUNES",
       "ventanaAperturaHora": "08:00",

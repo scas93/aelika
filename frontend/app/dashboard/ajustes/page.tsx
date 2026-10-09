@@ -14,7 +14,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/pagos": "Conecta Stripe para cobrar con tarjeta",
   "/dashboard/ajustes/conexion-whatsapp": "Llave del bot, webhook de Botpress y candado de frecuencia",
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
-  "/dashboard/ajustes/pedidos-b2b": "Rango semanal en el que aceptas pedidos de mayoreo",
+  "/dashboard/ajustes/pedidos-b2b": "Mínimo de piezas por pedido y rango semanal en el que aceptas pedidos",
   "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
   "/dashboard/ajustes/notificaciones": "Avisos por Telegram y correo cuando algo pasa con un pedido",
 };

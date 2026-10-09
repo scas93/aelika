@@ -115,6 +115,8 @@ export interface Product {
   precio: string;
   fotoUrl: string | null;
   disponible: boolean;
+  // ID del producto en el ERP del negocio (opcional, único por negocio).
+  erpId: string | null;
 }
 
 export interface CreateCategoryPayload {
@@ -136,6 +138,7 @@ export interface CreateProductPayload {
   categoryId: string;
   fotoUrl?: string;
   disponible?: boolean;
+  erpId?: string;
 }
 
 export interface UpdateProductPayload {
@@ -145,6 +148,8 @@ export interface UpdateProductPayload {
   categoryId?: string;
   fotoUrl?: string;
   disponible?: boolean;
+  // Vacío ('') quita el ID; el servidor lo guarda como null.
+  erpId?: string;
 }
 
 export interface TeamUser {
@@ -550,6 +555,8 @@ export interface TenantSettings {
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
   ventanaRecepcionB2b: VentanaRecepcionB2b | null;
+  // Mínimo de piezas por pedido de mayoreo; 0 = sin mínimo.
+  pedidoB2bMinimoPiezas: number;
 }
 
 export interface TenantStripeStatus {
@@ -570,6 +577,8 @@ export interface UpdateTenantSettingsPayload {
   // configurada"), omitido para no tocarla — mismo contrato que
   // UpdateTenantDto.ventanaRecepcionB2b en el backend.
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
+  // Entero ≥ 0 (0 = sin mínimo).
+  pedidoB2bMinimoPiezas?: number;
   botWebhookUrl?: string;
   botWebhookSecret?: string;
   candadoMarketingDias?: number;

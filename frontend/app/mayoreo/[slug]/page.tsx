@@ -145,7 +145,9 @@ export default function MayoreoPage() {
   const todosLosProductos = catalog.categories.flatMap((c) => c.products);
 
   const totalPiezas = Object.values(cart).reduce((sum, c) => sum + c, 0);
-  const progreso = Math.min(100, Math.round((totalPiezas / tenant.pedidoB2bMinimoPiezas) * 100));
+  // Mínimo 0 = sin mínimo: no se muestra la barra ni los avisos de mínimo.
+  const hayMinimo = tenant.pedidoB2bMinimoPiezas > 0;
+  const progreso = hayMinimo ? Math.min(100, Math.round((totalPiezas / tenant.pedidoB2bMinimoPiezas) * 100)) : 100;
   const alcanzaMinimoCarrito = totalPiezas >= tenant.pedidoB2bMinimoPiezas;
   const faltantePiezasCarrito = Math.max(0, tenant.pedidoB2bMinimoPiezas - totalPiezas);
 
@@ -283,19 +285,21 @@ export default function MayoreoPage() {
 
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{MENSAJE_PEDIDOS_CERRADOS}</p>
 
-            <div className="flex flex-col gap-1.5 rounded-xl bg-mayoreo-card p-4 shadow-sm">
-              <div className="flex items-center justify-between text-xs font-medium text-mayoreo-ink-soft">
-                <span>
-                  {totalPiezas} / {tenant.pedidoB2bMinimoPiezas} piezas
-                </span>
-                {totalPiezas >= tenant.pedidoB2bMinimoPiezas && (
-                  <span className="font-semibold text-emerald-600">Mínimo alcanzado</span>
-                )}
+            {hayMinimo && (
+              <div className="flex flex-col gap-1.5 rounded-xl bg-mayoreo-card p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs font-medium text-mayoreo-ink-soft">
+                  <span>
+                    {totalPiezas} / {tenant.pedidoB2bMinimoPiezas} piezas
+                  </span>
+                  {totalPiezas >= tenant.pedidoB2bMinimoPiezas && (
+                    <span className="font-semibold text-emerald-600">Mínimo alcanzado</span>
+                  )}
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-mayoreo-bg">
+                  <div className="h-full bg-mayoreo-accent transition-all" style={{ width: `${progreso}%` }} />
+                </div>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-mayoreo-bg">
-                <div className="h-full bg-mayoreo-accent transition-all" style={{ width: `${progreso}%` }} />
-              </div>
-            </div>
+            )}
 
             <input
               value={busqueda}
@@ -410,7 +414,7 @@ export default function MayoreoPage() {
               <span>${subtotalCarrito.toFixed(2)}</span>
             </div>
 
-            {!alcanzaMinimoCarrito && productIdsCarrito.length > 0 && (
+            {hayMinimo && !alcanzaMinimoCarrito && productIdsCarrito.length > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Tu pedido tiene {totalPiezas} piezas. Te faltan {faltantePiezasCarrito} piezas para alcanzar el
                 mínimo de {tenant.pedidoB2bMinimoPiezas}.

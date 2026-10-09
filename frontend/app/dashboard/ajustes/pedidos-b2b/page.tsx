@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import { ApiError, fetchTenantSettings, type VentanaRecepcionB2b } from "@/lib/api";
 import VentanaRecepcionB2bSection from "../ventana-recepcion-b2b-section";
+import MinimoPiezasB2bSection from "../minimo-piezas-b2b-section";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesPedidosB2bPage() {
@@ -19,7 +20,7 @@ export default function AjustesPedidosB2bPage() {
   } else if (user.tenant.tipoStorefront !== "RETAIL_B2B") {
     contenido = (
       <p className="text-sm text-admin-ink-soft">
-        La ventana de recepción de pedidos solo aplica a negocios de mayoreo.
+        Estos ajustes (mínimo de piezas y ventana de recepción) solo aplican a negocios de mayoreo.
       </p>
     );
   } else {
@@ -36,12 +37,16 @@ export default function AjustesPedidosB2bPage() {
 
 function PedidosB2bLoader({ token }: { token: string }) {
   const [ventanaRecepcionB2b, setVentanaRecepcionB2b] = useState<VentanaRecepcionB2b | null>(null);
+  const [minimoPiezas, setMinimoPiezas] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTenantSettings(token)
-      .then((settings) => setVentanaRecepcionB2b(settings.ventanaRecepcionB2b))
+      .then((settings) => {
+        setVentanaRecepcionB2b(settings.ventanaRecepcionB2b);
+        setMinimoPiezas(settings.pedidoB2bMinimoPiezas);
+      })
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : "No se pudo cargar la ventana de recepción"))
       .finally(() => setLoading(false));
   }, [token]);
@@ -54,10 +59,15 @@ function PedidosB2bLoader({ token }: { token: string }) {
   }
 
   return (
-    <VentanaRecepcionB2bSection
-      token={token}
-      ventanaRecepcionB2b={ventanaRecepcionB2b}
-      onUpdated={setVentanaRecepcionB2b}
-    />
+    <div className="flex flex-col gap-4">
+      {minimoPiezas !== null && (
+        <MinimoPiezasB2bSection token={token} minimoPiezas={minimoPiezas} onUpdated={setMinimoPiezas} />
+      )}
+      <VentanaRecepcionB2bSection
+        token={token}
+        ventanaRecepcionB2b={ventanaRecepcionB2b}
+        onUpdated={setVentanaRecepcionB2b}
+      />
+    </div>
   );
 }
