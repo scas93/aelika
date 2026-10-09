@@ -23,13 +23,16 @@ function tenantScopedQuery(tenantId: string) {
     query,
   }: {
     operation: string;
-    args: any;
-    query: (args: any) => Promise<any>;
+    args: { data?: unknown; where?: Record<string, unknown> };
+    query: (args: unknown) => Promise<unknown>;
   }) => {
     if (operation === 'create') {
-      args.data = { ...args.data, tenantId };
+      args.data = { ...(args.data as Record<string, unknown>), tenantId };
     } else if (operation === 'createMany' && Array.isArray(args.data)) {
-      args.data = args.data.map((item: any) => ({ ...item, tenantId }));
+      args.data = (args.data as Record<string, unknown>[]).map((item) => ({
+        ...item,
+        tenantId,
+      }));
     } else {
       args.where = { ...args.where, tenantId };
     }
@@ -125,6 +128,9 @@ export class TenantPrismaService {
             $allOperations: tenantScopedQuery(tenantId),
           },
           cliente: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          clienteTelefono: {
             $allOperations: tenantScopedQuery(tenantId),
           },
           regla: {

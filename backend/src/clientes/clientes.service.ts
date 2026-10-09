@@ -65,16 +65,21 @@ export class ClientesService {
       : {};
     // conPedidos: solo clientes con al menos un pedido contable (Top clientes). Sin el
     // parámetro el directorio muestra también a los de totalPedidos = 0.
-    const where: Prisma.ClienteWhereInput = query.conPedidos
-      ? { AND: [busqueda, { totalPedidos: { gt: 0 } }] }
-      : busqueda;
+    const where: Prisma.ClienteWhereInput = {
+      AND: [
+        busqueda,
+        ...(query.conPedidos ? [{ totalPedidos: { gt: 0 } }] : []),
+        ...(query.canal ? [{ canal: query.canal }] : []),
+      ],
+    };
 
     const skip = (query.page - 1) * query.limit;
 
     const [data, total] = await Promise.all([
       this.tenantPrisma.client.cliente.findMany({
         where,
-        omit: OMITIR_CAMPOS_B2B,
+        // Los campos B2B solo se exponen al pedir canal=B2B; sin canal el contrato es el de siempre.
+        omit: query.canal === ClienteCanal.B2B ? {} : OMITIR_CAMPOS_B2B,
         orderBy: { [query.ordenarPor]: query.orden },
         skip,
         take: query.limit,
