@@ -93,7 +93,8 @@ export interface CurrentUser {
   email: string;
   rol: Role;
   tenantId: string;
-  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string };
+  // modulosDesactivados: módulos opcionales apagados para el negocio ("LEALTAD", "CODIGOS_DESCUENTO"); vacío = todo encendido.
+  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[] };
 }
 
 export interface Category {
@@ -267,6 +268,7 @@ export interface ProductDetail extends Product {
 
 export interface PublicTenantInfo {
   nombre: string;
+  tipoStorefront: TipoStorefront;
   logoUrl: string | null;
   horarioAtencion: HorarioSemana | null;
   ubicacion: string | null;
@@ -1429,6 +1431,8 @@ export interface PublicPedidoB2bTenantInfo {
   // Mismo Tenant.facturacionModo que ya usa /tienda — controla si el
   // checkbox "Quiero factura" del resumen se muestra/exige.
   facturacionModo: FacturacionModo;
+  // false = módulo Códigos de descuento apagado: el storefront no muestra el campo de código.
+  codigosDescuentoActivo: boolean;
   semanaDestino: PedidoB2bSemanaDestino;
 }
 

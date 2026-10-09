@@ -133,6 +133,8 @@ async function main() {
     mensajeBienvenida: menu.tenant.mensajeBienvenida,
     horarioAtencion,
     tipoStorefront: TipoStorefront[menu.tenant.tipoStorefront],
+    // Como quedará Banetto: sin Programa de Lealtad ni Códigos de descuento.
+    modulosDesactivados: ['LEALTAD', 'CODIGOS_DESCUENTO'],
     facturacionModo: FacturacionModo[menu.tenant.facturacionModo],
     pedidoB2bMinimoPiezas: menu.tenant.pedidoB2b.minimoPiezas,
     pedidoB2bModoCobro: PedidoB2bModoCobro[menu.tenant.pedidoB2b.modoCobro],

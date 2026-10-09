@@ -6,7 +6,9 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { ModuloActivoGuard, RequiereModulo } from '../common/modulos';
 import { CodigosDescuentoB2bService } from './codigos-descuento-b2b.service';
 import { CreateCodigoDescuentoB2bDto } from './dto/create-codigo-descuento-b2b.dto';
 import { UpdateCodigoDescuentoB2bDto } from './dto/update-codigo-descuento-b2b.dto';
@@ -15,6 +17,8 @@ import { Role } from '../../generated/prisma/enums';
 
 // GET abierto a los 3 roles (se necesita para armar un PedidoB2b), escritura
 // solo Gerente/Dueño — mismo criterio que Promociones.
+@UseGuards(ModuloActivoGuard)
+@RequiereModulo('CODIGOS_DESCUENTO')
 @Controller('codigos-descuento-b2b')
 export class CodigosDescuentoB2bController {
   constructor(

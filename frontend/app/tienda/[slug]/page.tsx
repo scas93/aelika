@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   ApiError,
   fetchPublicCatalog,
@@ -56,6 +56,7 @@ function nombreProducto(catalog: PublicCatalog, productId: string) {
 export default function TiendaPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+  const router = useRouter();
 
   const [tenant, setTenant] = useState<PublicTenantInfo | null>(null);
   const [catalog, setCatalog] = useState<PublicCatalog | null>(null);
@@ -72,7 +73,13 @@ export default function TiendaPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [tenantData, catalogData] = await Promise.all([fetchPublicTenant(slug), fetchPublicCatalog(slug)]);
+        const tenantData = await fetchPublicTenant(slug);
+        // Respaldo del proxy: la tienda de menudeo está cerrada para negocios de mayoreo — se lleva al storefront de mayoreo.
+        if (tenantData.tipoStorefront === "RETAIL_B2B") {
+          router.replace(`/mayoreo/${encodeURIComponent(slug)}`);
+          return;
+        }
+        const catalogData = await fetchPublicCatalog(slug);
         setTenant(tenantData);
         setCatalog(catalogData);
       } catch (err) {
@@ -84,7 +91,7 @@ export default function TiendaPage() {
       }
     }
     load();
-  }, [slug]);
+  }, [slug, router]);
 
   function addToCart(
     productId: string,

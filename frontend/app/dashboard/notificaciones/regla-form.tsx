@@ -22,6 +22,7 @@ import Button from "../_components/Button";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import {
   CATEGORIA_LABEL,
+  ESTATUS_B2B_DESPACHADO_OBSOLETO,
   ESTATUS_POR_ORIGEN,
   FILTRO_CAMPO_LABEL,
   FILTRO_OPERADOR_LABEL,
@@ -347,7 +348,10 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                 Estatus que dispara
                 <select value={estatus} onChange={(e) => setEstatus(e.target.value)} className="admin-input">
                   <option value="">Selecciona...</option>
-                  {ESTATUS_POR_ORIGEN[origen].map((op) => (
+                  {[
+                    ...ESTATUS_POR_ORIGEN[origen],
+                    ...(origen === "PEDIDO_B2B" && estatus === "DESPACHADO" ? [ESTATUS_B2B_DESPACHADO_OBSOLETO] : []),
+                  ].map((op) => (
                     <option key={op.value} value={op.value}>
                       {op.label}
                     </option>

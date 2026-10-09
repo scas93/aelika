@@ -3,6 +3,7 @@ import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { TenantB2bPublicGuard } from './tenant-b2b.guard';
+import { ModuloActivoGuard, RequiereModulo } from '../common/modulos';
 
 // Storefront público de pedidos B2B — mismo patrón que PublicController
 // (public/): @Public() a nivel de clase, tenant resuelto por slug, sin JWT.
@@ -26,6 +27,8 @@ export class PublicPedidosB2bController {
     return this.publicPedidosB2bService.getCatalog(slug);
   }
 
+  @UseGuards(ModuloActivoGuard)
+  @RequiereModulo('CODIGOS_DESCUENTO')
   @Get('tenants/:slug/codigos-descuento/:codigo')
   previewCodigoDescuento(
     @Param('slug') slug: string,

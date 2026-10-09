@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertCodigosDescuentoPermitidos } from '../common/modulos';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { round2 } from '../common/money';
 import { toCsv } from '../common/csv';
@@ -479,8 +480,9 @@ export class PedidosB2bService {
     // que TenantService.
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
-      select: { pedidoB2bModoCobro: true, pedidoB2bMinimoPiezas: true },
+      select: { pedidoB2bModoCobro: true, pedidoB2bMinimoPiezas: true, modulosDesactivados: true },
     });
+    assertCodigosDescuentoPermitidos(tenant.modulosDesactivados, dto.codigoDescuento);
 
     const semanaInicio = assertLunes(dto.semanaInicio);
     const { resueltos, totalPiezas, subtotal } = await resolverItems(

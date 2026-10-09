@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { configurarB2b, seedBase } from './db';
 import { expectError, expectExacto } from './exacto';
-import { bodyCheckout, cederEventLoop, postCheckout, usarSuite } from './helpers';
+import { bodyCheckout, cederEventLoop, postCheckoutMixto, usarSuite } from './helpers';
 import { waitForCalls } from './harness';
 import { normalizar } from './normalizar';
 import { apiRol, cerrarEntregasB2b, crearAdminB2b, crearPublicoB2b } from './b2b-helpers';
@@ -180,7 +180,7 @@ describe('Transversal · Reglas de notificación', () => {
       await apiRol(s.h, otro, 'DUENO').post('/reglas', reglaBody({ nombre: 'De otro tenant' })).expect(201);
 
       // Crear un pedido (de cualquier tipo) NO dispara ninguna regla.
-      const o = (await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { items: [{ productId: s.base.productoA.id, cantidad: 2 }] }))).body;
+      const o = (await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base, { items: [{ productId: s.base.productoA.id, cantidad: 2 }] }))).body;
       const p = await crearPublicoB2b(s.h, s.base);
       await waitForCalls(s.h.fakes.queueAdd);
       await cederEventLoop();
@@ -263,7 +263,7 @@ describe('Transversal · Reglas de notificación', () => {
     it('varias reglas del mismo origen y estatus se disparan todas; un PATCH a activa=false o a otro estatus cambia lo que dispara', async () => {
       const A = await evento('ORDER', 'CONFIRMADO_SURTIENDO');
       const B = await evento('ORDER', 'CONFIRMADO_SURTIENDO');
-      const o = (await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base))).body;
+      const o = (await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base))).body;
       await waitForCalls(s.h.fakes.queueAdd);
 
       await dueno().patch(`/orders/${o.id}/avanzar`).expect(200);
@@ -280,7 +280,7 @@ describe('Transversal · Reglas de notificación', () => {
 
     it('un fallo de la frontera (Botpress) no rompe el avance del pedido', async () => {
       await evento('ORDER', 'CONFIRMADO_SURTIENDO');
-      const o = (await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base))).body;
+      const o = (await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base))).body;
       await waitForCalls(s.h.fakes.queueAdd);
       s.h.fakes.reglaEnvio.mockRejectedValueOnce(new Error('botpress caído'));
       const res = await dueno().patch(`/orders/${o.id}/avanzar`);
@@ -297,15 +297,15 @@ describe('Transversal · Reglas de notificación', () => {
 
     /** B2C Ana (2 pedidos), B2C Bob (1, hace 3 días), B2B Luis (1), Lealtad-only Lia (0 pedidos), y un cliente de OTRO tenant. */
     beforeEach(async () => {
-      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Ana', clienteTelefono: '5511110001' }));
-      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Ana', clienteTelefono: '5511110001' }));
+      await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Ana', clienteTelefono: '5511110001' }));
+      await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Ana', clienteTelefono: '5511110001' }));
       jest.setSystemTime(new Date('2026-09-27T16:00:00.000Z'));
-      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Bob', clienteTelefono: '5511110002' }));
+      await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteNombre: 'Bob', clienteTelefono: '5511110002' }));
       jest.setSystemTime(new Date('2026-09-30T16:00:00.000Z'));
       await crearPublicoB2b(s.h, s.base, { contactoNombre: 'Luis', contactoTelefono: '5511110003' });
       await apiRol(s.h, s.base, 'DUENO').post('/lealtad/clientes', { nombre: 'Lia', telefono: '5511110004' }).expect(201);
       const otro = await seedBase(s.h.prisma, { slug: 'otro-negocio' });
-      await postCheckout(s.h, otro.tenant.slug, bodyCheckout(otro, { clienteNombre: 'Ajeno', clienteTelefono: '5599990000' }));
+      await postCheckoutMixto(s.h, otro.tenant.slug, bodyCheckout(otro, { clienteNombre: 'Ajeno', clienteTelefono: '5599990000' }));
       await waitForCalls(s.h.fakes.queueAdd, 4);
       s.h.fakes.reset();
       jest.setSystemTime(new Date('2026-09-30T20:00:00.000Z'));

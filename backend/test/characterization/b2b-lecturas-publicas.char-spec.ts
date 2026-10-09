@@ -19,6 +19,7 @@ describe('B2B · lecturas públicas', () => {
         abierto: true,
         ventanaCerradaMensaje: null,
         facturacionModo: 'DESACTIVADO',
+        codigosDescuentoActivo: true,
         semanaDestino: { inicio: '2026-10-05', fin: '2026-10-11' },
       });
     });
@@ -36,6 +37,7 @@ describe('B2B · lecturas públicas', () => {
         abierto: false,
         ventanaCerradaMensaje: 'Este negocio no recibe pedidos en este momento — vuelve a abrir el jueves a las 08:00.',
         facturacionModo: 'DESACTIVADO',
+        codigosDescuentoActivo: true,
         semanaDestino: { inicio: '2026-10-05', fin: '2026-10-11' },
       });
     });
@@ -59,6 +61,7 @@ describe('B2B · lecturas públicas', () => {
         abierto: true,
         ventanaCerradaMensaje: null,
         facturacionModo: 'OBLIGATORIO',
+        codigosDescuentoActivo: true,
         semanaDestino: { inicio: '2026-10-05', fin: '2026-10-11' },
       });
     });

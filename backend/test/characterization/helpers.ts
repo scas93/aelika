@@ -20,6 +20,23 @@ export function postCheckout(h: Harness, slug: string, body: Record<string, unkn
   return request(h.app.getHttpServer()).post(`/public/tenants/${slug}/orders`).send(body);
 }
 
+/**
+ * Checkout B2C en un tenant sembrado como B2B (escenarios con datos de ambos flujos: contadores de Cliente, tableros, reglas).
+ * La API ahora rechaza el checkout de menudeo para un negocio de mayoreo (404); aquí el tenant pasa a B2C SOLO durante la
+ * llamada para poder generar el pedido B2C que esos escenarios necesitan (datos históricos de un negocio mixto). El rechazo
+ * en sí se prueba en modulos-y-tienda-b2b.
+ */
+export async function postCheckoutMixto(h: Harness, slug: string, body: Record<string, unknown>) {
+  const antes = await h.prisma.tenant.findUniqueOrThrow({ where: { slug }, select: { tipoStorefront: true } });
+  if (antes.tipoStorefront === 'RETAIL_B2C') return postCheckout(h, slug, body);
+  await h.prisma.tenant.update({ where: { slug }, data: { tipoStorefront: 'RETAIL_B2C' } });
+  try {
+    return await postCheckout(h, slug, body);
+  } finally {
+    await h.prisma.tenant.update({ where: { slug }, data: { tipoStorefront: antes.tipoStorefront } });
+  }
+}
+
 export function auth(h: Harness, token: string) {
   const s = h.app.getHttpServer();
   return {
@@ -81,7 +98,7 @@ export function postWebhook(h: Harness, evento: object, opts: { secreto?: string
 
 /** Crea un pedido TARJETA y devuelve { order, piId }. Requiere conectarStripe antes. */
 export async function crearPedidoTarjeta(h: Harness, base: BaseSeed, extra: Record<string, unknown> = {}) {
-  const res = await postCheckout(h, base.tenant.slug, bodyCheckout(base, { metodoPago: 'TARJETA', ...extra }));
+  const res = await postCheckoutMixto(h, base.tenant.slug, bodyCheckout(base, { metodoPago: 'TARJETA', ...extra }));
   if (res.status !== 201) throw new Error(`crearPedidoTarjeta: ${res.status} ${JSON.stringify(res.body)}`);
   return { order: res.body, piId: res.body.stripePaymentIntentId as string };
 }

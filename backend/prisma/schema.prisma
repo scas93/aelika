@@ -70,6 +70,9 @@ model Tenant {
   // para el backfill de tenants creados antes de este campo, que
   // históricamente eran todos retail de pickup. Ver TipoStorefront arriba.
   tipoStorefront               TipoStorefront     @default(RETAIL_B2C)
+  // Módulos opcionales apagados para este negocio (valores de backend/src/common/modulos.ts: LEALTAD,
+  // CODIGOS_DESCUENTO). Vacío = todo encendido (default de todos los tenants). Se cambia por seed/API interna, sin pantalla.
+  modulosDesactivados          String[]           @default([])
   // Obligatorio en RegisterDto (sin default a nivel de API) para tenants
   // nuevos; nullable en DB para no romper tenants ya existentes (Entredós,
   // Banetto), que se actualizarán manualmente desde Ajustes. Ver GiroNegocio.

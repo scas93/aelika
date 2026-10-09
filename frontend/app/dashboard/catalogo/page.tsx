@@ -36,6 +36,8 @@ export default function CatalogoPage() {
   const { user, token } = useSession();
   const canWrite = user.rol === "GERENTE" || user.rol === "DUENO";
   const [tab, setTab] = useState<Tab>("catalogo");
+  const esB2b = user.tenant.tipoStorefront === "RETAIL_B2B";
+  const tabActivo: Tab = esB2b ? "catalogo" : tab;
 
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
@@ -119,19 +121,22 @@ export default function CatalogoPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Tabs
-        items={[
-          { key: "catalogo", label: "Categorías y productos", icon: "📋" },
-          { key: "promociones", label: "Promociones", icon: "🏷️" },
-          { key: "modificadores", label: "Modificadores", icon: "🧩" },
-        ]}
-        active={tab}
-        onChange={(key) => setTab(key as Tab)}
-      />
+      {/* B2B no usa promociones ni modificadores: sin pestañas (solo Categorías y productos). */}
+      {!esB2b && (
+        <Tabs
+          items={[
+            { key: "catalogo", label: "Categorías y productos", icon: "📋" },
+            { key: "promociones", label: "Promociones", icon: "🏷️" },
+            { key: "modificadores", label: "Modificadores", icon: "🧩" },
+          ]}
+          active={tab}
+          onChange={(key) => setTab(key as Tab)}
+        />
+      )}
 
-      {tab === "promociones" ? (
+      {tabActivo === "promociones" ? (
         <PromotionsSection token={token} canWrite={canWrite} />
-      ) : tab === "modificadores" ? (
+      ) : tabActivo === "modificadores" ? (
         <ModifiersSection token={token} canWrite={canWrite} />
       ) : (
         <>

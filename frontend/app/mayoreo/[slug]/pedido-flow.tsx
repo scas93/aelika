@@ -64,6 +64,7 @@ export default function PedidoFlow({
   cart,
   minimoPiezas,
   facturacionModo,
+  codigosDescuentoActivo,
   semanaDestino,
   screen,
   onScreenChange,
@@ -75,6 +76,8 @@ export default function PedidoFlow({
   cart: Record<string, number>;
   minimoPiezas: number;
   facturacionModo: FacturacionModo;
+  // false = módulo Códigos de descuento apagado para el negocio: no se muestra el campo de código.
+  codigosDescuentoActivo: boolean;
   semanaDestino: PedidoB2bSemanaDestino;
   screen: PedidoFlowScreen;
   onScreenChange: (screen: PedidoFlowScreen) => void;
@@ -501,38 +504,40 @@ export default function PedidoFlow({
           </div>
         </div>
 
-        <div className={CARD}>
-          <h3 className="text-sm font-semibold text-mayoreo-ink">Código de promoción (opcional)</h3>
-          <div className="flex gap-2">
-            <input
-              className="mayoreo-input flex-1"
-              placeholder="Código"
-              value={codigoInput}
-              onChange={(e) => setCodigoInput(e.target.value)}
-              disabled={!!codigoAplicado}
-            />
-            {codigoAplicado ? (
-              <button type="button" onClick={quitarCodigo} className={BTN_SECONDARY}>
-                Quitar
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={validarCodigo}
-                disabled={validandoCodigo || !codigoInput.trim()}
-                className={BTN_PRIMARY}
-              >
-                {validandoCodigo ? "Validando..." : "Aplicar"}
-              </button>
+        {codigosDescuentoActivo && (
+          <div className={CARD}>
+            <h3 className="text-sm font-semibold text-mayoreo-ink">Código de promoción (opcional)</h3>
+            <div className="flex gap-2">
+              <input
+                className="mayoreo-input flex-1"
+                placeholder="Código"
+                value={codigoInput}
+                onChange={(e) => setCodigoInput(e.target.value)}
+                disabled={!!codigoAplicado}
+              />
+              {codigoAplicado ? (
+                <button type="button" onClick={quitarCodigo} className={BTN_SECONDARY}>
+                  Quitar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={validarCodigo}
+                  disabled={validandoCodigo || !codigoInput.trim()}
+                  className={BTN_PRIMARY}
+                >
+                  {validandoCodigo ? "Validando..." : "Aplicar"}
+                </button>
+              )}
+            </div>
+            {codigoError && <p className="text-xs text-red-600">{codigoError}</p>}
+            {codigoAplicado && (
+              <p className="text-xs font-semibold text-red-600">
+                Código {codigoAplicado.texto} aplicado: -{codigoAplicado.porcentaje}%
+              </p>
             )}
           </div>
-          {codigoError && <p className="text-xs text-red-600">{codigoError}</p>}
-          {codigoAplicado && (
-            <p className="text-xs font-semibold text-red-600">
-              Código {codigoAplicado.texto} aplicado: -{codigoAplicado.porcentaje}%
-            </p>
-          )}
-        </div>
+        )}
 
         <div className={CARD}>
           <h3 className="text-sm font-semibold text-mayoreo-ink">Datos de tu negocio</h3>

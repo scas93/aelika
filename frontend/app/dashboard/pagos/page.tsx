@@ -130,6 +130,7 @@ export default function PagosPage() {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el error al iniciar cada consulta (mismo criterio que el resto de listados)
     setError(null);
     fetchPayments(token, {
       status: status ?? undefined,

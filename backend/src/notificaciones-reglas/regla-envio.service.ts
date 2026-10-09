@@ -150,7 +150,7 @@ export class ReglaEnvioService {
     contexto: PedidoContexto | undefined,
   ): string[] {
     const ahora = new Date();
-    const storefrontUrl = buildStorefrontUrl(this.configService, tenant.slug);
+    const storefrontUrl = buildStorefrontUrl(this.configService, tenant.slug, tenant.tipoStorefront);
 
     return [...plantillaVariables]
       .sort((a, b) => a.posicion - b.posicion)

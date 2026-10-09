@@ -157,10 +157,17 @@ export function puedeVerNotificaciones(rol: Role, tipoStorefront: TipoStorefront
   return rol === "DUENO" || (rol === "GERENTE" && tipoStorefront === "RETAIL_B2B");
 }
 
-export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[] {
+// Módulos opcionales que un negocio puede tener apagados (Tenant.modulosDesactivados, se configura por seed/API).
+export type ModuloOpcional = "LEALTAD" | "CODIGOS_DESCUENTO";
+export function moduloActivo(modulosDesactivados: string[] | undefined, modulo: ModuloOpcional): boolean {
+  return !(modulosDesactivados ?? []).includes(modulo);
+}
+
+export function getNavItems(rol: Role, tipoStorefront: TipoStorefront, modulosDesactivados: string[] = []): NavItem[] {
   return ALL_NAV_ITEMS.filter((item) => {
     if (HREFS_OCULTOS_DEL_SIDEBAR.has(item.href)) return false;
     if (item.href === "/dashboard") return tipoStorefront === "RETAIL_B2B" || rol !== "OPERADOR";
+    if (item.href === "/dashboard/lealtad") return moduloActivo(modulosDesactivados, "LEALTAD");
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";

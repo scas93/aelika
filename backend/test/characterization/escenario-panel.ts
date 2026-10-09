@@ -1,6 +1,6 @@
 import { tokenFor } from './auth';
 import { conectarStripe } from './db';
-import { auth, bodyCheckout, cederEventLoop, eventoPaymentIntent, postCheckout, postWebhook, Suite } from './helpers';
+import { auth, bodyCheckout, cederEventLoop, eventoPaymentIntent, postCheckoutMixto, postWebhook, Suite } from './helpers';
 
 export interface Escenario {
   ids: Record<'o1' | 'o2' | 'o3' | 'o4' | 'o5', string>;
@@ -31,7 +31,7 @@ export async function crearEscenarioPanel(s: Suite): Promise<Escenario> {
 
   const crear = async (iso: string, body: Record<string, unknown>) => {
     jest.setSystemTime(new Date(iso));
-    const res = await postCheckout(h, slug, body);
+    const res = await postCheckoutMixto(h, slug, body);
     if (res.status !== 201) throw new Error(`escenario: ${res.status} ${JSON.stringify(res.body)}`);
     return res.body;
   };

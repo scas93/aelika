@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "@/lib/session-context";
-import { ALL_NAV_ITEMS } from "../nav-items";
+import { ALL_NAV_ITEMS, moduloActivo } from "../nav-items";
 import Card from "../_components/Card";
 
 // Una línea por tarjeta — los labels ya vienen de ALL_NAV_ITEMS (mismo
@@ -56,7 +56,17 @@ export default function AjustesPage() {
     return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>;
   }
 
-  const grupos = user.tenant.tipoStorefront === "RETAIL_B2B" ? [...GRUPOS, GRUPO_PEDIDOS_B2B] : GRUPOS;
+  const esB2b = user.tenant.tipoStorefront === "RETAIL_B2B";
+  // B2B no cobra con tarjeta ni usa puntos de envío; Códigos de descuento se oculta si el módulo está apagado.
+  const ocultos = new Set<string>();
+  if (esB2b) {
+    ocultos.add("/dashboard/ajustes/pagos");
+    ocultos.add("/dashboard/ajustes/envios");
+  }
+  if (!moduloActivo(user.tenant.modulosDesactivados, "CODIGOS_DESCUENTO")) ocultos.add("/dashboard/ajustes/codigos-descuento");
+  const grupos = (esB2b ? [...GRUPOS, GRUPO_PEDIDOS_B2B] : GRUPOS)
+    .map((grupo) => ({ ...grupo, hrefs: grupo.hrefs.filter((href) => !ocultos.has(href)) }))
+    .filter((grupo) => grupo.hrefs.length > 0);
 
   return (
     <div className="flex flex-col gap-7">

@@ -15,7 +15,7 @@ export class InternalService {
       mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
       abierto: isAbiertoAhora(tenant.horarioAtencion as HorarioSemana | null),
       ubicacion: tenant.ubicacion,
-      catalogoUrl: buildStorefrontUrl(this.configService, tenant.slug),
+      catalogoUrl: buildStorefrontUrl(this.configService, tenant.slug, tenant.tipoStorefront),
     };
   }
 }

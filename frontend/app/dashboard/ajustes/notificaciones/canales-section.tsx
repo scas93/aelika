@@ -186,7 +186,7 @@ function CorreoCard({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync local form state when the loaded canal changes (initial fetch, or after a save elsewhere)
     setNombreRemitente(nombreRemitenteActual);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setCorreoDestino(correoDestinoActual);
   }, [nombreRemitenteActual, correoDestinoActual]);
 

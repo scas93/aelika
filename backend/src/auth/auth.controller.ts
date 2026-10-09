@@ -52,7 +52,7 @@ export class AuthController {
         email: true,
         rol: true,
         tenantId: true,
-        tenant: { select: { nombre: true, tipoStorefront: true, slug: true } },
+        tenant: { select: { nombre: true, tipoStorefront: true, slug: true, modulosDesactivados: true } },
       },
     });
     return record;

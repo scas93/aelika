@@ -1,4 +1,5 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { ModuloActivoGuard, RequiereModulo } from '../common/modulos';
 import { PublicLealtadService } from './public-lealtad.service';
 import { AltaClienteLealtadDto } from './dto/alta-cliente-lealtad.dto';
 import { Public } from '../auth/decorators/public.decorator';
@@ -8,6 +9,8 @@ import { Public } from '../auth/decorators/public.decorator';
 // tenant resuelto por slug, sin JWT. Prefijo propio (public/lealtad/...)
 // para no tocar/chocar con las rutas de PublicController (public/tenants/...).
 @Public()
+@UseGuards(ModuloActivoGuard)
+@RequiereModulo('LEALTAD')
 @Controller('public/lealtad')
 export class PublicLealtadController {
   constructor(private readonly publicLealtadService: PublicLealtadService) {}

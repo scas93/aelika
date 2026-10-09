@@ -430,6 +430,7 @@ export default function MayoreoPage() {
             cart={cart}
             minimoPiezas={tenant.pedidoB2bMinimoPiezas}
             facturacionModo={tenant.facturacionModo}
+            codigosDescuentoActivo={tenant.codigosDescuentoActivo}
             semanaDestino={tenant.semanaDestino}
             screen={screen}
             onScreenChange={setScreen}

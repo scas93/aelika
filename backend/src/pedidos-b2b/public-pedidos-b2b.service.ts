@@ -15,6 +15,7 @@ import {
   ventanaDesdeTenant,
 } from '../common/ventana-recepcion-b2b';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
+import { assertCodigosDescuentoPermitidos, moduloActivo } from '../common/modulos';
 import {
   assertLunes,
   calcularSemanaDestino,
@@ -57,6 +58,7 @@ export class PublicPedidosB2bService {
         pedidoB2bVentanaCierreDia: true,
         pedidoB2bVentanaCierreHora: true,
         facturacionModo: true,
+        modulosDesactivados: true,
       },
     });
     if (!tenant) {
@@ -90,6 +92,8 @@ export class PublicPedidosB2bService {
       // campos de factura — resolverFacturacion en createPedido vuelve a
       // exigirlo server-side.
       facturacionModo: tenant.facturacionModo,
+      // Si es false el storefront no muestra el campo de código de descuento (módulo apagado para el negocio).
+      codigosDescuentoActivo: moduloActivo(tenant.modulosDesactivados, 'CODIGOS_DESCUENTO'),
       // Semana calendario a la que aplicará el pedido que se está armando —
       // ver calcularSemanaDestino. El frontend todavía no la consume (sigue
       // calculando su propio "próximo lunes" en pedido-flow.tsx); queda
@@ -175,11 +179,13 @@ export class PublicPedidosB2bService {
         pedidoB2bVentanaCierreDia: true,
         pedidoB2bVentanaCierreHora: true,
         facturacionModo: true,
+        modulosDesactivados: true,
       },
     });
     if (!tenant) {
       throw new NotFoundException('Negocio no encontrado');
     }
+    assertCodigosDescuentoPermitidos(tenant.modulosDesactivados, dto.codigoDescuento);
 
     // Fuera de la ventana de recepción ahora mismo? A diferencia de
     // PublicService.createOrder (B2C, que usa isAbiertoAhora/HorarioSemana),

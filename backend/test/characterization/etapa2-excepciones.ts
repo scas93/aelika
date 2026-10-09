@@ -17,8 +17,10 @@
  *     histórico ($450) y el recálculo lo hace el script de datos b2b-estados (`--totales-cancelados`).
  *  6. (Folio B2B nuevo) Los folios de pedidos B2B nuevos son "P-" + 6 dígitos (antes "1", "2"…). Se lleva de vuelta al consecutivo
  *     simple (P-000003 → 3) en el cuerpo, el CSV y los textos; el resto se sigue comparando byte a byte.
+ *  7. (Módulos por negocio) `codigosDescuentoActivo`: campo NUEVO de la info pública del storefront de mayoreo (siempre true con
+ *     todo encendido); el golden no lo conoce.
  */
-const CAMPOS_NUEVOS = ['pagadoAt', 'entregas', 'entregaId', 'entregaEstado', 'cerradaAt', 'atrasada', 'enProceso'];
+const CAMPOS_NUEVOS = ['pagadoAt', 'entregas', 'entregaId', 'entregaEstado', 'cerradaAt', 'atrasada', 'enProceso', 'codigosDescuentoActivo'];
 
 type Dorado = { status: number; body?: any; texto?: string[] };
 export interface OpcionesExcepciones {

@@ -252,8 +252,8 @@ describe('Etapa 2 · órdenes B2B sobre la orden centralizada', () => {
     });
 
     it('las órdenes B2C no exponen las columnas nuevas (cancelado, canceladoAt, orden)', async () => {
-      const { postCheckout, bodyCheckout } = await import('./helpers');
-      const res = await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base));
+      const { postCheckoutMixto, bodyCheckout } = await import('./helpers');
+      const res = await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base));
       expect(res.status).toBe(201);
       expect(res.body).not.toHaveProperty('cancelado');
       expect(res.body).not.toHaveProperty('canceladoAt');
