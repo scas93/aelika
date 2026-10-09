@@ -8,7 +8,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ESTADOS_B2B_FILTRO, type EstadoB2bFiltro } from '../pedidos-b2b-estados';
+import { ESTADOS_B2B_FILTRO, ESTADOS_PAGO_B2B_FILTRO, type EstadoB2bFiltro, type EstadoPagoB2bFiltro } from '../pedidos-b2b-estados';
 
 // Mismos filtros que ListPedidosB2bQueryDto sin paginación — el export
 // devuelve todas las filas que apliquen, como ExportOrdersHistoricoQueryDto.
@@ -46,6 +46,11 @@ export class ExportPedidosB2bQueryDto {
   )
   @IsBoolean()
   cancelado?: boolean;
+
+  // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
+  @IsOptional()
+  @IsIn(ESTADOS_PAGO_B2B_FILTRO)
+  estadoPago?: EstadoPagoB2bFiltro;
 
   @IsOptional()
   @IsDateString()

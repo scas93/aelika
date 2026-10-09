@@ -277,6 +277,7 @@ describe('B2B · panel', () => {
             ),
           ],
           entregas: [entregaEsperada('LUNES'), entregaEsperada('JUEVES')],
+          pagadoAt: null, // Fase 1b: fecha y hora del pago (solo en la forma del panel)
           codigoDescuento: {
             id: '<codigo>',
             tenantId: '<tenant>',
@@ -313,6 +314,7 @@ describe('B2B · panel', () => {
             ),
           ],
           entregas: [entregaEsperada('MIERCOLES')],
+          pagadoAt: null,
           codigoDescuento: null,
         }),
         etiquetasB2b(s.base, res.body),

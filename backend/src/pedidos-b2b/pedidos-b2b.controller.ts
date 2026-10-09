@@ -13,6 +13,7 @@ import { PedidosB2bService } from './pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { CerrarEntregaB2bDto } from './dto/cerrar-entrega-b2b.dto';
+import { CorregirEntregaB2bDto } from './dto/corregir-entrega-b2b.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -81,8 +82,8 @@ export class PedidosB2bController {
 
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/items')
-  updateItems(@Param('id') id: string, @Body() dto: UpdatePedidoB2bItemsDto) {
-    return this.pedidosB2bService.updateItems(id, dto);
+  updateItems(@Param('id') id: string, @Body() dto: UpdatePedidoB2bItemsDto, @CurrentUser() user: JwtPayload) {
+    return this.pedidosB2bService.updateItems(id, dto, user.rol);
   }
 
   @Roles(Role.GERENTE, Role.DUENO)
@@ -98,10 +99,23 @@ export class PedidosB2bController {
     return this.pedidosB2bService.cerrarEntrega(id, entregaId, dto);
   }
 
+  // Corregir una entrega ya cerrada es de admin (Gerente/Dueño), a diferencia de cerrarla (operativo, los 3 roles).
+  @Roles(Role.GERENTE, Role.DUENO)
+  @Patch(':id/entregas/:entregaId/corregir')
+  corregirEntrega(@Param('id') id: string, @Param('entregaId') entregaId: string, @Body() dto: CorregirEntregaB2bDto) {
+    return this.pedidosB2bService.corregirEntrega(id, entregaId, dto);
+  }
+
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/marcar-pagado')
   marcarPagado(@Param('id') id: string) {
     return this.pedidosB2bService.marcarPagado(id);
+  }
+
+  @Roles(Role.GERENTE, Role.DUENO)
+  @Patch(':id/desmarcar-pagado')
+  desmarcarPagado(@Param('id') id: string) {
+    return this.pedidosB2bService.desmarcarPagado(id);
   }
 
   @Roles(Role.GERENTE, Role.DUENO)

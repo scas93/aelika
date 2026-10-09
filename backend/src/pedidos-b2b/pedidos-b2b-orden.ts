@@ -318,6 +318,8 @@ export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo
   const conEntregas = orden.entregas
     ? {
         ...respuesta,
+        // Fecha y hora en que se marcó Pagado (null si está Pendiente o si se pagó antes de que existiera este dato).
+        pagadoAt: d.pagadoAt,
         entregas: orden.entregas.map((e) => ({
           id: e.id,
           fecha: e.fecha,

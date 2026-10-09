@@ -2,6 +2,7 @@ import {
   EstadoEntrega,
   EstadoPedido,
   Prisma,
+  Role,
 } from '../../generated/prisma/client';
 import { round2 } from '../common/money';
 import { fechaMexicoYMD } from './pedidos-b2b-logica';
@@ -48,6 +49,19 @@ export function estadoB2bVisible(estado: EstadoPedido): EstadoPedido {
 export function estadosDeBdParaFiltro(estado: EstadoB2bFiltro): EstadoPedido[] {
   const e = estado as EstadoPedido;
   return ESTADOS_B2B_COMPLETADOS.includes(e) ? ESTADOS_B2B_COMPLETADOS : [e];
+}
+
+/** Valores del filtro `estadoPago` de la API B2B (el pago B2B solo tiene Pendiente y Pagado). */
+export const ESTADOS_PAGO_B2B_FILTRO = ['PENDIENTE', 'PAGADO'] as const;
+export type EstadoPagoB2bFiltro = (typeof ESTADOS_PAGO_B2B_FILTRO)[number];
+
+/**
+ * ¿Puede este rol editar un pedido B2B ya Pagado? Gerente y Dueño (admin) sí; el Operador no (docs/diseno-operacion.md,
+ * "Roles y permisos": un pedido marcado como Pagado queda bloqueado para él). Hoy editar es solo de Gerente/Dueño a nivel de
+ * ruta; esta regla queda lista para cuando el Operador reciba permiso de editar.
+ */
+export function puedeEditarPedidoPagado(rol: Role): boolean {
+  return rol === Role.GERENTE || rol === Role.DUENO;
 }
 
 export const ESTADOS_ENTREGA_CERRADOS: EstadoEntrega[] = [

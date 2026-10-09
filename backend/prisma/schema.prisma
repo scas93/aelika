@@ -644,6 +644,9 @@ model DetalleB2B {
   codigoDescuentoId           String?
   codigoDescuentoTexto        String?
   descuentoPorcentajeAplicado Decimal?           @db.Decimal(5, 2)
+  // Fecha y hora en que el admin marcó el pedido como Pagado (sin usuario); null mientras está Pendiente. Desmarcar lo limpia.
+  // Pedidos pagados antes de este campo (migrados) quedan en null: se sabe que están pagados, no cuándo.
+  pagadoAt                    DateTime?
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -14,6 +15,7 @@ import {
   EstadoPedido,
   PedidoB2bEstado,
   Prisma,
+  Role,
   TipoOrden,
 } from '../../generated/prisma/client';
 import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
@@ -24,6 +26,7 @@ import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
 import { CerrarEntregaB2bDto } from './dto/cerrar-entrega-b2b.dto';
+import { CorregirEntregaB2bDto } from './dto/corregir-entrega-b2b.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
 import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 import {
@@ -50,10 +53,13 @@ import {
   ESTADOS_B2B_ACTIVOS,
   ESTADOS_B2B_COMPLETADOS,
   estadoB2bVisible,
+  ESTADOS_ENTREGA_CERRADOS,
   estadosDeBdParaFiltro,
+  puedeEditarPedidoPagado,
   recalcularEstadoB2b,
   recalcularTotalesB2b,
   type EstadoB2bFiltro,
+  type EstadoPagoB2bFiltro,
 } from './pedidos-b2b-estados';
 
 // Etapa 2: un pedido B2B ES una Order (tipo B2B) + DetalleB2B + OrderItem + Entrega/EntregaItem. Este servicio conserva
@@ -111,6 +117,7 @@ export class PedidosB2bService {
   private buildWhere(query: {
     estado?: EstadoB2bFiltro;
     estados?: EstadoB2bFiltro[];
+    estadoPago?: EstadoPagoB2bFiltro;
     cancelado?: boolean;
     desde?: string;
     hasta?: string;
@@ -147,6 +154,7 @@ export class PedidosB2bService {
           ? { in: estadosDeBdParaFiltro(query.estado) }
           : undefined,
       cancelado: query.cancelado,
+      estadoPago: query.estadoPago ? (query.estadoPago as EstadoPago) : undefined,
       total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
       // Siempre hay detalle en una orden B2B; el filtro solo se agrega si realmente se filtra por él.
       ...(detalle.semanaInicio || detalle.negocioNombre ? { detalleB2b: detalle } : {}),
@@ -539,37 +547,33 @@ export class PedidosB2bService {
    * conservando la identidad de los ítems y entregas que siguen existiendo. El código/porcentaje de descuento no es
    * editable aquí (no forma parte del alcance de edición descrito), solo se reaplica sobre el nuevo subtotal.
    */
-  async updateItems(id: string, dto: UpdatePedidoB2bItemsDto) {
+  async updateItems(id: string, dto: UpdatePedidoB2bItemsDto, rol: Role) {
     const pedido = await this.cargar(id);
     this.assertActivo(pedido);
     // Se puede editar en Por confirmar, Confirmado, En proceso y Completado (agregar una entrega a un Completado lo regresa
     // a En proceso). Las entregas ya cerradas no se tocan aquí: sincronizarOrdenB2b da 409 si el cambio las afecta.
-    // Si el pedido ya está pagado (modo AL_INICIO), no se edita el mismo
-    // pedido — se crea uno nuevo e independiente. Ver CLAUDE.md.
-    if (pedido.estadoPago === EstadoPago.PAGADO) {
-      throw new ConflictException(
-        'Este pedido ya está pagado — crea un pedido nuevo para agregar más producto',
-      );
+    // Un pedido Pagado ya no bloquea la edición para Gerente/Dueño (admin). Para el Operador sí: queda bloqueado
+    // (docs/diseno-operacion.md, "Roles y permisos"). Hoy la ruta es solo de admin; la regla queda lista para cuando el
+    // Operador reciba permiso de editar. El pago nunca cambia solo al editar.
+    if (pedido.estadoPago === EstadoPago.PAGADO && !puedeEditarPedidoPagado(rol)) {
+      throw new ConflictException('Este pedido ya está pagado — solo un administrador puede editarlo');
     }
 
     const detalle = pedido.detalleB2b!;
-    const { resueltos, totalPiezas, subtotal } = await resolverItems(
+    // Los totales NO salen de lo que se pidió: se recalculan abajo con la regla actual (todas las líneas al precio actual
+    // del catálogo, solo entregas no canceladas, % de descuento del pedido).
+    const { resueltos, totalPiezas } = await resolverItems(
       this.tenantPrisma.client,
       pedido.tenantId,
       dto.items,
     );
-    const descuentoPorcentaje = detalle.descuentoPorcentajeAplicado
-      ? Number(detalle.descuentoPorcentajeAplicado)
-      : 0;
-    const descuentoTotal = round2(subtotal * (descuentoPorcentaje / 100));
-    const total = round2(subtotal - descuentoTotal);
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
       // Serializa ediciones concurrentes del mismo pedido: la regla "una entrega por fecha" vive aquí, no en la base.
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
       await sincronizarOrdenB2b(tx, pedido.tenantId, id, detalle.semanaInicio, resueltos);
-      await tx.detalleB2B.update({ where: { orderId: id }, data: { totalPiezas, subtotal } });
-      await tx.order.update({ where: { id }, data: { descuentoTotal, total } });
+      await tx.detalleB2B.update({ where: { orderId: id }, data: { totalPiezas } });
+      await recalcularTotalesB2b(tx, id);
       // Una entrega nueva en un Completado (o una quitada/agregada en general) puede cambiar el estado calculado.
       await recalcularEstadoB2b(tx, id);
 
@@ -653,50 +657,50 @@ export class PedidosB2bService {
   }
 
   /**
-   * PATCH /:id/marcar-pagado. En modo AL_INICIO esta es la acción de
-   * "pago/checkout" descrita en CLAUDE.md: el mínimo de piezas se valida
-   * aquí (no en /avanzar, que la rechaza directamente para este modo) y,
-   * al pagar, el pedido se confirma en el mismo paso (pago con tarjeta al
-   * confirmar el pedido). En modo AL_FINAL es la confirmación de pago manual
-   * — no reabre ni revalida el mínimo, y no mueve `estado`.
+   * PATCH /:id/marcar-pagado (Gerente/Dueño). Marca Pagado en CUALQUIER estado del pedido, incluso Cancelado, y guarda la
+   * fecha y hora (`pagadoAt`, sin usuario). El pago nunca cambia solo: ni al corregir, ni al editar, ni al cancelar.
+   *
+   * Modo AL_INICIO (pago anticipado) conserva su comportamiento: si el pedido sigue Por confirmar (y no está cancelado), el
+   * mínimo de piezas se valida aquí y, al pagar, el pedido se confirma en el mismo paso. Si ya pasó de Por confirmar (p. ej.
+   * se desmarcó y se vuelve a marcar) solo se marca el pago — no se vuelve a validar el mínimo ni se mueve el estado.
+   * En modo AL_FINAL (crédito) solo cambia el pago.
    */
   async marcarPagado(id: string) {
-    const pedido = await this.cargar(id);
-    this.assertActivo(pedido);
-    const detalle = pedido.detalleB2b!;
-
-    if (pedido.estadoPago === EstadoPago.PAGADO) {
-      throw new ConflictException('Este pedido ya está pagado');
-    }
-
-    const data: Prisma.OrderUpdateInput = { estadoPago: EstadoPago.PAGADO };
-
-    if (detalle.modoCobro === 'AL_INICIO') {
-      if (pedido.estadoPedido !== EstadoPedido.PENDIENTE_CONFIRMACION) {
-        throw new ConflictException('Este pedido ya fue confirmado');
+    await this.cargar(id); // 404 si no existe / otro tenant / no es B2B
+    const { actualizado, confirmo } = await this.tenantPrisma.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      const orden = await tx.order.findUniqueOrThrow({ where: { id }, include: { detalleB2b: true } });
+      const detalle = orden.detalleB2b!;
+      if (orden.estadoPago === EstadoPago.PAGADO) {
+        throw new ConflictException('Este pedido ya está pagado');
       }
-      if (detalle.totalPiezas < detalle.minimoPiezasAplicado) {
-        throw new ConflictException(
-          `Este pedido no alcanza el mínimo de ${detalle.minimoPiezasAplicado} piezas para procesar el pago (tiene ${detalle.totalPiezas})`,
-        );
+
+      const data: Prisma.OrderUpdateInput = { estadoPago: EstadoPago.PAGADO };
+      const confirma =
+        detalle.modoCobro === 'AL_INICIO' && !orden.cancelado && orden.estadoPedido === EstadoPedido.PENDIENTE_CONFIRMACION;
+      if (confirma) {
+        if (detalle.totalPiezas < detalle.minimoPiezasAplicado) {
+          throw new ConflictException(
+            `Este pedido no alcanza el mínimo de ${detalle.minimoPiezasAplicado} piezas para procesar el pago (tiene ${detalle.totalPiezas})`,
+          );
+        }
+        data.estadoPedido = EstadoPedido.CONFIRMADO_SURTIENDO;
       }
-      data.estadoPedido = EstadoPedido.CONFIRMADO_SURTIENDO;
-    }
+      await tx.order.update({ where: { id }, data });
+      await tx.detalleB2B.update({ where: { orderId: id }, data: { pagadoAt: new Date() } });
+      return {
+        actualizado: aRespuestaPedidoB2b(await tx.order.findUniqueOrThrow({ where: { id }, include: INCLUDE_PEDIDO })),
+        confirmo: confirma,
+      };
+    });
 
-    const actualizado = aRespuestaPedidoB2b(
-      await this.tenantPrisma.client.order.update({ where: { id }, data, include: INCLUDE_PEDIDO }),
-    );
-
-    // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — solo si esta llamada de
-    // verdad movió `estado` (rama AL_INICIO). En modo AL_FINAL, marcarPagado
-    // nunca cambia `estado` (ver comentario del método), así que no hay
-    // ningún evento de estatus que disparar aquí — ver también avanzar(),
-    // que sí lo cubre para esa transición.
-    if (data.estadoPedido) {
+    // Reglas EVENTO_PEDIDO (Módulo 3, Etapa 2c) — solo si esta llamada de verdad movió `estado` (rama AL_INICIO).
+    // En AL_FINAL marcarPagado nunca cambia `estado`, así que no hay evento de estatus que disparar aquí.
+    if (confirmo) {
       void this.reglaEventoPedidoService.dispararSeguro({
         tenantId: actualizado.tenantId,
         origen: 'PEDIDO_B2B',
-        estatus: data.estadoPedido as unknown as PedidoB2bEstado,
+        estatus: EstadoPedido.CONFIRMADO_SURTIENDO as unknown as PedidoB2bEstado,
         clienteId: actualizado.clienteId,
         contexto: this.contextoPedidoParaReglas(actualizado),
       });
@@ -707,6 +711,117 @@ export class PedidosB2bService {
     await recalcularContadoresCliente(this.tenantPrisma.client as unknown as ClienteContadoresDb, actualizado.clienteId);
 
     return actualizado;
+  }
+
+  /**
+   * PATCH /:id/desmarcar-pagado (Gerente/Dueño). Regresa el pago a Pendiente y limpia la fecha (deshacer un error, o un
+   * reembolso). Solo toca el pago: NUNCA mueve el estado del pedido — en AL_INICIO un pedido que se confirmó al pagarse
+   * sigue Confirmado aunque se desmarque (decide el admin, ver docs/diseno-operacion.md). Sirve en cualquier estado.
+   */
+  async desmarcarPagado(id: string) {
+    await this.cargar(id);
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      const orden = await tx.order.findUniqueOrThrow({ where: { id }, select: { estadoPago: true } });
+      if (orden.estadoPago !== EstadoPago.PAGADO) {
+        throw new ConflictException('Este pedido no está pagado');
+      }
+      await tx.order.update({ where: { id }, data: { estadoPago: EstadoPago.PENDIENTE } });
+      await tx.detalleB2B.update({ where: { orderId: id }, data: { pagadoAt: null } });
+      return aRespuestaPedidoB2b(await tx.order.findUniqueOrThrow({ where: { id }, include: INCLUDE_PEDIDO }));
+    });
+  }
+
+  /**
+   * PATCH /:id/entregas/:entregaId/corregir (Gerente/Dueño) — corrección del admin sobre una entrega YA CERRADA (Entregada
+   * o No recogida) por un error en el envío: cambia productos, cantidades y el estado (solo entre Entregada y No recogida).
+   * Sirve en cualquier estado del pedido: Pagado, Completado o Cancelado (las cerradas de un cancelado se conservan).
+   *
+   * Recalcula con la regla actual: TODAS las líneas del pedido toman nombre y precio actuales del catálogo, y se reaplica el %
+   * de descuento del pedido sobre las entregas no canceladas. NO cambia el estado del pedido (las entregas siguen cerradas),
+   * NO toca el pago, NO conserva usuario y NO dispara notificaciones. Conserva la fecha/hora del cierre original.
+   * Una línea nueva reutiliza el ítem del pedido de ese producto si existe (otro día) o crea uno; un ítem que se queda sin
+   * ninguna entrega se elimina, y `OrderItem.cantidad` vuelve a ser la suma de sus entregas.
+   */
+  async corregirEntrega(id: string, entregaId: string, dto: CorregirEntregaB2bDto) {
+    await this.cargar(id);
+    const ids = dto.items.map((i) => i.productId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Hay un producto repetido en la corrección — junta sus cantidades en una sola línea');
+    }
+
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      const orden = await tx.order.findUniqueOrThrow({ where: { id }, select: { tenantId: true } });
+      const entrega = await tx.entrega.findFirst({ where: { id: entregaId, orderId: id }, include: { items: true } });
+      if (!entrega) throw new NotFoundException('Entrega no encontrada');
+      if (!ESTADOS_ENTREGA_CERRADOS.includes(entrega.estado)) {
+        throw new ConflictException('Solo se pueden corregir entregas ya cerradas (Entregada o No recogida)');
+      }
+
+      const productos = await tx.product.findMany({ where: { id: { in: ids } }, select: { id: true, nombre: true, precio: true } });
+      if (productos.length !== ids.length) {
+        throw new NotFoundException('Uno o más productos no existen en este negocio');
+      }
+      const producto = new Map(productos.map((p) => [p.id, p]));
+
+      // --- 1. Las líneas de ESTA entrega pasan a ser exactamente `dto.items`.
+      const items = await tx.orderItem.findMany({ where: { orderId: id }, orderBy: [{ orden: 'asc' }, { id: 'asc' }] });
+      const itemDe = new Map(items.filter((i) => i.productId).map((i) => [i.productId!, i]));
+      const idItemsEnEntrega = new Map(entrega.items.map((ei) => [ei.orderItemId, ei]));
+      const deseados = new Set<string>(); // orderItem.id que quedan en la entrega
+      let siguienteOrden = items.reduce((m, i) => Math.max(m, i.orden), -1) + 1;
+      for (const linea of dto.items) {
+        const p = producto.get(linea.productId)!;
+        let item = itemDe.get(linea.productId);
+        if (!item) {
+          item = await tx.orderItem.create({
+            data: { tenantId: orden.tenantId, orderId: id, productId: p.id, nombreProducto: p.nombre, precioUnitario: p.precio, cantidad: linea.cantidad, orden: siguienteOrden++ },
+          });
+          itemDe.set(p.id, item);
+          items.push(item);
+        }
+        deseados.add(item.id);
+        const fila = idItemsEnEntrega.get(item.id);
+        if (fila) {
+          if (fila.cantidad !== linea.cantidad) await tx.entregaItem.update({ where: { id: fila.id }, data: { cantidad: linea.cantidad } });
+        } else {
+          await tx.entregaItem.create({ data: { tenantId: orden.tenantId, entregaId, orderItemId: item.id, cantidad: linea.cantidad } });
+        }
+      }
+      for (const fila of entrega.items) {
+        if (!deseados.has(fila.orderItemId)) await tx.entregaItem.delete({ where: { id: fila.id } });
+      }
+
+      // --- 2. Estado de la entrega (solo Entregada <-> No recogida); la fecha/hora del cierre original se conserva.
+      if (dto.estado && dto.estado !== entrega.estado) {
+        await tx.entrega.update({ where: { id: entregaId }, data: { estado: dto.estado } });
+      }
+
+      // --- 3. Todas las líneas toman el precio (y nombre) actual del catálogo; luego cantidad = suma de sus entregas.
+      const idsCatalogo = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
+      const actuales = new Map(
+        (await tx.product.findMany({ where: { id: { in: idsCatalogo } }, select: { id: true, nombre: true, precio: true } })).map((p) => [p.id, p]),
+      );
+      let totalPiezas = 0;
+      for (const item of items) {
+        const suma = (await tx.entregaItem.aggregate({ where: { orderItemId: item.id }, _sum: { cantidad: true } }))._sum.cantidad ?? 0;
+        if (suma === 0) {
+          await tx.orderItem.delete({ where: { id: item.id } }); // se quedó sin ninguna entrega
+          continue;
+        }
+        const p = item.productId ? actuales.get(item.productId) : undefined;
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: { cantidad: suma, ...(p ? { nombreProducto: p.nombre, precioUnitario: p.precio } : {}) },
+        });
+        totalPiezas += suma;
+      }
+      await tx.detalleB2B.update({ where: { orderId: id }, data: { totalPiezas } });
+      await recalcularTotalesB2b(tx, id); // sin recalcularEstadoB2b: el estado del pedido no cambia
+
+      return aRespuestaPedidoB2b(await tx.order.findUniqueOrThrow({ where: { id }, include: INCLUDE_PEDIDO_ADMIN }));
+    });
   }
 
   /**

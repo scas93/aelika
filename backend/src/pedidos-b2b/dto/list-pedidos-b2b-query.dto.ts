@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { ESTADOS_B2B_FILTRO, type EstadoB2bFiltro } from '../pedidos-b2b-estados';
+import { ESTADOS_B2B_FILTRO, ESTADOS_PAGO_B2B_FILTRO, type EstadoB2bFiltro, type EstadoPagoB2bFiltro } from '../pedidos-b2b-estados';
 import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
 
 // desde/hasta filtran sobre semanaInicio — la dimensión de negocio natural
@@ -44,6 +44,11 @@ export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   )
   @IsBoolean()
   cancelado?: boolean;
+
+  // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
+  @IsOptional()
+  @IsIn(ESTADOS_PAGO_B2B_FILTRO)
+  estadoPago?: EstadoPagoB2bFiltro;
 
   @IsOptional()
   @IsDateString()

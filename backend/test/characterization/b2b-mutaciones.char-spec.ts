@@ -111,7 +111,7 @@ describe('B2B · mutaciones', () => {
       });
     });
 
-    it('rechazos: cancelado, completado (reemplazo que toca entregas cerradas), pagado, id inexistente', async () => {
+    it('rechazos: cancelado, completado (reemplazo que toca entregas cerradas), id inexistente', async () => {
       const cancelado = await crearPublicoB2b(s.h, s.base);
       await api().patch(`/pedidos-b2b/${cancelado.id}/cancelar`).expect(200);
       expectError(await api().patch(`/pedidos-b2b/${cancelado.id}/items`).send(cuerpo()), 409, 'Este pedido está cancelado');
@@ -125,13 +125,12 @@ describe('B2B · mutaciones', () => {
       expect(rechazo.status).toBe(409);
       expect(rechazo.body.message).toMatch(/ya no está pendiente — no se puede modificar/);
 
+      // CAMBIA A PROPÓSITO (Fase 1b): un pedido Pagado ya NO bloquea la edición de Gerente/Dueño (antes: 409 "crea un pedido
+      // nuevo"). Sigue bloqueado para el Operador (regla puedeEditarPedidoPagado, probada en b2b-pagos-correccion). El pago no cambia.
       const pagado = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000002' });
       await api().patch(`/pedidos-b2b/${pagado.id}/marcar-pagado`).expect(200);
-      expectError(
-        await api().patch(`/pedidos-b2b/${pagado.id}/items`).send(cuerpo()),
-        409,
-        'Este pedido ya está pagado — crea un pedido nuevo para agregar más producto',
-      );
+      expect((await api().patch(`/pedidos-b2b/${pagado.id}/items`).send(cuerpo())).status).toBe(200);
+      expect((await api().get(`/pedidos-b2b/${pagado.id}`)).body.estadoPago).toBe('PAGADO');
       expectError(await api().patch('/pedidos-b2b/00000000-0000-4000-8000-000000000000/items').send(cuerpo()), 404, 'Pedido no encontrado');
     });
 
@@ -360,11 +359,12 @@ describe('B2B · mutaciones', () => {
       expect({ cancelado: res.body.cancelado, estadoPago: res.body.estadoPago }).toStrictEqual({ cancelado: true, estadoPago: 'PAGADO' });
     });
 
-    it('un pedido cancelado no se puede avanzar, editar ni marcar como pagado (409 "está cancelado")', async () => {
+    it('un pedido cancelado no se puede avanzar ni editar (409 "está cancelado"); SÍ se puede marcar como pagado (Fase 1b)', async () => {
       const p = await crearPublicoB2b(s.h, s.base);
       await api().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200);
       expectError(await api().patch(`/pedidos-b2b/${p.id}/avanzar`), 409, 'Este pedido está cancelado');
-      expectError(await api().patch(`/pedidos-b2b/${p.id}/marcar-pagado`), 409, 'Este pedido está cancelado');
+      // CAMBIA A PROPÓSITO (Fase 1b): el pago se marca en cualquier estado, también Cancelado (las entregas ya cerradas se cobran).
+      expect((await api().patch(`/pedidos-b2b/${p.id}/marcar-pagado`)).status).toBe(200);
       expectError(
         await api().patch(`/pedidos-b2b/${p.id}/items`).send({ items: [{ productId: s.base.productoB.id, distribucion: [{ dia: 'LUNES', cantidad: 5 }] }] }),
         409,

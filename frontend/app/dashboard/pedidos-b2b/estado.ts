@@ -1,4 +1,4 @@
-import type { PedidoB2bEstado, PedidoB2bEstadoEntrega } from "@/lib/api";
+import type { PedidoB2bEstado, PedidoB2bEstadoEntrega, PedidoB2bEstadoPago } from "@/lib/api";
 import type { BadgeVariant } from "../_components/Badge";
 
 export const ESTADO_LABEL: Record<PedidoB2bEstado, string> = {
@@ -46,6 +46,11 @@ export const ESTADO_FILTRO_LABEL: Record<EstadoFiltroHistorico, string> = {
 export function puedeCerrarEntregas(estado: PedidoB2bEstado, cancelado: boolean): boolean {
   return !cancelado && (estado === "CONFIRMADO_SURTIENDO" || estado === "EN_PROCESO");
 }
+
+// Estado de pago del pedido B2B: solo Pendiente y Pagado, independiente del estado operativo.
+export const ESTADO_PAGO_LABEL: Record<PedidoB2bEstadoPago, string> = { PENDIENTE: "Pendiente", PAGADO: "Pagado" };
+export const ESTADO_PAGO_VARIANT: Record<PedidoB2bEstadoPago, BadgeVariant> = { PENDIENTE: "neutro", PAGADO: "exito" };
+export const ESTADOS_PAGO_FILTRO: PedidoB2bEstadoPago[] = ["PENDIENTE", "PAGADO"];
 
 export const ESTADO_ENTREGA_LABEL: Record<PedidoB2bEstadoEntrega, string> = {
   PENDIENTE: "Pendiente",

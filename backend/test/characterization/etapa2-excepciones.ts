@@ -7,13 +7,15 @@
  *  1. El estado `DESPACHADO` de B2B ahora se expone como `COMPLETADO` (despachar ya no existe).
  *  2. Campos NUEVOS que el golden no conoce: `entregas` (solo GET /:id), `enProceso` (resumen) y, en cada fila de
  *     /dia/:fecha, `entregaId`, `entregaEstado`, `cerradaAt`, `atrasada` y `cancelado`.
+ *  2b. `pagadoAt` (fecha y hora del pago, Fase 1b): nuevo campo de la forma del panel (GET /:id), null mientras el pedido
+ *      esté Pendiente de pago.
  *  3. Entregas del día: ahora incluyen las entregas CERRADAS (Entregada / No recogida) con su estado; el golden solo traía
  *     pedidos activos. Se descartan las filas con entrega cerrada (en el escenario solo p1, ya completado).
  *  4. (solo flujo por API, `cancelacionRecalcula`) El total de un pedido CANCELADO solo cuenta entregas no canceladas: p5
  *     pasa de $450 a $0. En el flujo "filas legacy → migración" NO aplica: la migración de la Etapa 2 conserva el total
  *     histórico ($450) y el recálculo lo hace el script de datos b2b-estados (`--totales-cancelados`).
  */
-const CAMPOS_NUEVOS = ['entregas', 'entregaId', 'entregaEstado', 'cerradaAt', 'atrasada', 'enProceso'];
+const CAMPOS_NUEVOS = ['pagadoAt', 'entregas', 'entregaId', 'entregaEstado', 'cerradaAt', 'atrasada', 'enProceso'];
 
 type Dorado = { status: number; body?: any; texto?: string[] };
 export interface OpcionesExcepciones {

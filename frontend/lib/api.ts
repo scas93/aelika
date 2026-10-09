@@ -1585,6 +1585,9 @@ export interface PedidoB2bDetalle extends PublicPedidoB2b {
   minimoPiezasAplicado: number;
   // Solo en las respuestas del panel (no en el storefront público).
   entregas?: PedidoB2bEntrega[];
+  // Fecha y hora en que se marcó Pagado (también solo en la forma del panel). null si está Pendiente, o si se pagó antes de
+  // que existiera este dato.
+  pagadoAt?: string | null;
 }
 
 export interface ListPedidosB2bFilter extends FiltroImporte {
@@ -1597,6 +1600,8 @@ export interface ListPedidosB2bFilter extends FiltroImporte {
   // necesita resolver este filtro en el servidor (a diferencia de "Pedidos
   // activos", que trae todo sin paginar y filtra en el cliente).
   negocioNombre?: string;
+  // Filtro de Históricos por estado de pago.
+  estadoPago?: PedidoB2bEstadoPago;
   page?: number;
   limit?: number;
 }
@@ -1608,6 +1613,7 @@ export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
   appendFiltroImporte(params, filter);
@@ -1697,6 +1703,30 @@ export function marcarPagadoPedidoB2b(token: string, id: string) {
   });
 }
 
+// Solo Gerente/Dueño. Regresa el pago a Pendiente y limpia la fecha; nunca mueve el estado del pedido.
+export function desmarcarPagadoPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/desmarcar-pagado`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export interface CorregirEntregaPedidoB2bPayload {
+  // Solo entre Entregada y No recogida; sin él se conserva el estado.
+  estado?: "ENTREGADA" | "NO_RECOGIDA";
+  // El conjunto COMPLETO de líneas que debe quedar en la entrega (nunca precios: salen del catálogo).
+  items: { productId: string; cantidad: number }[];
+}
+
+// Corrección del admin (Gerente/Dueño) sobre una entrega YA cerrada, en cualquier estado del pedido.
+export function corregirEntregaPedidoB2b(token: string, pedidoId: string, entregaId: string, payload: CorregirEntregaPedidoB2bPayload) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${pedidoId}/entregas/${entregaId}/corregir`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
 export function cancelarPedidoB2b(token: string, id: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/cancelar`, {
     method: "PATCH",
@@ -1719,6 +1749,7 @@ export interface ExportPedidosB2bFilter {
   desde?: string;
   hasta?: string;
   negocioNombre?: string;
+  estadoPago?: PedidoB2bEstadoPago;
 }
 
 // Bypasses request() on purpose, igual que exportOrdersHistoricoCsv — este
@@ -1731,6 +1762,7 @@ export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
   const query = params.toString();
 
   const res = await fetch(`${API_URL}/pedidos-b2b/export${query ? `?${query}` : ""}`, {

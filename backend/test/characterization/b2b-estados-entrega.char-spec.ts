@@ -187,14 +187,11 @@ describe('B2B · estados por entrega', () => {
       expect(await estados(p.id)).toStrictEqual(['ENTREGADA', 'PENDIENTE', 'PENDIENTE']);
     });
 
-    it('las reglas actuales siguen: un pedido pagado no se edita', async () => {
+    it('CAMBIA A PROPÓSITO (Fase 1b): un pedido pagado SÍ se edita (Gerente/Dueño) y sigue Pagado', async () => {
       const p = await confirmado();
       await dueno().patch(`/pedidos-b2b/${p.id}/marcar-pagado`).expect(200);
-      expectError(
-        await dueno().patch(`/pedidos-b2b/${p.id}/items`).send(cuerpo(s.base.productoA.id, [['LUNES', 12]])),
-        409,
-        'Este pedido ya está pagado — crea un pedido nuevo para agregar más producto',
-      );
+      await dueno().patch(`/pedidos-b2b/${p.id}/items`).send(cuerpo(s.base.productoA.id, [['LUNES', 12]])).expect(200);
+      expect((await detalle(p.id)).estadoPago).toBe('PAGADO');
     });
   });
 

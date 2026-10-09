@@ -8,10 +8,20 @@ import {
   fetchPedidosB2b,
   type FiltroImporte,
   type PaginatedPedidosB2b,
+  type PedidoB2bEstadoPago,
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_LABEL, ESTADO_VARIANT, ESTADO_FILTRO_LABEL, ESTADOS_FILTRO_HISTORICO, type EstadoFiltroHistorico } from "../estado";
+import {
+  ESTADO_LABEL,
+  ESTADO_VARIANT,
+  ESTADO_FILTRO_LABEL,
+  ESTADOS_FILTRO_HISTORICO,
+  ESTADOS_PAGO_FILTRO,
+  ESTADO_PAGO_LABEL,
+  ESTADO_PAGO_VARIANT,
+  type EstadoFiltroHistorico,
+} from "../estado";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
@@ -46,6 +56,11 @@ const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
       ) : (
         <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
       ),
+  },
+  {
+    key: "pago",
+    header: "Pago",
+    render: (pedido) => <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>,
   },
   { key: "total", header: "Total", align: "right", render: (pedido) => formatMoney(pedido.total) },
 ];
@@ -90,6 +105,7 @@ export default function PedidosB2bHistoricoPage() {
 
   const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
   const [estado, setEstado] = useState<EstadoFiltroHistorico | null>(null);
+  const [estadoPago, setEstadoPago] = useState<PedidoB2bEstadoPago | null>(null);
   const [negocioNombre, setNegocioNombre] = useState<string | null>(null);
   const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
@@ -124,6 +140,7 @@ export default function PedidosB2bHistoricoPage() {
       // "Cancelado" es el flag, no un valor de estado; los otros 4 estados excluyen a los cancelados.
       estado: estado && estado !== "CANCELADO" ? estado : undefined,
       negocioNombre: negocioNombre?.trim() || undefined,
+      estadoPago: estadoPago ?? undefined,
       cancelado: estado === "CANCELADO" ? true : estado ? false : undefined,
       operador: importe?.operador,
       valor: importe?.valor,
@@ -185,6 +202,22 @@ export default function PedidosB2bHistoricoPage() {
             )}
           </FilterPill>
 
+          <FilterPill
+            filterKey="estadoPago"
+            label="Pago"
+            valueLabel={estadoPago ? ESTADO_PAGO_LABEL[estadoPago] : null}
+            onClear={() => setEstadoPago(null)}
+          >
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
+                valorAplicado={estadoPago}
+                onAplicar={setEstadoPago}
+                close={close}
+              />
+            )}
+          </FilterPill>
+
           <FilterPill filterKey="fecha" label="Semana" valueLabel={labelFiltroFecha(fecha)} onClear={() => setFecha(null)}>
             {({ close }) => <FiltroFechaPopover valorAplicado={fecha} onAplicar={setFecha} close={close} />}
           </FilterPill>
@@ -241,7 +274,15 @@ export default function PedidosB2bHistoricoPage() {
         </>
       )}
 
-      <HistoricoDetallePanel pedidoId={selectedId} onClose={() => setSelectedId(null)} />
+      {/* Tras editar, corregir o cambiar el pago, la lista se vuelve a consultar (un Completado que recibe una entrega vuelve a
+          En proceso y deja de ser "histórico"). El panel conserva el pedido abierto con su estado nuevo. */}
+      <HistoricoDetallePanel
+        pedidoId={selectedId}
+        onClose={() => setSelectedId(null)}
+        onChanged={() => {
+          if (searched) void ejecutarBusqueda(result?.page ?? 1);
+        }}
+      />
     </div>
   );
 }

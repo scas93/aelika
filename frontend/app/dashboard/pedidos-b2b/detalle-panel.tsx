@@ -7,16 +7,20 @@ import {
   avanzarPedidoB2b,
   cancelarPedidoB2b,
   cerrarEntregaPedidoB2b,
+  corregirEntregaPedidoB2b,
+  desmarcarPagadoPedidoB2b,
   fetchPedidoB2b,
+  marcarPagadoPedidoB2b,
   fetchProducts,
   updatePedidoB2bItems,
   DIAS_SEMANA_PEDIDO_B2B,
+  type CorregirEntregaPedidoB2bPayload,
   type DiaSemanaPedidoB2b,
   type PedidoB2bDetalle,
   type Product,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_VARIANT, ESTADO_LABEL, puedeCerrarEntregas } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT, puedeCerrarEntregas } from "./estado";
 import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
@@ -95,6 +99,7 @@ export default function DetallePanel({
   const [avanzando, setAvanzando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [pagando, setPagando] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -233,6 +238,38 @@ export default function DetallePanel({
   }
   const pagado = pedido?.estadoPago === "PAGADO";
 
+  // Pago (solo Gerente/Dueño), en cualquier estado del pedido, incluso Cancelado. No mueve el estado del pedido.
+  async function handlePago(marcar: boolean) {
+    if (!pedido) return;
+    setPagando(true);
+    setActionError(null);
+    try {
+      if (marcar) await marcarPagadoPedidoB2b(token, pedido.id);
+      else await desmarcarPagadoPedidoB2b(token, pedido.id);
+      setPedido(await fetchPedidoB2b(token, pedido.id)); // la respuesta del pago no trae las entregas ni la fecha: se vuelve a leer
+      onChanged();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "No se pudo actualizar el pago");
+    } finally {
+      setPagando(false);
+    }
+  }
+
+  // Corrección del admin sobre una entrega ya cerrada. Los errores los muestra el propio formulario de la entrega.
+  async function handleCorregirEntrega(entregaId: string, payload: CorregirEntregaPedidoB2bPayload) {
+    if (!pedido) return;
+    setPedido(await corregirEntregaPedidoB2b(token, pedido.id, entregaId, payload));
+    onChanged();
+  }
+
+  function cargarProductos() {
+    if (!products) {
+      fetchProducts(token)
+        .then(setProducts)
+        .catch(() => {});
+    }
+  }
+
   const productosDisponibles = products?.filter((p) => !editItems.some((item) => item.productId === p.id)) ?? [];
 
   return (
@@ -266,15 +303,36 @@ export default function DetallePanel({
             <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>
           </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-bold text-admin-ink">Pago</span>
+            <div className="flex items-center gap-2">
+              <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
+              {pagado && (
+                <span className="text-xs text-admin-ink-soft">
+                  {pedido.pagadoAt
+                    ? new Date(pedido.pagadoAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : "Fecha no registrada"}
+                </span>
+              )}
+            </div>
+          </div>
+
           {!editMode && pedido.entregas && pedido.entregas.length > 0 && (
-            <EntregasLista entregas={pedido.entregas} onCerrar={puedeCerrar ? handleCerrarEntrega : undefined} />
+            <EntregasLista
+              entregas={pedido.entregas}
+              items={pedido.items}
+              onCerrar={puedeCerrar ? handleCerrarEntrega : undefined}
+              onCorregir={canWrite ? handleCorregirEntrega : undefined}
+              productos={products}
+              cargarProductos={cargarProductos}
+            />
           )}
 
           {!editMode ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-admin-ink">Productos</span>
-                {canWrite && !pagado && (
+                {canWrite && !pedido.cancelado && (
                   <button
                     type="button"
                     onClick={startEdit}
@@ -284,11 +342,6 @@ export default function DetallePanel({
                   </button>
                 )}
               </div>
-              {pagado && (
-                <p className="text-xs text-admin-ink-soft">
-                  Este pedido ya está pagado — para agregar más producto, crea un pedido nuevo.
-                </p>
-              )}
               <ul className="flex flex-col gap-2">
                 {pedido.items.map((item) => (
                   <li key={item.id} className="flex flex-col gap-0.5 border-b border-admin-border pb-2 last:border-0">
@@ -427,6 +480,9 @@ export default function DetallePanel({
                   {avanzando ? "Confirmando..." : "Confirmar pedido"}
                 </Button>
               )}
+              <Button variant="secondary" onClick={() => handlePago(!pagado)} disabled={pagando}>
+                {pagando ? "Guardando..." : pagado ? "Desmarcar pagado" : "Marcar pagado"}
+              </Button>
               {pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
                 <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
                   Cancelar pedido
