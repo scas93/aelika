@@ -18,6 +18,7 @@ import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { CerrarEntregaB2bDto } from './dto/cerrar-entrega-b2b.dto';
 import { CorregirEntregaB2bDto } from './dto/corregir-entrega-b2b.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
+import { ExistentePedidoB2bQueryDto } from './dto/existente-pedido-b2b-query.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -37,6 +38,15 @@ export class PedidosB2bController {
   @Get()
   findAll(@Query() query: ListPedidosB2bQueryDto) {
     return this.pedidosB2bService.findAll(query);
+  }
+
+  // Aviso previo de la captura: ¿el cliente ya tiene pedido esa semana? (los 3 roles). Antes de @Get(':id').
+  @Get('existente')
+  existente(@Query() query: ExistentePedidoB2bQueryDto) {
+    return this.pedidosB2bService.existente(
+      query.clienteId,
+      query.semanaInicio,
+    );
   }
 
   // Agregado para el módulo Inicio del panel (RETAIL_B2B) — mismo patrón que

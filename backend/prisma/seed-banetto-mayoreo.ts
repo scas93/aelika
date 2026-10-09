@@ -89,6 +89,7 @@ interface MenuData {
       ventanaCierreHora: string;
     };
     duenoDemo: { email: string; nombre: string; password: string };
+    gerenteDemo: { email: string; nombre: string; password: string };
   };
   codigosDescuento: {
     codigo: string;
@@ -209,6 +210,19 @@ async function main() {
       email: menu.tenant.duenoDemo.email,
       passwordHash: duenoPasswordHash,
       rol: Role.DUENO,
+    },
+  });
+
+  // Gerente de prueba (para verificar los 3 roles del panel de mayoreo). La contraseña vive en el JSON y no se imprime.
+  await prisma.user.upsert({
+    where: { email: menu.tenant.gerenteDemo.email },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      nombre: menu.tenant.gerenteDemo.nombre,
+      email: menu.tenant.gerenteDemo.email,
+      passwordHash: await bcrypt.hash(menu.tenant.gerenteDemo.password, 10),
+      rol: Role.GERENTE,
     },
   });
 

@@ -22,6 +22,8 @@
  *  8. (Fase 2, clientes B2B) En la lista de clientes (`/clientes`), la fila de un cliente B2B ya no trae `nombre` = nombre del contacto
  *     ni `telefono`: ahora es el nombre comercial del cliente y su teléfono vive en `ClienteTelefono` (Cliente.telefono = null). Esos dos
  *     campos se quitan de las filas B2B tanto del golden como de lo recibido; el resto de la fila se sigue comparando byte a byte.
+ *  9. (Fase 2, panel lateral) `GET /pedidos-b2b/:id` suma `notaCliente` y `clienteCodigo` (el código actual del cliente): campos nuevos que el golden
+ *     no conoce.
  */
 const CAMPOS_NUEVOS = [
   'pagadoAt',
@@ -32,6 +34,8 @@ const CAMPOS_NUEVOS = [
   'atrasada',
   'enProceso',
   'codigosDescuentoActivo',
+  'notaCliente',
+  'clienteCodigo',
 ];
 
 type Dorado = { status: number; body?: any; texto?: string[] };

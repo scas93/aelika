@@ -20,7 +20,8 @@ import {
   type Product,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
+import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
+import CuadriculaDias, { distribucionVacia, totalDistribucion, type DistribucionDias } from "./cuadricula-dias";
 import { ESTADO_VARIANT, ESTADO_LABEL, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT, puedeCerrarEntregas } from "./estado";
 import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
@@ -39,17 +40,7 @@ interface EditItem {
   productId: string;
   nombreProducto: string;
   // Una cantidad puede quedar vacía mientras se escribe; vacío cuenta como 0 al guardar.
-  distribucion: Record<DiaSemanaPedidoB2b, Cantidad>;
-}
-
-function distribucionVacia(): Record<DiaSemanaPedidoB2b, Cantidad> {
-  return DIAS_SEMANA_PEDIDO_B2B.reduce(
-    (acc, { value }) => {
-      acc[value] = 0;
-      return acc;
-    },
-    {} as Record<DiaSemanaPedidoB2b, Cantidad>,
-  );
+  distribucion: DistribucionDias;
 }
 
 // Los items sin productId (el producto original se borró del catálogo — ver
@@ -75,7 +66,7 @@ function itemsEditablesDesdePedido(pedido: PedidoB2bDetalle): { items: EditItem[
 }
 
 function totalItem(item: EditItem): number {
-  return DIAS_SEMANA_PEDIDO_B2B.reduce((sum, { value }) => sum + cantidadNumero(item.distribucion[value]), 0);
+  return totalDistribucion(item.distribucion);
 }
 
 export default function DetallePanel({
@@ -313,11 +304,21 @@ export default function DetallePanel({
 
           <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
             <span className="text-sm font-bold text-admin-ink">{pedido.negocioNombre}</span>
+            {pedido.clienteCodigo && (
+              <span className="text-xs font-semibold text-admin-ink-soft">Cliente · {pedido.clienteCodigo}</span>
+            )}
             <span className="text-sm text-admin-ink-soft">
               {pedido.contactoNombre} · {pedido.contactoTelefono}
             </span>
-            <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>
+            {pedido.contactoCorreo && <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>}
           </div>
+
+          {pedido.notaCliente && (
+            <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3">
+              <span className="text-sm font-bold text-admin-ink">Nota del cliente</span>
+              <p className="whitespace-pre-wrap text-sm text-admin-ink">{pedido.notaCliente}</p>
+            </div>
+          )}
 
           {/* Pago: tarjeta propia con su botón a todo lo ancho — antes era un botón más en la fila de acciones y se perdía junto a
               Confirmar y Cancelar. Marcar/Desmarcar piden confirmación (modal con folio y total). */}
@@ -434,34 +435,12 @@ export default function DetallePanel({
                         </button>
                       </div>
                     </div>
-                    {/* 7 columnas iguales que nunca desbordan (minmax(0,1fr)). .admin-input trae padding 12px 16px sin capa,
-                        que (igual que `color`) gana a las utilidades de Tailwind: por eso el padding y el color van con `!` — si no, se comía el
-                        espacio del número. Sin las flechas nativas del input para dar el ancho al texto (las flechas del
-                        teclado ↑/↓ siguen funcionando). Un 0 se atenúa para ver de un vistazo qué días tienen pedido. */}
-                    <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
-                      {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => {
-                        const cerrado = diasCerrados.get(value);
-                        const cantidad = item.distribucion[value];
-                        return (
-                          <label key={value} className="flex min-w-0 flex-col items-center gap-1">
-                            <span className="text-[10px] font-medium text-admin-ink-soft">{label.slice(0, 3)}</span>
-                            <CantidadInput
-                              value={cantidad}
-                              onChange={(v) => setCantidadDia(item.localId, value, v)}
-                              disabled={cerrado !== undefined}
-                              aria-label={`${item.nombreProducto}, ${label}`}
-                              title={cerrado ? `Entrega ${cerrado === "ENTREGADA" ? "entregada" : "no recogida"}: se cambia con «Corregir»` : undefined}
-                              className={`admin-input w-full min-w-0 px-0! py-1.5! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-admin-ink-soft/40 ${
-                                cerrado ? "cursor-not-allowed opacity-60" : ""
-                              } ${cantidadNumero(cantidad) > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"}`}
-                            />
-                            <span className="h-3 text-[9px] leading-3 text-admin-ink-soft">
-                              {cerrado === "ENTREGADA" ? "Entregada" : cerrado === "NO_RECOGIDA" ? "No rec." : ""}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <CuadriculaDias
+                      nombreProducto={item.nombreProducto}
+                      distribucion={item.distribucion}
+                      onChange={(dia, cantidad) => setCantidadDia(item.localId, dia, cantidad)}
+                      cerrados={diasCerrados}
+                    />
                   </div>
                 );
               })}
@@ -504,7 +483,14 @@ export default function DetallePanel({
             </div>
             {Number(pedido.descuentoTotal) > 0 && (
               <div className="flex justify-between text-sm text-admin-green-dark">
-                <span>Descuento{pedido.codigoDescuentoTexto ? ` (${pedido.codigoDescuentoTexto})` : ""}</span>
+                <span>
+                  Descuento
+                  {pedido.codigoDescuentoTexto
+                    ? ` (${pedido.codigoDescuentoTexto})`
+                    : pedido.descuentoPorcentajeAplicado
+                      ? ` (${Number(pedido.descuentoPorcentajeAplicado)}%)`
+                      : ""}
+                </span>
                 <span>-{formatMoney(pedido.descuentoTotal)}</span>
               </div>
             )}

@@ -314,6 +314,80 @@ describe('Clientes B2B · pedidos (2d)', () => {
     });
   });
 
+  describe('panel lateral y aviso previo (2e)', () => {
+    it('GET /pedidos-b2b/:id trae la nota del cliente y el código del cliente (también para el Operador)', async () => {
+      const c = await alta();
+      const p = (
+        await crear(c.id, { notaCliente: 'Entregar por la puerta de atrás' })
+      ).body;
+      for (const api of [admin(), operador()]) {
+        const detalle = (await api.get(`/pedidos-b2b/${p.id}`).expect(200))
+          .body;
+        expect(detalle).toMatchObject({
+          notaCliente: 'Entregar por la puerta de atrás',
+          clienteCodigo: 'cafe-test-matriz',
+          negocioNombre: 'Café Aurora Matriz',
+        });
+      }
+      const sinNota = (await crear(c.id, { semanaInicio: SEMANA_SIGUIENTE }))
+        .body;
+      expect(
+        (await admin().get(`/pedidos-b2b/${sinNota.id}`).expect(200)).body,
+      ).toMatchObject({ notaCliente: null });
+    });
+
+    it('GET /pedidos-b2b/existente: devuelve el pedido del cliente esa semana (o null; un cancelado no cuenta); los 3 roles', async () => {
+      const c = await alta();
+      const consulta = (api = admin(), semana = SEMANA_PROXIMA) =>
+        api
+          .get('/pedidos-b2b/existente')
+          .query({ clienteId: c.id, semanaInicio: semana });
+      expect((await consulta().expect(200)).body).toEqual({});
+      const p = (await crear(c.id)).body;
+      for (const api of [admin(), operador()]) {
+        expect((await consulta(api).expect(200)).body).toEqual({
+          id: p.id,
+          folio: p.folio,
+        });
+      }
+      expect(
+        (await consulta(admin(), SEMANA_SIGUIENTE).expect(200)).body,
+      ).toEqual({});
+      await admin().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200);
+      expect((await consulta().expect(200)).body).toEqual({});
+    });
+
+    it('existente: lunes inválido 400, cliente ajeno/no B2B 404, parámetros mal formados 400, sin token 401', async () => {
+      const c = await alta();
+      const otro = await seedBase(s.h.prisma, {
+        slug: 'otro-mayoreo',
+        tipoStorefront: 'RETAIL_B2B',
+      });
+      const ajeno = await crearClienteB2b(s.h.prisma, {
+        tenantId: otro.tenant.id,
+        tenantSlug: otro.tenant.slug,
+        sufijo: 'x',
+        nombre: 'Ajeno',
+        direccion: 'D',
+        telefonos: [{ telefono: '5599990000' }],
+      });
+      const q = (clienteId: string, semanaInicio: string) =>
+        admin()
+          .get('/pedidos-b2b/existente')
+          .query({ clienteId, semanaInicio });
+      expect((await q(c.id, '2026-10-06')).status).toBe(400);
+      expect((await q(ajeno.id, SEMANA_PROXIMA)).status).toBe(404);
+      expect((await q('no-uuid', SEMANA_PROXIMA)).status).toBe(400);
+      expect(
+        (
+          await request(s.h.app.getHttpServer())
+            .get('/pedidos-b2b/existente')
+            .query({ clienteId: c.id, semanaInicio: SEMANA_PROXIMA })
+        ).status,
+      ).toBe(401);
+    });
+  });
+
   describe('permisos', () => {
     it('el Operador puede capturar pedidos; sin token 401; negocio de menudeo 403', async () => {
       const c = await alta();

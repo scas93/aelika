@@ -56,6 +56,11 @@
       "email": "dueno@banetto-mayorista.com",
       "nombre": "Dueño Banetto Mayorista",
       "password": "banettomayorista1234"
+    },
+    "gerenteDemo": {
+      "email": "gerente@banetto-mayorista.com",
+      "nombre": "Gerente Demo",
+      "password": "gerentemayorista1234"
     }
   },
   "codigosDescuento": [

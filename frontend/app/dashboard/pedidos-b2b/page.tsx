@@ -15,6 +15,7 @@ import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import DetallePanel from "./detalle-panel";
+import NuevoPedidoPanel from "./nuevo-pedido-panel";
 import { formatearFolioB2b } from "@/lib/format";
 
 // Sin paginación a propósito, mismo criterio que la pestaña "Activos" de
@@ -55,6 +56,7 @@ export default function PedidosB2bPage() {
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -255,9 +257,15 @@ export default function PedidosB2bPage() {
           </Button>
         </div>
 
-        <Button variant="secondary" onClick={handleExport} disabled={exporting || !pedidos}>
-          {exporting ? "Exportando..." : "📥 Exportar Excel"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={handleExport} disabled={exporting || !pedidos}>
+            {exporting ? "Exportando..." : "📥 Exportar Excel"}
+          </Button>
+          {/* Captura por teléfono: los 3 roles. */}
+          <Button variant="primary" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
+            Nuevo pedido
+          </Button>
+        </div>
       </div>
 
       <input
@@ -280,6 +288,22 @@ export default function PedidosB2bPage() {
       ) : (
         <ul className="flex flex-col gap-2">{filtrados.map((pedido) => renderPedido(pedido, false))}</ul>
       )}
+
+      <NuevoPedidoPanel
+        open={nuevoAbierto}
+        semanaInicial={semanas?.siguiente.inicio ?? null}
+        onClose={() => setNuevoAbierto(false)}
+        onAbrirPedido={(id) => {
+          setNuevoAbierto(false);
+          setSelectedId(id);
+        }}
+        onCreado={(id) => {
+          // Se abre el pedido recién creado en el panel lateral (puede ser de una semana que esta vista no muestra).
+          setNuevoAbierto(false);
+          setSelectedId(id);
+          reload();
+        }}
+      />
 
       <DetallePanel pedidoId={selectedId} onClose={() => setSelectedId(null)} onChanged={reload} />
     </div>

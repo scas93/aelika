@@ -1592,6 +1592,9 @@ export interface PedidoB2bDetalle extends PublicPedidoB2b {
   // Fecha y hora en que se marcó Pagado (también solo en la forma del panel). null si está Pendiente, o si se pagó antes de
   // que existiera este dato.
   pagadoAt?: string | null;
+  // Solo en GET /pedidos-b2b/:id (panel lateral): nota libre del cliente y código actual del cliente (null en pedidos viejos).
+  notaCliente?: string | null;
+  clienteCodigo?: string | null;
 }
 
 export interface ListPedidosB2bFilter extends FiltroImporte {
@@ -2011,3 +2014,194 @@ export function altaClienteLealtadPublico(slug: string, nombre: string, telefono
 }
 
 export { ApiError };
+
+
+// ---------------------------------------------------------------------------
+// Clientes B2B (Fase 2): /clientes-b2b (Gerente/Dueño, salvo el selector) y captura de pedidos desde el panel.
+// ---------------------------------------------------------------------------
+
+export type ClienteB2bEstadoFiltro = "ACTIVOS" | "BAJA" | "TODOS";
+export type ModalidadPagoB2b = "AL_INICIO" | "AL_FINAL";
+
+export interface ClienteB2bFila {
+  id: string;
+  codigo: string | null;
+  nombre: string;
+  direccion: string | null;
+  descuentoPorcentaje: number | null;
+  modalidadPago: ModalidadPagoB2b | null;
+  activo: boolean;
+  bajaAt: string | null;
+  telefonoPrincipal: string | null;
+  nombreContactoPrincipal: string | null;
+  pedidosActivos: number;
+  incompleto: boolean;
+  createdAt: string;
+}
+
+export interface PaginatedClientesB2b {
+  data: ClienteB2bFila[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ClienteB2bTelefono {
+  id: string;
+  telefono: string;
+  principal: boolean;
+  nombreContacto: string | null;
+}
+
+export interface ClienteB2bDetalle {
+  id: string;
+  codigo: string | null;
+  nombre: string;
+  direccion: string | null;
+  descuentoPorcentaje: number | null;
+  modalidadPago: ModalidadPagoB2b | null;
+  activo: boolean;
+  bajaAt: string | null;
+  pedidosActivos: number;
+  incompleto: boolean;
+  totalPedidos: number;
+  ultimoPedidoAt: string | null;
+  createdAt: string;
+  telefonos: ClienteB2bTelefono[];
+}
+
+// Selector de la captura de pedidos (los 3 roles): solo lo mínimo de los clientes activos.
+export interface ClienteB2bSelectorItem {
+  id: string;
+  nombre: string;
+  codigo: string | null;
+  descuentoPorcentaje: number | null;
+}
+
+export interface TelefonoClienteB2bInput {
+  telefono: string;
+  principal?: boolean;
+  nombreContacto?: string;
+}
+
+export interface CreateClienteB2bPayload {
+  nombre: string;
+  sufijo: string;
+  direccion: string;
+  descuentoPorcentaje?: number;
+  modalidadPago?: ModalidadPagoB2b;
+  telefonos: TelefonoClienteB2bInput[];
+}
+
+export interface UpdateClienteB2bPayload {
+  nombre?: string;
+  direccion?: string;
+  // null borra el descuento / la modalidad (queda la del negocio).
+  descuentoPorcentaje?: number | null;
+  modalidadPago?: ModalidadPagoB2b | null;
+}
+
+export function fetchClientesB2b(
+  token: string,
+  filtros: { q?: string; estado?: ClienteB2bEstadoFiltro; page?: number; limit?: number } = {},
+) {
+  const params = new URLSearchParams();
+  if (filtros.q) params.set("q", filtros.q);
+  if (filtros.estado) params.set("estado", filtros.estado);
+  if (filtros.page) params.set("page", String(filtros.page));
+  if (filtros.limit) params.set("limit", String(filtros.limit));
+  const query = params.toString();
+  return request<PaginatedClientesB2b>(`/clientes-b2b${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchClientesB2bSelector(token: string) {
+  return request<ClienteB2bSelectorItem[]>("/clientes-b2b/selector", { headers: authHeaders(token) });
+}
+
+export function fetchClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}`, { headers: authHeaders(token) });
+}
+
+export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {
+  return request<ClienteB2bDetalle>("/clientes-b2b", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateClienteB2b(token: string, id: string, payload: UpdateClienteB2bPayload) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function bajaClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/baja`, { method: "POST", headers: authHeaders(token) });
+}
+
+export function reactivarClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/reactivar`, { method: "POST", headers: authHeaders(token) });
+}
+
+export function agregarTelefonoClienteB2b(token: string, id: string, payload: TelefonoClienteB2bInput) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function editarTelefonoClienteB2b(
+  token: string,
+  id: string,
+  telefonoId: string,
+  payload: { telefono?: string; nombreContacto?: string | null },
+) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function cambiarPrincipalClienteB2b(token: string, id: string, telefonoId: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}/principal`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function quitarTelefonoClienteB2b(token: string, id: string, telefonoId: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export interface CreatePedidoB2bPayload {
+  clienteId: string;
+  semanaInicio: string;
+  items: PedidoB2bItemInput[];
+  notaCliente?: string;
+}
+
+// Captura por teléfono (los 3 roles). 409 si el cliente está de baja o ya tiene pedido esa semana.
+export function createPedidoB2b(token: string, payload: CreatePedidoB2bPayload) {
+  return request<PedidoB2bDetalle>("/pedidos-b2b", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+// Aviso previo de la captura: el pedido (no cancelado) que el cliente ya tiene esa semana, o null.
+export function fetchPedidoB2bExistente(token: string, clienteId: string, semanaInicio: string) {
+  const params = new URLSearchParams({ clienteId, semanaInicio });
+  return request<{ id: string; folio: string } | null>(`/pedidos-b2b/existente?${params.toString()}`, {
+    headers: authHeaders(token),
+  });
+}

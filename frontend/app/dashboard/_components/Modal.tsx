@@ -8,6 +8,8 @@ interface ModalProps {
   title: string;
   children?: ReactNode;
   footer?: ReactNode;
+  // Formularios con varias columnas (ej. alta de un cliente): más ancho que el diálogo de confirmación por defecto.
+  wide?: boolean;
 }
 
 // Replaces the "fixed inset-0 bg-black/40" confirmation-modal markup
@@ -15,7 +17,7 @@ interface ModalProps {
 // (temporary password), puntos-envio-section.tsx (delete zone), etc. Not
 // connected to any of those screens yet — created in this phase only, see
 // CLAUDE.md phase notes.
-export default function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export default function Modal({ open, onClose, title, children, footer, wide = false }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -30,7 +32,7 @@ export default function Modal({ open, onClose, title, children, footer }: ModalP
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="flex w-full max-w-sm flex-col gap-4 rounded-[var(--radius-admin-card)] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
+        className={`flex w-full ${wide ? "max-w-xl" : "max-w-sm"} flex-col gap-4 rounded-[var(--radius-admin-card)] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]`}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-extrabold text-admin-ink">{title}</h3>

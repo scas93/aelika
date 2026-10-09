@@ -647,7 +647,42 @@ export class PedidosB2bService {
           where: { id: d.codigoDescuentoId },
         })
       : null;
-    return aRespuestaPedidoB2b(orden, { conCodigo: codigo });
+    // Solo en este GET (el panel lateral): la nota del cliente y el código ACTUAL del cliente (el código no cambia nunca).
+    // Se lee aquí porque el Operador no puede consultar /clientes-b2b/:id.
+    const cliente = await this.tenantPrisma.client.cliente.findFirst({
+      where: { id: orden.clienteId },
+      select: { codigo: true },
+    });
+    return {
+      ...aRespuestaPedidoB2b(orden, { conCodigo: codigo }),
+      notaCliente: d.notaCliente,
+      clienteCodigo: cliente?.codigo ?? null,
+    };
+  }
+
+  /**
+   * ¿Ya tiene este cliente un pedido (no cancelado) en esa semana? Lo usa la captura del panel para avisar ANTES de guardar.
+   * Devuelve folio e id del existente, o null. Cliente de otro negocio o que no es B2B: 404, igual que al crear.
+   */
+  async existente(clienteId: string, semanaInicioStr: string) {
+    const semanaInicio = assertLunes(semanaInicioStr);
+    const cliente = await this.tenantPrisma.client.cliente.findFirst({
+      where: { id: clienteId, canal: ClienteCanal.B2B },
+      select: { id: true },
+    });
+    if (!cliente) {
+      throw new NotFoundException('Cliente no encontrado');
+    }
+    const orden = await this.tenantPrisma.client.order.findFirst({
+      where: {
+        tipo: TipoOrden.B2B,
+        clienteId,
+        cancelado: false,
+        detalleB2b: { semanaInicio },
+      },
+      select: { id: true, folio: true },
+    });
+    return orden ? { id: orden.id, folio: orden.folio } : null;
   }
 
   /**
