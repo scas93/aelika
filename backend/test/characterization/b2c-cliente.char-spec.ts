@@ -15,6 +15,12 @@ describe('B2C · Cliente derivado del pedido', () => {
       tenantId: s.base.tenant.id,
       canal: 'B2C',
       telefono: '5511112222',
+      // 2a (cambia a propósito): columnas nuevas del Cliente B2B, siempre null en B2C.
+      bajaAt: null,
+      codigo: null,
+      descuentoPorcentaje: null,
+      direccion: null,
+      modalidadPago: null,
       nombre: 'Ana Prueba',
       correo: 'ana@test.com',
       primerPedidoAt: '2026-09-30T16:00:00.000Z',

@@ -7,10 +7,11 @@ import { buildStorefrontUrl } from '../common/storefront-url';
 import { PedidoContexto, PlantillaVariable } from './plantilla-variable.type';
 import { buscarEnCatalogo, disponibleParaContexto } from './plantilla-variable-catalogo';
 import { sanitizarParaMeta } from './plantilla-variable-formato';
+import { telefonoDestino } from '../clientes/cliente-b2b';
 
 // Todos los tenants piloto operan en México — mismo supuesto ya hardcodeado
-// en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono
-// guarda solo los 10 dígitos nacionales (ver common/telefono.ts), sin
+// en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono (B2C) y
+// ClienteTelefono (B2B) guardan solo los 10 dígitos nacionales (ver common/telefono.ts), sin
 // código de país, así que hay que anteponerlo aquí antes de mandarlo a
 // Botpress/Meta, que sí lo requieren en el número.
 const LADA_PAIS = '+52';
@@ -47,6 +48,12 @@ export class ReglaEnvioService {
       );
     }
 
+    // B2C: el propio teléfono del cliente. B2B: su número principal. Antes del log: sin destino no hay intento.
+    const telefono = await telefonoDestino(this.prisma, cliente);
+    if (!telefono) {
+      throw new BadRequestException(`El cliente ${cliente.id} no tiene un teléfono al cual enviar (tenant=${tenant.id}).`);
+    }
+
     const variables = this.resolverVariables(regla.plantillaVariables as unknown as PlantillaVariable[], tenant, cliente, contexto);
 
     // Se crea ANTES del POST (estado EN_CURSO por default, ver schema.prisma)
@@ -67,7 +74,7 @@ export class ReglaEnvioService {
 
     const payload = {
       correlacionId: log.id,
-      telefono: `${LADA_PAIS}${cliente.telefono}`,
+      telefono: `${LADA_PAIS}${telefono}`,
       plantilla: { nombre: regla.plantillaNombre, idioma: regla.plantillaIdioma },
       variables,
     };

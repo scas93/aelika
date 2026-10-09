@@ -99,6 +99,12 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
       tenantId: s.base.tenant.id,
       canal: 'B2C',
       telefono: '5544445555',
+      // 2a (cambia a propósito): columnas nuevas del Cliente B2B, siempre null en B2C.
+      bajaAt: null,
+      codigo: null,
+      descuentoPorcentaje: null,
+      direccion: null,
+      modalidadPago: null,
       nombre: 'Beto Lealtad',
       correo: null,
       primerPedidoAt: '2026-09-30T16:00:00.000Z',
@@ -136,6 +142,12 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
       tenantId: s.base.tenant.id,
       canal: 'B2C',
       telefono: '5544445555',
+      // 2a (cambia a propósito): columnas nuevas del Cliente B2B, siempre null en B2C.
+      bajaAt: null,
+      codigo: null,
+      descuentoPorcentaje: null,
+      direccion: null,
+      modalidadPago: null,
       nombre: 'Alberto Pedido',
       correo: 'beto@test.com',
       primerPedidoAt: '2026-09-30T18:00:00.000Z', // A2: fecha del primer pedido pagado (antes: la de alta en Lealtad)

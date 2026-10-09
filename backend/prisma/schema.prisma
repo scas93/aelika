@@ -170,6 +170,7 @@ model Tenant {
   notificacionCanalConfigs  NotificacionCanalConfig[]
   notificacionEventoConfigs NotificacionEventoConfig[]
   clientes                  Cliente[]
+  clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
   loyaltyCards              LoyaltyCard[]
@@ -223,6 +224,9 @@ model Product {
   precio      Decimal  @db.Decimal(10, 2)
   fotoUrl     String?
   disponible  Boolean  @default(true)
+  // ID del producto en el ERP del negocio (opcional, para integraciones). Vacío se normaliza a NULL;
+  // los NULL repetidos no chocan en el unique.
+  erpId       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -232,6 +236,7 @@ model Product {
   modifierGroups ProductModifierGroup[]
   pedidoB2bItems PedidoB2bItem[]
 
+  @@unique([tenantId, erpId])
   @@index([tenantId])
   @@index([categoryId])
   @@map("products")
@@ -650,6 +655,8 @@ model DetalleB2B {
   // Fecha y hora en que el admin marcó el pedido como Pagado (sin usuario); null mientras está Pendiente. Desmarcar lo limpia.
   // Pedidos pagados antes de este campo (migrados) quedan en null: se sabe que están pagados, no cuándo.
   pagadoAt                    DateTime?
+  // Nota libre del cliente (opcional). Se ve en el panel lateral del pedido y sale en el Excel.
+  notaCliente                 String?
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -1096,7 +1103,10 @@ model Cliente {
   // antes de guardar: solo dígitos, últimos 10 — así "+52 55 1111 2222",
   // "55-1111-2222" y "5511112222" resuelven al mismo Cliente. Nunca se
   // guarda el formato crudo capturado en el pedido.
-  telefono       String
+  // NULL solo en clientes B2B: su(s) teléfono(s) viven en ClienteTelefono (un mismo número
+  // puede estar en varios clientes B2B). En B2C siempre viene y el unique de abajo sigue
+  // igual — Postgres no considera iguales dos NULL, así que no choca con los B2B.
+  telefono       String?
   // Nombre y correo más recientemente capturados — se sobreescriben en cada
   // pedido nuevo del mismo cliente (ver ClientesService). correo es opcional
   // porque Order.clienteCorreo lo es; un pedido sin correo nunca borra un
@@ -1110,15 +1120,53 @@ model Cliente {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // --- Solo clientes B2B (NULL en B2C). Los da de alta un admin; ver docs/diseno-operacion.md ---
+  // {Tenant.slug}-{slug del cliente}. Único por negocio; no se edita después de crearlo.
+  codigo              String?
+  direccion           String?
+  // % sobre el total del pedido; NULL o 0 = sin descuento. Se snapshotea en el pedido al crearlo.
+  descuentoPorcentaje Decimal?            @db.Decimal(5, 2)
+  // NULL = usa la modalidad de cobro del negocio.
+  modalidadPago       PedidoB2bModoCobro?
+  // Baja lógica: no puede pedir ni entrar; sus pedidos activos siguen y el historial se conserva.
+  bajaAt              DateTime?
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  telefonos      ClienteTelefono[]
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
   loyaltyCard    LoyaltyCard?
 
   @@unique([tenantId, canal, telefono])
+  @@unique([tenantId, codigo])
   @@index([tenantId])
+  @@index([tenantId, canal, bajaAt])
   @@map("clientes")
+}
+
+// Teléfonos autorizados de un cliente B2B. Un mismo número puede estar en varios clientes
+// (del mismo negocio o de negocios distintos): la unicidad es por cliente, no global.
+// Invariantes (en el servicio, bajo FOR UPDATE del Cliente): al menos 1 teléfono y exactamente
+// 1 principal. "Un solo principal por cliente" también lo garantiza un índice único parcial
+// (UNIQUE ("clienteId") WHERE principal) creado a mano en la migración — Prisma no lo modela.
+model ClienteTelefono {
+  id             String   @id @default(uuid())
+  tenantId       String
+  clienteId      String
+  // Normalizado con normalizarTelefono (solo dígitos, últimos 10).
+  telefono       String
+  principal      Boolean  @default(false)
+  // Quién es la persona de ese número (opcional).
+  nombreContacto String?
+  createdAt      DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([clienteId, telefono])
+  @@index([tenantId, telefono])
+  @@map("cliente_telefonos")
 }
 
 // ---------------------------------------------------------------------------

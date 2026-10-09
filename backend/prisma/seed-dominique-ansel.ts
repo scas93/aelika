@@ -25,6 +25,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
 import { generateApiKey } from '../src/common/api-key';
+import { sembrarClienteB2b } from '../src/clientes/cliente-b2b';
 import { normalizarHorarioSemana, type HorarioSemana } from '../src/common/horario';
 import { Role, TipoStorefront, FacturacionModo, PedidoB2bModoCobro, DiaSemana } from '../generated/prisma/enums';
 
@@ -72,6 +73,14 @@ interface MenuData {
     activo: boolean;
     usosMaximos: number | null;
     fechaLimite: string | null;
+  }[];
+  clientesB2b: {
+    sufijo: string;
+    nombre: string;
+    direccion: string;
+    descuentoPorcentaje: number | null;
+    modalidadPago: keyof typeof PedidoB2bModoCobro | null;
+    telefonos: { telefono: string; principal: boolean; nombreContacto: string | null }[];
   }[];
   categorias: MenuCategoria[];
 }
@@ -177,10 +186,21 @@ async function main() {
     });
   }
 
+  // Clientes B2B por alta (código {slug}-{sufijo}, teléfonos autorizados y principal). Teléfonos ficticios.
+  for (const cliente of menu.clientesB2b) {
+    await sembrarClienteB2b(prisma, {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      ...cliente,
+      modalidadPago: cliente.modalidadPago ? PedidoB2bModoCobro[cliente.modalidadPago] : null,
+    });
+  }
+
   console.log(`Seed de Dominique Ansel Bakery listo: tenant "${tenant.slug}" (${tenant.tipoStorefront})`);
   console.log(`  ${menu.tenant.duenoDemo.email} / ${menu.tenant.duenoDemo.password} (DUENO)`);
   console.log(`  ${menu.categorias.length} categorías, ${totalProductos} productos`);
   console.log(`  ${menu.codigosDescuento.length} código(s) de descuento B2B`);
+  console.log(`  ${menu.clientesB2b.length} cliente(s) B2B: ${menu.clientesB2b.map((c) => `${tenant.slug}-${c.sufijo}`).join(', ')}`);
   console.log('');
   console.log('Pendiente de configurar manualmente en este ambiente:');
   console.log(`  - botApiKey (Botpress): ${tenant.botApiKey}`);

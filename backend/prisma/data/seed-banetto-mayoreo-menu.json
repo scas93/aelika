@@ -67,6 +67,55 @@
       "fechaLimite": null
     }
   ],
+  "clientesB2b": [
+    {
+      "sufijo": "matriz",
+      "nombre": "Café Aurora Matriz",
+      "direccion": "Av. Insurgentes Sur 1200, Col. Del Valle, CDMX",
+      "descuentoPorcentaje": 10,
+      "modalidadPago": null,
+      "telefonos": [
+        {
+          "telefono": "5555010001",
+          "principal": true,
+          "nombreContacto": "Mariana López"
+        },
+        {
+          "telefono": "5555010002",
+          "principal": false,
+          "nombreContacto": "Luis Ortega"
+        }
+      ]
+    },
+    {
+      "sufijo": "americas",
+      "nombre": "Café Aurora Américas",
+      "direccion": "Av. Américas 450, Col. Providencia, Guadalajara",
+      "descuentoPorcentaje": 10,
+      "modalidadPago": null,
+      "telefonos": [
+        {
+          "telefono": "5555010001",
+          "principal": true,
+          "nombreContacto": "Mariana López"
+        }
+      ]
+    },
+    {
+      "sufijo": "providencia",
+      "nombre": "Cafetería Providencia",
+      "direccion": "Calle Tarascos 3300, Col. Providencia, Guadalajara",
+      "descuentoPorcentaje": null,
+      "modalidadPago": "AL_INICIO",
+      "telefonos": [
+        {
+          "telefono": "5555010003",
+          "principal": true,
+          "nombreContacto": "Fernanda Ruiz"
+        }
+      ]
+    }
+  ],
   "categorias": [
     {
       "orden": 1,

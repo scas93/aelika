@@ -37,6 +37,12 @@ describe('B2B · creación pública, casos válidos', () => {
       tenantId: s.base.tenant.id,
       canal: 'B2B',
       telefono: '5533334444',
+      // 2a (cambia a propósito): columnas nuevas del Cliente B2B; el flujo actual (sincronización) las deja en null.
+      bajaAt: null,
+      codigo: null,
+      descuentoPorcentaje: null,
+      direccion: null,
+      modalidadPago: null,
       nombre: 'Luis Compras',
       correo: 'compras@laesquina.test',
       primerPedidoAt: '2026-09-30T16:00:00.000Z',

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Cliente, ClienteCanal, EstadoPago, Prisma, TipoOrden } from '../../generated/prisma/client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
+import { OMITIR_CAMPOS_B2B } from './cliente-b2b';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 
@@ -65,6 +66,7 @@ export class ClientesService {
     const [data, total] = await Promise.all([
       this.tenantPrisma.client.cliente.findMany({
         where,
+        omit: OMITIR_CAMPOS_B2B,
         orderBy: { [query.ordenarPor]: query.orden },
         skip,
         take: query.limit,
