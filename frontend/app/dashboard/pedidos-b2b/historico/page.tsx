@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
-  exportPedidosB2bCsv,
+  exportPedidosB2bXlsx,
   fetchPedidosB2b,
   type FiltroImporte,
   type PaginatedPedidosB2b,
@@ -32,6 +32,7 @@ import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroF
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
 import HistoricoDetallePanel from "./historico-detalle-panel";
 import { formatearFolioB2b } from "@/lib/format";
+import { hoyYYYYMMDD } from "@/lib/fecha";
 
 const LIMIT = 25;
 
@@ -169,11 +170,11 @@ export default function PedidosB2bHistoricoPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const blob = await exportPedidosB2bCsv(token, filtrosActuales());
+      const blob = await exportPedidosB2bXlsx(token, filtrosActuales());
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "pedidos-b2b-historico.csv";
+      a.download = `historico-${hoyYYYYMMDD()}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();

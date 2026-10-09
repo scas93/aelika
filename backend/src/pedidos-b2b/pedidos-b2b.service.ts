@@ -10,6 +10,8 @@ import { assertCodigosDescuentoPermitidos } from '../common/modulos';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { round2 } from '../common/money';
 import { toCsv } from '../common/csv';
+import { fechaExcel } from '../common/xlsx';
+import { libroEntregasDia, libroPedidos, type FilaEntregaExcel, type FilaPedidoExcel } from './pedidos-b2b-excel';
 import {
   ClienteCanal,
   EstadoEntrega,
@@ -219,6 +221,86 @@ export class PedidosB2bService {
       { header: 'Piezas', value: (p) => p.totalPiezas },
       { header: 'Total', value: (p) => Number(p.total).toFixed(2) },
     ]);
+  }
+
+  /**
+   * Excel (.xlsx) de Históricos y Pedidos activos: una fila por pedido, con los mismos filtros que el CSV. Subtotal, descuento
+   * % y descuento $ salen tal como están guardados en el pedido (sin recalcular, también en pedidos cancelados).
+   */
+  async exportPedidosXlsx(query: ExportPedidosB2bQueryDto): Promise<Buffer> {
+    const pedidos = await this.tenantPrisma.client.order.findMany({
+      where: this.buildWhere(query),
+      orderBy: [{ detalleB2b: { semanaInicio: 'desc' } }, { createdAt: 'asc' }],
+      select: {
+        folio: true,
+        estadoPedido: true,
+        estadoPago: true,
+        cancelado: true,
+        total: true,
+        descuentoTotal: true,
+        createdAt: true,
+        detalleB2b: { select: { negocioNombre: true, semanaInicio: true, subtotal: true, descuentoPorcentajeAplicado: true, pagadoAt: true } },
+        entregas: { select: { estado: true } },
+      },
+    });
+    const filas: FilaPedidoExcel[] = pedidos.map((o) => ({
+      folio: o.folio,
+      negocioNombre: o.detalleB2b!.negocioNombre,
+      semanaInicio: o.detalleB2b!.semanaInicio,
+      createdAt: o.createdAt,
+      estado: estadoB2bVisible(o.estadoPedido),
+      cancelado: o.cancelado,
+      estadoPago: o.estadoPago,
+      pagadoAt: o.detalleB2b!.pagadoAt,
+      estadosEntregas: o.entregas.map((e) => e.estado),
+      subtotal: Number(o.detalleB2b!.subtotal),
+      descuentoPorcentaje: Number(o.detalleB2b!.descuentoPorcentajeAplicado ?? 0),
+      descuentoTotal: Number(o.descuentoTotal),
+      total: Number(o.total),
+    }));
+    return libroPedidos(filas);
+  }
+
+  /** Excel (.xlsx) de Entregas del día: hojas Entregas (una fila por producto de cada entrega, sin canceladas) y Consolidado. */
+  async exportEntregasDiaXlsx(fechaStr: string): Promise<Buffer> {
+    const { semanaInicio, dia } = resolverSemanaYDia(fechaStr);
+    const fecha = fechaDeDia(semanaInicio, dia);
+    const vigente = { fecha, estado: { not: EstadoEntrega.CANCELADA } };
+
+    const pedidos = await this.tenantPrisma.client.order.findMany({
+      where: { tipo: TipoOrden.B2B, entregas: { some: vigente } },
+      orderBy: [{ detalleB2b: { negocioNombre: 'asc' } }, { createdAt: 'asc' }],
+      select: {
+        folio: true,
+        detalleB2b: { select: { negocioNombre: true } },
+        entregas: { where: vigente, select: { estado: true } },
+        items: {
+          orderBy: [{ orden: 'asc' }, { id: 'asc' }],
+          select: {
+            nombreProducto: true,
+            precioUnitario: true,
+            product: { select: { category: { select: { nombre: true } } } },
+            entregaItems: { where: { entrega: vigente }, select: { cantidad: true } },
+          },
+        },
+      },
+    });
+
+    const filas: FilaEntregaExcel[] = pedidos.flatMap((pedido) =>
+      pedido.items
+        .map((item) => ({
+          fecha: fechaExcel(fecha),
+          folio: pedido.folio,
+          negocioNombre: pedido.detalleB2b!.negocioNombre,
+          estadoEntrega: pedido.entregas[0].estado,
+          categoria: item.product?.category?.nombre ?? 'Sin categoría',
+          producto: item.nombreProducto,
+          cantidad: item.entregaItems.reduce((suma, ei) => suma + ei.cantidad, 0),
+          precioUnitario: Number(item.precioUnitario),
+        }))
+        .filter((fila) => fila.cantidad > 0),
+    );
+    return libroEntregasDia(filas);
   }
 
   /**

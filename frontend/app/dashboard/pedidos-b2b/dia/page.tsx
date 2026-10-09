@@ -5,7 +5,7 @@ import { useSession } from "@/lib/session-context";
 import {
   ApiError,
   cerrarEntregaPedidoB2b,
-  exportPedidosB2bDiaCsv,
+  exportPedidosB2bDiaXlsx,
   fetchPedidosB2bDia,
   fetchTenantSettings,
   type PedidoB2bEntregaDia,
@@ -86,11 +86,11 @@ export default function PedidosB2bDiaPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const blob = await exportPedidosB2bDiaCsv(token, fecha);
+      const blob = await exportPedidosB2bDiaXlsx(token, fecha);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `pedidos-b2b-${fecha}.csv`;
+      a.download = `entregas-${fecha}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
-  exportPedidosB2bCsv,
+  exportPedidosB2bXlsx,
   fetchPedidosB2b,
   fetchPedidosB2bResumen,
   type PedidoB2bReportable,
@@ -158,7 +158,7 @@ export default function PedidosB2bPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const blob = await exportPedidosB2bCsv(token, {
+      const blob = await exportPedidosB2bXlsx(token, {
         estados: ESTADOS_ACTIVOS,
         cancelado: false,
         desde: semanaSeleccionada.inicio,
@@ -167,7 +167,7 @@ export default function PedidosB2bPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `pedidos-b2b-activos-${semanaSeleccionada.inicio}.csv`;
+      a.download = `pedidos-${semanaSeleccionada.inicio}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();

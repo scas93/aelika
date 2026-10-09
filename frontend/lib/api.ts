@@ -1766,9 +1766,9 @@ export interface ExportPedidosB2bFilter {
   soloHistorico?: boolean;
 }
 
-// Bypasses request() on purpose, igual que exportOrdersHistoricoCsv — este
-// endpoint regresa un CSV, no JSON.
-export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB2bFilter): Promise<Blob> {
+// Bypasses request() on purpose: este endpoint regresa un archivo Excel (.xlsx), no JSON. El CSV del backend
+// (GET /pedidos-b2b/export) ya no lo usa el panel.
+export async function exportPedidosB2bXlsx(token: string, filter?: ExportPedidosB2bFilter): Promise<Blob> {
   const params = new URLSearchParams();
   if (filter?.estados && filter.estados.length > 0) params.set("estados", filter.estados.join(","));
   else if (filter?.estado) params.set("estado", filter.estado);
@@ -1780,7 +1780,7 @@ export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB
   if (filter?.soloHistorico) params.set("soloHistorico", "true");
   const query = params.toString();
 
-  const res = await fetch(`${API_URL}/pedidos-b2b/export${query ? `?${query}` : ""}`, {
+  const res = await fetch(`${API_URL}/pedidos-b2b/export-xlsx${query ? `?${query}` : ""}`, {
     headers: authHeaders(token),
   });
 
@@ -1829,10 +1829,9 @@ export function fetchPedidosB2bDia(token: string, fecha: string) {
   });
 }
 
-// Bypasses request() on purpose, mismo motivo que exportPedidosB2bCsv — CSV,
-// no JSON.
-export async function exportPedidosB2bDiaCsv(token: string, fecha: string): Promise<Blob> {
-  const res = await fetch(`${API_URL}/pedidos-b2b/dia/${encodeURIComponent(fecha)}/export`, {
+// Bypasses request() on purpose, mismo motivo que exportPedidosB2bXlsx — archivo Excel, no JSON.
+export async function exportPedidosB2bDiaXlsx(token: string, fecha: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}/pedidos-b2b/dia/${encodeURIComponent(fecha)}/export-xlsx`, {
     headers: authHeaders(token),
   });
 

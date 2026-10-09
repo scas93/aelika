@@ -7,8 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { PedidosB2bService } from './pedidos-b2b.service';
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
@@ -21,6 +24,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../../generated/prisma/enums';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { TenantB2bPanelGuard } from './tenant-b2b.guard';
+import { XLSX_CONTENT_TYPE } from '../common/xlsx';
+import { fechaMexicoYMD } from './pedidos-b2b-logica';
 
 // Crear, pagar y corregir entregas cerradas: solo Gerente/Dueño. Editar, confirmar, cancelar y cerrar entregas: los 3
 // roles (el Operador no puede editar ni cancelar un pedido Pagado). GET abierto a los 3 roles.
@@ -50,6 +55,14 @@ export class PedidosB2bController {
     return this.pedidosB2bService.exportCsv(query);
   }
 
+  // Excel (.xlsx) de Históricos y Pedidos activos (los 3 roles). El CSV de arriba queda sin uso por el panel.
+  @Get('export-xlsx')
+  async exportXlsx(@Query() query: ExportPedidosB2bQueryDto, @Res({ passthrough: true }) res: Response) {
+    const buffer = await this.pedidosB2bService.exportPedidosXlsx(query);
+    res.set({ 'Content-Type': XLSX_CONTENT_TYPE, 'Content-Disposition': `attachment; filename="pedidos-${fechaMexicoYMD()}.xlsx"` });
+    return new StreamableFile(buffer);
+  }
+
   // "Pedidos del día" — no colisiona con @Get(':id') (distinto número de
   // segmentos, Express solo hace match exacto de segmentos para :id), pero
   // se agrupa aquí junto al resto de rutas estáticas/especiales por
@@ -64,6 +77,14 @@ export class PedidosB2bController {
   @Header('Content-Disposition', 'attachment; filename="pedidos-b2b-dia.csv"')
   exportEntregasDiaCsv(@Param('fecha') fecha: string) {
     return this.pedidosB2bService.exportEntregasDiaCsv(fecha);
+  }
+
+  // Excel (.xlsx) de Entregas del día (los 3 roles). Antes de @Get(':id') por el mismo motivo que el resto de rutas estáticas.
+  @Get('dia/:fecha/export-xlsx')
+  async exportEntregasDiaXlsx(@Param('fecha') fecha: string, @Res({ passthrough: true }) res: Response) {
+    const buffer = await this.pedidosB2bService.exportEntregasDiaXlsx(fecha);
+    res.set({ 'Content-Type': XLSX_CONTENT_TYPE, 'Content-Disposition': `attachment; filename="entregas-${fecha}.xlsx"` });
+    return new StreamableFile(buffer);
   }
 
   @Get(':id')
