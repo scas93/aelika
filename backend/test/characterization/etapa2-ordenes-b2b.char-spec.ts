@@ -152,7 +152,23 @@ describe('Etapa 2 · órdenes B2B sobre la orden centralizada', () => {
       await invariante(p.id);
     });
 
-    it('defensa: no modifica una entrega que ya no está pendiente (409) y no cambia nada', async () => {
+    it('defensa: no modifica una entrega cerrada (409 legible) y no cambia nada', async () => {
+      const p = await crearAdminB2b(s.h, s.base);
+      const e = (await entregas(p.id))[0];
+      await prisma().entrega.update({ where: { id: e.id }, data: { estado: 'ENTREGADA' } });
+      const res = await dueno().patch(`/pedidos-b2b/${p.id}/items`).send({
+        items: [
+          { productId: A(), distribucion: [{ dia: 'LUNES', cantidad: 1 }, { dia: 'MIERCOLES', cantidad: 6 }] },
+          { productId: B(), distribucion: [{ dia: 'VIERNES', cantidad: 4 }] },
+        ],
+      });
+      expectError(res, 409, 'La entrega del lun 5 de oct ya está cerrada (Entregada). Para cambiarla usa «Corregir» en esa entrega.');
+      const sigue = await entregas(p.id);
+      expect(sigue.find((x) => x.id === e.id)!.items.map((i) => i.cantidad)).toStrictEqual([6]); // rollback: nada cambió
+      await invariante(p.id);
+    });
+
+    it('una entrega Lista (aún no cerrada) SÍ se puede editar, igual que una Pendiente', async () => {
       const p = await crearAdminB2b(s.h, s.base);
       const e = (await entregas(p.id))[0];
       await prisma().entrega.update({ where: { id: e.id }, data: { estado: 'LISTA' } });
@@ -162,9 +178,7 @@ describe('Etapa 2 · órdenes B2B sobre la orden centralizada', () => {
           { productId: B(), distribucion: [{ dia: 'VIERNES', cantidad: 4 }] },
         ],
       });
-      expectError(res, 409, 'La entrega del 2026-10-05 ya no está pendiente — no se puede modificar');
-      const sigue = await entregas(p.id);
-      expect(sigue.find((x) => x.id === e.id)!.items.map((i) => i.cantidad)).toStrictEqual([6]); // rollback: nada cambió
+      expect(res.status).toBe(200);
       await invariante(p.id);
     });
 

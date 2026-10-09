@@ -24,19 +24,11 @@ export const ESTADO_VARIANT: Record<PedidoB2bEstado, BadgeVariant> = {
 // "Pedidos activos" = Por confirmar, Confirmado y En proceso (y no cancelado). Completado y Cancelado van a Históricos.
 export const ESTADOS_ACTIVOS: PedidoB2bEstado[] = ["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "EN_PROCESO"];
 
-// Los 5 estados del filtro de Históricos. CANCELADO no es un valor del backend: se manda como `cancelado=true`.
-export type EstadoFiltroHistorico = Exclude<PedidoB2bEstado, "DESPACHADO"> | "CANCELADO";
-export const ESTADOS_FILTRO_HISTORICO: EstadoFiltroHistorico[] = [
-  "PENDIENTE_CONFIRMACION",
-  "CONFIRMADO_SURTIENDO",
-  "EN_PROCESO",
-  "COMPLETADO",
-  "CANCELADO",
-];
+// Históricos solo muestra pedidos Completados y Cancelados: el filtro de estado se limita a esos dos (los pedidos activos viven
+// en Pedidos activos). CANCELADO no es un valor del backend: se manda como `cancelado=true`.
+export type EstadoFiltroHistorico = "COMPLETADO" | "CANCELADO";
+export const ESTADOS_FILTRO_HISTORICO: EstadoFiltroHistorico[] = ["COMPLETADO", "CANCELADO"];
 export const ESTADO_FILTRO_LABEL: Record<EstadoFiltroHistorico, string> = {
-  PENDIENTE_CONFIRMACION: ESTADO_LABEL.PENDIENTE_CONFIRMACION,
-  CONFIRMADO_SURTIENDO: ESTADO_LABEL.CONFIRMADO_SURTIENDO,
-  EN_PROCESO: ESTADO_LABEL.EN_PROCESO,
   COMPLETADO: ESTADO_LABEL.COMPLETADO,
   CANCELADO: "Cancelado",
 };

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PublicPedidoB2bProduct } from "@/lib/api";
+import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 
 const OVERLAY = "fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4";
 const CARD = "w-full max-w-sm rounded-t-xl bg-mayoreo-card p-5 shadow-lg sm:rounded-xl";
@@ -22,10 +23,12 @@ export default function ProductoDetalleModal({
   onConfirm: (cantidad: number) => void;
   onClose: () => void;
 }) {
-  const [cantidad, setCantidad] = useState(cantidadInicial);
+  // Puede quedar vacío mientras se escribe; vacío cuenta como 0 al guardar.
+  const [campo, setCampo] = useState<Cantidad>(cantidadInicial);
+  const cantidad = cantidadNumero(campo);
 
   function incrementar(delta: number) {
-    setCantidad((prev) => Math.max(0, prev + delta));
+    setCampo((prev) => Math.max(0, cantidadNumero(prev) + delta));
   }
 
   return (
@@ -55,12 +58,11 @@ export default function ProductoDetalleModal({
             >
               −
             </button>
-            <input
-              type="number"
-              min={0}
-              value={cantidad}
-              onChange={(e) => setCantidad(Math.max(0, Number(e.target.value) || 0))}
-              className="mayoreo-input w-24 text-center text-lg font-semibold"
+            <CantidadInput
+              value={campo}
+              onChange={setCampo}
+              aria-label="Cantidad total"
+              className="mayoreo-input w-24 text-center text-lg font-semibold placeholder:font-normal placeholder:text-mayoreo-ink-soft/40"
             />
             <button
               type="button"
@@ -82,7 +84,7 @@ export default function ProductoDetalleModal({
             <button type="button" onClick={() => incrementar(10)} className={INCREMENT_BTN}>
               +10
             </button>
-            <button type="button" onClick={() => setCantidad(0)} className={INCREMENT_BTN}>
+            <button type="button" onClick={() => setCampo(0)} className={INCREMENT_BTN}>
               Reiniciar
             </button>
           </div>

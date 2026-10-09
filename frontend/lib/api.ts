@@ -1592,6 +1592,12 @@ export interface PedidoB2bDetalle extends PublicPedidoB2b {
 
 export interface ListPedidosB2bFilter extends FiltroImporte {
   estado?: PedidoB2bEstado;
+  // Multi-valor (Pedidos activos pide los 3 estados activos de una vez).
+  estados?: PedidoB2bEstado[];
+  // Históricos: solo pedidos Completados y Cancelados.
+  soloHistorico?: boolean;
+  // Solo pedidos de semanas ANTERIORES a esta fecha ("YYYY-MM-DD"): los activos que quedaron de semanas pasadas.
+  semanaAntesDe?: string;
   cancelado?: boolean;
   desde?: string;
   hasta?: string;
@@ -1608,7 +1614,10 @@ export interface ListPedidosB2bFilter extends FiltroImporte {
 
 export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   const params = new URLSearchParams();
-  if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.estados && filter.estados.length > 0) params.set("estados", filter.estados.join(","));
+  else if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.soloHistorico) params.set("soloHistorico", "true");
+  if (filter?.semanaAntesDe) params.set("semanaAntesDe", filter.semanaAntesDe);
   if (filter?.cancelado !== undefined) params.set("cancelado", String(filter.cancelado));
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
@@ -1750,6 +1759,7 @@ export interface ExportPedidosB2bFilter {
   hasta?: string;
   negocioNombre?: string;
   estadoPago?: PedidoB2bEstadoPago;
+  soloHistorico?: boolean;
 }
 
 // Bypasses request() on purpose, igual que exportOrdersHistoricoCsv — este
@@ -1763,6 +1773,7 @@ export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
   if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  if (filter?.soloHistorico) params.set("soloHistorico", "true");
   const query = params.toString();
 
   const res = await fetch(`${API_URL}/pedidos-b2b/export${query ? `?${query}` : ""}`, {

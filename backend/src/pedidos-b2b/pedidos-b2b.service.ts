@@ -118,6 +118,8 @@ export class PedidosB2bService {
     estado?: EstadoB2bFiltro;
     estados?: EstadoB2bFiltro[];
     estadoPago?: EstadoPagoB2bFiltro;
+    soloHistorico?: boolean;
+    semanaAntesDe?: string;
     cancelado?: boolean;
     desde?: string;
     hasta?: string;
@@ -128,10 +130,12 @@ export class PedidosB2bService {
   }): Prisma.OrderWhereInput {
     const detalle: Prisma.DetalleB2BWhereInput = {
       semanaInicio:
-        query.desde || query.hasta
+        query.desde || query.hasta || query.semanaAntesDe
           ? {
               gte: query.desde ? new Date(query.desde) : undefined,
               lte: query.hasta ? new Date(query.hasta) : undefined,
+              // semanaInicio estrictamente anterior (pedidos activos de semanas pasadas)
+              lt: query.semanaAntesDe ? new Date(query.semanaAntesDe) : undefined,
             }
           : undefined,
       // Coincidencia parcial, case-insensitive — usado por "Históricos"
@@ -155,6 +159,8 @@ export class PedidosB2bService {
           : undefined,
       cancelado: query.cancelado,
       estadoPago: query.estadoPago ? (query.estadoPago as EstadoPago) : undefined,
+      // Históricos: solo Completados (incluye el DESPACHADO heredado) y Cancelados.
+      ...(query.soloHistorico ? { AND: [{ OR: [{ cancelado: true }, { estadoPedido: { in: ESTADOS_B2B_COMPLETADOS } }] }] } : {}),
       total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
       // Siempre hay detalle en una orden B2B; el filtro solo se agrega si realmente se filtra por él.
       ...(detalle.semanaInicio || detalle.negocioNombre ? { detalleB2b: detalle } : {}),

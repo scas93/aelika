@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ApiError, type CorregirEntregaPedidoB2bPayload, type PedidoB2bDetalle, type PedidoB2bEntrega, type Product } from "@/lib/api";
 import { DIAS_SEMANA_PEDIDO_B2B } from "@/lib/api";
+import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import Badge from "../_components/Badge";
 import Button from "../_components/Button";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT } from "./estado";
@@ -19,7 +20,8 @@ function formatCierre(iso: string): string {
 interface LineaCorreccion {
   productId: string;
   nombreProducto: string;
-  cantidad: number;
+  // Puede quedar vacía mientras se escribe, pero una línea en 0 no existe: vacía/0 bloquea Guardar (usa Quitar).
+  cantidad: Cantidad;
 }
 
 // Editor de la corrección del admin sobre UNA entrega ya cerrada: estado (Entregada / No recogida) y el conjunto completo
@@ -43,7 +45,8 @@ function CorregirEntregaForm({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const invalido = lineas.length === 0 || lineas.some((l) => !Number.isInteger(l.cantidad) || l.cantidad < 1);
+  const sinCantidad = lineas.some((l) => cantidadNumero(l.cantidad) < 1);
+  const invalido = lineas.length === 0 || sinCantidad;
   const disponibles = productos?.filter((p) => !lineas.some((l) => l.productId === p.id)) ?? [];
 
   function agregar() {
@@ -57,7 +60,7 @@ function CorregirEntregaForm({
     setGuardando(true);
     setError(null);
     try {
-      await onGuardar({ estado, items: lineas.map((l) => ({ productId: l.productId, cantidad: l.cantidad })) });
+      await onGuardar({ estado, items: lineas.map((l) => ({ productId: l.productId, cantidad: cantidadNumero(l.cantidad) })) });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo guardar la corrección");
       setGuardando(false);
@@ -79,17 +82,13 @@ function CorregirEntregaForm({
         {lineas.map((l) => (
           <li key={l.productId} className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-sm text-admin-ink">{l.nombreProducto}</span>
-            <input
-              type="number"
+            <CantidadInput
               min={1}
-              inputMode="numeric"
               value={l.cantidad}
-              onChange={(e) =>
-                setLineas((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, cantidad: Math.trunc(Number(e.target.value)) || 0 } : x)))
-              }
+              onChange={(v) => setLineas((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, cantidad: v } : x)))}
               disabled={guardando}
               aria-label={`Cantidad de ${l.nombreProducto}`}
-              className="admin-input w-20 px-0! py-1.5! text-center font-semibold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="admin-input w-20 px-0! py-1.5! text-center font-semibold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:font-normal placeholder:text-admin-ink-soft/40"
             />
             <button
               type="button"
@@ -116,6 +115,7 @@ function CorregirEntregaForm({
         </Button>
       </div>
       {lineas.length === 0 && <p className="text-xs text-red-600">La entrega necesita al menos un producto.</p>}
+      {sinCantidad && lineas.length > 0 && <p className="text-xs text-red-600">Indica una cantidad o usa Quitar.</p>}
       <p className="text-xs text-admin-ink-soft">
         Al guardar, todas las líneas del pedido toman el precio actual del catálogo y el total se recalcula. El estado del pedido y el
         pago no cambian.
@@ -164,7 +164,7 @@ export default function EntregasLista({
       const d = item.distribucion.find((x) => x.dia === entrega.dia);
       if (!d) continue;
       if (!item.productId) bloqueada = true;
-      else lineas.push({ productId: item.productId, nombreProducto: item.nombreProducto, cantidad: d.cantidad });
+      else lineas.push({ productId: item.productId, nombreProducto: item.nombreProducto, cantidad: d.cantidad as Cantidad });
     }
     return { lineas, bloqueada };
   }

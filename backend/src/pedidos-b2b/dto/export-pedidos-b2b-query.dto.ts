@@ -47,6 +47,19 @@ export class ExportPedidosB2bQueryDto {
   @IsBoolean()
   cancelado?: boolean;
 
+  // Históricos: solo pedidos Completados y Cancelados. Parámetro aparte (en vez de cambiar el listado sin filtros) para no
+  // alterar el contrato de los demás consumidores de GET /pedidos-b2b (Pedidos activos pide por semana y por estado).
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  soloHistorico?: boolean;
+
+  // Solo pedidos de semanas ANTERIORES a esta fecha (semanaInicio < semanaAntesDe, "YYYY-MM-DD"): los pedidos activos que
+  // quedaron de semanas pasadas. Se combina con el resto de filtros.
+  @IsOptional()
+  @IsDateString()
+  semanaAntesDe?: string;
+
   // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
   @IsOptional()
   @IsIn(ESTADOS_PAGO_B2B_FILTRO)

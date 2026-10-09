@@ -48,6 +48,9 @@ export default function PedidosB2bPage() {
   const [semanaKey, setSemanaKey] = useState<SemanaKey>("actual");
 
   const [pedidos, setPedidos] = useState<PedidoB2bReportable[] | null>(null);
+  // Pedidos aún activos (Por confirmar, Confirmado, En proceso) de semanas ANTERIORES a la semana en curso: nunca deben quedar
+  // sin un lugar donde verse. Se muestran aparte de la vista semanal, sin importar qué semana esté seleccionada.
+  const [anteriores, setAnteriores] = useState<PedidoB2bReportable[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -96,7 +99,40 @@ export default function PedidosB2bPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, semanaSeleccionada?.inicio]);
 
+  // semanaInicio < semana en curso, activos y no cancelados; los más viejos primero (son los que más urgen).
+  async function fetchAnteriores(actualInicio: string): Promise<PedidoB2bReportable[]> {
+    const result = await fetchPedidosB2b(token, {
+      estados: ESTADOS_ACTIVOS,
+      cancelado: false,
+      semanaAntesDe: actualInicio,
+      limit: LIMIT,
+    });
+    return [...result.data].sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio) || Number(a.folio) - Number(b.folio));
+  }
+
+  const actualInicio = semanas?.actual.inicio;
+  useEffect(() => {
+    if (!actualInicio) return;
+    let cancelled = false;
+    fetchAnteriores(actualInicio)
+      .then((data) => {
+        if (!cancelled) setAnteriores(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAnteriores([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, actualInicio]);
+
   function reload() {
+    if (actualInicio) {
+      fetchAnteriores(actualInicio)
+        .then(setAnteriores)
+        .catch(() => {});
+    }
     if (!semanaSeleccionada) return;
     fetchSemana(semanaSeleccionada)
       .then(setPedidos)
@@ -109,6 +145,12 @@ export default function PedidosB2bPage() {
     if (!q) return pedidos;
     return pedidos.filter((p) => p.negocioNombre.toLowerCase().includes(q));
   }, [pedidos, busqueda]);
+
+  const anterioresFiltrados = useMemo(() => {
+    if (!anteriores) return [];
+    const q = busqueda.trim().toLowerCase();
+    return q ? anteriores.filter((p) => p.negocioNombre.toLowerCase().includes(q)) : anteriores;
+  }, [anteriores, busqueda]);
 
   async function handleExport() {
     if (!semanaSeleccionada) return;
@@ -136,8 +178,57 @@ export default function PedidosB2bPage() {
     }
   }
 
+  // Fila de un pedido; las de "semanas anteriores" llevan una marca visible para no confundirlas con la semana seleccionada.
+  function renderPedido(pedido: PedidoB2bReportable, anterior: boolean) {
+    return (
+      <li key={pedido.id}>
+        <button type="button" onClick={() => setSelectedId(pedido.id)} className="block w-full text-left">
+          <Card padding={20} className="transition hover:border-mayoreo-accent">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-admin-ink">#{pedido.folio}</span>
+                  <span className="text-sm font-semibold text-admin-ink">{pedido.negocioNombre}</span>
+                </div>
+                <span className="text-sm text-admin-ink-soft">
+                  {pedido.totalPiezas} piezas · Semana del {formatFecha(pedido.semanaInicio)}
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1.5">
+                  {anterior && <Badge variant="advertencia">Semana anterior</Badge>}
+                  <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+                </div>
+                <span className="text-sm font-bold text-admin-ink">{formatMoney(pedido.total)}</span>
+              </div>
+            </div>
+          </Card>
+        </button>
+      </li>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {anteriores && anteriores.length > 0 && (
+        <section
+          aria-label="Pedidos activos de semanas anteriores"
+          className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-4"
+        >
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-base font-bold text-admin-ink">De semanas anteriores ({anteriores.length})</h2>
+            <p className="text-sm text-admin-ink-soft">
+              Pedidos que siguen activos de semanas pasadas. Confírmalos, ciérralos o cancélalos para que no se queden pendientes.
+            </p>
+          </div>
+          {anterioresFiltrados.length === 0 ? (
+            <p className="text-sm text-admin-ink-soft">Ninguno coincide con la búsqueda.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">{anterioresFiltrados.map((pedido) => renderPedido(pedido, true))}</ul>
+          )}
+        </section>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button
@@ -186,31 +277,7 @@ export default function PedidosB2bPage() {
           {busqueda ? "No hay pedidos activos que coincidan con esa búsqueda." : "No hay pedidos activos para esta semana."}
         </Card>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {filtrados.map((pedido) => (
-            <li key={pedido.id}>
-              <button type="button" onClick={() => setSelectedId(pedido.id)} className="block w-full text-left">
-                <Card padding={20} className="transition hover:border-mayoreo-accent">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-bold text-admin-ink">#{pedido.folio}</span>
-                        <span className="text-sm font-semibold text-admin-ink">{pedido.negocioNombre}</span>
-                      </div>
-                      <span className="text-sm text-admin-ink-soft">
-                        {pedido.totalPiezas} piezas · Semana del {formatFecha(pedido.semanaInicio)}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
-                      <span className="text-sm font-bold text-admin-ink">{formatMoney(pedido.total)}</span>
-                    </div>
-                  </div>
-                </Card>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ul className="flex flex-col gap-2">{filtrados.map((pedido) => renderPedido(pedido, false))}</ul>
       )}
 
       <DetallePanel pedidoId={selectedId} onClose={() => setSelectedId(null)} onChanged={reload} />

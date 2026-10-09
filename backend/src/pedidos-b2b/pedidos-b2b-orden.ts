@@ -16,6 +16,20 @@ import { entregaAtrasada, estadoB2bVisible } from './pedidos-b2b-estados';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const ESTADO_ENTREGA_TEXTO: Record<EstadoEntrega, string> = {
+  PENDIENTE: 'Pendiente',
+  LISTA: 'Lista',
+  ENTREGADA: 'Entregada',
+  NO_RECOGIDA: 'No recogida',
+  CANCELADA: 'Cancelada',
+};
+/** "mar 6 de oct" — fecha de una entrega (@db.Date, medianoche UTC) en español para los mensajes al usuario. */
+export function fechaLegible(fecha: Date): string {
+  return `${DIAS_CORTOS[fecha.getUTCDay()]} ${fecha.getUTCDate()} de ${MESES_CORTOS[fecha.getUTCMonth()]}`;
+}
+
 /** Fecha real de una entrega: lunes de la semana del pedido + offset del día (LUNES = 0 … DOMINGO = 6). */
 export function fechaDeDia(semanaInicio: Date, dia: (typeof DIAS_EN_ORDEN)[number]): Date {
   return new Date(semanaInicio.getTime() + DIAS_EN_ORDEN.indexOf(dia) * DIA_MS);
@@ -146,8 +160,12 @@ export async function sincronizarOrdenB2b(
   });
   const entregas = await tx.entrega.findMany({ where: { orderId }, orderBy: { fecha: 'asc' }, include: { items: true } });
 
+  // Entrega CERRADA (Entregada / No recogida / Cancelada): no se edita por aquí. Pendiente y Lista sí.
+  const cerrada = (e: { estado: EstadoEntrega }) => e.estado !== EstadoEntrega.PENDIENTE && e.estado !== EstadoEntrega.LISTA;
   const noPendiente = (e: { estado: EstadoEntrega; fecha: Date }): never => {
-    throw new ConflictException(`La entrega del ${e.fecha.toISOString().slice(0, 10)} ya no está pendiente — no se puede modificar`);
+    throw new ConflictException(
+      `La entrega del ${fechaLegible(e.fecha)} ya está cerrada (${ESTADO_ENTREGA_TEXTO[e.estado]}). Para cambiarla usa «Corregir» en esa entrega.`,
+    );
   };
 
   // --- ítems
@@ -188,7 +206,7 @@ export async function sincronizarOrdenB2b(
     if (idsDeseados.has(viejo.id)) continue;
     for (const ei of viejo.entregaItems) {
       const e = entregas.find((x) => x.id === ei.entregaId);
-      if (e && e.estado !== EstadoEntrega.PENDIENTE) noPendiente(e);
+      if (e && cerrada(e)) noPendiente(e);
     }
     await tx.orderItem.delete({ where: { id: viejo.id } });
   }
@@ -199,7 +217,7 @@ export async function sincronizarOrdenB2b(
 
   for (const e of entregas) {
     if (deseadas.has(e.fecha.getTime()) && entregaPorFecha.get(e.fecha.getTime())?.id === e.id) continue;
-    if (e.estado !== EstadoEntrega.PENDIENTE) noPendiente(e);
+    if (cerrada(e)) noPendiente(e);
     await tx.entrega.delete({ where: { id: e.id } });
   }
 
@@ -222,17 +240,17 @@ export async function sincronizarOrdenB2b(
       const fila = filas.find((f) => f.orderItemId === orderItemId);
       if (fila) {
         if (fila.cantidad !== cantidad) {
-          if (existente!.estado !== EstadoEntrega.PENDIENTE) noPendiente(existente!);
+          if (cerrada(existente!)) noPendiente(existente!);
           await tx.entregaItem.update({ where: { id: fila.id }, data: { cantidad } });
         }
       } else {
-        if (existente && existente.estado !== EstadoEntrega.PENDIENTE) noPendiente(existente);
+        if (existente && cerrada(existente)) noPendiente(existente);
         await tx.entregaItem.create({ data: { tenantId, entregaId, orderItemId, cantidad } });
       }
     }
     for (const fila of filas) {
       if (idsVigentes.has(fila.orderItemId)) continue;
-      if (existente!.estado !== EstadoEntrega.PENDIENTE) noPendiente(existente!);
+      if (cerrada(existente!)) noPendiente(existente!);
       await tx.entregaItem.delete({ where: { id: fila.id } });
     }
   }

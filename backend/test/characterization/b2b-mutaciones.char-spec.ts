@@ -123,7 +123,7 @@ describe('B2B · mutaciones', () => {
       await cerrarEntregasB2b(api(), completado.id);
       const rechazo = await api().patch(`/pedidos-b2b/${completado.id}/items`).send(cuerpo());
       expect(rechazo.status).toBe(409);
-      expect(rechazo.body.message).toMatch(/ya no está pendiente — no se puede modificar/);
+      expect(rechazo.body.message).toMatch(/ya está cerrada \(Entregada\)\. Para cambiarla usa «Corregir» en esa entrega\./);
 
       // CAMBIA A PROPÓSITO (Fase 1b): un pedido Pagado ya NO bloquea la edición de Gerente/Dueño (antes: 409 "crea un pedido
       // nuevo"). Sigue bloqueado para el Operador (regla puedeEditarPedidoPagado, probada en b2b-pagos-correccion). El pago no cambia.

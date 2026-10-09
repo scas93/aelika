@@ -183,7 +183,8 @@ describe('B2B · estados por entrega', () => {
       await dueno().patch(ruta(p.id, e1.id)).send({ estado: 'ENTREGADA' }).expect(200);
       const r = await dueno().patch(`/pedidos-b2b/${p.id}/items`).send(cuerpo(s.base.productoA.id, [['MIERCOLES', 12]]));
       expect(r.status).toBe(409);
-      expect(r.body.message).toMatch(/ya no está pendiente — no se puede modificar/);
+      // Fase 1b: mensaje legible (fecha en español, estado real y a dónde ir).
+      expect(r.body.message).toBe('La entrega del lun 5 de oct ya está cerrada (Entregada). Para cambiarla usa «Corregir» en esa entrega.');
       expect(await estados(p.id)).toStrictEqual(['ENTREGADA', 'PENDIENTE', 'PENDIENTE']);
     });
 

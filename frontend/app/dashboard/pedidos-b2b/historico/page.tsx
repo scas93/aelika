@@ -141,6 +141,8 @@ export default function PedidosB2bHistoricoPage() {
       estado: estado && estado !== "CANCELADO" ? estado : undefined,
       negocioNombre: negocioNombre?.trim() || undefined,
       estadoPago: estadoPago ?? undefined,
+      // Históricos nunca muestra pedidos activos (Por confirmar, Confirmado, En proceso), ni con filtros vacíos.
+      soloHistorico: true,
       cancelado: estado === "CANCELADO" ? true : estado ? false : undefined,
       operador: importe?.operador,
       valor: importe?.valor,

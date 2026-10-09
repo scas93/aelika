@@ -11,6 +11,7 @@
  *      esté Pendiente de pago.
  *  3. Entregas del día: ahora incluyen las entregas CERRADAS (Entregada / No recogida) con su estado; el golden solo traía
  *     pedidos activos. Se descartan las filas con entrega cerrada (en el escenario solo p1, ya completado).
+ *  5. (Fase 1b) `lista?estados=…` ahora filtra de verdad por `estados` (antes lo ignoraba): el Despachado p1 sale de esa consulta.
  *  4. (solo flujo por API, `cancelacionRecalcula`) El total de un pedido CANCELADO solo cuenta entregas no canceladas: p5
  *     pasa de $450 a $0. En el flujo "filas legacy → migración" NO aplica: la migración de la Etapa 2 conserva el total
  *     histórico ($450) y el recálculo lo hace el script de datos b2b-estados (`--totales-cancelados`).
@@ -62,8 +63,14 @@ export function adaptarAlDorado(nombre: string, recibido: Dorado, op: OpcionesEx
   return { ...recibido, body };
 }
 
-/** El golden de una consulta, ajustado SOLO donde la excepción (4) cambia QUÉ filas devuelve (no solo un valor). */
+/** El golden de una consulta, ajustado SOLO donde una excepción cambia QUÉ filas devuelve (no solo un valor). */
 export function ajustarDorado(nombre: string, dorado: Dorado, op: OpcionesExcepciones): Dorado {
+  // (5) Fase 1b: GET /pedidos-b2b ahora respeta `estados=A,B` (antes el listado lo ignoraba y devolvía todos los no cancelados,
+  // incluido el Despachado p1). Con los 3 estados activos, el Completado/Despachado ya no entra.
+  if (nombre === 'lista?estados+cancelado=false') {
+    const data = dorado.body.data.filter((r: any) => r.folio !== '1');
+    return { ...dorado, body: { ...dorado.body, data, total: dorado.body.total - (dorado.body.data.length - data.length) } };
+  }
   if (op.cancelacionRecalcula && nombre === 'lista?importe entre') {
     // p5 (cancelado, $450 en el golden) ya no cae en el rango 300–545 porque ahora vale $0.
     const data = dorado.body.data.filter((r: any) => r.folio !== '5');

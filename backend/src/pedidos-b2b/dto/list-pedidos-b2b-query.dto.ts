@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -44,6 +45,26 @@ export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   )
   @IsBoolean()
   cancelado?: boolean;
+
+  // Variante multi-valor de `estado` ("estados=A,B"), como en el export: Pedidos activos pide los 3 estados activos de una vez.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsIn(ESTADOS_B2B_FILTRO, { each: true })
+  estados?: EstadoB2bFiltro[];
+
+  // Históricos: solo pedidos Completados y Cancelados. Parámetro aparte (en vez de cambiar el listado sin filtros) para no
+  // alterar el contrato de los demás consumidores de GET /pedidos-b2b (Pedidos activos pide por semana y por estado).
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  soloHistorico?: boolean;
+
+  // Solo pedidos de semanas ANTERIORES a esta fecha (semanaInicio < semanaAntesDe, "YYYY-MM-DD"): los pedidos activos que
+  // quedaron de semanas pasadas. Se combina con el resto de filtros.
+  @IsOptional()
+  @IsDateString()
+  semanaAntesDe?: string;
 
   // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
   @IsOptional()

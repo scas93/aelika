@@ -20,6 +20,7 @@ import {
   type Product,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import { ESTADO_VARIANT, ESTADO_LABEL, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT, puedeCerrarEntregas } from "./estado";
 import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
@@ -36,16 +37,17 @@ interface EditItem {
   localId: string;
   productId: string;
   nombreProducto: string;
-  distribucion: Record<DiaSemanaPedidoB2b, number>;
+  // Una cantidad puede quedar vacía mientras se escribe; vacío cuenta como 0 al guardar.
+  distribucion: Record<DiaSemanaPedidoB2b, Cantidad>;
 }
 
-function distribucionVacia(): Record<DiaSemanaPedidoB2b, number> {
+function distribucionVacia(): Record<DiaSemanaPedidoB2b, Cantidad> {
   return DIAS_SEMANA_PEDIDO_B2B.reduce(
     (acc, { value }) => {
       acc[value] = 0;
       return acc;
     },
-    {} as Record<DiaSemanaPedidoB2b, number>,
+    {} as Record<DiaSemanaPedidoB2b, Cantidad>,
   );
 }
 
@@ -72,7 +74,7 @@ function itemsEditablesDesdePedido(pedido: PedidoB2bDetalle): { items: EditItem[
 }
 
 function totalItem(item: EditItem): number {
-  return DIAS_SEMANA_PEDIDO_B2B.reduce((sum, { value }) => sum + (item.distribucion[value] || 0), 0);
+  return DIAS_SEMANA_PEDIDO_B2B.reduce((sum, { value }) => sum + cantidadNumero(item.distribucion[value]), 0);
 }
 
 export default function DetallePanel({
@@ -100,6 +102,7 @@ export default function DetallePanel({
   const [guardando, setGuardando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [pagando, setPagando] = useState(false);
+  const [confirmPago, setConfirmPago] = useState<"marcar" | "desmarcar" | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -137,11 +140,11 @@ export default function DetallePanel({
     setActionError(null);
   }
 
-  function setCantidadDia(localId: string, dia: DiaSemanaPedidoB2b, cantidad: number) {
+  function setCantidadDia(localId: string, dia: DiaSemanaPedidoB2b, cantidad: Cantidad) {
     setEditItems((prev) =>
       prev.map((item) =>
         item.localId === localId
-          ? { ...item, distribucion: { ...item.distribucion, [dia]: Math.max(0, cantidad) } }
+          ? { ...item, distribucion: { ...item.distribucion, [dia]: cantidad } }
           : item,
       ),
     );
@@ -179,7 +182,7 @@ export default function DetallePanel({
           productId: item.productId,
           distribucion: DIAS_SEMANA_PEDIDO_B2B.map(({ value }) => ({
             dia: value,
-            cantidad: item.distribucion[value] || 0,
+            cantidad: cantidadNumero(item.distribucion[value]),
           })),
         })),
       );
@@ -238,6 +241,13 @@ export default function DetallePanel({
   }
   const pagado = pedido?.estadoPago === "PAGADO";
 
+  // Días cuya entrega ya está cerrada (Entregada / No recogida): en la edición se ven bloqueados con su estado — se cambian
+  // con "Corregir" en esa entrega, no aquí (el servidor también lo rechaza con 409).
+  const diasCerrados = new Map<DiaSemanaPedidoB2b, "ENTREGADA" | "NO_RECOGIDA">();
+  for (const e of pedido?.entregas ?? []) {
+    if (e.estado === "ENTREGADA" || e.estado === "NO_RECOGIDA") diasCerrados.set(e.dia, e.estado);
+  }
+
   // Pago (solo Gerente/Dueño), en cualquier estado del pedido, incluso Cancelado. No mueve el estado del pedido.
   async function handlePago(marcar: boolean) {
     if (!pedido) return;
@@ -246,9 +256,11 @@ export default function DetallePanel({
     try {
       if (marcar) await marcarPagadoPedidoB2b(token, pedido.id);
       else await desmarcarPagadoPedidoB2b(token, pedido.id);
+      setConfirmPago(null);
       setPedido(await fetchPedidoB2b(token, pedido.id)); // la respuesta del pago no trae las entregas ni la fecha: se vuelve a leer
       onChanged();
     } catch (err) {
+      setConfirmPago(null);
       setActionError(err instanceof ApiError ? err.message : "No se pudo actualizar el pago");
     } finally {
       setPagando(false);
@@ -303,18 +315,32 @@ export default function DetallePanel({
             <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-bold text-admin-ink">Pago</span>
-            <div className="flex items-center gap-2">
-              <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
-              {pagado && (
-                <span className="text-xs text-admin-ink-soft">
-                  {pedido.pagadoAt
-                    ? new Date(pedido.pagadoAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
-                    : "Fecha no registrada"}
-                </span>
-              )}
+          {/* Pago: tarjeta propia con su botón a todo lo ancho — antes era un botón más en la fila de acciones y se perdía junto a
+              Confirmar y Cancelar. Marcar/Desmarcar piden confirmación (modal con folio y total). */}
+          <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-bold text-admin-ink">Pago</span>
+              <div className="flex items-center gap-2">
+                <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
+                {pagado && (
+                  <span className="text-xs text-admin-ink-soft">
+                    {pedido.pagadoAt
+                      ? new Date(pedido.pagadoAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      : "Fecha no registrada"}
+                  </span>
+                )}
+              </div>
             </div>
+            {canWrite && (
+              <Button
+                variant={pagado ? "secondary" : "primary"}
+                onClick={() => setConfirmPago(pagado ? "desmarcar" : "marcar")}
+                disabled={pagando || editMode}
+                className="w-full"
+              >
+                {pagado ? "Desmarcar pagado" : "Marcar pagado"}
+              </Button>
+            )}
           </div>
 
           {!editMode && pedido.entregas && pedido.entregas.length > 0 && (
@@ -365,6 +391,15 @@ export default function DetallePanel({
           ) : (
             <div className="flex flex-col gap-3">
               <span className="text-sm font-bold text-admin-ink">Editar productos</span>
+              {diasCerrados.size > 0 && (
+                <p className="rounded-[var(--radius-admin-control)] bg-admin-bg p-2 text-xs text-admin-ink-soft">
+                  Los días con entrega cerrada están bloqueados:{" "}
+                  {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) => diasCerrados.has(value))
+                    .map(({ value, label }) => `${label.slice(0, 3)} (${diasCerrados.get(value) === "ENTREGADA" ? "Entregada" : "No recogida"})`)
+                    .join(", ")}
+                  . Para cambiarlos usa «Corregir» en esa entrega.
+                </p>
+              )}
               {itemsOmitidos > 0 && (
                 <p className="text-xs text-admin-ink-soft">
                   {itemsOmitidos === 1
@@ -400,21 +435,28 @@ export default function DetallePanel({
                         espacio del número. Sin las flechas nativas del input para dar el ancho al texto (las flechas del
                         teclado ↑/↓ siguen funcionando). Un 0 se atenúa para ver de un vistazo qué días tienen pedido. */}
                     <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
-                      {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => (
-                        <label key={value} className="flex min-w-0 flex-col items-center gap-1">
-                          <span className="text-[10px] font-medium text-admin-ink-soft">{label.slice(0, 3)}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            inputMode="numeric"
-                            value={item.distribucion[value]}
-                            onChange={(e) => setCantidadDia(item.localId, value, Number(e.target.value) || 0)}
-                            className={`admin-input w-full min-w-0 px-0! py-1.5! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-                              item.distribucion[value] > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"
-                            }`}
-                          />
-                        </label>
-                      ))}
+                      {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => {
+                        const cerrado = diasCerrados.get(value);
+                        const cantidad = item.distribucion[value];
+                        return (
+                          <label key={value} className="flex min-w-0 flex-col items-center gap-1">
+                            <span className="text-[10px] font-medium text-admin-ink-soft">{label.slice(0, 3)}</span>
+                            <CantidadInput
+                              value={cantidad}
+                              onChange={(v) => setCantidadDia(item.localId, value, v)}
+                              disabled={cerrado !== undefined}
+                              aria-label={`${item.nombreProducto}, ${label}`}
+                              title={cerrado ? `Entrega ${cerrado === "ENTREGADA" ? "entregada" : "no recogida"}: se cambia con «Corregir»` : undefined}
+                              className={`admin-input w-full min-w-0 px-0! py-1.5! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-admin-ink-soft/40 ${
+                                cerrado ? "cursor-not-allowed opacity-60" : ""
+                              } ${cantidadNumero(cantidad) > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"}`}
+                            />
+                            <span className="h-3 text-[9px] leading-3 text-admin-ink-soft">
+                              {cerrado === "ENTREGADA" ? "Entregada" : cerrado === "NO_RECOGIDA" ? "No rec." : ""}
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -480,9 +522,6 @@ export default function DetallePanel({
                   {avanzando ? "Confirmando..." : "Confirmar pedido"}
                 </Button>
               )}
-              <Button variant="secondary" onClick={() => handlePago(!pagado)} disabled={pagando}>
-                {pagando ? "Guardando..." : pagado ? "Desmarcar pagado" : "Marcar pagado"}
-              </Button>
               {pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
                 <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
                   Cancelar pedido
@@ -492,6 +531,37 @@ export default function DetallePanel({
           )}
         </div>
       )}
+
+      <Modal
+        open={confirmPago !== null}
+        onClose={() => {
+          if (!pagando) setConfirmPago(null);
+        }}
+        title={confirmPago === "desmarcar" ? "¿Desmarcar el pago?" : "¿Marcar como pagado?"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmPago(null)} disabled={pagando}>
+              Volver
+            </Button>
+            <Button variant="primary" onClick={() => handlePago(confirmPago === "marcar")} disabled={pagando}>
+              {pagando ? "Guardando..." : confirmPago === "desmarcar" ? "Sí, desmarcar" : "Sí, marcar pagado"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-admin-ink">
+          {confirmPago === "desmarcar"
+            ? `¿Desmarcar el pago del pedido #${pedido?.folio}?`
+            : `¿Marcar el pedido #${pedido?.folio} como pagado?`}{" "}
+          <span className="font-semibold">Total: {pedido ? formatMoney(pedido.total) : ""}</span>
+        </p>
+        {confirmPago === "desmarcar" && pedido?.modoCobro === "AL_INICIO" && (
+          <p className="mt-2 text-xs text-admin-ink-soft">
+            Este negocio cobra por adelantado: desmarcar el pago no regresa el pedido a Por confirmar; seguirá{" "}
+            {ESTADO_LABEL[pedido.estado]}.
+          </p>
+        )}
+      </Modal>
 
       <Modal
         open={confirmCancelOpen}
