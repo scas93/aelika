@@ -61,8 +61,8 @@ describe('Transversal · Reglas de notificación', () => {
       }
     });
 
-    it('PEDIDO_B2B acepta sus 3 estatus', async () => {
-      for (const estatus of ['PENDIENTE_CONFIRMACION', 'CONFIRMADO_SURTIENDO', 'DESPACHADO']) {
+    it('PEDIDO_B2B acepta sus estatus vigentes (DESPACHADO ya no: cambio deliberado, ver abajo)', async () => {
+      for (const estatus of ['PENDIENTE_CONFIRMACION', 'CONFIRMADO_SURTIENDO']) {
         const res = await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus } }));
         expect(res.status).toBe(201);
         expectExacto(res.body, reglaEsperada({ triggerConfig: { origen: 'PEDIDO_B2B', estatus } }), et());
@@ -97,6 +97,47 @@ describe('Transversal · Reglas de notificación', () => {
       );
     });
 
+    describe('Despachado ya no existe para pedidos B2B', () => {
+      const MSG = /El estado Despachado ya no existe para pedidos B2B/;
+      const heredada = () =>
+        s.h.prisma.regla.create({
+          data: {
+            tenantId: s.base.tenant.id, nombre: 'Heredada', trigger: 'EVENTO_PEDIDO',
+            triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }, filtro: [], canal: 'WHATSAPP',
+            plantillaNombre: 'pedido_confirmado', plantillaIdioma: 'es_MX', plantillaCategoria: 'UTILITY', plantillaVariables: [], activa: true,
+          } as any,
+        });
+
+      it('crear una regla PEDIDO_B2B con Despachado: 400 y no se guarda', async () => {
+        const res = await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' } }));
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(MSG);
+        expect(await s.h.prisma.regla.count()).toBe(0);
+      });
+
+      it('actualizar una regla para que use Despachado B2B: 400; ORDER/Despachado sigue válido', async () => {
+        const r = await evento('PEDIDO_B2B', 'CONFIRMADO_SURTIENDO');
+        const res = await dueno().patch(`/reglas/${r.id}`).send({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' } });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(MSG);
+        await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'ORDER', estatus: 'DESPACHADO' } })).expect(201);
+      });
+
+      it('una regla heredada se lee y se desactiva, pero no se guarda con ese estado (ni se renombra ni se reactiva)', async () => {
+        const h = await heredada();
+        const lista = await dueno().get('/reglas').expect(200);
+        expect(lista.body.map((x: any) => x.triggerConfig)).toStrictEqual([{ origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }]);
+        await dueno().get(`/reglas/${h.id}`).expect(200);
+        for (const cambio of [{ nombre: 'Otro nombre' }, { nombre: 'Otro', activa: false }]) {
+          const res = await dueno().patch(`/reglas/${h.id}`).send(cambio);
+          expect([cambio, res.status]).toStrictEqual([cambio, 400]);
+        }
+        const desactivada = await dueno().patch(`/reglas/${h.id}`).send({ activa: false }).expect(200);
+        expect(desactivada.body.activa).toBe(false);
+        expect((await dueno().patch(`/reglas/${h.id}`).send({ activa: true })).status).toBe(400);
+      });
+    });
+
     it('el filtro no aplica a EVENTO_PEDIDO: se guarda como lista vacía aunque se mande', async () => {
       const res = await dueno().post('/reglas', reglaBody({ filtro: [{ campo: 'TOTAL_PEDIDOS', operador: 'MAYOR_IGUAL', valor: 99 }] }));
       expect(res.status).toBe(201);
@@ -110,21 +151,21 @@ describe('Transversal · Reglas de notificación', () => {
         400,
         'estatus "LISTO_ENTREGA" no es válido para origen PEDIDO_B2B (valores válidos: PENDIENTE_CONFIRMACION, CONFIRMADO_SURTIENDO, DESPACHADO).',
       );
-      const ok = await dueno().patch(`/reglas/${r.id}`).send({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }, nombre: 'Cambiada' });
+      const ok = await dueno().patch(`/reglas/${r.id}`).send({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'CONFIRMADO_SURTIENDO' }, nombre: 'Cambiada' });
       expect(ok.status).toBe(200);
-      expectExacto(ok.body, reglaEsperada({ nombre: 'Cambiada', triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' } }), et());
+      expectExacto(ok.body, reglaEsperada({ nombre: 'Cambiada', triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'CONFIRMADO_SURTIENDO' } }), et());
     });
 
     it('variables de plantilla: las de menudeo no aplican a PEDIDO_B2B; folio aplica a ambos; ninguna de pedido aplica a MANUAL', async () => {
       const menudeo = { plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_PEDIDO', valor: 'tipoEntrega' }] };
       expect((await dueno().post('/reglas', reglaBody(menudeo))).status).toBe(201);
       expectError(
-        await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }, ...menudeo })),
+        await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'CONFIRMADO_SURTIENDO' }, ...menudeo })),
         400,
         'La variable "Tipo de entrega" no aplica a esta Regla (Solo pedidos de menudeo).',
       );
       const folio = { plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_PEDIDO', valor: 'folio' }] };
-      expect((await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }, ...folio }))).status).toBe(201);
+      expect((await dueno().post('/reglas', reglaBody({ triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'CONFIRMADO_SURTIENDO' }, ...folio }))).status).toBe(201);
       expectError(
         await dueno().post('/reglas', reglaBody({ trigger: 'MANUAL', triggerConfig: undefined, ...folio })),
         400,
@@ -172,7 +213,14 @@ describe('Transversal · Reglas de notificación', () => {
       const R1 = await evento('ORDER', 'CONFIRMADO_SURTIENDO');
       const R2 = await evento('ORDER', 'DESPACHADO');
       const R3 = await evento('PEDIDO_B2B', 'CONFIRMADO_SURTIENDO');
-      const R4 = await evento('PEDIDO_B2B', 'DESPACHADO');
+      // Regla heredada sobre Despachado de un pedido B2B: ya no se puede crear por la API, se siembra directo.
+      const R4 = await s.h.prisma.regla.create({
+        data: {
+          tenantId: s.base.tenant.id, nombre: 'PEDIDO_B2B/DESPACHADO', trigger: 'EVENTO_PEDIDO',
+          triggerConfig: { origen: 'PEDIDO_B2B', estatus: 'DESPACHADO' }, filtro: [], canal: 'WHATSAPP',
+          plantillaNombre: 'pedido_confirmado', plantillaIdioma: 'es_MX', plantillaCategoria: 'UTILITY', plantillaVariables: [], activa: true,
+        } as any,
+      });
       await evento('ORDER', 'LISTO_ENTREGA', { activa: false }); // inactiva
       await evento('ORDER', 'PENDIENTE_CONFIRMACION'); // válida pero nunca dispara
       await evento('PEDIDO_B2B', 'PENDIENTE_CONFIRMACION'); // válida pero nunca dispara

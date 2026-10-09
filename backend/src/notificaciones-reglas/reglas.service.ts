@@ -126,11 +126,16 @@ export class ReglasService {
     const filtroRaw = dto.filtro ?? (cambioDeTrigger ? [] : ((existente.filtro as unknown[] | null) ?? []));
     const plantillaVariablesRaw = dto.plantillaVariables ?? ((existente.plantillaVariables as unknown[] | null) ?? []);
 
+    // Una regla ya existente sobre Despachado de un pedido B2B (estado que ya no existe) solo se puede desactivar; cualquier
+    // otro cambio que la guarde con ese estado se rechaza.
+    const soloDesactiva = dto.activa === false && Object.entries(dto).every(([clave, valor]) => clave === 'activa' || valor === undefined);
+
     const { triggerConfig, filtro, plantillaVariables } = await this.validarPayload({
       trigger,
       triggerConfigRaw,
       filtroRaw,
       plantillaVariablesRaw,
+      permitirDespachadoB2bObsoleto: soloDesactiva,
     });
 
     // Caso borde declarado explícitamente en el prompt: una FECHA_PROGRAMADA
@@ -236,10 +241,11 @@ export class ReglasService {
     triggerConfigRaw: Record<string, unknown> | undefined;
     filtroRaw: unknown[];
     plantillaVariablesRaw: unknown[];
+    permitirDespachadoB2bObsoleto?: boolean;
   }): Promise<PayloadValidado> {
     const { trigger } = input;
 
-    const triggerConfig = await this.validarTriggerConfig(trigger, input.triggerConfigRaw);
+    const triggerConfig = await this.validarTriggerConfig(trigger, input.triggerConfigRaw, input.permitirDespachadoB2bObsoleto);
 
     // El Filtro no aplica a EVENTO_PEDIDO (decisión de producto ya tomada) —
     // se limpia en vez de rechazar, mismo criterio que triggerConfig al
@@ -262,12 +268,19 @@ export class ReglasService {
   private async validarTriggerConfig(
     trigger: ReglaTriggerTipo,
     raw: Record<string, unknown> | undefined,
+    permitirDespachadoB2bObsoleto = false,
   ): Promise<Record<string, unknown> | null> {
     if (trigger === ReglaTriggerTipo.EVENTO_PEDIDO) {
       const instancia = plainToInstance(EventoPedidoTriggerConfigDto, raw ?? {});
       const errores = await validate(instancia, { whitelist: true, forbidNonWhitelisted: true });
       if (errores.length > 0) {
         throw new BadRequestException(this.primerError(errores, 'triggerConfig inválido para EVENTO_PEDIDO'));
+      }
+      // Despachado ya no existe para pedidos B2B (despachar se reemplazó por cerrar entregas): no se guarda.
+      if (instancia.origen === 'PEDIDO_B2B' && instancia.estatus === 'DESPACHADO' && !permitirDespachadoB2bObsoleto) {
+        throw new BadRequestException(
+          'El estado Despachado ya no existe para pedidos B2B (se reemplazó por el cierre de entregas). Elige otro estado; una regla que ya lo usa solo se puede desactivar.',
+        );
       }
       this.assertEstatusValido(instancia.origen, instancia.estatus);
       return { origen: instancia.origen, estatus: instancia.estatus };
