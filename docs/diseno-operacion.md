@@ -128,6 +128,8 @@ Lo más común es que el cliente no recorra el menú y vuelva a dar clic al link
 - **Solicitar cambio:** botón en el detalle que lleva con un humano. El cliente no modifica directamente.
 - **Repetir pedido anterior:** fuera de la primera versión; se define después.
 
+El portal del cliente es el mismo storefront B2B actual (/mayoreo/[slug]), no uno nuevo. En esta versión siempre se entra con cuenta: código de cliente, teléfono y código por WhatsApp.
+
 **Captura por teléfono:** el operativo selecciona al cliente de una lista y captura el pedido o la modificación desde el navegador.
 
 ## Catálogo y descuentos
@@ -315,7 +317,6 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Descuento por cliente | % fijo sobre el total, aplicado al crear el pedido | Sin descuentos |
 | Módulo de pagos | Apagado (el admin marca el pago a mano) | Cobrar en línea |
 | Modalidad de pago (con excepción por cliente) | Crédito | Anticipado |
-| Modo de cliente | Con cuenta | Anónimo (formulario por pedido) |
 | Alta de clientes | Solo admin | Autorregistro con aprobación |
 | Pedir código de cliente al entrar | Sí | Solo teléfono + código |
 | Duración de sesión | 60–90 días | Más corta |
@@ -343,13 +344,14 @@ Estas no se configuran, porque son las que hacen confiable al sistema:
 - Registro de cambios de los pedidos, de qué usuario hizo cada acción y del origen del pedido.
 - Zona horaria y moneda configurables por negocio (en esta versión son fijas: Ciudad de México y pesos).
 - Recuperación de contraseña por correo para el equipo del negocio (hoy no existe ni hay proveedor de correo).
+- Modo de cliente configurable por negocio: storefront B2B sin cuenta (formulario por pedido) o mixto (el cliente elige entrar con su cuenta o pedir sin cuenta).
 
 ### Plantillas de operación
 
 Para no configurar todo desde cero, cada negocio arranca de una plantilla con valores precargados y ajusta lo necesario:
 
 - **Entregas programadas B2B:** los valores de Banetto.
-- **Pedido único:** 1 entrega por pedido, cliente anónimo o con cuenta.
+- **Pedido único:** 1 entrega por pedido. En el storefront B2B el cliente siempre entra con cuenta; el storefront de menudeo (pickup) no usa cuentas.
 
 ## Métricas y cómo se ve el éxito
 
