@@ -27,7 +27,7 @@ import { TenantB2bPanelGuard } from './tenant-b2b.guard';
 import { XLSX_CONTENT_TYPE } from '../common/xlsx';
 import { fechaMexicoYMD } from './pedidos-b2b-logica';
 
-// Crear, pagar y corregir entregas cerradas: solo Gerente/Dueño. Editar, confirmar, cancelar y cerrar entregas: los 3
+// Crear: los 3 roles. Pagar y corregir entregas cerradas: solo Gerente/Dueño. Editar, confirmar, cancelar y cerrar entregas: los 3
 // roles (el Operador no puede editar ni cancelar un pedido Pagado). GET abierto a los 3 roles.
 @UseGuards(TenantB2bPanelGuard)
 @Controller('pedidos-b2b')
@@ -57,9 +57,15 @@ export class PedidosB2bController {
 
   // Excel (.xlsx) de Históricos y Pedidos activos (los 3 roles). El CSV de arriba queda sin uso por el panel.
   @Get('export-xlsx')
-  async exportXlsx(@Query() query: ExportPedidosB2bQueryDto, @Res({ passthrough: true }) res: Response) {
+  async exportXlsx(
+    @Query() query: ExportPedidosB2bQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const buffer = await this.pedidosB2bService.exportPedidosXlsx(query);
-    res.set({ 'Content-Type': XLSX_CONTENT_TYPE, 'Content-Disposition': `attachment; filename="pedidos-${fechaMexicoYMD()}.xlsx"` });
+    res.set({
+      'Content-Type': XLSX_CONTENT_TYPE,
+      'Content-Disposition': `attachment; filename="pedidos-${fechaMexicoYMD()}.xlsx"`,
+    });
     return new StreamableFile(buffer);
   }
 
@@ -81,9 +87,15 @@ export class PedidosB2bController {
 
   // Excel (.xlsx) de Entregas del día (los 3 roles). Antes de @Get(':id') por el mismo motivo que el resto de rutas estáticas.
   @Get('dia/:fecha/export-xlsx')
-  async exportEntregasDiaXlsx(@Param('fecha') fecha: string, @Res({ passthrough: true }) res: Response) {
+  async exportEntregasDiaXlsx(
+    @Param('fecha') fecha: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const buffer = await this.pedidosB2bService.exportEntregasDiaXlsx(fecha);
-    res.set({ 'Content-Type': XLSX_CONTENT_TYPE, 'Content-Disposition': `attachment; filename="entregas-${fecha}.xlsx"` });
+    res.set({
+      'Content-Type': XLSX_CONTENT_TYPE,
+      'Content-Disposition': `attachment; filename="entregas-${fecha}.xlsx"`,
+    });
     return new StreamableFile(buffer);
   }
 
@@ -92,7 +104,8 @@ export class PedidosB2bController {
     return this.pedidosB2bService.findOne(id);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
+  // Captura por teléfono: los 3 roles (el Operador también captura pedidos).
+  @Roles(Role.OPERADOR, Role.GERENTE, Role.DUENO)
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreatePedidoB2bDto) {
     return this.pedidosB2bService.create(user.tenantId, dto);
@@ -101,7 +114,11 @@ export class PedidosB2bController {
   // Editar, confirmar (avanzar) y cancelar están abiertos a los 3 roles; el servicio niega con 403 al Operador editar o
   // cancelar un pedido Pagado. Pagos y correcciones siguen siendo de admin.
   @Patch(':id/items')
-  updateItems(@Param('id') id: string, @Body() dto: UpdatePedidoB2bItemsDto, @CurrentUser() user: JwtPayload) {
+  updateItems(
+    @Param('id') id: string,
+    @Body() dto: UpdatePedidoB2bItemsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.pedidosB2bService.updateItems(id, dto, user.rol);
   }
 
@@ -113,14 +130,22 @@ export class PedidosB2bController {
   // Cerrar una entrega (Entregada / No recogida) es trabajo operativo: abierto a los 3 roles, a diferencia del resto de las
   // escrituras de este controller (Gerente/Dueño). Sin @Roles a propósito.
   @Patch(':id/entregas/:entregaId/cerrar')
-  cerrarEntrega(@Param('id') id: string, @Param('entregaId') entregaId: string, @Body() dto: CerrarEntregaB2bDto) {
+  cerrarEntrega(
+    @Param('id') id: string,
+    @Param('entregaId') entregaId: string,
+    @Body() dto: CerrarEntregaB2bDto,
+  ) {
     return this.pedidosB2bService.cerrarEntrega(id, entregaId, dto);
   }
 
   // Corregir una entrega ya cerrada es de admin (Gerente/Dueño), a diferencia de cerrarla (operativo, los 3 roles).
   @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/entregas/:entregaId/corregir')
-  corregirEntrega(@Param('id') id: string, @Param('entregaId') entregaId: string, @Body() dto: CorregirEntregaB2bDto) {
+  corregirEntrega(
+    @Param('id') id: string,
+    @Param('entregaId') entregaId: string,
+    @Body() dto: CorregirEntregaB2bDto,
+  ) {
     return this.pedidosB2bService.corregirEntrega(id, entregaId, dto);
   }
 

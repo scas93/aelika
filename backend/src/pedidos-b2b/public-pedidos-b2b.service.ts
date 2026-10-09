@@ -4,26 +4,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { round2 } from '../common/money';
-import { resolverFacturacion } from '../common/facturacion';
-import { ClienteCanal } from '../../generated/prisma/client';
-import { recalcularContadoresCliente, type ClienteContadoresDb } from '../clientes/cliente-contadores';
-import { ClientesService } from '../clientes/clientes.service';
+import { moduloActivo } from '../common/modulos';
 import {
   estaEnVentana,
   mensajeVentanaCerrada,
   ventanaDesdeTenant,
 } from '../common/ventana-recepcion-b2b';
-import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
-import { assertCodigosDescuentoPermitidos, moduloActivo } from '../common/modulos';
 import {
-  assertLunes,
   calcularSemanaDestino,
-  nextFolioPedidoB2b,
   resolverCodigoDescuento,
-  resolverItems,
 } from './pedidos-b2b-logica';
-import { aRespuestaPedidoB2b, crearOrdenB2b, INCLUDE_PEDIDO } from './pedidos-b2b-orden';
+
+export const MENSAJE_PEDIDOS_EN_LINEA_CERRADOS =
+  'Los pedidos en línea de mayoreo se habilitan con tu cuenta de cliente. Contáctanos.';
 
 /**
  * Storefront público del módulo B2B — sin JWT, mismo patrón que
@@ -40,10 +33,7 @@ import { aRespuestaPedidoB2b, crearOrdenB2b, INCLUDE_PEDIDO } from './pedidos-b2
  */
 @Injectable()
 export class PublicPedidosB2bService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly clientesService: ClientesService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getTenantInfo(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -93,7 +83,10 @@ export class PublicPedidosB2bService {
       // exigirlo server-side.
       facturacionModo: tenant.facturacionModo,
       // Si es false el storefront no muestra el campo de código de descuento (módulo apagado para el negocio).
-      codigosDescuentoActivo: moduloActivo(tenant.modulosDesactivados, 'CODIGOS_DESCUENTO'),
+      codigosDescuentoActivo: moduloActivo(
+        tenant.modulosDesactivados,
+        'CODIGOS_DESCUENTO',
+      ),
       // Semana calendario a la que aplicará el pedido que se está armando —
       // ver calcularSemanaDestino. El frontend todavía no la consume (sigue
       // calculando su propio "próximo lunes" en pedido-flow.tsx); queda
@@ -167,117 +160,19 @@ export class PublicPedidosB2bService {
     return { descuentoPorcentaje: descuentoPorcentajeAplicado };
   }
 
-  async createPedido(slug: string, dto: CreatePedidoB2bDto) {
+  /**
+   * El storefront anónimo de mayoreo ya no crea pedidos: un pedido B2B pertenece a un cliente dado de alta por un
+   * admin (docs/diseno-operacion.md, "Clientes y acceso"), y aquí no hay a quién atribuirlo. Se habilita con el portal
+   * con cuenta (Fase 4); mientras, el equipo captura desde el panel. Slug inexistente: el mismo 404 de siempre.
+   */
+  async rechazarPedidoAnonimo(slug: string): Promise<never> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
-      select: {
-        id: true,
-        pedidoB2bModoCobro: true,
-        pedidoB2bMinimoPiezas: true,
-        pedidoB2bVentanaAperturaDia: true,
-        pedidoB2bVentanaAperturaHora: true,
-        pedidoB2bVentanaCierreDia: true,
-        pedidoB2bVentanaCierreHora: true,
-        facturacionModo: true,
-        modulosDesactivados: true,
-      },
+      select: { id: true },
     });
     if (!tenant) {
       throw new NotFoundException('Negocio no encontrado');
     }
-    assertCodigosDescuentoPermitidos(tenant.modulosDesactivados, dto.codigoDescuento);
-
-    // Fuera de la ventana de recepción ahora mismo? A diferencia de
-    // PublicService.createOrder (B2C, que usa isAbiertoAhora/HorarioSemana),
-    // este flujo ya no depende del horario de atención del negocio — ver
-    // common/ventana-recepcion-b2b.ts. Sin ventana configurada, estaEnVentana
-    // regresa true (nunca bloquea). No puede depender de que el "abierto"
-    // que ya vio el cliente siga vigente, se revisa server-side sin importar
-    // lo que haya mostrado el frontend.
-    const ventana = ventanaDesdeTenant(tenant);
-    if (!estaEnVentana(ventana)) {
-      throw new ConflictException(mensajeVentanaCerrada(ventana!));
-    }
-
-    // Fuera de alcance de esta fase — ver comentario de clase. El pedido
-    // nunca se crea para no dejar un registro que jamás podría cobrarse
-    // por este storefront.
-    if (tenant.pedidoB2bModoCobro === 'AL_INICIO') {
-      throw new ConflictException(
-        'Este negocio requiere pago con tarjeta al confirmar el pedido — ese flujo aún no está disponible en este storefront. Contacta directamente al negocio.',
-      );
-    }
-
-    // Facturación — mismo mecanismo que PublicService.createOrder (B2C), ver
-    // common/facturacion.ts. Este módulo no timbra CFDI real, solo captura
-    // los datos fiscales para que el negocio facture por fuera del sistema.
-    const factura = resolverFacturacion(tenant.facturacionModo, dto);
-
-    const semanaInicio = assertLunes(dto.semanaInicio);
-    const { resueltos, totalPiezas, subtotal } = await resolverItems(
-      this.prisma,
-      tenant.id,
-      dto.items,
-    );
-    const {
-      codigoDescuentoId,
-      codigoDescuentoTexto,
-      descuentoPorcentajeAplicado,
-      descuentoTotal,
-    } = await resolverCodigoDescuento(
-      this.prisma,
-      tenant.id,
-      dto.codigoDescuento,
-      subtotal,
-    );
-
-    const total = round2(subtotal - descuentoTotal);
-
-    return this.prisma.$transaction(async (tx) => {
-      const folio = await nextFolioPedidoB2b(tx, tenant.id);
-
-      // Antes de crear el pedido — clienteId es FK requerida desde Módulo 2.
-      const cliente = await this.clientesService.sincronizarDesdePedido(tx, {
-        tenantId: tenant.id,
-        canal: ClienteCanal.B2B,
-        telefono: dto.contactoTelefono,
-        nombre: dto.contactoNombre,
-        correo: dto.contactoCorreo,
-        fechaPedido: new Date(),
-      });
-
-      const orden = await crearOrdenB2b(
-        tx,
-        {
-          tenantId: tenant.id,
-          folio,
-          clienteId: cliente.id,
-          negocioNombre: dto.negocioNombre,
-          contactoNombre: dto.contactoNombre,
-          contactoTelefono: dto.contactoTelefono,
-          contactoCorreo: dto.contactoCorreo,
-          semanaInicio,
-          // Siempre AL_FINAL en este punto — AL_INICIO ya se rechazó arriba.
-          modoCobro: tenant.pedidoB2bModoCobro,
-          minimoPiezasAplicado: tenant.pedidoB2bMinimoPiezas,
-          totalPiezas,
-          subtotal,
-          descuentoTotal,
-          total,
-          codigoDescuentoId,
-          codigoDescuentoTexto,
-          descuentoPorcentajeAplicado,
-          factura,
-        },
-        resueltos,
-      );
-
-      // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
-      await recalcularContadoresCliente(tx as unknown as ClienteContadoresDb, cliente.id);
-
-      return aRespuestaPedidoB2b(
-        await tx.order.findUniqueOrThrow({ where: { id: orden.id }, include: INCLUDE_PEDIDO }),
-      );
-    });
+    throw new ConflictException(MENSAJE_PEDIDOS_EN_LINEA_CERRADOS);
   }
 }

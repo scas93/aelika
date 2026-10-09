@@ -4,6 +4,7 @@ import {
   ClienteCanal,
   PedidoB2bModoCobro,
   Prisma,
+  TipoStorefront,
 } from '../../generated/prisma/client';
 import { normalizarTelefono } from '../common/telefono';
 
@@ -216,3 +217,13 @@ export const OMITIR_CAMPOS_B2B = {
   modalidadPago: true,
   bajaAt: true,
 } as const;
+
+/**
+ * Canal de los clientes de un negocio: un negocio de mayoreo solo trabaja con clientes B2B y uno de menudeo solo con B2C.
+ * Se usa donde un conteo o filtro de clientes no debe mezclar canales (clientes activos, Top clientes, filtros de reglas).
+ */
+export function canalDeNegocio(tipoStorefront: TipoStorefront): ClienteCanal {
+  return tipoStorefront === TipoStorefront.RETAIL_B2B
+    ? ClienteCanal.B2B
+    : ClienteCanal.B2C;
+}

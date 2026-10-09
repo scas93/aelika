@@ -3,7 +3,12 @@ import { seedBase } from './db';
 import { clienteEsperado } from './exacto';
 import { bodyCheckout, postCheckoutMixto, usarSuite } from './helpers';
 import { normalizar } from './normalizar';
-import { apiRol, bodyB2b, crearAdminB2b, crearPublicoB2b } from './b2b-helpers';
+import {
+  altaClienteB2bDePrueba,
+  apiRol,
+  crearAdminB2b,
+  crearPublicoB2b,
+} from './b2b-helpers';
 import { waitForCalls } from './harness';
 
 // 0b-2 · Áreas 12 y 13 · Cliente entre canales y Cliente desde Lealtad.
@@ -11,7 +16,7 @@ describe('Transversal · Cliente entre canales (mismo teléfono)', () => {
   const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2B', b2b: {} } });
   const TEL = '+52 55 3333 4444';
 
-  it('en un MISMO tenant, el mismo teléfono por checkout B2C y por pedido B2B genera dos Cliente (@@unique tenant+canal+teléfono)', async () => {
+  it('en un MISMO tenant, un teléfono por checkout B2C y como principal de un cliente B2B son dos Cliente independientes (el B2B no usa Cliente.telefono)', async () => {
     const o = await postCheckoutMixto(
       s.h,
       s.base.tenant.slug,
@@ -34,8 +39,15 @@ describe('Transversal · Cliente entre canales (mismo teléfono)', () => {
       clientes.map((c) => [c.canal, c.telefono, c.nombre, c.totalPedidos]),
     ).toStrictEqual([
       ['B2C', '5533334444', 'Luis Persona', 1], // el enum ClienteCanal ordena B2C antes que B2B
-      ['B2B', '5533334444', 'Luis Compras', 1],
+      ['B2B', null, 'Cafetería La Esquina', 1], // Fase 2: nombre comercial del cliente; su teléfono vive en ClienteTelefono
     ]);
+    expect(
+      (await s.h.prisma.clienteTelefono.findMany()).map((t) => [
+        t.telefono,
+        t.principal,
+        t.nombreContacto,
+      ]),
+    ).toStrictEqual([['5533334444', true, 'Luis Compras']]);
     // cada pedido apunta a su Cliente (mismo teléfono, canales distintos)
     expect(o.body.clienteId).toBe(clientes.find((c) => c.canal === 'B2C')!.id);
     expect(p.clienteId).toBe(clientes.find((c) => c.canal === 'B2B')!.id);
@@ -49,8 +61,14 @@ describe('Transversal · Cliente entre canales (mismo teléfono)', () => {
       s.base.tenant.slug,
       bodyCheckout(s.base, { clienteTelefono: TEL }),
     );
-    await crearAdminB2b(s.h, s.base, { contactoTelefono: TEL });
-    await crearAdminB2b(s.h, s.base, { contactoTelefono: '55-3333-4444' });
+    const b2b = await altaClienteB2bDePrueba(s.h, s.base, {
+      contactoTelefono: TEL,
+    });
+    await crearAdminB2b(s.h, s.base, { clienteId: b2b.id });
+    await crearAdminB2b(s.h, s.base, {
+      clienteId: b2b.id,
+      semanaInicio: '2026-10-12',
+    }); // otra semana: el mismo cliente
     await postCheckoutMixto(
       s.h,
       s.base.tenant.slug,
@@ -81,23 +99,18 @@ describe('Transversal · Cliente entre canales (mismo teléfono)', () => {
       }),
     );
     jest.setSystemTime(new Date('2026-09-30T17:00:00.000Z'));
-    await apiRol(s.h, s.base, 'DUENO')
-      .post(
-        '/pedidos-b2b',
-        bodyB2b(s.base, {
-          contactoTelefono: TEL,
-          contactoNombre: 'Luis Compras',
-        }),
-      )
-      .expect(201);
+    await crearAdminB2b(s.h, s.base, {
+      contactoTelefono: TEL,
+      contactoNombre: 'Luis Compras',
+    });
     const res = await apiRol(s.h, s.base, 'DUENO').get('/clientes').expect(200);
     expect(
       normalizar(res.body.data, { [s.base.tenant.id]: 'tenant' }),
     ).toStrictEqual([
       clienteEsperado({
         canal: 'B2B',
-        telefono: '5533334444',
-        nombre: 'Luis Compras',
+        telefono: null, // Fase 2: los teléfonos de un cliente B2B viven en ClienteTelefono
+        nombre: 'Cafetería La Esquina',
         correo: 'compras@laesquina.test',
       }),
       clienteEsperado({
@@ -300,12 +313,7 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
   });
 
   it('un teléfono que ya existe como Cliente B2B no se reutiliza: Lealtad crea un Cliente B2C aparte', async () => {
-    await apiRol(s.h, s.base, 'DUENO')
-      .post(
-        '/pedidos-b2b',
-        bodyB2b(s.base, { contactoTelefono: '55 4444 5555' }),
-      )
-      .expect(201);
+    await crearAdminB2b(s.h, s.base, { contactoTelefono: '55 4444 5555' });
     await alta('DUENO').expect(201);
     const clientes = await s.h.prisma.cliente.findMany({
       where: { tenantId: s.base.tenant.id },

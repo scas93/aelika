@@ -112,6 +112,17 @@ async function main() {
       },
       { timeout: 5 * 60_000 },
     );
+    // Con todos los B2B fuera, la CHECK clientes_identidad_check (NOT VALID desde la migración 2d) ya se puede validar.
+    if (!slug) {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "clientes" VALIDATE CONSTRAINT "clientes_identidad_check"',
+      );
+      log('CHECK clientes_identidad_check validada.');
+    } else {
+      log(
+        'Con --tenant no se valida la CHECK (pueden quedar B2B de otros tenants).',
+      );
+    }
     log('Listo. Re-siembra con los seeds B2B.');
   } finally {
     await prisma.$disconnect();

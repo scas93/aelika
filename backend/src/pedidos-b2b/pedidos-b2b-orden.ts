@@ -1,5 +1,11 @@
 import { ConflictException } from '@nestjs/common';
-import { EstadoEntrega, EstadoPago, EstadoPedido, Prisma, TipoOrden } from '../../generated/prisma/client';
+import {
+  EstadoEntrega,
+  EstadoPago,
+  EstadoPedido,
+  Prisma,
+  TipoOrden,
+} from '../../generated/prisma/client';
 import type { FacturaFields } from '../common/facturacion';
 import { DIAS_EN_ORDEN, ItemsResueltos } from './pedidos-b2b-logica';
 import { entregaAtrasada, estadoB2bVisible } from './pedidos-b2b-estados';
@@ -17,7 +23,20 @@ import { entregaAtrasada, estadoB2bVisible } from './pedidos-b2b-estados';
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MESES_CORTOS = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
 const ESTADO_ENTREGA_TEXTO: Record<EstadoEntrega, string> = {
   PENDIENTE: 'Pendiente',
   LISTA: 'Lista',
@@ -31,13 +50,18 @@ export function fechaLegible(fecha: Date): string {
 }
 
 /** Fecha real de una entrega: lunes de la semana del pedido + offset del día (LUNES = 0 … DOMINGO = 6). */
-export function fechaDeDia(semanaInicio: Date, dia: (typeof DIAS_EN_ORDEN)[number]): Date {
+export function fechaDeDia(
+  semanaInicio: Date,
+  dia: (typeof DIAS_EN_ORDEN)[number],
+): Date {
   return new Date(semanaInicio.getTime() + DIAS_EN_ORDEN.indexOf(dia) * DIA_MS);
 }
 
 /** Inversa: día de la semana de una entrega respecto de la semana del pedido (undefined si cae fuera de la semana). */
 export function diaDeFecha(fecha: Date, semanaInicio: Date) {
-  return DIAS_EN_ORDEN[Math.round((fecha.getTime() - semanaInicio.getTime()) / DIA_MS)];
+  return DIAS_EN_ORDEN[
+    Math.round((fecha.getTime() - semanaInicio.getTime()) / DIA_MS)
+  ];
 }
 
 export interface DatosOrdenB2b {
@@ -47,7 +71,7 @@ export interface DatosOrdenB2b {
   negocioNombre: string;
   contactoNombre: string;
   contactoTelefono: string;
-  contactoCorreo: string;
+  contactoCorreo: string | null;
   semanaInicio: Date;
   modoCobro: Prisma.DetalleB2BUncheckedCreateInput['modoCobro'];
   minimoPiezasAplicado: number;
@@ -58,6 +82,7 @@ export interface DatosOrdenB2b {
   codigoDescuentoId: string | null;
   codigoDescuentoTexto: string | null;
   descuentoPorcentajeAplicado: number | null;
+  notaCliente?: string | null;
   factura?: FacturaFields;
 }
 
@@ -67,7 +92,11 @@ export interface DatosOrdenB2b {
  *    B2B que naciera pagado se contaría como cobrado y no se podría editar.
  *  · metodoPago null — B2B no tiene método de pago.
  */
-export async function crearOrdenB2b(tx: Prisma.TransactionClient, d: DatosOrdenB2b, items: ItemsResueltos) {
+export async function crearOrdenB2b(
+  tx: Prisma.TransactionClient,
+  d: DatosOrdenB2b,
+  items: ItemsResueltos,
+) {
   const orden = await tx.order.create({
     data: {
       tenantId: d.tenantId,
@@ -83,7 +112,7 @@ export async function crearOrdenB2b(tx: Prisma.TransactionClient, d: DatosOrdenB
       descuentoTotal: d.descuentoTotal,
       total: d.total,
       ...(d.factura ?? {}),
-    } as Prisma.OrderUncheckedCreateInput,
+    },
   });
 
   await tx.detalleB2B.create({
@@ -99,6 +128,7 @@ export async function crearOrdenB2b(tx: Prisma.TransactionClient, d: DatosOrdenB
       codigoDescuentoId: d.codigoDescuentoId,
       codigoDescuentoTexto: d.codigoDescuentoTexto,
       descuentoPorcentajeAplicado: d.descuentoPorcentajeAplicado,
+      notaCliente: d.notaCliente ?? null,
     },
   });
 
@@ -120,10 +150,21 @@ export async function crearOrdenB2b(tx: Prisma.TransactionClient, d: DatosOrdenB
   }
 
   const fechas = new Map<number, Date>();
-  for (const item of items) for (const dia of item.distribucion) fechas.set(DIAS_EN_ORDEN.indexOf(dia.dia), fechaDeDia(d.semanaInicio, dia.dia));
+  for (const item of items)
+    for (const dia of item.distribucion)
+      fechas.set(
+        DIAS_EN_ORDEN.indexOf(dia.dia),
+        fechaDeDia(d.semanaInicio, dia.dia),
+      );
   const idEntregaPorDia = new Map<number, string>();
   for (const idx of [...fechas.keys()].sort((a, b) => a - b)) {
-    const entrega = await tx.entrega.create({ data: { tenantId: d.tenantId, orderId: orden.id, fecha: fechas.get(idx)! } });
+    const entrega = await tx.entrega.create({
+      data: {
+        tenantId: d.tenantId,
+        orderId: orden.id,
+        fecha: fechas.get(idx)!,
+      },
+    });
     idEntregaPorDia.set(idx, entrega.id);
   }
   for (const [i, item] of items.entries()) {
@@ -158,10 +199,15 @@ export async function sincronizarOrdenB2b(
     orderBy: [{ orden: 'asc' }, { id: 'asc' }],
     include: { entregaItems: true },
   });
-  const entregas = await tx.entrega.findMany({ where: { orderId }, orderBy: { fecha: 'asc' }, include: { items: true } });
+  const entregas = await tx.entrega.findMany({
+    where: { orderId },
+    orderBy: { fecha: 'asc' },
+    include: { items: true },
+  });
 
   // Entrega CERRADA (Entregada / No recogida / Cancelada): no se edita por aquí. Pendiente y Lista sí.
-  const cerrada = (e: { estado: EstadoEntrega }) => e.estado !== EstadoEntrega.PENDIENTE && e.estado !== EstadoEntrega.LISTA;
+  const cerrada = (e: { estado: EstadoEntrega }) =>
+    e.estado !== EstadoEntrega.PENDIENTE && e.estado !== EstadoEntrega.LISTA;
   const noPendiente = (e: { estado: EstadoEntrega; fecha: Date }): never => {
     throw new ConflictException(
       `La entrega del ${fechaLegible(e.fecha)} ya está cerrada (${ESTADO_ENTREGA_TEXTO[e.estado]}). Para cambiarla usa «Corregir» en esa entrega.`,
@@ -169,7 +215,9 @@ export async function sincronizarOrdenB2b(
   };
 
   // --- ítems
-  const porProducto = new Map(existentes.filter((i) => i.productId).map((i) => [i.productId!, i]));
+  const porProducto = new Map(
+    existentes.filter((i) => i.productId).map((i) => [i.productId!, i]),
+  );
   const idsDeseados = new Set<string>();
   const idItemDe = new Map<string, string>(); // productId -> orderItem.id
   for (const [orden, item] of items.entries()) {
@@ -177,13 +225,26 @@ export async function sincronizarOrdenB2b(
     if (actual) {
       await tx.orderItem.update({
         where: { id: actual.id },
-        data: { nombreProducto: item.nombreProducto, precioUnitario: item.precioUnitario, cantidad: item.cantidadTotal, orden },
+        data: {
+          nombreProducto: item.nombreProducto,
+          precioUnitario: item.precioUnitario,
+          cantidad: item.cantidadTotal,
+          orden,
+        },
       });
       idsDeseados.add(actual.id);
       idItemDe.set(item.productId, actual.id);
     } else {
       const creado = await tx.orderItem.create({
-        data: { tenantId, orderId, productId: item.productId, nombreProducto: item.nombreProducto, precioUnitario: item.precioUnitario, cantidad: item.cantidadTotal, orden },
+        data: {
+          tenantId,
+          orderId,
+          productId: item.productId,
+          nombreProducto: item.nombreProducto,
+          precioUnitario: item.precioUnitario,
+          cantidad: item.cantidadTotal,
+          orden,
+        },
       });
       idsDeseados.add(creado.id);
       idItemDe.set(item.productId, creado.id);
@@ -196,7 +257,10 @@ export async function sincronizarOrdenB2b(
     for (const dia of item.distribucion) {
       const ms = fechaDeDia(semanaInicio, dia.dia).getTime();
       const porItem = deseadas.get(ms) ?? new Map<string, number>();
-      porItem.set(item.productId, (porItem.get(item.productId) ?? 0) + dia.cantidad);
+      porItem.set(
+        item.productId,
+        (porItem.get(item.productId) ?? 0) + dia.cantidad,
+      );
       deseadas.set(ms, porItem);
     }
   }
@@ -213,10 +277,16 @@ export async function sincronizarOrdenB2b(
 
   // quitar entregas de fechas que ya no tienen nada; crear/actualizar las demás
   const entregaPorFecha = new Map<number, (typeof entregas)[number]>();
-  for (const e of entregas) if (!entregaPorFecha.has(e.fecha.getTime())) entregaPorFecha.set(e.fecha.getTime(), e);
+  for (const e of entregas)
+    if (!entregaPorFecha.has(e.fecha.getTime()))
+      entregaPorFecha.set(e.fecha.getTime(), e);
 
   for (const e of entregas) {
-    if (deseadas.has(e.fecha.getTime()) && entregaPorFecha.get(e.fecha.getTime())?.id === e.id) continue;
+    if (
+      deseadas.has(e.fecha.getTime()) &&
+      entregaPorFecha.get(e.fecha.getTime())?.id === e.id
+    )
+      continue;
     if (cerrada(e)) noPendiente(e);
     await tx.entrega.delete({ where: { id: e.id } });
   }
@@ -228,10 +298,14 @@ export async function sincronizarOrdenB2b(
     if (existente) {
       entregaId = existente.id;
     } else {
-      entregaId = (await tx.entrega.create({ data: { tenantId, orderId, fecha } })).id;
+      entregaId = (
+        await tx.entrega.create({ data: { tenantId, orderId, fecha } })
+      ).id;
     }
     // Las filas de ítems ya quitados se fueron en cascada: solo quedan las de ítems que siguen en el pedido.
-    const filas = (existente?.items ?? []).filter((f) => idsDeseados.has(f.orderItemId));
+    const filas = (existente?.items ?? []).filter((f) =>
+      idsDeseados.has(f.orderItemId),
+    );
     const porProductoDeseado = deseadas.get(ms)!;
     const idsVigentes = new Set<string>();
     for (const [productId, cantidad] of porProductoDeseado) {
@@ -241,11 +315,16 @@ export async function sincronizarOrdenB2b(
       if (fila) {
         if (fila.cantidad !== cantidad) {
           if (cerrada(existente!)) noPendiente(existente!);
-          await tx.entregaItem.update({ where: { id: fila.id }, data: { cantidad } });
+          await tx.entregaItem.update({
+            where: { id: fila.id },
+            data: { cantidad },
+          });
         }
       } else {
         if (existente && cerrada(existente)) noPendiente(existente);
-        await tx.entregaItem.create({ data: { tenantId, entregaId, orderItemId, cantidad } });
+        await tx.entregaItem.create({
+          data: { tenantId, entregaId, orderItemId, cantidad },
+        });
       }
     }
     for (const fila of filas) {
@@ -264,7 +343,9 @@ export const INCLUDE_PEDIDO = {
   detalleB2b: true,
   items: {
     orderBy: [{ orden: 'asc' as const }, { id: 'asc' as const }],
-    include: { entregaItems: { include: { entrega: { select: { fecha: true } } } } },
+    include: {
+      entregaItems: { include: { entrega: { select: { fecha: true } } } },
+    },
   },
 } satisfies Prisma.OrderInclude;
 
@@ -274,7 +355,9 @@ export const INCLUDE_PEDIDO_ADMIN = {
   entregas: { orderBy: { fecha: 'asc' as const } },
 } satisfies Prisma.OrderInclude;
 
-export type OrdenB2bConDetalle = Prisma.OrderGetPayload<{ include: typeof INCLUDE_PEDIDO }> & {
+export type OrdenB2bConDetalle = Prisma.OrderGetPayload<{
+  include: typeof INCLUDE_PEDIDO;
+}> & {
   entregas?: Prisma.EntregaGetPayload<object>[];
 };
 
@@ -283,7 +366,12 @@ export type OrdenB2bConDetalle = Prisma.OrderGetPayload<{ include: typeof INCLUD
  * Etapa 2). Lista explícita de campos — no "quitar los que sobran" — para que una columna nueva de Order/DetalleB2B
  * nunca se filtre a la respuesta. `distribucion` se deriva de las entregas (día = fecha − semanaInicio).
  */
-export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo?: Prisma.PedidoB2bCodigoDescuentoGetPayload<object> | null } = {}) {
+export function aRespuestaPedidoB2b(
+  orden: OrdenB2bConDetalle,
+  opts: {
+    conCodigo?: Prisma.PedidoB2bCodigoDescuentoGetPayload<object> | null;
+  } = {},
+) {
   const d = orden.detalleB2b!;
   const respuesta = {
     id: orden.id,
@@ -327,9 +415,20 @@ export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo
       precioUnitario: item.precioUnitario,
       cantidadTotal: item.cantidad,
       distribucion: item.entregaItems
-        .map((ei) => ({ ei, dia: diaDeFecha(ei.entrega.fecha, d.semanaInicio) }))
-        .sort((a, b) => DIAS_EN_ORDEN.indexOf(a.dia) - DIAS_EN_ORDEN.indexOf(b.dia))
-        .map(({ ei, dia }) => ({ id: ei.id, tenantId: ei.tenantId, pedidoB2bItemId: ei.orderItemId, dia, cantidad: ei.cantidad })),
+        .map((ei) => ({
+          ei,
+          dia: diaDeFecha(ei.entrega.fecha, d.semanaInicio),
+        }))
+        .sort(
+          (a, b) => DIAS_EN_ORDEN.indexOf(a.dia) - DIAS_EN_ORDEN.indexOf(b.dia),
+        )
+        .map(({ ei, dia }) => ({
+          id: ei.id,
+          tenantId: ei.tenantId,
+          pedidoB2bItemId: ei.orderItemId,
+          dia,
+          cantidad: ei.cantidad,
+        })),
     })),
   };
   // Solo en las respuestas del panel (se cargó con INCLUDE_PEDIDO_ADMIN): cada entrega con su estado y si va atrasada.
@@ -343,10 +442,16 @@ export function aRespuestaPedidoB2b(orden: OrdenB2bConDetalle, opts: { conCodigo
           fecha: e.fecha,
           dia: diaDeFecha(e.fecha, d.semanaInicio),
           estado: e.estado,
-          cerradaAt: e.estado === EstadoEntrega.ENTREGADA || e.estado === EstadoEntrega.NO_RECOGIDA ? e.estadoCambiadoAt : null,
+          cerradaAt:
+            e.estado === EstadoEntrega.ENTREGADA ||
+            e.estado === EstadoEntrega.NO_RECOGIDA
+              ? e.estadoCambiadoAt
+              : null,
           atrasada: entregaAtrasada(e.estado, e.fecha),
         })),
       }
     : respuesta;
-  return opts.conCodigo === undefined ? conEntregas : { ...conEntregas, codigoDescuento: opts.conCodigo };
+  return opts.conCodigo === undefined
+    ? conEntregas
+    : { ...conEntregas, codigoDescuento: opts.conCodigo };
 }

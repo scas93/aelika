@@ -24,6 +24,11 @@ const PRODUCT_CARD =
   "flex flex-col gap-2 rounded-xl bg-mayoreo-card p-2 text-left shadow-sm transition hover:shadow-md";
 // Mismo patrón de pills que las tabs de categoría en /tienda (page.tsx) —
 // activa/inactiva, redondeada, con los tokens mayoreo-* en vez de black/white.
+// El POST público de pedidos de mayoreo está cerrado (409 con este mismo texto) hasta que llegue el portal con cuenta de
+// cliente: el catálogo se ve, pero no se puede enviar un pedido desde aquí.
+const MENSAJE_PEDIDOS_CERRADOS =
+  "Los pedidos en línea de mayoreo se habilitan con tu cuenta de cliente. Contáctanos.";
+
 const TAB_ACTIVE = "shrink-0 rounded-full bg-mayoreo-button px-3.5 py-1.5 text-sm font-semibold text-white";
 const TAB_INACTIVE =
   "shrink-0 rounded-full border border-mayoreo-border bg-mayoreo-card px-3.5 py-1.5 text-sm font-medium text-mayoreo-ink-soft";
@@ -179,8 +184,6 @@ export default function MayoreoPage() {
     return sum + (product ? Number(product.precio) * cart[id] : 0);
   }, 0);
 
-  const hayProductosEnCarrito = productIdsCarrito.length > 0;
-
   const term = busqueda.trim().toLowerCase();
   const buscando = term.length > 0;
   const productosFiltrados = todosLosProductos.filter((p) => p.nombre.toLowerCase().includes(term));
@@ -277,6 +280,8 @@ export default function MayoreoPage() {
                 Pedidos para la semana del {rangoSemanaTexto(tenant.semanaDestino.inicio, tenant.semanaDestino.fin)}
               </p>
             </div>
+
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{MENSAJE_PEDIDOS_CERRADOS}</p>
 
             <div className="flex flex-col gap-1.5 rounded-xl bg-mayoreo-card p-4 shadow-sm">
               <div className="flex items-center justify-between text-xs font-medium text-mayoreo-ink-soft">
@@ -412,14 +417,7 @@ export default function MayoreoPage() {
               </p>
             )}
 
-            <button
-              type="button"
-              onClick={() => setScreen("distribucion")}
-              disabled={productIdsCarrito.length === 0 || !alcanzaMinimoCarrito}
-              className="rounded-lg bg-mayoreo-button px-4 py-3 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Continuar ({totalPiezas} pieza{totalPiezas === 1 ? "" : "s"})
-            </button>
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{MENSAJE_PEDIDOS_CERRADOS}</p>
           </>
         )}
 
@@ -442,19 +440,6 @@ export default function MayoreoPage() {
           />
         )}
       </main>
-
-      {screen === "catalogo" && hayProductosEnCarrito && (
-        <button
-          type="button"
-          onClick={() => setScreen("carrito")}
-          className="fixed inset-x-0 bottom-6 z-40 mx-auto flex w-fit items-center gap-4 rounded-full bg-mayoreo-button px-6 py-3.5 text-sm font-semibold text-white shadow-lg"
-        >
-          <span>
-            {totalPiezas} pieza{totalPiezas === 1 ? "" : "s"}
-          </span>
-          <span>Continuar</span>
-        </button>
-      )}
 
       {productoDetalle && (
         <ProductoDetalleModal

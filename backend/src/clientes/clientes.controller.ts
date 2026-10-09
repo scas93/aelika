@@ -1,4 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { ClientesService } from './clientes.service';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
@@ -23,8 +25,11 @@ export class ClientesController {
   constructor(private readonly clientesService: ClientesService) {}
 
   @Get()
-  findAll(@Query() query: ListClientesQueryDto) {
-    return this.clientesService.findAll(query);
+  findAll(
+    @Query() query: ListClientesQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.clientesService.findAll(query, user.tenantId);
   }
 
   // summaryDaily/activos alimentan el Dashboard (Inicio), no el directorio
@@ -40,7 +45,7 @@ export class ClientesController {
 
   @Get('activos')
   @Roles(Role.OPERADOR, Role.GERENTE, Role.DUENO)
-  activos() {
-    return this.clientesService.activos();
+  activos(@CurrentUser() user: JwtPayload) {
+    return this.clientesService.activos(user.tenantId);
   }
 }

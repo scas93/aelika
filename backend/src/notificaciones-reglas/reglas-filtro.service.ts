@@ -1,8 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Cliente, Prisma } from '../../generated/prisma/client';
-import { ReglaFiltroCampo, ReglaFiltroOperador } from '../../generated/prisma/enums';
+import {
+  ReglaFiltroCampo,
+  ReglaFiltroOperador,
+} from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { FiltroCondicion } from './filtro-condicion.type';
+import { canalDeNegocio } from '../clientes/cliente-b2b';
 
 const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -25,30 +29,67 @@ export class ReglasFiltroService {
    * `condiciones: []` (sin condiciones) matchea a todos los clientes del
    * tenant — es el Filtro "todos", no un caso inválido.
    */
-  async evaluar(tenantId: string, condiciones: FiltroCondicion[]): Promise<Cliente[]> {
+  async evaluar(
+    tenantId: string,
+    condiciones: FiltroCondicion[],
+  ): Promise<Cliente[]> {
     const ahora = new Date();
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { tipoStorefront: true },
+    });
     const where: Prisma.ClienteWhereInput = {
       tenantId,
-      AND: condiciones.map((condicion) => this.condicionAWhere(condicion, ahora)),
+      // Solo clientes del canal del negocio (mayoreo = B2B, menudeo = B2C) y nunca los dados de baja.
+      canal: canalDeNegocio(tenant.tipoStorefront),
+      bajaAt: null,
+      AND: condiciones.map((condicion) =>
+        this.condicionAWhere(condicion, ahora),
+      ),
     };
 
     return this.prisma.cliente.findMany({ where });
   }
 
-  private condicionAWhere(condicion: FiltroCondicion, ahora: Date): Prisma.ClienteWhereInput {
+  private condicionAWhere(
+    condicion: FiltroCondicion,
+    ahora: Date,
+  ): Prisma.ClienteWhereInput {
     switch (condicion.campo) {
       case ReglaFiltroCampo.TOTAL_PEDIDOS:
-        return { totalPedidos: this.filtroNumerico(condicion.operador, condicion.valor) };
+        return {
+          totalPedidos: this.filtroNumerico(
+            condicion.operador,
+            condicion.valor,
+          ),
+        };
       case ReglaFiltroCampo.ULTIMO_PEDIDO_ANTIGUEDAD_DIAS:
-        return { ultimoPedidoAt: this.filtroAntiguedad(condicion.operador, condicion.valor, ahora) };
+        return {
+          ultimoPedidoAt: this.filtroAntiguedad(
+            condicion.operador,
+            condicion.valor,
+            ahora,
+          ),
+        };
       case ReglaFiltroCampo.PRIMER_PEDIDO_ANTIGUEDAD_DIAS:
-        return { primerPedidoAt: this.filtroAntiguedad(condicion.operador, condicion.valor, ahora) };
+        return {
+          primerPedidoAt: this.filtroAntiguedad(
+            condicion.operador,
+            condicion.valor,
+            ahora,
+          ),
+        };
       default:
-        throw new BadRequestException(`Campo de filtro no soportado: ${condicion.campo}`);
+        throw new BadRequestException(
+          `Campo de filtro no soportado: ${String(condicion.campo)}`,
+        );
     }
   }
 
-  private filtroNumerico(operador: ReglaFiltroOperador, valor: number): Prisma.IntFilter {
+  private filtroNumerico(
+    operador: ReglaFiltroOperador,
+    valor: number,
+  ): Prisma.IntFilter {
     switch (operador) {
       case ReglaFiltroOperador.MAYOR_IGUAL:
         return { gte: valor };
@@ -57,7 +98,9 @@ export class ReglasFiltroService {
       case ReglaFiltroOperador.IGUAL:
         return { equals: valor };
       default:
-        throw new BadRequestException(`Operador no soportado: ${operador}`);
+        throw new BadRequestException(
+          `Operador no soportado: ${String(operador)}`,
+        );
     }
   }
 
@@ -74,7 +117,11 @@ export class ReglasFiltroService {
    * igual o anterior a (ahora - X días), el inverso de una comparación
    * numérica directa.
    */
-  private filtroAntiguedad(operador: ReglaFiltroOperador, dias: number, ahora: Date): Prisma.DateTimeFilter {
+  private filtroAntiguedad(
+    operador: ReglaFiltroOperador,
+    dias: number,
+    ahora: Date,
+  ): Prisma.DateTimeFilter {
     const limite = new Date(ahora.getTime() - dias * MILISEGUNDOS_POR_DIA);
     switch (operador) {
       case ReglaFiltroOperador.MAYOR_IGUAL:

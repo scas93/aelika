@@ -6,9 +6,10 @@ import {
   Prisma,
   TipoOrden,
 } from '../../generated/prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
-import { OMITIR_CAMPOS_B2B } from './cliente-b2b';
+import { canalDeNegocio, OMITIR_CAMPOS_B2B } from './cliente-b2b';
 import { ListClientesQueryDto } from './dto/list-clientes-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 
@@ -39,7 +40,19 @@ interface SincronizarClienteInput {
  */
 @Injectable()
 export class ClientesService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /** Canal de los clientes del negocio de la sesión (mayoreo = B2B, menudeo = B2C). */
+  private async canalDelNegocio(tenantId: string): Promise<ClienteCanal> {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { tipoStorefront: true },
+    });
+    return canalDeNegocio(tenant.tipoStorefront);
+  }
 
   /**
    * Directorio de clientes del tenant en sesión — filtro de tenant ya lo
@@ -52,7 +65,7 @@ export class ClientesService {
    * teléfono del OR simplemente no se agrega (buscar "" en `contains` haría
    * match con todo).
    */
-  async findAll(query: ListClientesQueryDto) {
+  async findAll(query: ListClientesQueryDto, tenantId: string) {
     const q = query.q?.trim();
     const digits = q ? q.replace(/\D/g, '') : '';
     const busqueda: Prisma.ClienteWhereInput = q
@@ -65,11 +78,15 @@ export class ClientesService {
       : {};
     // conPedidos: solo clientes con al menos un pedido contable (Top clientes). Sin el
     // parámetro el directorio muestra también a los de totalPedidos = 0.
+    // Top clientes (conPedidos) solo cuenta clientes del canal del negocio, salvo que se pida otro canal explícito.
+    const canal =
+      query.canal ??
+      (query.conPedidos ? await this.canalDelNegocio(tenantId) : undefined);
     const where: Prisma.ClienteWhereInput = {
       AND: [
         busqueda,
         ...(query.conPedidos ? [{ totalPedidos: { gt: 0 } }] : []),
-        ...(query.canal ? [{ canal: query.canal }] : []),
+        ...(canal ? [{ canal }] : []),
       ],
     };
 
@@ -79,7 +96,7 @@ export class ClientesService {
       this.tenantPrisma.client.cliente.findMany({
         where,
         // Los campos B2B solo se exponen al pedir canal=B2B; sin canal el contrato es el de siempre.
-        omit: query.canal === ClienteCanal.B2B ? {} : OMITIR_CAMPOS_B2B,
+        omit: canal === ClienteCanal.B2B ? {} : OMITIR_CAMPOS_B2B,
         orderBy: { [query.ordenarPor]: query.orden },
         skip,
         take: query.limit,
@@ -169,14 +186,18 @@ export class ClientesService {
   // ultimoPedidoAt ya se actualiza en cada pedido nuevo del cliente (ver
   // sincronizarDesdePedido), así que "activo" se resuelve con un solo
   // count sobre Cliente — no hace falta tocar Order para esto.
-  async activos() {
+  async activos(tenantId: string) {
     const DIAS = 7;
     const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000);
 
     const clientesActivos = await this.tenantPrisma.client.cliente.count({
       // totalPedidos > 0: un cliente sin pedidos contables (solo intentos de pago, o
       // dado de alta en Lealtad) tiene ultimoPedidoAt = fecha de alta, no un pedido.
-      where: { ultimoPedidoAt: { gte: desde }, totalPedidos: { gt: 0 } },
+      where: {
+        canal: await this.canalDelNegocio(tenantId),
+        ultimoPedidoAt: { gte: desde },
+        totalPedidos: { gt: 0 },
+      },
     });
 
     return { clientesActivos };

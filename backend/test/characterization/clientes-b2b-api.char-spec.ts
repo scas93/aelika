@@ -400,17 +400,8 @@ describe('Clientes B2B · API', () => {
         nombre: 'Panadería del Norte',
         telefonos: [{ telefono: '5500001111', nombreContacto: 'Rosa' }],
       });
-      // pedido activo del cliente A (el flujo público aún crea su propio cliente: se reasigna a A)
-      const p = await crearPublicoB2b(s.h, s.base, {
-        contactoTelefono: '5588887777',
-      });
-      await s.h.prisma.order.update({
-        where: { id: p.id },
-        data: { clienteId: a.id },
-      });
-      await s.h.prisma.cliente.deleteMany({
-        where: { telefono: '5588887777' },
-      });
+      // pedido activo del cliente A
+      await crearPublicoB2b(s.h, s.base, { clienteId: a.id });
       // un legado sin dirección
       await s.h.prisma.cliente.update({
         where: { id: a.id },

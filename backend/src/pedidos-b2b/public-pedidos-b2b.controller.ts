@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
-import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { TenantB2bPublicGuard } from './tenant-b2b.guard';
 import { ModuloActivoGuard, RequiereModulo } from '../common/modulos';
@@ -37,8 +36,9 @@ export class PublicPedidosB2bController {
     return this.publicPedidosB2bService.previewCodigoDescuento(slug, codigo);
   }
 
+  // Cerrado hasta el portal con cuenta de cliente: sin @Body a propósito, siempre 409 con el mismo mensaje.
   @Post('tenants/:slug/pedidos')
-  createPedido(@Param('slug') slug: string, @Body() dto: CreatePedidoB2bDto) {
-    return this.publicPedidosB2bService.createPedido(slug, dto);
+  createPedido(@Param('slug') slug: string) {
+    return this.publicPedidosB2bService.rechazarPedidoAnonimo(slug);
   }
 }

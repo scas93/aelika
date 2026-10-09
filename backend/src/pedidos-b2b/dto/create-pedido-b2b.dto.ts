@@ -2,83 +2,33 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsDateString,
-  IsEmail,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
-  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { PedidoB2bItemInputDto } from './pedido-b2b-item-input.dto';
 
+/**
+ * Captura de un pedido B2B desde el panel: el pedido pertenece a un cliente B2B dado de alta (clientes-b2b). El nombre
+ * del negocio, el contacto, el descuento y la modalidad de cobro salen del cliente; el cliente nunca manda precios.
+ */
 export class CreatePedidoB2bDto {
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  negocioNombre: string;
-
-  @IsString()
-  @MinLength(2)
-  @MaxLength(120)
-  contactoNombre: string;
-
-  @IsString()
-  @MinLength(7)
-  @MaxLength(20)
-  contactoTelefono: string;
-
-  @IsEmail()
-  @MaxLength(200)
-  contactoCorreo: string;
+  @IsUUID()
+  clienteId: string;
 
   // "YYYY-MM-DD" — debe ser un lunes real, validado en PedidosB2bService
   // (no a nivel de DTO, para poder dar un mensaje claro en español).
   @IsDateString()
   semanaInicio: string;
 
+  // Nota libre del cliente (opcional).
   @IsOptional()
   @IsString()
-  @MaxLength(40)
-  codigoDescuento?: string;
-
-  // Mismos 6 campos + requiereFactura que CreatePublicOrderDto — solo se
-  // requieren juntos, condicionalmente, según Tenant.facturacionModo,
-  // enforced en PublicPedidosB2bService (ver common/facturacion.ts), no aquí.
-  @IsOptional()
-  @IsBoolean()
-  requiereFactura?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  facturaRazonSocial?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(13)
-  facturaRfc?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  facturaRegimenFiscal?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  facturaUsoCfdi?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  facturaCodigoPostal?: string;
-
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(200)
-  facturaCorreo?: string;
+  @MaxLength(500)
+  notaCliente?: string;
 
   @IsArray()
   @ArrayMinSize(1)
