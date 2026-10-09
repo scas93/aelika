@@ -152,14 +152,18 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
   "/dashboard/notificaciones/seguimiento/nueva",
 ]);
 
+// Notificaciones (reglas): Dueño siempre; Gerente solo en tenants RETAIL_B2B (el backend aplica la misma regla); Operador nunca.
+export function puedeVerNotificaciones(rol: Role, tipoStorefront: TipoStorefront): boolean {
+  return rol === "DUENO" || (rol === "GERENTE" && tipoStorefront === "RETAIL_B2B");
+}
+
 export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[] {
   return ALL_NAV_ITEMS.filter((item) => {
     if (HREFS_OCULTOS_DEL_SIDEBAR.has(item.href)) return false;
-    if (item.href === "/dashboard") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";
-    if (item.href === "/dashboard/notificaciones") return rol === "DUENO";
+    if (item.href === "/dashboard/notificaciones") return puedeVerNotificaciones(rol, tipoStorefront);
     if (tipoStorefront === "RETAIL_B2B" && HREFS_NO_APLICAN_A_RETAIL_B2B.has(item.href)) return false;
     if (tipoStorefront !== "RETAIL_B2B" && HREFS_SOLO_RETAIL_B2B.has(item.href)) return false;
     return true;

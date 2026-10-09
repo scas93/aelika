@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -547,6 +548,13 @@ export class PedidosB2bService {
     });
   }
 
+  /** Un pedido Pagado solo lo edita o cancela un administrador; al Operador se le niega con 403. */
+  private assertPuedeModificarPagado(pedido: { estadoPago: EstadoPago }, rol: Role, accion: string) {
+    if (pedido.estadoPago === EstadoPago.PAGADO && !puedeEditarPedidoPagado(rol)) {
+      throw new ForbiddenException(`Este pedido ya está pagado — solo un administrador puede ${accion}`);
+    }
+  }
+
   /**
    * Reemplazo completo de items/distribución sobre un pedido existente — ver
    * UpdatePedidoB2bItemsDto: el cliente manda el conjunto completo. Etapa 2: se aplica como DIFF (sincronizarOrdenB2b),
@@ -558,12 +566,9 @@ export class PedidosB2bService {
     this.assertActivo(pedido);
     // Se puede editar en Por confirmar, Confirmado, En proceso y Completado (agregar una entrega a un Completado lo regresa
     // a En proceso). Las entregas ya cerradas no se tocan aquí: sincronizarOrdenB2b da 409 si el cambio las afecta.
-    // Un pedido Pagado ya no bloquea la edición para Gerente/Dueño (admin). Para el Operador sí: queda bloqueado
-    // (docs/diseno-operacion.md, "Roles y permisos"). Hoy la ruta es solo de admin; la regla queda lista para cuando el
-    // Operador reciba permiso de editar. El pago nunca cambia solo al editar.
-    if (pedido.estadoPago === EstadoPago.PAGADO && !puedeEditarPedidoPagado(rol)) {
-      throw new ConflictException('Este pedido ya está pagado — solo un administrador puede editarlo');
-    }
+    // Un pedido Pagado no bloquea la edición para Gerente/Dueño (admin). Para el Operador sí: queda bloqueado
+    // (docs/diseno-operacion.md, "Roles y permisos") — 403. El pago nunca cambia solo al editar.
+    this.assertPuedeModificarPagado(pedido, rol, 'editarlo');
 
     const detalle = pedido.detalleB2b!;
     // Los totales NO salen de lo que se pidió: se recalculan abajo con la regla actual (todas las líneas al precio actual
@@ -835,8 +840,9 @@ export class PedidosB2bService {
    * Confirmado y En proceso; no en Completado ni Cancelado. Las entregas ya cerradas (Entregada / No recogida) se
    * conservan y se cobran; las pendientes pasan a CANCELADA y no se cobran: el total se recalcula solo con las vigentes.
    */
-  async cancelar(id: string) {
+  async cancelar(id: string, rol: Role) {
     const pedido = await this.cargar(id);
+    this.assertPuedeModificarPagado(pedido, rol, 'cancelarlo');
     if (pedido.cancelado) {
       throw new ConflictException('Este pedido ya está cancelado');
     }

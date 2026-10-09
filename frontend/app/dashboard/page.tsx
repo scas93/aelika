@@ -44,15 +44,6 @@ function formatFechaCorta(fecha: string): string {
 export default function DashboardPage() {
   const { user } = useSession();
 
-  // Gate antes del branch B2B/B2C a propósito — Operador no ve el
-  // Dashboard en ninguna de las dos variantes (ver nav-items.ts, donde el
-  // link "Inicio" ya se oculta para Operador sin importar tipoStorefront).
-  // Poniéndolo aquí, ni InicioB2B ni InicioB2C necesitan su propio chequeo
-  // de rol — mismo mensaje/patrón que clientes/page.tsx y ajustes/page.tsx.
-  if (user.rol !== "GERENTE" && user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
-  }
-
   // B2C queda exactamente igual a como estaba (InicioB2C, sin cambios) —
   // B2B consume un agregado distinto (GET /pedidos-b2b/resumen, ver
   // inicio-b2b.tsx), Order/summary no le aplica.

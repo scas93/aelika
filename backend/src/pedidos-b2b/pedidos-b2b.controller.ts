@@ -22,11 +22,8 @@ import { Role } from '../../generated/prisma/enums';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { TenantB2bPanelGuard } from './tenant-b2b.guard';
 
-// Escritura (crear/editar/avanzar/pagar/cancelar) restringida a
-// Gerente/Dueño — mismo criterio que Catálogo/Promociones: a diferencia de
-// Pedidos (pickup), este es un flujo de gestión de negocio, no de
-// surtido rutinario. GET abierto a los 3 roles para que Operador pueda ver
-// contexto igual que en el resto de la app.
+// Crear, pagar y corregir entregas cerradas: solo Gerente/Dueño. Editar, confirmar, cancelar y cerrar entregas: los 3
+// roles (el Operador no puede editar ni cancelar un pedido Pagado). GET abierto a los 3 roles.
 @UseGuards(TenantB2bPanelGuard)
 @Controller('pedidos-b2b')
 export class PedidosB2bController {
@@ -80,13 +77,13 @@ export class PedidosB2bController {
     return this.pedidosB2bService.create(user.tenantId, dto);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
+  // Editar, confirmar (avanzar) y cancelar están abiertos a los 3 roles; el servicio niega con 403 al Operador editar o
+  // cancelar un pedido Pagado. Pagos y correcciones siguen siendo de admin.
   @Patch(':id/items')
   updateItems(@Param('id') id: string, @Body() dto: UpdatePedidoB2bItemsDto, @CurrentUser() user: JwtPayload) {
     return this.pedidosB2bService.updateItems(id, dto, user.rol);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/avanzar')
   avanzar(@Param('id') id: string) {
     return this.pedidosB2bService.avanzar(id);
@@ -118,9 +115,8 @@ export class PedidosB2bController {
     return this.pedidosB2bService.desmarcarPagado(id);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/cancelar')
-  cancelar(@Param('id') id: string) {
-    return this.pedidosB2bService.cancelar(id);
+  cancelar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.pedidosB2bService.cancelar(id, user.rol);
   }
 }

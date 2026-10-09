@@ -57,8 +57,7 @@ export type EstadoPagoB2bFiltro = (typeof ESTADOS_PAGO_B2B_FILTRO)[number];
 
 /**
  * ¿Puede este rol editar un pedido B2B ya Pagado? Gerente y Dueño (admin) sí; el Operador no (docs/diseno-operacion.md,
- * "Roles y permisos": un pedido marcado como Pagado queda bloqueado para él). Hoy editar es solo de Gerente/Dueño a nivel de
- * ruta; esta regla queda lista para cuando el Operador reciba permiso de editar.
+ * "Roles y permisos": un pedido marcado como Pagado queda bloqueado para él). Aplica a editar y a cancelar.
  */
 export function puedeEditarPedidoPagado(rol: Role): boolean {
   return rol === Role.GERENTE || rol === Role.DUENO;

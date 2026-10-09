@@ -143,9 +143,11 @@ describe('Transversal · Reglas de notificación', () => {
       expectError(await dueno().get('/reglas/00000000-0000-4000-8000-000000000000'), 404, 'Regla no encontrada');
     });
 
-    it('solo el Dueño: Gerente y Operador 403, sin token 401', async () => {
+    it('tenant B2B: Dueño y Gerente sí (lectura y escritura); Operador 403, sin token 401', async () => {
       const msg = 'No tienes permiso para realizar esta acción';
-      expectError(await apiRol(s.h, s.base, 'GERENTE').get('/reglas'), 403, msg);
+      await apiRol(s.h, s.base, 'GERENTE').get('/reglas').expect(200);
+      await apiRol(s.h, s.base, 'GERENTE').post('/reglas', reglaBody()).expect(201);
+      expectError(await apiRol(s.h, s.base, 'OPERADOR').get('/reglas'), 403, msg);
       expectError(await apiRol(s.h, s.base, 'OPERADOR').post('/reglas', reglaBody()), 403, msg);
       expectError(await request(s.h.app.getHttpServer()).get('/reglas'), 401, 'Unauthorized');
     });
@@ -355,7 +357,7 @@ describe('Transversal · Reglas de notificación', () => {
       expect(res.body).toStrictEqual({ clientesMatcheados: 4, enviosDisparados: 3, bloqueadosPorCandado: 0, conError: 1 });
     });
 
-    it('rechazos: no MANUAL (400), inactiva (400), inexistente o de otro tenant (404), no Dueño (403)', async () => {
+    it('rechazos: no MANUAL (400), inactiva (400), inexistente o de otro tenant (404), Operador (403)', async () => {
       const evt = await evento('ORDER', 'DESPACHADO');
       expectError(await dueno().post(`/reglas/${evt.id}/disparar`), 400, 'Solo se puede disparar a demanda una Regla de tipo MANUAL.');
       const inactiva = await manual([], { activa: false });
@@ -364,7 +366,7 @@ describe('Transversal · Reglas de notificación', () => {
       const otro = await seedBase(s.h.prisma, { slug: 'otro-tenant-2' });
       expectError(await apiRol(s.h, otro, 'DUENO').post(`/reglas/${inactiva.id}/disparar`), 404, 'Regla no encontrada');
       const r = await manual([]);
-      expectError(await apiRol(s.h, s.base, 'GERENTE').post(`/reglas/${r.id}/disparar`), 403, 'No tienes permiso para realizar esta acción');
+      expectError(await apiRol(s.h, s.base, 'OPERADOR').post(`/reglas/${r.id}/disparar`), 403, 'No tienes permiso para realizar esta acción');
       expect(s.h.fakes.reglaEnvio).not.toHaveBeenCalled();
     });
 

@@ -289,7 +289,27 @@ describe('B2B · pago y corrección del admin (Fase 1b)', () => {
       expect(await detalle(p.id)).toMatchObject({ estadoPago: 'PAGADO', total: '752' }); // 14 × 45 + 4 × 30.5
     });
 
-    it('la regla del Operador queda lista: un pedido Pagado le está bloqueado, a Gerente/Dueño no', () => {
+    it('un Operador no puede editar ni cancelar un pedido Pagado (403 sin efectos); sí confirmarlo si aplica; Gerente sí', async () => {
+      const p = await confirmado();
+      await dueno().patch(`/pedidos-b2b/${p.id}/marcar-pagado`).expect(200);
+      const antes = await detalle(p.id);
+      const body = { items: [{ productId: A(), distribucion: [{ dia: 'LUNES', cantidad: 6 }] }] };
+      expectError(await operador().patch(`/pedidos-b2b/${p.id}/items`).send(body), 403, 'Este pedido ya está pagado — solo un administrador puede editarlo');
+      expectError(await operador().patch(`/pedidos-b2b/${p.id}/cancelar`), 403, 'Este pedido ya está pagado — solo un administrador puede cancelarlo');
+      expect(await detalle(p.id)).toStrictEqual(antes);
+      await gerente().patch(`/pedidos-b2b/${p.id}/items`).send(body).expect(200);
+    });
+
+    it('un Operador sí edita y cancela un pedido no pagado', async () => {
+      const p = await confirmado();
+      await operador()
+        .patch(`/pedidos-b2b/${p.id}/items`)
+        .send({ items: [{ productId: A(), distribucion: [{ dia: 'LUNES', cantidad: 6 }] }] })
+        .expect(200);
+      expect((await operador().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200)).body.cancelado).toBe(true);
+    });
+
+    it('la regla del Operador: un pedido Pagado le está bloqueado, a Gerente/Dueño no', () => {
       expect(puedeEditarPedidoPagado(Role.DUENO)).toBe(true);
       expect(puedeEditarPedidoPagado(Role.GERENTE)).toBe(true);
       expect(puedeEditarPedidoPagado(Role.OPERADOR)).toBe(false);

@@ -19,6 +19,7 @@ import ToggleSwitch from "../_components/ToggleSwitch";
 import Modal from "../_components/Modal";
 import Table, { type TableColumn } from "../_components/Table";
 import { TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
+import { puedeVerNotificaciones } from "../nav-items";
 
 interface ReglaListadoProps {
   categoria: ReglaMensajeCategoria;
@@ -55,8 +56,8 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoria]);
 
-  if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar las reglas de notificación.</p>;
+  if (!puedeVerNotificaciones(user.rol, user.tenant.tipoStorefront)) {
+    return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
   }
 
   async function handleToggleActiva(regla: Regla) {

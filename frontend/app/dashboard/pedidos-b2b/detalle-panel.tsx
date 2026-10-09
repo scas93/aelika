@@ -87,7 +87,9 @@ export default function DetallePanel({
   onChanged: () => void;
 }) {
   const { token, user } = useSession();
-  const canWrite = user.rol === "GERENTE" || user.rol === "DUENO";
+  // Admin (Gerente/Dueño): pagos y correcciones de entregas cerradas. El Operador edita, confirma y cancela, pero un
+  // pedido Pagado le queda bloqueado para editar y cancelar (el servidor también responde 403).
+  const esAdmin = user.rol === "GERENTE" || user.rol === "DUENO";
 
   const [pedido, setPedido] = useState<PedidoB2bDetalle | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -230,7 +232,7 @@ export default function DetallePanel({
 
   // Por confirmar → Confirmado es lo único manual; En proceso / Completado salen de cerrar entregas.
   const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION";
-  // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende de canWrite).
+  // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende del rol).
   const puedeCerrar = pedido ? puedeCerrarEntregas(pedido.estado, pedido.cancelado) : false;
 
   async function handleCerrarEntrega(entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") {
@@ -240,6 +242,7 @@ export default function DetallePanel({
     onChanged();
   }
   const pagado = pedido?.estadoPago === "PAGADO";
+  const puedeModificar = esAdmin || !pagado;
 
   // Días cuya entrega ya está cerrada (Entregada / No recogida): en la edición se ven bloqueados con su estado — se cambian
   // con "Corregir" en esa entrega, no aquí (el servidor también lo rechaza con 409).
@@ -331,7 +334,7 @@ export default function DetallePanel({
                 )}
               </div>
             </div>
-            {canWrite && (
+            {esAdmin && (
               <Button
                 variant={pagado ? "secondary" : "primary"}
                 onClick={() => setConfirmPago(pagado ? "desmarcar" : "marcar")}
@@ -348,7 +351,7 @@ export default function DetallePanel({
               entregas={pedido.entregas}
               items={pedido.items}
               onCerrar={puedeCerrar ? handleCerrarEntrega : undefined}
-              onCorregir={canWrite ? handleCorregirEntrega : undefined}
+              onCorregir={esAdmin ? handleCorregirEntrega : undefined}
               productos={products}
               cargarProductos={cargarProductos}
             />
@@ -358,7 +361,7 @@ export default function DetallePanel({
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-admin-ink">Productos</span>
-                {canWrite && !pedido.cancelado && (
+                {puedeModificar && !pedido.cancelado && (
                   <button
                     type="button"
                     onClick={startEdit}
@@ -515,14 +518,14 @@ export default function DetallePanel({
 
           {actionError && <p className="text-sm text-red-600">{actionError}</p>}
 
-          {canWrite && !editMode && (
+          {!editMode && (puedeConfirmar || (puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado)) && (
             <div className="flex flex-wrap gap-2 border-t border-admin-border pt-3">
               {puedeConfirmar && (
                 <Button variant="primary" onClick={handleAvanzar} disabled={avanzando}>
                   {avanzando ? "Confirmando..." : "Confirmar pedido"}
                 </Button>
               )}
-              {pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
+              {puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
                 <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
                   Cancelar pedido
                 </Button>

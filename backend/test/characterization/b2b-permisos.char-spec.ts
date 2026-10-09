@@ -5,7 +5,8 @@ import { usarSuite } from './helpers';
 import { apiRol, bodyB2b, crearPublicoB2b } from './b2b-helpers';
 
 // 0b-1 · Área 9 · Permisos por rol en todos los endpoints B2B del panel.
-// Lecturas: los 3 roles. Escrituras (crear, items, avanzar, marcar-pagado, cancelar, códigos POST/PATCH/DELETE): Gerente y Dueño.
+// Lecturas: los 3 roles. Crear, marcar-pagado, corregir y códigos POST/PATCH/DELETE: Gerente y Dueño.
+// Editar (items), confirmar (avanzar) y cancelar: los 3 roles (el Operador no puede sobre un pedido Pagado: ver b2b-pagos-correccion).
 describe('B2B · permisos por rol', () => {
   const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2B' } });
   const SIN_PERMISO = 'No tienes permiso para realizar esta acción';
@@ -38,7 +39,7 @@ describe('B2B · permisos por rol', () => {
     });
   });
 
-  describe('escrituras de pedidos: Operador 403 (sin efectos), Gerente y Dueño permitidos, sin token 401', () => {
+  describe('escrituras de pedidos de admin: Operador 403 (sin efectos), Gerente y Dueño permitidos, sin token 401', () => {
     it('POST /pedidos-b2b', async () => {
       expectError(await apiRol(s.h, s.base, 'OPERADOR').post('/pedidos-b2b', bodyB2b(s.base)), 403, SIN_PERMISO);
       expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
@@ -48,10 +49,7 @@ describe('B2B · permisos por rol', () => {
     });
 
     const escrituras: [string, (id: string) => { metodo: 'patch'; url: string; body?: object }][] = [
-      ['items', (id) => ({ metodo: 'patch', url: `/pedidos-b2b/${id}/items`, body: { items: [{ productId: '', distribucion: [{ dia: 'LUNES', cantidad: 12 }] }] } })],
-      ['avanzar', (id) => ({ metodo: 'patch', url: `/pedidos-b2b/${id}/avanzar` })],
       ['marcar-pagado', (id) => ({ metodo: 'patch', url: `/pedidos-b2b/${id}/marcar-pagado` })],
-      ['cancelar', (id) => ({ metodo: 'patch', url: `/pedidos-b2b/${id}/cancelar` })],
     ];
     it.each(escrituras)('PATCH /pedidos-b2b/:id/%s', async (_nombre, ruta) => {
       const armar = (id: string) => {
@@ -74,6 +72,29 @@ describe('B2B · permisos por rol', () => {
       for (const [i, rol] of (['GERENTE', 'DUENO'] as Rol[]).entries()) {
         const p = await crearPublicoB2b(s.h, s.base, { contactoTelefono: `55000000${i}0` });
         const r = armar(p.id);
+        const llamada = apiRol(s.h, s.base, rol).patch(r.url);
+        const res = r.body ? await llamada.send(r.body) : await llamada;
+        expect([rol, res.status]).toStrictEqual([rol, 200]);
+      }
+    });
+  });
+
+  describe('editar, confirmar y cancelar: abiertas a los 3 roles (sin token 401)', () => {
+    const operaciones: [string, (id: string, productId: string) => { url: string; body?: object }][] = [
+      ['items', (id, productId) => ({ url: `/pedidos-b2b/${id}/items`, body: { items: [{ productId, distribucion: [{ dia: 'LUNES', cantidad: 12 }] }] } })],
+      ['avanzar', (id) => ({ url: `/pedidos-b2b/${id}/avanzar` })],
+      ['cancelar', (id) => ({ url: `/pedidos-b2b/${id}/cancelar` })],
+    ];
+    it.each(operaciones)('PATCH /pedidos-b2b/:id/%s', async (_nombre, ruta) => {
+      const anonimo = ruta('x', s.base.productoA.id);
+      expectError(
+        anonimo.body ? await anon().patch(anonimo.url).send(anonimo.body) : await anon().patch(anonimo.url),
+        401,
+        'Unauthorized',
+      );
+      for (const [i, rol] of roles.entries()) {
+        const p = await crearPublicoB2b(s.h, s.base, { contactoTelefono: `55000001${i}0` });
+        const r = ruta(p.id, s.base.productoA.id);
         const llamada = apiRol(s.h, s.base, rol).patch(r.url);
         const res = r.body ? await llamada.send(r.body) : await llamada;
         expect([rol, res.status]).toStrictEqual([rol, 200]);
