@@ -44,6 +44,11 @@ function formatFechaCorta(fecha: string): string {
 export default function DashboardPage() {
   const { user } = useSession();
 
+  // Inicio B2B: los 3 roles. Inicio B2C: solo Gerente y Dueño (sin cambios).
+  if (user.tenant.tipoStorefront !== "RETAIL_B2B" && user.rol === "OPERADOR") {
+    return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
+  }
+
   // B2C queda exactamente igual a como estaba (InicioB2C, sin cambios) —
   // B2B consume un agregado distinto (GET /pedidos-b2b/resumen, ver
   // inicio-b2b.tsx), Order/summary no le aplica.
