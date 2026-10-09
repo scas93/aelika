@@ -1,5 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { Cliente, ClienteCanal, PedidoB2bModoCobro, Prisma } from '../../generated/prisma/client';
+import {
+  Cliente,
+  ClienteCanal,
+  PedidoB2bModoCobro,
+  Prisma,
+} from '../../generated/prisma/client';
 import { normalizarTelefono } from '../common/telefono';
 
 /**
@@ -9,7 +14,10 @@ import { normalizarTelefono } from '../common/telefono';
  * Recibe el cliente Prisma como parámetro (raíz o transacción) y siempre un tenantId explícito: sirve igual con
  * sesión JWT que desde un script, y no depende de TenantPrismaService.
  */
-export type ClienteB2bDb = Pick<Prisma.TransactionClient, 'cliente' | 'clienteTelefono'>;
+export type ClienteB2bDb = Pick<
+  Prisma.TransactionClient,
+  'cliente' | 'clienteTelefono'
+>;
 
 export interface TelefonoB2bInput {
   telefono: string;
@@ -40,10 +48,15 @@ export function slugificar(texto: string): string {
 }
 
 /** Código de cliente: `{slug del negocio}-{slug del cliente}`. Lanza 400 si el sufijo queda vacío. */
-export function construirCodigoCliente(tenantSlug: string, sufijo: string): string {
+export function construirCodigoCliente(
+  tenantSlug: string,
+  sufijo: string,
+): string {
   const limpio = slugificar(sufijo);
   if (!limpio) {
-    throw new BadRequestException('El código del cliente no puede quedar vacío (usa letras o números)');
+    throw new BadRequestException(
+      'El código del cliente no puede quedar vacío (usa letras o números)',
+    );
   }
   return `${tenantSlug}-${limpio}`;
 }
@@ -54,7 +67,9 @@ export function construirCodigoCliente(tenantSlug: string, sufijo: string): stri
  */
 export function normalizarTelefonosB2b(telefonos: TelefonoB2bInput[]) {
   if (telefonos.length === 0) {
-    throw new BadRequestException('El cliente necesita al menos un teléfono autorizado');
+    throw new BadRequestException(
+      'El cliente necesita al menos un teléfono autorizado',
+    );
   }
   const normalizados = telefonos.map((t) => ({
     telefono: normalizarTelefono(t.telefono),
@@ -64,7 +79,9 @@ export function normalizarTelefonosB2b(telefonos: TelefonoB2bInput[]) {
   if (normalizados.some((t) => t.telefono.length < 10)) {
     throw new BadRequestException('Cada teléfono debe tener 10 dígitos');
   }
-  if (new Set(normalizados.map((t) => t.telefono)).size !== normalizados.length) {
+  if (
+    new Set(normalizados.map((t) => t.telefono)).size !== normalizados.length
+  ) {
     throw new BadRequestException('Hay teléfonos repetidos en el cliente');
   }
   const marcados = normalizados.filter((t) => t.principal).length;
@@ -78,20 +95,27 @@ export function normalizarTelefonosB2b(telefonos: TelefonoB2bInput[]) {
 }
 
 /** Alta de un cliente B2B con sus teléfonos. 409 si el código ya existe en el negocio. */
-export async function crearClienteB2b(db: ClienteB2bDb, input: CrearClienteB2bInput): Promise<Cliente> {
+export async function crearClienteB2b(
+  db: ClienteB2bDb,
+  input: CrearClienteB2bInput,
+): Promise<Cliente> {
   const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo);
   const telefonos = normalizarTelefonosB2b(input.telefonos);
   const nombre = input.nombre.trim();
   const direccion = input.direccion.trim();
   if (!nombre || !direccion) {
-    throw new BadRequestException('El nombre comercial y la dirección son obligatorios');
+    throw new BadRequestException(
+      'El nombre comercial y la dirección son obligatorios',
+    );
   }
   const descuento = input.descuentoPorcentaje ?? null;
   if (descuento !== null && (descuento < 0 || descuento > 100)) {
     throw new BadRequestException('El descuento debe estar entre 0 y 100');
   }
 
-  const existente = await db.cliente.findFirst({ where: { tenantId: input.tenantId, codigo } });
+  const existente = await db.cliente.findFirst({
+    where: { tenantId: input.tenantId, codigo },
+  });
   if (existente) {
     throw new ConflictException(`Ya existe un cliente con el código ${codigo}`);
   }
@@ -116,7 +140,11 @@ export async function crearClienteB2b(db: ClienteB2bDb, input: CrearClienteB2bIn
   });
   // Escritura aparte (no nested create): ver la nota de TenantPrismaService sobre escrituras anidadas.
   await db.clienteTelefono.createMany({
-    data: telefonos.map((t) => ({ ...t, tenantId: input.tenantId, clienteId: cliente.id })),
+    data: telefonos.map((t) => ({
+      ...t,
+      tenantId: input.tenantId,
+      clienteId: cliente.id,
+    })),
   });
   return cliente;
 }
@@ -143,9 +171,14 @@ export async function telefonoDestino(
  * Para los seeds: alta por código o, si ya existe, actualiza sus datos y reemplaza sus teléfonos (idempotente).
  * Los pedidos del cliente no se tocan. El código nunca cambia.
  */
-export async function sembrarClienteB2b(db: ClienteB2bDb, input: CrearClienteB2bInput): Promise<Cliente> {
+export async function sembrarClienteB2b(
+  db: ClienteB2bDb,
+  input: CrearClienteB2bInput,
+): Promise<Cliente> {
   const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo);
-  const existente = await db.cliente.findFirst({ where: { tenantId: input.tenantId, codigo } });
+  const existente = await db.cliente.findFirst({
+    where: { tenantId: input.tenantId, codigo },
+  });
   if (!existente) return crearClienteB2b(db, input);
 
   const telefonos = normalizarTelefonosB2b(input.telefonos);
@@ -162,7 +195,11 @@ export async function sembrarClienteB2b(db: ClienteB2bDb, input: CrearClienteB2b
   });
   await db.clienteTelefono.deleteMany({ where: { clienteId: existente.id } });
   await db.clienteTelefono.createMany({
-    data: telefonos.map((t) => ({ ...t, tenantId: input.tenantId, clienteId: existente.id })),
+    data: telefonos.map((t) => ({
+      ...t,
+      tenantId: input.tenantId,
+      clienteId: existente.id,
+    })),
   });
   return actualizado;
 }

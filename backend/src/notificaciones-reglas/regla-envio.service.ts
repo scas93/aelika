@@ -1,11 +1,24 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cliente, Regla, ReglaEnvioLog, Tenant } from '../../generated/prisma/client';
+import {
+  Cliente,
+  Regla,
+  ReglaEnvioLog,
+  Tenant,
+} from '../../generated/prisma/client';
 import { ReglaPlantillaVariableFuente } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildStorefrontUrl } from '../common/storefront-url';
 import { PedidoContexto, PlantillaVariable } from './plantilla-variable.type';
-import { buscarEnCatalogo, disponibleParaContexto } from './plantilla-variable-catalogo';
+import {
+  buscarEnCatalogo,
+  disponibleParaContexto,
+} from './plantilla-variable-catalogo';
 import { sanitizarParaMeta } from './plantilla-variable-formato';
 import { telefonoDestino } from '../clientes/cliente-b2b';
 
@@ -41,7 +54,12 @@ export class ReglaEnvioService {
    * cualquier otro trigger; si la Regla sí referencia CAMPO_PEDIDO pero no
    * se pasó contexto, `resolverVariables` lo rechaza explícito (ver abajo).
    */
-  async enviar(tenant: Tenant, cliente: Cliente, regla: Regla, contexto?: PedidoContexto): Promise<ReglaEnvioLog> {
+  async enviar(
+    tenant: Tenant,
+    cliente: Cliente,
+    regla: Regla,
+    contexto?: PedidoContexto,
+  ): Promise<ReglaEnvioLog> {
     if (!tenant.botWebhookUrl) {
       throw new BadRequestException(
         `El tenant ${tenant.id} no tiene configurada la URL del webhook de Botpress (Tenant.botWebhookUrl) — no se puede enviar.`,
@@ -51,10 +69,17 @@ export class ReglaEnvioService {
     // B2C: el propio teléfono del cliente. B2B: su número principal. Antes del log: sin destino no hay intento.
     const telefono = await telefonoDestino(this.prisma, cliente);
     if (!telefono) {
-      throw new BadRequestException(`El cliente ${cliente.id} no tiene un teléfono al cual enviar (tenant=${tenant.id}).`);
+      throw new BadRequestException(
+        `El cliente ${cliente.id} no tiene un teléfono al cual enviar (tenant=${tenant.id}).`,
+      );
     }
 
-    const variables = this.resolverVariables(regla.plantillaVariables as unknown as PlantillaVariable[], tenant, cliente, contexto);
+    const variables = this.resolverVariables(
+      regla.plantillaVariables as unknown as PlantillaVariable[],
+      tenant,
+      cliente,
+      contexto,
+    );
 
     // Se crea ANTES del POST (estado EN_CURSO por default, ver schema.prisma)
     // para poder correlacionar la respuesta asíncrona de Botpress — su id
@@ -75,7 +100,10 @@ export class ReglaEnvioService {
     const payload = {
       correlacionId: log.id,
       telefono: `${LADA_PAIS}${telefono}`,
-      plantilla: { nombre: regla.plantillaNombre, idioma: regla.plantillaIdioma },
+      plantilla: {
+        nombre: regla.plantillaNombre,
+        idioma: regla.plantillaIdioma,
+      },
       variables,
     };
 
@@ -84,26 +112,38 @@ export class ReglaEnvioService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(tenant.botWebhookSecret ? { 'x-bp-secret': tenant.botWebhookSecret } : {}),
+          ...(tenant.botWebhookSecret
+            ? { 'x-bp-secret': tenant.botWebhookSecret }
+            : {}),
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const detalle = await response.text().catch(() => `HTTP ${response.status}`);
+        const detalle = await response
+          .text()
+          .catch(() => `HTTP ${response.status}`);
         this.logger.warn(
           `Botpress rechazó el POST inicial para ReglaEnvioLog ${log.id} (tenant=${tenant.id}): ${detalle}`,
         );
-        return this.prisma.reglaEnvioLog.update({ where: { id: log.id }, data: { estado: 'FALLO' } });
+        return this.prisma.reglaEnvioLog.update({
+          where: { id: log.id },
+          data: { estado: 'FALLO' },
+        });
       }
 
-      this.logger.log(`POST a Botpress aceptado para ReglaEnvioLog ${log.id} (tenant=${tenant.id}) — en curso.`);
-      return log;
-    } catch (error: any) {
-      this.logger.error(
-        `Error de red mandando ReglaEnvioLog ${log.id} (tenant=${tenant.id}) a Botpress: ${error?.message ?? error}`,
+      this.logger.log(
+        `POST a Botpress aceptado para ReglaEnvioLog ${log.id} (tenant=${tenant.id}) — en curso.`,
       );
-      return this.prisma.reglaEnvioLog.update({ where: { id: log.id }, data: { estado: 'FALLO' } });
+      return log;
+    } catch (error: unknown) {
+      this.logger.error(
+        `Error de red mandando ReglaEnvioLog ${log.id} (tenant=${tenant.id}) a Botpress: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return this.prisma.reglaEnvioLog.update({
+        where: { id: log.id },
+        data: { estado: 'FALLO' },
+      });
     }
   }
 
@@ -127,9 +167,13 @@ export class ReglaEnvioService {
     logId: string,
     estado: 'EXITO' | 'FALLO',
   ): Promise<ReglaEnvioLog> {
-    const log = await this.prisma.reglaEnvioLog.findFirst({ where: { id: logId, tenantId } });
+    const log = await this.prisma.reglaEnvioLog.findFirst({
+      where: { id: logId, tenantId },
+    });
     if (!log) {
-      throw new NotFoundException(`No se encontró el envío ${logId} para este tenant.`);
+      throw new NotFoundException(
+        `No se encontró el envío ${logId} para este tenant.`,
+      );
     }
 
     if (log.estado !== 'EN_CURSO') {
@@ -139,7 +183,10 @@ export class ReglaEnvioService {
       return log;
     }
 
-    return this.prisma.reglaEnvioLog.update({ where: { id: logId }, data: { estado } });
+    return this.prisma.reglaEnvioLog.update({
+      where: { id: logId },
+      data: { estado },
+    });
   }
 
   /**
@@ -157,7 +204,11 @@ export class ReglaEnvioService {
     contexto: PedidoContexto | undefined,
   ): string[] {
     const ahora = new Date();
-    const storefrontUrl = buildStorefrontUrl(this.configService, tenant.slug, tenant.tipoStorefront);
+    const storefrontUrl = buildStorefrontUrl(
+      this.configService,
+      tenant.slug,
+      tenant.tipoStorefront,
+    );
 
     return [...plantillaVariables]
       .sort((a, b) => a.posicion - b.posicion)
@@ -176,12 +227,20 @@ export class ReglaEnvioService {
         if (!disponibleParaContexto(definicion.restriccion, contexto)) {
           throw new BadRequestException(
             `La variable "${definicion.label}" no aplica a este envío (${
-              definicion.restriccion.tipo === 'ninguna' ? 'sin restricción' : definicion.restriccion.motivo
+              definicion.restriccion.tipo === 'ninguna'
+                ? 'sin restricción'
+                : definicion.restriccion.motivo
             }).`,
           );
         }
 
-        const valor = definicion.resolver({ tenant, cliente, contexto, ahora, storefrontUrl });
+        const valor = definicion.resolver({
+          tenant,
+          cliente,
+          contexto,
+          ahora,
+          storefrontUrl,
+        });
         return sanitizarParaMeta(valor ?? '', definicion.fallback);
       });
   }
