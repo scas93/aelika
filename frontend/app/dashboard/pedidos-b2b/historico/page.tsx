@@ -31,6 +31,7 @@ import { FiltroSelectPopover } from "../../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
 import HistoricoDetallePanel from "./historico-detalle-panel";
+import { formatearFolioB2b } from "@/lib/format";
 
 const LIMIT = 25;
 
@@ -44,7 +45,7 @@ function formatSemana(iso: string): string {
 // estado real cuando aplica — no hay variante "cancelado" en ESTADO_VARIANT,
 // se resuelve aquí igual que ahí (peligro).
 const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
-  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">#{pedido.folio}</span> },
+  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">{formatearFolioB2b(pedido.folio)}</span> },
   { key: "negocio", header: "Negocio", render: (pedido) => pedido.negocioNombre },
   { key: "semana", header: "Semana", render: (pedido) => formatSemana(pedido.semanaInicio) },
   {

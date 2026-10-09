@@ -113,7 +113,7 @@ export function pedidoB2bEsperado(overrides: Record<string, unknown> = {}) {
   return {
     id: '<pedido>',
     tenantId: '<tenant>',
-    folio: '1',
+    folio: 'P-000001',
     negocioNombre: 'Cafetería La Esquina',
     contactoNombre: 'Luis Compras',
     contactoTelefono: '+52 55 3333 4444',

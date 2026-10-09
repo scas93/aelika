@@ -16,6 +16,7 @@ import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
+import { formatearFolioB2b } from "@/lib/format";
 
 // timeZone: "UTC" en todo este archivo — `fecha` es un string "YYYY-MM-DD"
 // parseado como medianoche UTC (mismo motivo que formatFecha en
@@ -184,7 +185,7 @@ export default function PedidosB2bDiaPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-bold text-admin-ink">#{entrega.folio}</span>
+                      <span className="text-base font-bold text-admin-ink">{formatearFolioB2b(entrega.folio)}</span>
                       <span className="text-sm font-semibold text-admin-ink">{entrega.negocioNombre}</span>
                       {entrega.atrasada && <Badge variant="peligro">Atrasada</Badge>}
                       <Badge variant={ESTADO_ENTREGA_VARIANT[entrega.entregaEstado]}>{ESTADO_ENTREGA_LABEL[entrega.entregaEstado]}</Badge>

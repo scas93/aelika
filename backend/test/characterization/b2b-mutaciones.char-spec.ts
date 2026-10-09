@@ -174,7 +174,7 @@ describe('B2B · mutaciones', () => {
         clienteId: '<cliente>',
         contexto: {
           origen: 'PEDIDO_B2B',
-          folio: '1',
+          folio: 'P-000001',
           total: '662',
           estatus: 'CONFIRMADO_SURTIENDO',
           createdAt: '<iso>',
@@ -285,7 +285,7 @@ describe('B2B · mutaciones', () => {
         clienteId: '<cliente>',
         contexto: {
           origen: 'PEDIDO_B2B',
-          folio: '1',
+          folio: 'P-000001',
           total: '662',
           estatus: 'CONFIRMADO_SURTIENDO',
           createdAt: '<iso>',

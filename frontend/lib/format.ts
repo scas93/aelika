@@ -46,3 +46,11 @@ export function formatFechaCorta(iso: string, ahora: Date = new Date()): string 
   const mismoAnio = ANIO.format(fecha) === ANIO.format(ahora);
   return (mismoAnio ? FECHA_CORTA : FECHA_CORTA_CON_ANIO).format(fecha);
 }
+
+/**
+ * Folio de un pedido B2B para mostrar. Los folios anteriores son numéricos ("12") y se muestran como "#12"; los nuevos
+ * ("P-000001") ya llevan su prefijo y se muestran tal cual. No usar con folios B2C (siempre "#folio").
+ */
+export function formatearFolioB2b(folio: string): string {
+  return /^\d+$/.test(folio) ? `#${folio}` : folio;
+}

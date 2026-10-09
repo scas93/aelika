@@ -15,7 +15,7 @@ type Fila = {
 const fila = (
   folio: string, negocioNombre: string, contactoNombre: string, semana: string, estado: string, estadoPago: string,
   modoCobro: string, cancelado: boolean, totalPiezas: number, total: string, createdAt: string,
-): Fila => ({ folio, negocioNombre, contactoNombre, semanaInicio: `${semana}T00:00:00.000Z`, estado, estadoPago, modoCobro, cancelado, totalPiezas, total, createdAt });
+): Fila => ({ folio: `P-${folio.padStart(6, '0')}`, negocioNombre, contactoNombre, semanaInicio: `${semana}T00:00:00.000Z`, estado, estadoPago, modoCobro, cancelado, totalPiezas, total, createdAt });
 
 const FILAS: Record<string, Fila> = {
   '1': fila('1', 'Abarrotes Uno', 'Uno', '2026-09-14', 'COMPLETADO', 'PAGADO', 'AL_FINAL', false, 12, '540', '2026-09-10T15:00:00.000Z'),
@@ -26,7 +26,7 @@ const FILAS: Record<string, Fila> = {
   '6': fila('6', 'Fonda Seis', 'Seis', '2026-10-12', 'CONFIRMADO_SURTIENDO', 'PAGADO', 'AL_INICIO', false, 20, '900', '2026-09-29T17:00:00.000Z'),
 };
 const ordenar = <T extends { semanaInicio: string; folio: string }>(rows: T[]) =>
-  [...rows].sort((a, b) => (a.semanaInicio === b.semanaInicio ? Number(a.folio) - Number(b.folio) : a.semanaInicio < b.semanaInicio ? 1 : -1));
+  [...rows].sort((a, b) => (a.semanaInicio === b.semanaInicio ? a.folio.localeCompare(b.folio) : a.semanaInicio < b.semanaInicio ? 1 : -1));
 const filas = (...folios: string[]) => ordenar(folios.map((f) => FILAS[f]));
 
 describe('B2B · panel', () => {
@@ -103,12 +103,12 @@ describe('B2B · panel', () => {
       return rows.sort();
     };
     const R: Record<string, string> = {
-      '1': '1,Abarrotes Uno,Uno,2026-09-14,COMPLETADO,AL_FINAL,PAGADO,No,12,540.00',
-      '2': '2,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00',
-      '3': '3,Cafetería Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00',
-      '4': '4,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25',
-      '5': '5,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,Sí,10,0.00',
-      '6': '6,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00',
+      '1': 'P-000001,Abarrotes Uno,Uno,2026-09-14,COMPLETADO,AL_FINAL,PAGADO,No,12,540.00',
+      '2': 'P-000002,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00',
+      '3': 'P-000003,Cafetería Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00',
+      '4': 'P-000004,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25',
+      '5': 'P-000005,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,Sí,10,0.00',
+      '6': 'P-000006,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00',
     };
     const esperado = (...f: string[]) => f.map((x) => R[x]).sort();
 
@@ -154,17 +154,17 @@ describe('B2B · panel', () => {
         Array(2).fill(['atrasada', 'cancelado', 'cerradaAt', 'contactoNombre', 'contactoTelefono', 'entregaEstado', 'entregaId', 'estado', 'folio', 'id', 'items', 'negocioNombre']),
       );
       expect(sinId(res.body)).toStrictEqual([
-        entrega('2', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)]),
-        entrega('3', 'Cafetería Tres', 'Tres', '5511000003', 'PENDIENTE_CONFIRMACION', [it_(s.base.productoB.id, 'Concha', '30.5', 10)]),
+        entrega('P-000002', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)]),
+        entrega('P-000003', 'Cafetería Tres', 'Tres', '5511000003', 'PENDIENTE_CONFIRMACION', [it_(s.base.productoB.id, 'Concha', '30.5', 10)]),
       ]);
     });
 
     it('otros días: lunes (solo p2, ya pasado y pendiente → atrasada), lunes de la semana próxima (p4; p5 cancelado no aparece), martes vacío', async () => {
       expect(sinId((await api().get('/pedidos-b2b/dia/2026-09-28').expect(200)).body)).toStrictEqual([
-        entrega('2', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)], { atrasada: true }),
+        entrega('P-000002', 'Bodega Dos', 'Dos', '5511000002', 'CONFIRMADO_SURTIENDO', [it_(s.base.productoA.id, 'Café americano', '45', 6)], { atrasada: true }),
       ]);
       expect(sinId((await api().get('/pedidos-b2b/dia/2026-10-05').expect(200)).body)).toStrictEqual([
-        entrega('4', 'Deli Cuatro', 'Cuatro', '5511000004', 'PENDIENTE_CONFIRMACION', [it_(s.base.productoA.id, 'Café americano', '45', 10)]),
+        entrega('P-000004', 'Deli Cuatro', 'Cuatro', '5511000004', 'PENDIENTE_CONFIRMACION', [it_(s.base.productoA.id, 'Café americano', '45', 10)]),
       ]);
       expect((await api().get('/pedidos-b2b/dia/2026-09-29').expect(200)).body).toStrictEqual([]);
     });
@@ -173,14 +173,14 @@ describe('B2B · panel', () => {
       // p1 (COMPLETADO): su entrega del lunes 09-14 quedó Entregada y SIGUE apareciendo, con su estado y la hora del cierre.
       const [p1] = (await api().get('/pedidos-b2b/dia/2026-09-14').expect(200)).body;
       expect({ folio: p1.folio, estado: p1.estado, entregaEstado: p1.entregaEstado, atrasada: p1.atrasada, cerrada: p1.cerradaAt !== null }).toStrictEqual({
-        folio: '1',
+        folio: 'P-000001',
         estado: 'COMPLETADO',
         entregaEstado: 'ENTREGADA',
         atrasada: false,
         cerrada: true,
       });
       // p5 (cancelado, todas sus entregas CANCELADAS) no aparece el lunes 10-05 (solo p4)
-      expect((await api().get('/pedidos-b2b/dia/2026-10-05').expect(200)).body.map((r: any) => r.folio)).toStrictEqual(['4']);
+      expect((await api().get('/pedidos-b2b/dia/2026-10-05').expect(200)).body.map((r: any) => r.folio)).toStrictEqual(['P-000004']);
     });
 
     it('fecha inválida: 400', async () => {
@@ -198,7 +198,7 @@ describe('B2B · panel', () => {
   describe('GET /pedidos-b2b/resumen', () => {
     it('valores exactos (semana en curso, próxima semana, ranking)', async () => {
       const res = await api().get('/pedidos-b2b/resumen').expect(200);
-      const sorted = (arr: any[]) => [...arr].sort((a, b) => Number(a.folio) - Number(b.folio));
+      const sorted = (arr: any[]) => [...arr].sort((a, b) => a.folio.localeCompare(b.folio));
       const { semanaEnCurso, ...resto } = res.body;
       const { entregasHoy, entregasManana, pendientesMasAntiguos, ...enCurso } = semanaEnCurso;
       expect(Object.keys(res.body).sort()).toStrictEqual(['proximaSemana', 'rankingProductos', 'semanaEnCurso']);
@@ -212,14 +212,14 @@ describe('B2B · panel', () => {
       });
       // sin orden contractual en entregas de hoy
       expect(sorted(entregasHoy)).toStrictEqual([
-        { folio: '2', negocioNombre: 'Bodega Dos', cantidad: 6 },
-        { folio: '3', negocioNombre: 'Cafetería Tres', cantidad: 10 },
+        { folio: 'P-000002', negocioNombre: 'Bodega Dos', cantidad: 6 },
+        { folio: 'P-000003', negocioNombre: 'Cafetería Tres', cantidad: 10 },
       ]);
       expect(entregasManana).toStrictEqual([]);
       // los más antiguos primero; solo pendientes no cancelados de cualquier semana
       expect(pendientesMasAntiguos).toStrictEqual([
-        { id: e.ids.p3, folio: '3', negocioNombre: 'Cafetería Tres', diasPendiente: 4 },
-        { id: e.ids.p4, folio: '4', negocioNombre: 'Deli Cuatro', diasPendiente: 2 },
+        { id: e.ids.p3, folio: 'P-000003', negocioNombre: 'Cafetería Tres', diasPendiente: 4 },
+        { id: e.ids.p4, folio: 'P-000004', negocioNombre: 'Deli Cuatro', diasPendiente: 2 },
       ]);
       expect(resto).toStrictEqual({
         proximaSemana: { inicio: '2026-10-05', fin: '2026-10-11', totalPedidos: 1, totalPiezas: 15 },
@@ -257,7 +257,7 @@ describe('B2B · panel', () => {
       expectExacto(
         res.body,
         pedidoB2bEsperado({
-          folio: '4',
+          folio: 'P-000004',
           negocioNombre: 'Deli Cuatro',
           contactoNombre: 'Cuatro',
           contactoTelefono: '5511000004',
@@ -299,7 +299,7 @@ describe('B2B · panel', () => {
       expectExacto(
         res.body,
         pedidoB2bEsperado({
-          folio: '3',
+          folio: 'P-000003',
           negocioNombre: 'Cafetería Tres',
           contactoNombre: 'Tres',
           contactoTelefono: '5511000003',

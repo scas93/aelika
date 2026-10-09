@@ -1,6 +1,7 @@
 import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
 import { METODO_PAGO_LABEL, type Order, type PedidoB2bEntregaDia, type PublicOrderItem, type Role } from "./api";
 import { regimenFiscalLabel, usoCfdiLabel } from "./catalogos-sat";
+import { formatearFolioB2b } from "./format";
 
 // GHIA GTP801, 80mm — Font A fits ~42-48 chars at this width; 42 is the
 // conservative choice so lines don't wrap unexpectedly on narrower printers.
@@ -286,7 +287,7 @@ function buildComandaB2bDiaBytes(entrega: PedidoB2bEntregaDia, ctx: ComandaB2bDi
     .font("A")
     .size(2, 2)
     .bold(true)
-    .line(`#${entrega.folio}`)
+    .line(formatearFolioB2b(entrega.folio))
     .bold(false)
     .size(1, 1)
     .bold(true)

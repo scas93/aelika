@@ -27,6 +27,7 @@ import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import { formatearFolioB2b } from "@/lib/format";
 
 // Estado local de edición — una fila por producto, con un id propio
 // (independiente de productId) porque dos líneas del pedido podrían
@@ -288,7 +289,7 @@ export default function DetallePanel({
   const productosDisponibles = products?.filter((p) => !editItems.some((item) => item.productId === p.id)) ?? [];
 
   return (
-    <SidePanel open={pedidoId !== null} onClose={onClose} title={pedido ? `Pedido #${pedido.folio}` : "Pedido"}>
+    <SidePanel open={pedidoId !== null} onClose={onClose} title={pedido ? `Pedido ${formatearFolioB2b(pedido.folio)}` : "Pedido"}>
       {loadError && <p className="text-sm text-red-600">{loadError}</p>}
 
       {!pedido && !loadError && <p className="text-sm text-admin-ink-soft">Cargando...</p>}
@@ -554,8 +555,8 @@ export default function DetallePanel({
       >
         <p className="text-sm text-admin-ink">
           {confirmPago === "desmarcar"
-            ? `¿Desmarcar el pago del pedido #${pedido?.folio}?`
-            : `¿Marcar el pedido #${pedido?.folio} como pagado?`}{" "}
+            ? `¿Desmarcar el pago del pedido ${pedido ? formatearFolioB2b(pedido.folio) : ""}?`
+            : `¿Marcar el pedido ${pedido ? formatearFolioB2b(pedido.folio) : ""} como pagado?`}{" "}
           <span className="font-semibold">Total: {pedido ? formatMoney(pedido.total) : ""}</span>
         </p>
         {confirmPago === "desmarcar" && pedido?.modoCobro === "AL_INICIO" && (
@@ -584,7 +585,7 @@ export default function DetallePanel({
         }
       >
         <p className="text-sm text-admin-ink-soft">
-          Esta acción no se puede deshacer. El pedido #{pedido?.folio} de {pedido?.negocioNombre} quedará cancelado: las
+          Esta acción no se puede deshacer. El pedido {pedido ? formatearFolioB2b(pedido.folio) : ""} de {pedido?.negocioNombre} quedará cancelado: las
           entregas ya cerradas se conservan y se cobran; las pendientes se cancelan y no se cobran.
         </p>
       </Modal>

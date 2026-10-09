@@ -77,7 +77,7 @@ describe('B2B · creación admin', () => {
     await s.h.prisma.tenant.update({ where: { id: s.base.tenant.id }, data: { facturacionModo: 'OBLIGATORIO' } });
     const b = await crear('DUENO', { contactoTelefono: '5500000001' }); // ni siquiera exige factura
     expect(b.status).toBe(201);
-    exacto(b.body, pedidoB2bEsperado({ folio: '2', contactoTelefono: '5500000001' }));
+    exacto(b.body, pedidoB2bEsperado({ folio: 'P-000002', contactoTelefono: '5500000001' }));
   });
 
   it('HUECO CONGELADO: no valida la ventana de recepción (crea aunque esté cerrada)', async () => {

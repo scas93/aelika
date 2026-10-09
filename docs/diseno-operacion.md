@@ -54,7 +54,7 @@ Un cliente está **activo** mientras no esté dado de baja. La baja es lógica: 
 
 | Campo | Notas |
 | --- | --- |
-| Folio | P- + consecutivo de 6 dígitos por negocio (ej. P-000001). Aplica a todos los negocios, solo para pedidos nuevos; reiniciar o no el consecutivo se decide por facilidad de implementación |
+| Folio | P- + consecutivo de 6 dígitos por negocio (ej. P-000001). Aplica solo a pedidos B2B nuevos; los pedidos B2C conservan su consecutivo simple |
 | Cliente | Uno por pedido |
 | Semana | Fecha de inicio (lunes) y fin (domingo) |
 | Método de entrega | Mostrador o a domicilio. Uno por pedido |

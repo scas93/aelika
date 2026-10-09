@@ -15,6 +15,8 @@
  *  4. (solo flujo por API, `cancelacionRecalcula`) El total de un pedido CANCELADO solo cuenta entregas no canceladas: p5
  *     pasa de $450 a $0. En el flujo "filas legacy → migración" NO aplica: la migración de la Etapa 2 conserva el total
  *     histórico ($450) y el recálculo lo hace el script de datos b2b-estados (`--totales-cancelados`).
+ *  6. (Folio B2B nuevo) Los folios de pedidos B2B nuevos son "P-" + 6 dígitos (antes "1", "2"…). Se lleva de vuelta al consecutivo
+ *     simple (P-000003 → 3) en el cuerpo, el CSV y los textos; el resto se sigue comparando byte a byte.
  */
 const CAMPOS_NUEVOS = ['pagadoAt', 'entregas', 'entregaId', 'entregaEstado', 'cerradaAt', 'atrasada', 'enProceso'];
 
@@ -38,7 +40,7 @@ function recorrer(valor: any, f: (o: any) => void): any {
 export function adaptarAlDorado(nombre: string, recibido: Dorado, op: OpcionesExcepciones): Dorado {
   if (recibido.texto) {
     const texto = recibido.texto.map((l) => {
-      let linea = l.replace(',COMPLETADO,', ',DESPACHADO,'); // (1)
+      let linea = l.replace(',COMPLETADO,', ',DESPACHADO,').replace(/\bP-0*(\d+)\b/g, '$1'); // (1) y (6)
       if (op.cancelacionRecalcula && /^5,/.test(linea) && linea.endsWith(',10,0.00')) linea = linea.replace(/,10,0\.00$/, ',10,450.00'); // (4)
       return linea;
     });
@@ -52,6 +54,7 @@ export function adaptarAlDorado(nombre: string, recibido: Dorado, op: OpcionesEx
     body = body.map(({ cancelado: _c, ...r }: any) => r); // (2): `cancelado` por fila es nuevo en /dia
   }
   body = recorrer(body, (o) => {
+    if (typeof o.folio === 'string') o.folio = o.folio.replace(/^P-0*(\d+)$/, '$1'); // (6)
     if (o.estado === 'COMPLETADO') o.estado = 'DESPACHADO'; // (1)
     for (const campo of CAMPOS_NUEVOS) delete o[campo]; // (2)
     if (op.cancelacionRecalcula && o.folio === '5' && o.cancelado === true) {

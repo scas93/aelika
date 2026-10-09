@@ -219,7 +219,7 @@ describe('Transversal · Reglas de notificación', () => {
         regla: { id: '<R3>', nombre: 'PEDIDO_B2B/CONFIRMADO_SURTIENDO' },
         contexto: {
           origen: 'PEDIDO_B2B',
-          folio: '1',
+          folio: 'P-000001',
           total: '662',
           estatus: 'CONFIRMADO_SURTIENDO',
           createdAt: '<iso>',

@@ -72,10 +72,10 @@ describe('Transversal · tipo de pedido vs tipo de storefront', () => {
       const p3 = await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5500000002' });
 
       expect([o1, o2].map((r) => r.body.folio)).toStrictEqual(['1', '2']);
-      expect([p1, p2, p3].map((p) => p.folio)).toStrictEqual(['1', '2', '3']);
-      // ambos tipos comparten folio "1" en el mismo tenant, en tablas distintas
+      expect([p1, p2, p3].map((p) => p.folio)).toStrictEqual(['P-000001', 'P-000002', 'P-000003']);
+      // B2C conserva su consecutivo simple ("1") y B2B usa el suyo con prefijo, en el mismo tenant
       expect(await s.h.prisma.order.count({ where: { folio: '1', tipo: 'B2C' } })).toBe(1);
-      expect(await s.h.prisma.order.count({ where: { folio: '1', tipo: 'B2B' } })).toBe(1);
+      expect(await s.h.prisma.order.count({ where: { folio: 'P-000001', tipo: 'B2B' } })).toBe(1);
       await cederEventLoop();
     });
 
@@ -89,9 +89,9 @@ describe('Transversal · tipo de pedido vs tipo de storefront', () => {
       const res = await Promise.all(tareas);
       expect(res.map((r) => r.status)).toStrictEqual(Array(N).fill(201));
       const b2c = res.filter((_, i) => i % 2 === 0).map((r) => Number(r.body.folio)).sort();
-      const b2b = res.filter((_, i) => i % 2 === 1).map((r) => Number(r.body.folio)).sort();
+      const b2b = res.filter((_, i) => i % 2 === 1).map((r) => r.body.folio as string).sort();
       expect(b2c).toStrictEqual([1, 2, 3]);
-      expect(b2b).toStrictEqual([1, 2, 3]);
+      expect(b2b).toStrictEqual(['P-000001', 'P-000002', 'P-000003']);
       await cederEventLoop();
     });
   });

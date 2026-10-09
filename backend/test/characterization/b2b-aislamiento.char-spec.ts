@@ -26,8 +26,8 @@ describe('B2B · aislamiento multi-tenant', () => {
     s.h.fakes.reset();
   });
 
-  it('cada tenant tiene su propio folio 1', async () => {
-    expect([a1.folio, a2.folio, b1.folio]).toStrictEqual(['1', '2', '1']);
+  it('cada tenant tiene su propio folio P-000001', async () => {
+    expect([a1.folio, a2.folio, b1.folio]).toStrictEqual(['P-000001', 'P-000002', 'P-000001']);
   });
 
   it('B no puede leer un pedido de A por id (404, igual que uno inexistente)', async () => {

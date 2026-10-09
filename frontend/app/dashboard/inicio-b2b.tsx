@@ -8,6 +8,7 @@ import { ApiError, fetchPedidosB2bResumen, type PedidoB2bResumen } from "@/lib/a
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import Card from "./_components/Card";
 import SummaryCard, { SUMMARY_GRID } from "./_components/SummaryCard";
+import { formatearFolioB2b } from "@/lib/format";
 
 // Cada folio de este módulo enlaza a la lista de Pedidos activos — no al
 // detalle directo (fuera de alcance de este widget, ver auditoría) — con el
@@ -20,7 +21,7 @@ function FolioLink({ folio }: { folio: string }) {
       href={PEDIDOS_ACTIVOS_HREF}
       className="shrink-0 text-xs font-bold text-admin-green-dark hover:underline"
     >
-      #{folio}
+      {formatearFolioB2b(folio)}
     </Link>
   );
 }

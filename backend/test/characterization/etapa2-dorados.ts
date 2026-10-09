@@ -82,7 +82,7 @@ type Dorado = { status: number; body?: unknown; texto?: string[] };
 
 function ordenarLista(body: any) {
   const data = [...body.data].sort((a: any, b: any) =>
-    a.semanaInicio === b.semanaInicio ? Number(a.folio) - Number(b.folio) : a.semanaInicio < b.semanaInicio ? 1 : -1,
+    a.semanaInicio === b.semanaInicio ? Number(String(a.folio).replace(/^P-/, '')) - Number(String(b.folio).replace(/^P-/, '')) : a.semanaInicio < b.semanaInicio ? 1 : -1,
   );
   return { ...body, data };
 }

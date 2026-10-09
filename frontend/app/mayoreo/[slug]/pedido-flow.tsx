@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { etiquetaDiaConFecha, rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
+import { formatearFolioB2b } from "@/lib/format";
 
 // Pantallas del flujo de checkout, una vez que el catálogo y el carrito ya
 // quedaron atrás — se muestran dentro del <main> de MayoreoPage como
@@ -672,7 +673,7 @@ export default function PedidoFlow({
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mayoreo-accent-soft text-2xl">✓</div>
       <h2 className="text-lg font-semibold text-mayoreo-ink">Pedido enviado, pendiente de confirmación</h2>
       <p className="text-sm text-mayoreo-ink-soft">Se facturará al finalizar la semana.</p>
-      <p className="text-xs text-mayoreo-ink-soft">Folio #{pedidoCreado.folio}</p>
+      <p className="text-xs text-mayoreo-ink-soft">Folio {formatearFolioB2b(pedidoCreado.folio)}</p>
       <p className="text-xs font-semibold text-mayoreo-ink-soft">
         Semana del {rangoSemanaTexto(semanaDestino.inicio, semanaDestino.fin)}
       </p>
