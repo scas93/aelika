@@ -1480,3 +1480,19 @@ model ReglaEnvioLog {
   @@index([tenantId, clienteId, categoria, createdAt])
   @@map("regla_envio_logs")
 }
+
+// ---------------------------------------------------------------------------
+// TEMPORAL — Fase 4, entrega 4a (prueba de sesión del portal del cliente, solo staging). NO es tabla de tenant.
+// Se elimina en la 4b, cuando se cree la tabla definitiva de sesiones del portal (antes o junto con la siguiente
+// promoción de staging a main). La cookie lleva un token opaco; aquí solo vive su hash.
+// ---------------------------------------------------------------------------
+model SesionPrueba {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userAgent  String?
+  creadaAt   DateTime @default(now())
+  renovadaAt DateTime @default(now())
+  venceAt    DateTime
+
+  @@map("sesiones_prueba")
+}
