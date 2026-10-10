@@ -24,6 +24,7 @@ import { ClientesB2bModule } from './clientes-b2b/clientes-b2b.module';
 import { NotificacionesReglasModule } from './notificaciones-reglas/notificaciones-reglas.module';
 import { AelikaScanLiteModule } from './aelika-scan/lite/aelika-scan-lite.module';
 import { LealtadModule } from './lealtad/lealtad.module';
+import { PortalModule } from './portal/portal.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { LealtadModule } from './lealtad/lealtad.module';
     NotificacionesReglasModule,
     AelikaScanLiteModule,
     LealtadModule,
+    PortalModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

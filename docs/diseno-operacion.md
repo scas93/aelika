@@ -8,7 +8,7 @@ La operación se diseña para ser lo más simple posible: reglas claras para el 
 
 - **Clientes:** cafeterías con entregas programadas. Hoy son \~30; la operación debe soportar 4X (\~120 clientes).
 - **Regla de oro:** las restricciones de tiempo aplican solo al cliente. El equipo puede crear y modificar libremente.
-- **Fuera de alcance en esta versión:** cobranza en sistema, facturación, cupo de capacidad por día, pedidos recurrentes automáticos, repetir pedido anterior, disponibilidad de productos por día, registro de cambios de pedidos, mínimo de piezas.
+- **Fuera de alcance en esta versión:** cobranza en sistema, facturación, cupo de capacidad por día, pedidos recurrentes automáticos, disponibilidad de productos por día, registro de cambios de pedidos, mínimo de piezas.
 
 ## Datos
 
@@ -41,10 +41,11 @@ Estos son los datos que guarda el sistema. El **negocio** es el tenant (Banetto)
 | --- | --- | --- |
 | Nombre comercial | Sí |  |
 | Dirección | Sí | Donde se entrega si el pedido es a domicilio |
-| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. Es lo que el cliente escribe al entrar al portal. No se puede editar después de crearlo, por ahora |
+| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. Identificador interno: se usa en el panel y en el Excel; el cliente no lo escribe al entrar al portal. No se puede editar después de crearlo, por ahora |
 | Descuento | No | % sobre el total del pedido. Aplica solo dentro de su negocio |
 | Modalidad de pago | No | Si no se define, usa la del negocio |
 | Teléfonos autorizados y número principal | Sí, al menos 1 | Un mismo teléfono puede estar registrado en varios clientes, del mismo negocio o de negocios distintos |
+| Pedido favorito | No | Uno por cliente. Lo marca el cliente desde Mis pedidos y lo usa al crear un pedido (ver Canales). Guarda productos y cantidades por día de la semana, no precios |
 
 Una cafetería con 3 sucursales se da de alta como 3 clientes, cada uno con sus teléfonos, descuento y pedidos.
 
@@ -62,6 +63,7 @@ Un cliente está **activo** mientras no esté dado de baja. La baja es lógica: 
 | Estado operativo | Por confirmar, Confirmado, En proceso, Completado, Cancelado |
 | Estado de pago | Pendiente o Pagado, con la fecha en que se marcó |
 | Nota del cliente | Opcional, texto libre. Visible en el panel lateral y en el Excel |
+| Modificado por el cliente | Marca que se enciende cuando el cliente modifica el pedido en el portal y se apaga cuando el equipo lo vuelve a confirmar |
 | Descuento aplicado | % que tenía el cliente al crear el pedido. Si después cambia, no afecta este pedido |
 | Subtotal, descuento y total | En pesos, IVA incluido |
 | Fechas | Creación, confirmación y completado |
@@ -80,11 +82,11 @@ Un cliente está **activo** mientras no esté dado de baja. La baja es lógica: 
 | Tipo | Datos | Cómo entra |
 | --- | --- | --- |
 | Equipo del negocio (admin, operativo) | Nombre, correo, contraseña, rol | Correo y contraseña. Sin recuperación por correo en esta versión |
-| Cliente | Teléfono autorizado en el cliente | Código de cliente + teléfono + código por WhatsApp |
+| Cliente | Teléfono autorizado en uno o más clientes | Teléfono + código por WhatsApp; elige cliente si su teléfono está en varios |
 
 ## Clientes y acceso
 
-Cada cliente tiene varios teléfonos autorizados. El acceso es sin contraseña: código de cliente, teléfono y código por WhatsApp.
+Cada cliente tiene varios teléfonos autorizados, y un mismo teléfono puede estar en varios clientes. El acceso es sin contraseña: teléfono y código por WhatsApp.
 
 **Modelo de cliente:**
 
@@ -96,17 +98,21 @@ Cada cliente tiene varios teléfonos autorizados. El acceso es sin contraseña: 
 
 **Flujo de acceso al portal:**
 
-1. El cliente escribe su código de cliente (ej. banetto-matriz). El código identifica al negocio y al cliente, así que un mismo teléfono puede estar en varios clientes sin confusión.
-2. Escribe su teléfono.
-3. Si el teléfono está autorizado en ese cliente, recibe un código por WhatsApp.
-4. Escribe el código y entra.
+El negocio se identifica por la dirección del portal (/mayoreo/[slug]); el cliente no escribe ningún código de cliente.
 
-Si el número no está autorizado, ve "Tu número no está dado de alta, contáctanos" y no puede seguir.
+1. El cliente escribe su teléfono.
+2. Si el teléfono está autorizado en al menos un cliente activo del negocio, recibe un código por WhatsApp.
+3. Escribe el código.
+4. Si su teléfono está en un solo cliente, entra directo. Si está en varios, elige con cuál entrar, y puede cambiar de cliente dentro del portal.
+
+Si el número no está autorizado en ningún cliente del negocio, ve "Tu número no está dado de alta, contáctanos" y no puede seguir.
+
+**Límite de envíos:** cada envío de código cuesta un mensaje de WhatsApp, así que los envíos tienen límite por teléfono y por dispositivo.
 
 **Para que sea super sencillo desde el teléfono:**
 
 - La sesión dura 60–90 días en el dispositivo. Después de la primera vez, el link del bot lleva directo al catálogo.
-- El código de cliente se queda guardado en el dispositivo. Si la sesión expira, solo se pide el código de WhatsApp.
+- Si la sesión expira, el teléfono queda guardado en el dispositivo y solo se pide de nuevo el código de WhatsApp.
 - El link personal de un solo uso desde el bot queda como mejora futura, sujeta a validación técnica.
 
 ## Canales
@@ -116,19 +122,19 @@ Cada negocio tiene su panel administrativo, su propio portal para clientes (stor
 **Bot de WhatsApp:** abre con un mensaje inicial y el menú principal.
 
 1. **Hacer un pedido** → envía el link del portal (siempre el mismo URL).
-2. **Ver o modificar mis pedidos** → envía el mismo link. En el portal, el cliente ve sus pedidos y un botón "Solicitar cambio" que lo lleva con un humano.
+2. **Ver o modificar mis pedidos** → envía el mismo link. En el portal, el cliente ve sus pedidos y puede modificar los que tienen entregas todavía modificables.
 3. **Hablar con un humano.**
 
 Lo más común es que el cliente no recorra el menú y vuelva a dar clic al link que el bot le envió antes. Por eso el link debe ser estable y la sesión larga.
 
 **Portal del cliente (mismo storefront actual, con cuenta):**
 
-- **Crear pedido:** pantalla por pantalla, muy parecido al storefront B2B actual. Los datos del cliente vienen precargados y el descuento ya aplicado. Al terminar, el cliente ve una pantalla de confirmación con el folio y el resumen; no se envía WhatsApp hasta que el equipo lo marca Confirmado. Ver la pestaña Pantallas actuales.
-- **Mis pedidos:** una tabla con los pedidos del cliente. Al abrir uno se ve el detalle: información básica del pedido, sus productos, sus entregas con su estado y el estado del pago.
-- **Solicitar cambio:** botón en el detalle que lleva con un humano. El cliente no modifica directamente.
-- **Repetir pedido anterior:** fuera de la primera versión; se define después.
+Al entrar, el portal muestra el menú: **Crear pedido · Modificar pedido activo · Ver mis pedidos**. Si el teléfono está en varios clientes, se muestra en cuál está y puede cambiar de cliente.
 
-El portal del cliente es el mismo storefront B2B actual (/mayoreo/[slug]), no uno nuevo. En esta versión siempre se entra con cuenta: código de cliente, teléfono y código por WhatsApp.
+- **Crear pedido:** pantalla por pantalla, muy parecido al storefront B2B actual. Los datos del cliente vienen precargados y el descuento ya aplicado. Al terminar, el cliente ve una pantalla de confirmación con el folio y el resumen; no se envía WhatsApp hasta que el equipo lo marca Confirmado. Ver la pestaña Pantallas actuales. Si el cliente tiene pedido favorito, puede pulsar **Usar mi favorito**: llena el carrito y la distribución por día de la semana, y el cliente puede editarlo antes de enviar. Los días que ya no cumplen las 36h se quitan con un aviso. Los precios son siempre los actuales.
+- **Modificar pedido activo:** muestra solo los pedidos con alguna entrega todavía modificable; si hay dos, el cliente elige. Reglas en la sección Reglas de pedido. Las entregas a menos de 18h y las ya cerradas se ven bloqueadas, con un botón para contactar al negocio (número de atención configurado en Ajustes).
+- **Ver mis pedidos:** pedidos activos e historial, con estado, entregas y estado de pago. Al abrir uno se ve el detalle: información básica del pedido, sus productos, sus entregas con su estado y el estado del pago. Desde aquí el cliente marca un pedido como su **favorito** (uno por cliente).
+- El cliente **no cancela el pedido completo**: eso se pide por teléfono al negocio.
 
 **Captura por teléfono:** el operativo selecciona al cliente de una lista y captura el pedido o la modificación desde el navegador.
 
@@ -163,7 +169,8 @@ Un pedido es una semana (lunes a domingo) con hasta 7 entregas. Todas las entreg
 | Acción | Quién | Límite | Ejemplo: entrega miércoles 8am |
 | --- | --- | --- | --- |
 | Crear | Cliente (portal) | Hasta 36h antes de la entrega | Lunes 8pm |
-| Modificar | Cliente, por teléfono | Hasta 18h antes de la entrega | Martes 2pm |
+| Modificar (cambiar productos y cantidades, o quitar una entrega) | Cliente (portal) | Hasta 18h antes de esa entrega | Martes 2pm |
+| Agregar un día nuevo | Cliente (portal) | Hasta 36h antes, igual que crear | Lunes 8pm |
 | Crear o modificar | Operativo o admin | Sin límite de tiempo ni de horizonte, ni hora de corte interna (cualquier fecha, incluso días no laborables) | — |
 | Corregir ya entregado | Solo admin | Sin límite | Después de la entrega |
 
@@ -171,7 +178,8 @@ Un pedido es una semana (lunes a domingo) con hasta 7 entregas. Todas las entreg
 
 - Fecha mínima: ahora + 36h. Fecha máxima: domingo de la semana siguiente.
 - Si el cliente elige días de las dos semanas, el sistema genera automáticamente dos pedidos, uno por semana, en un solo checkout.
-- Un cliente no puede tener dos pedidos en la misma semana. Un pedido cancelado no cuenta: el cliente puede crear otro para esa misma semana. Si ya tiene uno, ve el mensaje "Ya tienes pedido para esta semana. Para agregar o cambiar entregas, llámanos". El equipo tampoco crea un segundo pedido: modifica el existente.
+- Un cliente no puede tener dos pedidos en la misma semana. Un pedido cancelado no cuenta: el cliente puede crear otro para esa misma semana. Si ya tiene uno, ve el mensaje "Ya tienes pedido para esta semana. Para agregar o cambiar entregas, usa Modificar pedido activo". El equipo tampoco crea un segundo pedido: modifica el existente. Como máximo un cliente tiene dos pedidos activos a la vez (semana en curso y siguiente).
+- **Modificación por el cliente:** las entregas a menos de 18h y las ya cerradas quedan bloqueadas en el portal. Si el pedido estaba Confirmado y el cliente lo modifica, regresa a Por confirmar y se marca "Modificado por el cliente" en Pedidos activos y en el panel lateral hasta que el equipo lo vuelva a confirmar. El pago no cambia por la modificación.
 - Sin mínimo de piezas por pedido ni por entrega.
 
 **Incentivo para pedir antes del sábado 8pm:** sábado 8pm es exactamente 36h antes del lunes 8am. Quien pide después pierde la entrega del lunes; después del domingo 8pm, también la del martes. Los recordatorios lo dicen explícitamente.
@@ -204,7 +212,7 @@ Un pedido tiene dos estados independientes: el operativo, que solo requiere una 
 &#91;embedded content: estados del pedido y de cada entrega\]
 
 1. El cliente o el equipo crea el pedido; queda **Por confirmar**.
-2. El equipo revisa las entregas y los productos de cada entrega, y lo marca **Confirmado**. Se notifica al cliente. Un pedido se puede cancelar en Por confirmar, Confirmado o En proceso: las entregas ya cerradas se quedan como están y se cobran; las pendientes pasan a Canceladas y no se cobran. No existe cancelar una entrega suelta: quitar un día se hace editando el pedido.
+2. El equipo revisa las entregas y los productos de cada entrega, y lo marca **Confirmado**. Se notifica al cliente. Un pedido se puede cancelar en Por confirmar, Confirmado o En proceso: las entregas ya cerradas se quedan como están y se cobran; las pendientes pasan a Canceladas y no se cobran. No existe cancelar una entrega suelta: quitar un día se hace editando el pedido (el equipo en el panel; el cliente en el portal, hasta 18h antes). El cliente no cancela el pedido completo. Si el cliente modifica un pedido Confirmado, vuelve a Por confirmar hasta que el equipo lo confirme de nuevo.
 3. Cada entrega nace **Pendiente** y se cierra como:
    - **Entregada:** el cliente la recoge en mostrador o la recibe a domicilio. Se cobra y se envía la relación de lo entregado.
    - **No recogida:** el cliente no pasó por ella. Solo queda registrada; se cobra igual.
@@ -233,7 +241,7 @@ El módulo de notificaciones ya existe y es requisito del día uno. Lo que esta 
 | Evento | Tipo | Cuándo se dispara | Filtros que debe permitir | Configuración Banetto |
 | --- | --- | --- | --- | --- |
 | Recordatorio programado | Programado | Día y hora configurables | Todos los clientes activos; clientes sin pedido para la siguiente semana | Viernes 12pm a todos; sábado 12pm a clientes sin pedido |
-| Pedido confirmado | Por evento | Cuando el pedido cambia a Confirmado | Cliente del pedido | Activo. Resumen: entregas por día, productos y total con descuento |
+| Pedido confirmado | Por evento | Cuando el pedido cambia a Confirmado, incluido cuando el equipo lo reconfirma tras una modificación del cliente | Cliente del pedido | Activo. Resumen: entregas por día, productos y total con descuento |
 | Entrega entregada | Por evento | Cuando una entrega cambia a Entregada | Cliente del pedido | Activo. Relación de lo entregado en esa entrega |
 
 - Si el admin corrige una entrega ya entregada, no se reenvía la relación. La versión corregida se ve en el portal.
@@ -264,11 +272,11 @@ El equipo opera desde los módulos del sidebar B2B actual, ajustados. Los detall
 | 5. Catálogo | Ver, crear, modificar, activar y desactivar productos y sus categorías. Bloqueado del todo para el Operador, que solo ve los productos en la captura de pedidos | Solo admin |
 | 6. Clientes | Ver, crear, modificar y dar de baja clientes: código de cliente, teléfonos autorizados, número principal, descuento, dirección | Solo admin |
 | 7. Notificaciones | Reglas de los eventos de la sección Notificaciones: activación, horario, filtro y plantilla | Solo admin |
-| 8. Ajustes | Parámetros del negocio, días sin entrega, métodos de entrega y puntos de envío, usuarios del equipo (alta, baja y rol) | Solo admin |
+| 8. Ajustes | Parámetros del negocio, número de atención del negocio, días sin entrega, métodos de entrega y puntos de envío, usuarios del equipo (alta, baja y rol) | Solo admin |
 
 **Detalle por módulo:**
 
-- **Pedidos activos:** como la vista actual. Muestra los pedidos que aún no están completados ni cancelados. Todos los cambios del equipo a un pedido se hacen desde aquí, en el panel lateral. Al completarse o cancelarse, el pedido pasa a Históricos. Si a un pedido Completado se le agregan entregas, vuelve solo a En proceso y a Pedidos activos.
+- **Pedidos activos:** como la vista actual. Muestra los pedidos que aún no están completados ni cancelados. Todos los cambios del equipo a un pedido se hacen desde aquí, en el panel lateral. Al completarse o cancelarse, el pedido pasa a Históricos. Si a un pedido Completado se le agregan entregas, vuelve solo a En proceso y a Pedidos activos. Un pedido que el cliente modificó desde el portal regresa a Por confirmar y lleva la marca "Modificado por el cliente" en la lista y en el panel lateral hasta que el equipo lo confirme.
 - **Entregas del día:** cada entrega se marca una por una (Entregada o No recogida); no hay cambio de estado en bloque. Una entrega de un día pasado que sigue Pendiente se muestra como atrasada; no se cierra en automático.
 - **Los pedidos no se borran:** solo se cancelan.
 
@@ -303,7 +311,7 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Días de entrega habilitados | Todos los días, excepto días no laborables | Sin domingos |
 | Anticipación mínima para crear | 36h | 2h, o mismo día |
 | Anticipación para que el cliente modifique | 18h | Otra, o no permitir |
-| Modificación por el cliente | Solo solicitándola | Directa en el portal |
+| Modificación por el cliente | Directa en el portal | Solo solicitándola por teléfono |
 | Horizonte máximo de selección | Fin de la semana siguiente | 1 día, 1 mes |
 | Mínimo por pedido o por entrega | Ninguno | Piezas o monto mínimo |
 
@@ -318,12 +326,13 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Módulo de pagos | Apagado (el admin marca el pago a mano) | Cobrar en línea |
 | Modalidad de pago (con excepción por cliente) | Crédito | Anticipado |
 | Alta de clientes | Solo admin | Autorregistro con aprobación |
-| Pedir código de cliente al entrar | Sí | Solo teléfono + código |
+| Pedir código de cliente al entrar | No | Sí |
 | Duración de sesión | 60–90 días | Más corta |
 | Confirmación manual del pedido | Sí | Confirmación automática |
 | Estados de entrega en uso | Pendiente, Entregada, No recogida, Cancelada | Con "Lista"; sin "No recogida" |
 | Notificaciones | Los 3 eventos de la sección Notificaciones (4 envíos) | Cada una con su activación, horario, filtro y plantilla |
 | Menú del bot | 3 opciones | Opciones propias |
+| Número de atención del negocio | Configurado en Ajustes; el portal lo usa en el botón de contacto de las entregas bloqueadas | — |
 
 ### Reglas fijas del producto
 
