@@ -41,7 +41,7 @@ Estos son los datos que guarda el sistema. El **negocio** es el tenant (Banetto)
 | --- | --- | --- |
 | Nombre comercial | Sí |  |
 | Dirección | Sí | Donde se entrega si el pedido es a domicilio |
-| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. Es lo que el cliente escribe al entrar al portal. No se puede editar después de crearlo, por ahora |
+| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. Identificador interno: se usa en el panel y en el Excel; el cliente no lo escribe al entrar al portal. No se puede editar después de crearlo, por ahora |
 | Descuento | No | % sobre el total del pedido. Aplica solo dentro de su negocio |
 | Modalidad de pago | No | Si no se define, usa la del negocio |
 | Teléfonos autorizados y número principal | Sí, al menos 1 | Un mismo teléfono puede estar registrado en varios clientes, del mismo negocio o de negocios distintos |
@@ -80,11 +80,11 @@ Un cliente está **activo** mientras no esté dado de baja. La baja es lógica: 
 | Tipo | Datos | Cómo entra |
 | --- | --- | --- |
 | Equipo del negocio (admin, operativo) | Nombre, correo, contraseña, rol | Correo y contraseña. Sin recuperación por correo en esta versión |
-| Cliente | Teléfono autorizado en el cliente | Código de cliente + teléfono + código por WhatsApp |
+| Cliente | Teléfono autorizado en uno o más clientes | Teléfono + código por WhatsApp; elige cliente si su teléfono está en varios |
 
 ## Clientes y acceso
 
-Cada cliente tiene varios teléfonos autorizados. El acceso es sin contraseña: código de cliente, teléfono y código por WhatsApp.
+Cada cliente tiene varios teléfonos autorizados, y un mismo teléfono puede estar en varios clientes. El acceso es sin contraseña: teléfono y código por WhatsApp.
 
 **Modelo de cliente:**
 
@@ -96,17 +96,21 @@ Cada cliente tiene varios teléfonos autorizados. El acceso es sin contraseña: 
 
 **Flujo de acceso al portal:**
 
-1. El cliente escribe su código de cliente (ej. banetto-matriz). El código identifica al negocio y al cliente, así que un mismo teléfono puede estar en varios clientes sin confusión.
-2. Escribe su teléfono.
-3. Si el teléfono está autorizado en ese cliente, recibe un código por WhatsApp.
-4. Escribe el código y entra.
+El negocio se identifica por la dirección del portal (/mayoreo/[slug]); el cliente no escribe ningún código de cliente.
 
-Si el número no está autorizado, ve "Tu número no está dado de alta, contáctanos" y no puede seguir.
+1. El cliente escribe su teléfono.
+2. Si el teléfono está autorizado en al menos un cliente activo del negocio, recibe un código por WhatsApp.
+3. Escribe el código.
+4. Si su teléfono está en un solo cliente, entra directo. Si está en varios, elige con cuál entrar, y puede cambiar de cliente dentro del portal.
+
+Si el número no está autorizado en ningún cliente del negocio, ve "Tu número no está dado de alta, contáctanos" y no puede seguir.
+
+**Límite de envíos:** cada envío de código cuesta un mensaje de WhatsApp, así que los envíos tienen límite por teléfono y por dispositivo.
 
 **Para que sea super sencillo desde el teléfono:**
 
 - La sesión dura 60–90 días en el dispositivo. Después de la primera vez, el link del bot lleva directo al catálogo.
-- El código de cliente se queda guardado en el dispositivo. Si la sesión expira, solo se pide el código de WhatsApp.
+- Si la sesión expira, el teléfono queda guardado en el dispositivo y solo se pide de nuevo el código de WhatsApp.
 - El link personal de un solo uso desde el bot queda como mejora futura, sujeta a validación técnica.
 
 ## Canales
@@ -128,7 +132,7 @@ Lo más común es que el cliente no recorra el menú y vuelva a dar clic al link
 - **Solicitar cambio:** botón en el detalle que lleva con un humano. El cliente no modifica directamente.
 - **Repetir pedido anterior:** fuera de la primera versión; se define después.
 
-El portal del cliente es el mismo storefront B2B actual (/mayoreo/[slug]), no uno nuevo. En esta versión siempre se entra con cuenta: código de cliente, teléfono y código por WhatsApp.
+El portal del cliente es el mismo storefront B2B actual (/mayoreo/[slug]), no uno nuevo. En esta versión siempre se entra con cuenta: teléfono y código por WhatsApp.
 
 **Captura por teléfono:** el operativo selecciona al cliente de una lista y captura el pedido o la modificación desde el navegador.
 
@@ -318,7 +322,7 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Módulo de pagos | Apagado (el admin marca el pago a mano) | Cobrar en línea |
 | Modalidad de pago (con excepción por cliente) | Crédito | Anticipado |
 | Alta de clientes | Solo admin | Autorregistro con aprobación |
-| Pedir código de cliente al entrar | Sí | Solo teléfono + código |
+| Pedir código de cliente al entrar | No | Sí |
 | Duración de sesión | 60–90 días | Más corta |
 | Confirmación manual del pedido | Sí | Confirmación automática |
 | Estados de entrega en uso | Pendiente, Entregada, No recogida, Cancelada | Con "Lista"; sin "No recogida" |
