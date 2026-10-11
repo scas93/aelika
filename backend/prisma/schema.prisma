@@ -108,6 +108,10 @@ model Tenant {
   // es como la integración Webhook de Botpress lo espera).
   botWebhookUrl                String?
   botWebhookSecret             String?
+  // Plantilla de WhatsApp (categoría AUTHENTICATION) con la que el portal manda el código de acceso. Sin valor = el
+  // portal no envía WhatsApp (solo el modo "código visible" de pruebas). Se asigna cuando Meta la apruebe.
+  portalPlantillaNombre        String?
+  portalPlantillaIdioma        String?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se
@@ -170,6 +174,7 @@ model Tenant {
   notificacionCanalConfigs  NotificacionCanalConfig[]
   notificacionEventoConfigs NotificacionEventoConfig[]
   clientes                  Cliente[]
+  sesionesPortal            SesionPortal[]
   clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
@@ -1133,6 +1138,7 @@ model Cliente {
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   telefonos      ClienteTelefono[]
+  sesionesPortal SesionPortal[]
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
@@ -1482,17 +1488,28 @@ model ReglaEnvioLog {
 }
 
 // ---------------------------------------------------------------------------
-// TEMPORAL — Fase 4, entrega 4a (prueba de sesión del portal del cliente, solo staging). NO es tabla de tenant.
-// Se elimina en la 4b, cuando se cree la tabla definitiva de sesiones del portal (antes o junto con la siguiente
-// promoción de staging a main). La cookie lleva un token opaco; aquí solo vive su hash.
+// Portal del cliente B2B (Fase 4, entrega 4b). Sesión del cliente en su dispositivo: token opaco en una cookie
+// __Host-portal_<slug> (aquí solo vive su hash), 90 días renovables en cada uso. La sesión es del TELÉFONO, no de un
+// cliente: `clienteId` es el cliente activo (null mientras el teléfono, autorizado en varios clientes, no elige).
+// Se revalida contra ClienteTelefono/Cliente en cada petición (ver backend/src/portal/). No es tabla de tenant
+// (los endpoints del portal son públicos y usan PrismaService directo).
 // ---------------------------------------------------------------------------
-model SesionPrueba {
-  id         String   @id @default(uuid())
-  tokenHash  String   @unique
-  userAgent  String?
-  creadaAt   DateTime @default(now())
-  renovadaAt DateTime @default(now())
-  venceAt    DateTime
+model SesionPortal {
+  id            String   @id @default(uuid())
+  tenantId      String
+  // Normalizado con normalizarTelefono (10 dígitos).
+  telefono      String
+  clienteId     String?
+  tokenHash     String   @unique
+  dispositivoId String?
+  userAgent     String?
+  creadaAt      DateTime @default(now())
+  ultimoUsoAt   DateTime @default(now())
+  venceAt       DateTime
 
-  @@map("sesiones_prueba")
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, telefono])
+  @@map("sesiones_portal")
 }

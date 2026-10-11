@@ -13,6 +13,8 @@ import { TelegramTokenService } from '../../src/notificaciones/telegram/telegram
 import { ReglaEnvioService } from '../../src/notificaciones-reglas/regla-envio.service';
 import { WalletPassService } from '../../src/lealtad/wallet-pass.service';
 import { ReglaBarridoService } from '../../src/notificaciones-reglas/regla-barrido.service';
+import { CODIGOS_STORE, MemoriaCodigosStore } from '../../src/portal/codigos-store';
+import { EnviarCodigoAccesoService } from '../../src/portal/enviar-codigo-acceso.service';
 
 export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
 
@@ -31,6 +33,9 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
  *  - reglaEnvio: frontera con Botpress (ReglaEnvioService.enviar) — siempre sustituida.
  *    Recibe (tenant, cliente, regla, contexto?).
  *  - walletCrearPase / walletActualizarPase: WalletWallet API (Lealtad) — siempre sustituida.
+ *  - codigos: almacén de códigos y contadores del acceso al portal (Fase 4) en memoria (sin Redis); `codigos.caido = true`
+ *    simula Redis caído. enviarCodigoAcceso: envío del código por WhatsApp (Botpress nunca se contacta); recibe los datos
+ *    del envío ({ telefono, codigo, plantillaNombre, ... }).
  */
 export interface Fakes {
   queueAdd: jest.Mock;
@@ -44,6 +49,8 @@ export interface Fakes {
   reglaEnvio: jest.Mock;
   walletCrearPase: jest.Mock;
   walletActualizarPase: jest.Mock;
+  codigos: MemoriaCodigosStore;
+  enviarCodigoAcceso: jest.Mock;
   reset(): void;
 }
 
@@ -100,6 +107,8 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
   const reglaEnvio = jest.fn();
   const walletCrearPase = jest.fn();
   const walletActualizarPase = jest.fn();
+  const codigos = new MemoriaCodigosStore();
+  const enviarCodigoAcceso = jest.fn();
 
   const fakes: Fakes = {
     queueAdd,
@@ -112,7 +121,11 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     reglaEnvio,
     walletCrearPase,
     walletActualizarPase,
+    codigos,
+    enviarCodigoAcceso,
     reset() {
+      codigos.reset();
+      enviarCodigoAcceso.mockReset().mockResolvedValue({ enviado: true, correlacionId: 'envio-codigo-char' });
       queueAdd.mockReset().mockResolvedValue(undefined);
       dispararSeguro.mockReset().mockResolvedValue(undefined);
       let n = 0;
@@ -180,7 +193,11 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .overrideProvider(WalletPassService)
     .useValue({ crearPase: walletCrearPase, actualizarPase: walletActualizarPase })
     .overrideProvider(ReglaBarridoService)
-    .useValue({});
+    .useValue({})
+    .overrideProvider(CODIGOS_STORE)
+    .useValue(codigos)
+    .overrideProvider(EnviarCodigoAccesoService)
+    .useValue({ enviar: enviarCodigoAcceso });
   if (!opts.reglasReales) {
     builder = builder.overrideProvider(ReglaEventoPedidoService).useValue({ dispararSeguro });
   }
