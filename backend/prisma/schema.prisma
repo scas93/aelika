@@ -112,6 +112,18 @@ model Tenant {
   // portal no envía WhatsApp (solo el modo "código visible" de pruebas). Se asigna cuando Meta la apruebe.
   portalPlantillaNombre        String?
   portalPlantillaIdioma        String?
+  // Calendario del portal del cliente B2B (Fase 4, 4c). Todo en hora de Ciudad de México. Ver
+  // docs/diseno-operacion.md ("Reglas de pedido") y backend/src/portal/portal-calendario.ts.
+  // Hora de entrega "HH:mm" (la misma para todas las entregas del negocio).
+  portalHoraEntrega            String             @default("08:00")
+  // Horas de anticipación para CREAR o AGREGAR un día (la entrega debe quedar a >= N horas de ahora).
+  portalHorasAgregarDia        Int                @default(36)
+  // Horas de anticipación para MODIFICAR o QUITAR una entrega ya existente.
+  portalHorasModificar         Int                @default(18)
+  // Semanas que el portal deja pedir DESPUÉS de la semana en curso (0 = solo la semana en curso, 1 = en curso + siguiente).
+  portalHorizonteSemanas       Int                @default(1)
+  // Teléfono de atención del negocio (10 dígitos). Vacío = el portal no muestra «Contactar al negocio».
+  numeroAtencion               String?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se

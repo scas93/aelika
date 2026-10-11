@@ -4,11 +4,14 @@ import { CODIGOS_STORE, RedisCodigosStore } from './codigos-store';
 import { EnviarCodigoAccesoService } from './enviar-codigo-acceso.service';
 import { PortalAccesoController } from './portal-acceso.controller';
 import { PortalAccesoService } from './portal-acceso.service';
+import { PortalCalendarioController } from './portal-calendario.controller';
+import { PortalCalendarioService } from './portal-calendario.service';
 
 @Module({
-  controllers: [PortalAccesoController],
+  controllers: [PortalAccesoController, PortalCalendarioController],
   providers: [
     PortalAccesoService,
+    PortalCalendarioService,
     EnviarCodigoAccesoService,
     {
       provide: CODIGOS_STORE,

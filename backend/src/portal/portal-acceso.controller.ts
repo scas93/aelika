@@ -8,7 +8,6 @@ import {
   Query,
   Req,
   Res,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { IsNotEmpty, IsString, IsUUID, Matches } from 'class-validator';
 import { randomUUID } from 'crypto';
@@ -20,16 +19,22 @@ import {
   type SesionValida,
 } from './portal-acceso.service';
 import { DISPOSITIVO_MS, SESION_MS } from './portal-config';
+import {
+  OPCIONES_COOKIE,
+  borrarCookieSesion,
+  exigirSesionPortal,
+  leerCookie,
+  nombreCookieSesion,
+} from './portal-sesion-http';
 
 const COOKIE_DISPOSITIVO = '__Host-portal_disp';
 const ENCABEZADO_PORTAL = 'x-portal-request';
-// __Host-: Secure, Path=/ y sin Domain.
-const OPCIONES_COOKIE = {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'lax',
-  path: '/',
-} as const;
+
+function ipDe(req: Request): string {
+  const xff = req.headers['x-forwarded-for'];
+  const primero = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
+  return primero || req.socket.remoteAddress || 'desconocida';
+}
 
 class SlugDto {
   @IsString() @IsNotEmpty() @Matches(/^[a-z0-9-]{1,80}$/) slug!: string;
@@ -42,25 +47,6 @@ class VerificarDto extends PedirCodigoDto {
 }
 class ElegirClienteDto extends SlugDto {
   @IsUUID() clienteId!: string;
-}
-
-function leerCookie(req: Request, nombre: string): string | undefined {
-  const crudo = req.headers.cookie;
-  if (!crudo) return undefined;
-  for (const par of crudo.split(';')) {
-    const i = par.indexOf('=');
-    if (i >= 0 && par.slice(0, i).trim() === nombre)
-      return decodeURIComponent(par.slice(i + 1).trim());
-  }
-  return undefined;
-}
-
-const nombreCookieSesion = (slug: string) => `__Host-portal_${slug}`;
-
-function ipDe(req: Request): string {
-  const xff = req.headers['x-forwarded-for'];
-  const primero = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-  return primero || req.socket.remoteAddress || 'desconocida';
 }
 
 // Acceso al portal del cliente B2B (Fase 4, 4b). Público (sin JWT del panel); la sesión es la cookie por negocio.
@@ -96,29 +82,12 @@ export class PortalAccesoController {
     };
   }
 
-  private borrarCookieSesion(res: Response, slug: string) {
-    res.clearCookie(nombreCookieSesion(slug), OPCIONES_COOKIE);
-  }
-
-  private async exigirSesion(
+  private exigirSesion(
     req: Request,
     res: Response,
     slug: string,
   ): Promise<SesionValida> {
-    const token = leerCookie(req, nombreCookieSesion(slug));
-    const sesion = await this.acceso.validarSesion(slug, token);
-    if (!sesion) {
-      if (token) this.borrarCookieSesion(res, slug);
-      throw new UnauthorizedException(
-        'Tu sesión terminó. Vuelve a entrar con tu teléfono',
-      );
-    }
-    // Renovación: la cookie vuelve a emitirse con 90 días en cada uso.
-    res.cookie(nombreCookieSesion(slug), token as string, {
-      ...OPCIONES_COOKIE,
-      maxAge: SESION_MS,
-    });
-    return sesion;
+    return exigirSesionPortal(this.acceso, req, res, slug);
   }
 
   @Post('pedir-codigo')
@@ -200,7 +169,7 @@ export class PortalAccesoController {
     this.exigirEncabezado(req);
     res.setHeader('Cache-Control', 'no-store');
     await this.acceso.cerrar(leerCookie(req, nombreCookieSesion(dto.slug)));
-    this.borrarCookieSesion(res, dto.slug);
+    borrarCookieSesion(res, dto.slug);
     return { ok: true };
   }
 }
