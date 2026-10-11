@@ -105,9 +105,9 @@ El negocio se identifica por la dirección del portal (/mayoreo/[slug]); el clie
 3. Escribe el código.
 4. Si su teléfono está en un solo cliente, entra directo. Si está en varios, elige con cuál entrar, y puede cambiar de cliente dentro del portal.
 
-Si el número no está autorizado en ningún cliente del negocio, ve "Tu número no está dado de alta, contáctanos" y no puede seguir.
+Al escribir su teléfono, el cliente ve **siempre el mismo mensaje**, esté o no autorizado: "Si tu número está dado de alta, recibirás un código por WhatsApp. Si no te llega en unos minutos, contáctanos", con el botón para contactar al negocio cuando el número de atención esté configurado. El portal nunca revela qué teléfonos son clientes del negocio; quien no está autorizado no recibe código y no puede seguir.
 
-**Límite de envíos:** cada envío de código cuesta un mensaje de WhatsApp, así que los envíos tienen límite por teléfono y por dispositivo.
+**Límite de envíos:** cada envío de código cuesta un mensaje de WhatsApp, así que los envíos tienen límite: 3 por hora y 10 por día por teléfono, 10 por día por dispositivo, 30 por día por conexión (IP) y un tope diario por negocio. El código es de 6 dígitos, vale 10 minutos, se usa una sola vez y admite 5 intentos. Los teléfonos que no son clientes cuentan igual contra los límites. Si el servicio de límites no responde, nadie puede pedir código.
 
 **Para que sea super sencillo desde el teléfono:**
 
