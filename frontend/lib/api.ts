@@ -557,6 +557,13 @@ export interface TenantSettings {
   ventanaRecepcionB2b: VentanaRecepcionB2b | null;
   // Mínimo de piezas por pedido de mayoreo; 0 = sin mínimo.
   pedidoB2bMinimoPiezas: number;
+  // Calendario del portal del cliente B2B (hora de Ciudad de México).
+  portalHoraEntrega: string;
+  portalHorasAgregarDia: number;
+  portalHorasModificar: number;
+  portalHorizonteSemanas: number;
+  // 10 dígitos, o null = sin número (el portal oculta «Contactar al negocio»).
+  numeroAtencion: string | null;
 }
 
 export interface TenantStripeStatus {
@@ -579,6 +586,12 @@ export interface UpdateTenantSettingsPayload {
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
   // Entero ≥ 0 (0 = sin mínimo).
   pedidoB2bMinimoPiezas?: number;
+  // Calendario del portal: HH:mm; horas enteras 0–168; semanas 0–4; número de 10 dígitos (null o "" lo quita).
+  portalHoraEntrega?: string;
+  portalHorasAgregarDia?: number;
+  portalHorasModificar?: number;
+  portalHorizonteSemanas?: number;
+  numeroAtencion?: string | null;
   botWebhookUrl?: string;
   botWebhookSecret?: string;
   candadoMarketingDias?: number;

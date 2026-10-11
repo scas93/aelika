@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { ApiError, fetchTenantSettings, type VentanaRecepcionB2b } from "@/lib/api";
+import {
+  ApiError,
+  fetchTenantSettings,
+  type VentanaRecepcionB2b,
+} from "@/lib/api";
 import VentanaRecepcionB2bSection from "../ventana-recepcion-b2b-section";
 import MinimoPiezasB2bSection from "../minimo-piezas-b2b-section";
+import CalendarioPortalB2bSection, {
+  calendarioDesdeSettings,
+  type CalendarioPortalB2b,
+} from "../calendario-portal-b2b-section";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesPedidosB2bPage() {
@@ -16,11 +24,16 @@ export default function AjustesPedidosB2bPage() {
   // B2C si esta sección no estuviera oculta, en vez de redirigir.
   let contenido: React.ReactNode;
   if (user.rol !== "DUENO") {
-    contenido = <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>;
+    contenido = (
+      <p className="text-sm text-admin-ink-soft">
+        Solo el dueño del negocio puede editar los ajustes.
+      </p>
+    );
   } else if (user.tenant.tipoStorefront !== "RETAIL_B2B") {
     contenido = (
       <p className="text-sm text-admin-ink-soft">
-        Estos ajustes (mínimo de piezas y ventana de recepción) solo aplican a negocios de mayoreo.
+        Estos ajustes (mínimo de piezas, calendario del portal y ventana de
+        recepción) solo aplican a negocios de mayoreo.
       </p>
     );
   } else {
@@ -36,8 +49,12 @@ export default function AjustesPedidosB2bPage() {
 }
 
 function PedidosB2bLoader({ token }: { token: string }) {
-  const [ventanaRecepcionB2b, setVentanaRecepcionB2b] = useState<VentanaRecepcionB2b | null>(null);
+  const [ventanaRecepcionB2b, setVentanaRecepcionB2b] =
+    useState<VentanaRecepcionB2b | null>(null);
   const [minimoPiezas, setMinimoPiezas] = useState<number | null>(null);
+  const [calendario, setCalendario] = useState<CalendarioPortalB2b | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -46,8 +63,15 @@ function PedidosB2bLoader({ token }: { token: string }) {
       .then((settings) => {
         setVentanaRecepcionB2b(settings.ventanaRecepcionB2b);
         setMinimoPiezas(settings.pedidoB2bMinimoPiezas);
+        setCalendario(calendarioDesdeSettings(settings));
       })
-      .catch((err) => setLoadError(err instanceof ApiError ? err.message : "No se pudo cargar la ventana de recepción"))
+      .catch((err) =>
+        setLoadError(
+          err instanceof ApiError
+            ? err.message
+            : "No se pudo cargar la ventana de recepción",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -61,7 +85,18 @@ function PedidosB2bLoader({ token }: { token: string }) {
   return (
     <div className="flex flex-col gap-4">
       {minimoPiezas !== null && (
-        <MinimoPiezasB2bSection token={token} minimoPiezas={minimoPiezas} onUpdated={setMinimoPiezas} />
+        <MinimoPiezasB2bSection
+          token={token}
+          minimoPiezas={minimoPiezas}
+          onUpdated={setMinimoPiezas}
+        />
+      )}
+      {calendario !== null && (
+        <CalendarioPortalB2bSection
+          token={token}
+          calendario={calendario}
+          onUpdated={setCalendario}
+        />
       )}
       <VentanaRecepcionB2bSection
         token={token}
