@@ -562,6 +562,10 @@ model Order {
   // (ver aRespuestaOrder). La escribe el módulo B2B.
   cancelado             Boolean          @default(false)
   canceladoAt           DateTime?
+  // Fase 4 · 4f: marca «Modificado por el cliente» (solo B2B). Se enciende con la hora cuando el cliente modifica el
+  // pedido desde el portal (cantidades, entregas o nota) y se apaga al volver a confirmar o con «Marcar como revisado»
+  // en el panel. null = sin marca. Nunca la escribe el panel al editar.
+  modificadoPorClienteAt DateTime?
   // Etapa 1: tipo de orden. NOT NULL con DEFAULT 'B2C' en la BD (y aquí) hasta la
   // Etapa 1b, para que el contenedor anterior —que no lo escribe— siga creando
   // órdenes durante un despliegue/reversa. El código nuevo lo escribe explícito.

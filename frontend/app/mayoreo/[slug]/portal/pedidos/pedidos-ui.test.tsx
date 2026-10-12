@@ -78,6 +78,8 @@ const detalle = (
   total: 229.95,
   notaCliente: "Tocar el timbre",
   esFavorito: false,
+  version: "2026-09-30T16:00:00.000Z",
+  modificable: false,
   entregas: [
     {
       fecha: "2026-10-02",

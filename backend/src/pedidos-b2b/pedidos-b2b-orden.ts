@@ -389,6 +389,8 @@ export function aRespuestaPedidoB2b(
     estadoPago: orden.estadoPago,
     cancelado: orden.cancelado,
     canceladoAt: orden.canceladoAt,
+    // 4f: marca «Modificado por el cliente» (null = sin marca).
+    modificadoPorClienteAt: orden.modificadoPorClienteAt,
     minimoPiezasAplicado: d.minimoPiezasAplicado,
     totalPiezas: d.totalPiezas,
     codigoDescuentoId: d.codigoDescuentoId,

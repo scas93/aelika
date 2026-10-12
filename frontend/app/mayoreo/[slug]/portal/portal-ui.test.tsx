@@ -316,6 +316,7 @@ describe("menú: botón de WhatsApp", () => {
         sesion={sesion}
         onCrear={() => {}}
         onVerPedidos={() => {}}
+        onModificar={() => {}}
         onCambiarCliente={() => {}}
         onCerrada={() => {}}
       />,
@@ -328,7 +329,7 @@ describe("menú: botón de WhatsApp", () => {
     );
   });
 
-  it("Ver mis pedidos está habilitado y abre la lista; Modificar sigue deshabilitado", async () => {
+  it("Ver mis pedidos y Modificar pedido activo están habilitados", async () => {
     fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")]));
     const onVerPedidos = vi.fn();
     render(
@@ -337,6 +338,7 @@ describe("menú: botón de WhatsApp", () => {
         sesion={sesion}
         onCrear={() => {}}
         onVerPedidos={onVerPedidos}
+        onModificar={() => {}}
         onCambiarCliente={() => {}}
         onCerrada={() => {}}
       />,
@@ -345,7 +347,7 @@ describe("menú: botón de WhatsApp", () => {
     expect(onVerPedidos).toHaveBeenCalledTimes(1);
     expect(
       screen.getByRole("button", { name: /Modificar pedido activo/ }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     await waitFor(() => expect(fetchCalendario).toHaveBeenCalled());
   });
 
@@ -357,6 +359,7 @@ describe("menú: botón de WhatsApp", () => {
         sesion={sesion}
         onCrear={() => {}}
         onVerPedidos={() => {}}
+        onModificar={() => {}}
         onCambiarCliente={() => {}}
         onCerrada={() => {}}
       />,

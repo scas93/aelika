@@ -27,6 +27,7 @@ type Fila = {
   totalPiezas: number;
   total: string;
   createdAt: string;
+  modificadoPorClienteAt: null; // 4f: marca «Modificado por el cliente»
 };
 const fila = (
   folio: string,
@@ -52,6 +53,7 @@ const fila = (
   totalPiezas,
   total,
   createdAt,
+  modificadoPorClienteAt: null,
 });
 
 const FILAS: Record<string, Fila> = {
@@ -195,6 +197,7 @@ describe('B2B · panel', () => {
           'estadoPago',
           'folio',
           'id',
+          'modificadoPorClienteAt',
           'modoCobro',
           'negocioNombre',
           'semanaInicio',

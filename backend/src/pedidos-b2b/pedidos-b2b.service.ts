@@ -26,7 +26,10 @@ import {
   TipoOrden,
 } from '../../generated/prisma/client';
 import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
-import { bloquearClienteB2b, crearPedidoB2bDeCliente } from './pedidos-b2b-crear';
+import {
+  bloquearClienteB2b,
+  crearPedidoB2bDeCliente,
+} from './pedidos-b2b-crear';
 import { ClientesService } from '../clientes/clientes.service';
 import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
 import { PedidoContexto } from '../notificaciones-reglas/plantilla-variable.type';
@@ -89,6 +92,7 @@ const REPORTABLE_SELECT = {
   estadoPedido: true,
   estadoPago: true,
   cancelado: true,
+  modificadoPorClienteAt: true,
   total: true,
   createdAt: true,
   detalleB2b: {
@@ -115,6 +119,7 @@ function aReportable(
     estadoPago: o.estadoPago,
     modoCobro: d.modoCobro,
     cancelado: o.cancelado,
+    modificadoPorClienteAt: o.modificadoPorClienteAt,
     totalPiezas: d.totalPiezas,
     total: o.total,
     createdAt: o.createdAt,
@@ -729,7 +734,11 @@ export class PedidosB2bService {
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
       // Candado del cliente → revisión de «un pedido por semana» → folio: ver pedidos-b2b-crear.ts (compartido con el portal).
-      const { cliente, principal } = await bloquearClienteB2b(tx, tenantId, dto.clienteId);
+      const { cliente, principal } = await bloquearClienteB2b(
+        tx,
+        tenantId,
+        dto.clienteId,
+      );
       const creado = await crearPedidoB2bDeCliente(tx, {
         tenantId,
         tenant,
@@ -794,6 +803,19 @@ export class PedidosB2bService {
     return this.tenantPrisma.client.$transaction(async (tx) => {
       // Serializa ediciones concurrentes del mismo pedido: la regla "una entrega por fecha" vive aquí, no en la base.
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      // Concurrencia opcional (4f): si el panel mandó la versión que cargó y el pedido cambió (p. ej. el cliente lo
+      // modificó en el portal mientras se editaba), no se pisa. Sin `version`, comportamiento de siempre.
+      if (dto.version) {
+        const actual = await tx.order.findUniqueOrThrow({
+          where: { id },
+          select: { updatedAt: true },
+        });
+        if (actual.updatedAt.getTime() !== new Date(dto.version).getTime()) {
+          throw new ConflictException(
+            'El cliente modificó este pedido mientras lo editabas, recárgalo',
+          );
+        }
+      }
       await sincronizarOrdenB2b(
         tx,
         pedido.tenantId,
@@ -850,7 +872,8 @@ export class PedidosB2bService {
     const actualizado = aRespuestaPedidoB2b(
       await this.tenantPrisma.client.order.update({
         where: { id },
-        data: { estadoPedido: siguiente },
+        // Al confirmar (o reconfirmar tras una modificación del cliente) se apaga la marca «Modificado por el cliente».
+        data: { estadoPedido: siguiente, modificadoPorClienteAt: null },
         include: INCLUDE_PEDIDO,
       }),
     );
@@ -955,6 +978,7 @@ export class PedidosB2bService {
             );
           }
           data.estadoPedido = EstadoPedido.CONFIRMADO_SURTIENDO;
+          data.modificadoPorClienteAt = null;
         }
         await tx.order.update({ where: { id }, data });
         await tx.detalleB2B.update({
@@ -1251,6 +1275,28 @@ export class PedidosB2bService {
       cancelado.clienteId,
     );
     return cancelado;
+  }
+
+  /**
+   * PATCH /:id/marcar-revisado (Fase 4 · 4f; adición NO incluida en docs/diseno-operacion.md): apaga la marca «Modificado
+   * por el cliente» sin cambiar nada más. Existe porque un pedido En proceso o Completado nunca se vuelve a confirmar, así que
+   * esa marca no tendría otra forma de apagarse. Los 3 roles; idempotente.
+   */
+  async marcarRevisado(id: string) {
+    await this.cargar(id);
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      await tx.order.updateMany({
+        where: { id, modificadoPorClienteAt: { not: null } },
+        data: { modificadoPorClienteAt: null },
+      });
+      return aRespuestaPedidoB2b(
+        await tx.order.findUniqueOrThrow({
+          where: { id },
+          include: INCLUDE_PEDIDO,
+        }),
+      );
+    });
   }
 
   private assertActivo(pedido: { cancelado: boolean }) {

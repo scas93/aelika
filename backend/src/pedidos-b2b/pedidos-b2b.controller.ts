@@ -132,6 +132,12 @@ export class PedidosB2bController {
     return this.pedidosB2bService.updateItems(id, dto, user.rol);
   }
 
+  // Adición de la 4f (no está en el documento de diseño): apaga la marca «Modificado por el cliente». Los 3 roles.
+  @Patch(':id/marcar-revisado')
+  marcarRevisado(@Param('id') id: string) {
+    return this.pedidosB2bService.marcarRevisado(id);
+  }
+
   @Patch(':id/avanzar')
   avanzar(@Param('id') id: string) {
     return this.pedidosB2bService.avanzar(id);

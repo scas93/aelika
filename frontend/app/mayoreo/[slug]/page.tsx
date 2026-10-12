@@ -145,6 +145,9 @@ export default function PortalPage() {
       slug={slug}
       sesion={sesion}
       onCrear={() => setEstado({ ...estado, vista: "crear" })}
+      onModificar={() =>
+        router.push(`${rutaBasePortal(pathname, slug)}/portal/modificar`)
+      }
       onVerPedidos={() =>
         router.push(`${rutaBasePortal(pathname, slug)}/portal/pedidos`)
       }

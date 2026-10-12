@@ -299,6 +299,8 @@ describe('Portal · ver mis pedidos (4e)', () => {
         descuentoTotal: 25.55,
         notaCliente: 'Tocar el timbre',
         esFavorito: false,
+        modificable: true,
+        version: expect.any(String),
         entregas: [
           {
             fecha: '2026-10-02',
@@ -426,6 +428,7 @@ describe('Portal · ver mis pedidos (4e)', () => {
           'etiqueta',
           'fecha',
           'folio',
+          'modificable',
           'modificadoPorCliente',
           'nombre',
           'notaCliente',
@@ -438,6 +441,7 @@ describe('Portal · ver mis pedidos (4e)', () => {
           'subtotal',
           'total',
           'totalPiezas',
+          'version',
         ].sort(),
       );
       expect(JSON.stringify(r.body)).not.toMatch(

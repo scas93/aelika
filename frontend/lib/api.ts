@@ -1526,6 +1526,8 @@ export interface PedidoB2bReportable {
   estadoPago: PedidoB2bEstadoPago;
   modoCobro: PedidoB2bModoCobro;
   cancelado: boolean;
+  // Marca «Modificado por el cliente» (null = sin marca).
+  modificadoPorClienteAt: string | null;
   totalPiezas: number;
   total: string;
   createdAt: string;
@@ -1556,6 +1558,10 @@ export interface PedidoB2bEntrega {
 export interface PedidoB2bDetalle extends PublicPedidoB2b {
   cancelado: boolean;
   canceladoAt: string | null;
+  // Marca «Modificado por el cliente»: la enciende el portal y se apaga al reconfirmar o con «Marcar como revisado».
+  modificadoPorClienteAt?: string | null;
+  // Versión del pedido para el control de concurrencia al editar (se manda como `version`).
+  updatedAt?: string;
   minimoPiezasAplicado: number;
   // Solo en las respuestas del panel (no en el storefront público).
   entregas?: PedidoB2bEntrega[];
@@ -1658,11 +1664,20 @@ export function fetchPedidosB2bResumen(token: string) {
   return request<PedidoB2bResumen>("/pedidos-b2b/resumen", { headers: authHeaders(token) });
 }
 
-export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[]) {
+// `version` (opcional): el updatedAt del pedido tal como se cargó. Si cambió (p. ej. el cliente lo modificó en el portal), 409.
+export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[], version?: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/items`, {
     method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, ...(version ? { version } : {}) }),
+  });
+}
+
+// Apaga la marca «Modificado por el cliente» sin cambiar nada más. Abierto a los 3 roles.
+export function marcarRevisadoPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/marcar-revisado`, {
+    method: "PATCH",
+    headers: authHeaders(token),
   });
 }
 

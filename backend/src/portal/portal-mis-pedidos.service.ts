@@ -14,6 +14,7 @@ import {
 } from '../pedidos-b2b/pedidos-b2b-estados';
 import { sumarDiasISO } from '../pedidos-b2b/pedidos-b2b-logica';
 import { PortalFavoritoService } from './portal-favorito.service';
+import { calendarioDeSemana, semanaModificable } from './portal-modificable';
 import type { SesionValida } from './portal-acceso.service';
 
 export const TAMANO_PAGINA_ANTERIORES = 20;
@@ -46,6 +47,8 @@ const SELECT_PEDIDO = {
   estadoPedido: true,
   estadoPago: true,
   cancelado: true,
+  updatedAt: true,
+  modificadoPorClienteAt: true,
   descuentoTotal: true,
   total: true,
   detalleB2b: {
@@ -97,7 +100,7 @@ export interface ResumenPedidoPortal {
     etiqueta: string;
     pagadoAt: string | null;
   };
-  /** La enciende la 4f cuando el cliente modifica el pedido; en la 4e siempre es false. */
+  /** Marca «Modificado por el cliente»: se enciende al modificar desde el portal y se apaga al reconfirmar o al revisarla el equipo. */
   modificadoPorCliente: boolean;
   totalPiezas: number;
   total: number;
@@ -124,7 +127,7 @@ function resumen(f: FilaResumen): ResumenPedidoPortal {
       etiqueta: pagado ? 'Pagado' : 'Pago pendiente',
       pagadoAt: pagado && d.pagadoAt ? d.pagadoAt.toISOString() : null,
     },
-    modificadoPorCliente: false,
+    modificadoPorCliente: !f.cancelado && f.modificadoPorClienteAt !== null,
     totalPiezas: d.totalPiezas,
     total: num(f.total),
   };
@@ -197,6 +200,27 @@ export class PortalMisPedidosService {
         ? String(offset + TAMANO_PAGINA_ANTERIORES)
         : null,
     };
+  }
+
+  /** Resúmenes de los pedidos (del cliente de la sesión) con esos folios, de la semana más reciente a la más antigua. */
+  async resumenesPorFolio(
+    sesion: SesionValida,
+    folios: string[],
+  ): Promise<ResumenPedidoPortal[]> {
+    const c = this.clienteDe(sesion);
+    if (folios.length === 0) return [];
+    const filas = await this.prisma.order.findMany({
+      where: {
+        tenantId: sesion.tenant.id,
+        clienteId: c.id,
+        tipo: 'B2B',
+        folio: { in: folios },
+        detalleB2b: { isNot: null },
+      },
+      orderBy: [{ detalleB2b: { semanaInicio: 'desc' } }, { folio: 'desc' }],
+      select: SELECT_PEDIDO,
+    });
+    return filas.map(resumen);
   }
 
   private leerCursor(cursor?: string): number {
@@ -303,6 +327,20 @@ export class PortalMisPedidosService {
       descuentoTotal: num(f.descuentoTotal),
       notaCliente: d.notaCliente,
       esFavorito,
+      // Versión para el control de concurrencia al modificar (el `updatedAt` del pedido).
+      version: f.updatedAt.toISOString(),
+      // ¿Hay algo que el cliente pueda cambiar ahora? (misma fuente que el calendario de la 4c).
+      modificable: semanaModificable(
+        f.cancelado
+          ? null
+          : await calendarioDeSemana(
+              this.prisma,
+              sesion.tenant,
+              sesion.cliente!.id,
+              d.semanaInicio.toISOString().slice(0, 10),
+              new Date(),
+            ),
+      ),
     };
   }
 
