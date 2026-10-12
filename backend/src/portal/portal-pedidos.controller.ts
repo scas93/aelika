@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  Param,
   HttpCode,
   Post,
   Put,
@@ -34,6 +35,7 @@ import { DiaSemana } from '../../generated/prisma/enums';
 import { PortalAccesoService } from './portal-acceso.service';
 import { PortalCatalogoService } from './portal-catalogo.service';
 import { PortalFavoritoService } from './portal-favorito.service';
+import { PortalMisPedidosService } from './portal-mis-pedidos.service';
 import { PortalPedidosService } from './portal-pedidos.service';
 import { exigirSesionPortal } from './portal-sesion-http';
 
@@ -42,6 +44,10 @@ const SLUG = /^[a-z0-9-]{1,80}$/;
 
 class SlugQuery {
   @IsString() @IsNotEmpty() @Matches(SLUG) slug!: string;
+}
+
+class ListaPedidosQuery extends SlugQuery {
+  @IsOptional() @IsString() @MaxLength(10) cursor?: string;
 }
 
 class ItemEntregaDto {
@@ -99,6 +105,7 @@ export class PortalPedidosController {
     private readonly catalogo: PortalCatalogoService,
     private readonly favorito: PortalFavoritoService,
     private readonly pedidos: PortalPedidosService,
+    private readonly misPedidos: PortalMisPedidosService,
   ) {}
 
   private exigirEncabezado(req: Request) {
@@ -141,6 +148,49 @@ export class PortalPedidosController {
     res.setHeader('Cache-Control', 'no-store');
     const sesion = await exigirSesionPortal(this.acceso, req, res, dto.slug);
     return this.favorito.guardar(sesion, dto.lineas);
+  }
+
+  // ---- Ver mis pedidos (4e): solo lectura, siempre del cliente de la sesión ----
+
+  @Get('pedidos')
+  async listarPedidos(
+    @Query() q: ListaPedidosQuery,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.misPedidos.listar(
+      await exigirSesionPortal(this.acceso, req, res, q.slug),
+      q.cursor,
+    );
+  }
+
+  @Get('pedidos/:folio')
+  async detallePedido(
+    @Param('folio') folio: string,
+    @Query() q: SlugQuery,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.misPedidos.detalle(
+      await exigirSesionPortal(this.acceso, req, res, q.slug),
+      folio,
+    );
+  }
+
+  @Post('pedidos/:folio/favorito')
+  @HttpCode(200)
+  async favoritoDesdePedido(
+    @Param('folio') folio: string,
+    @Body() dto: SlugQuery,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    this.exigirEncabezado(req);
+    res.setHeader('Cache-Control', 'no-store');
+    const sesion = await exigirSesionPortal(this.acceso, req, res, dto.slug);
+    return this.misPedidos.usarComoFavorito(sesion, folio);
   }
 
   @Post('pedidos')

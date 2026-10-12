@@ -284,3 +284,68 @@ export const crearPedido = (
     base: BASE_PORTAL,
     headers: { "Idempotency-Key": idempotencyKey },
   });
+
+// ---- Ver mis pedidos (4e). Solo lectura (más «usar como favorito»); el backend devuelve etiquetas ya en español. ----
+
+export interface EstadoEtiquetadoPortal {
+  codigo: string;
+  etiqueta: string;
+}
+
+export interface ResumenPedidoPortal {
+  folio: string;
+  semanaInicio: string;
+  semanaFin: string;
+  estado: EstadoEtiquetadoPortal;
+  pago: {
+    estado: "PENDIENTE" | "PAGADO";
+    etiqueta: string;
+    pagadoAt: string | null;
+  };
+  /** La enciende la 4f cuando el cliente modifica el pedido; en la 4e el servidor siempre manda false. */
+  modificadoPorCliente: boolean;
+  totalPiezas: number;
+  total: number;
+}
+
+export interface ListaPedidosPortal {
+  activos: ResumenPedidoPortal[];
+  anteriores: ResumenPedidoPortal[];
+  siguienteCursor: string | null;
+}
+
+export interface DetallePedidoPortal extends ResumenPedidoPortal {
+  subtotal: number;
+  descuentoPorcentaje: number;
+  descuentoTotal: number;
+  notaCliente: string | null;
+  esFavorito: boolean;
+  entregas: {
+    fecha: string;
+    estado: EstadoEtiquetadoPortal;
+    productos: {
+      nombre: string;
+      cantidad: number;
+      precioUnitario: number;
+      subtotal: number;
+    }[];
+  }[];
+}
+
+export const fetchPedidos = (slug: string, cursor?: string) =>
+  llamar<ListaPedidosPortal>(
+    `/pedidos?slug=${encodeURIComponent(slug)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    { base: BASE_PORTAL },
+  );
+
+export const fetchPedido = (slug: string, folio: string) =>
+  llamar<DetallePedidoPortal>(
+    `/pedidos/${encodeURIComponent(folio)}?slug=${encodeURIComponent(slug)}`,
+    { base: BASE_PORTAL },
+  );
+
+export const usarPedidoComoFavorito = (slug: string, folio: string) =>
+  llamar<{ favorito: FavoritoPortal["favorito"]; omitidos: string[] }>(
+    `/pedidos/${encodeURIComponent(folio)}/favorito`,
+    { method: "POST", body: { slug }, base: BASE_PORTAL },
+  );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 import { fetchPublicPedidoB2bTenant } from "@/lib/api";
 import { PortalError, fetchSesion, type PortalSesion } from "@/lib/portal-api";
 import AccesoPantalla from "./portal/acceso-pantalla";
@@ -48,6 +49,8 @@ async function resolverEstado(
 
 export default function PortalPage() {
   const { slug } = useParams<{ slug: string }>();
+  const router = useRouter();
+  const pathname = usePathname();
   const [estado, setEstado] = useState<Estado>({ tipo: "cargando" });
   const [nombrePublico, setNombrePublico] = useState("Mayoreo");
 
@@ -142,6 +145,9 @@ export default function PortalPage() {
       slug={slug}
       sesion={sesion}
       onCrear={() => setEstado({ ...estado, vista: "crear" })}
+      onVerPedidos={() =>
+        router.push(`${rutaBasePortal(pathname, slug)}/portal/pedidos`)
+      }
       onCambiarCliente={() => setEstado({ ...estado, cambiando: true })}
       onCerrada={() => setEstado({ tipo: "sin-sesion", aviso: null })}
     />

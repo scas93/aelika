@@ -13,6 +13,7 @@ interface Props {
   slug: string;
   sesion: PortalSesion;
   onCrear: () => void;
+  onVerPedidos: () => void;
   onCambiarCliente: () => void;
   onCerrada: () => void;
 }
@@ -21,11 +22,12 @@ const OPCION =
   "flex w-full flex-col items-start gap-0.5 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 text-left shadow-sm transition active:opacity-80";
 const OPCION_DESHABILITADA = "cursor-not-allowed opacity-50";
 
-// Menú del portal (4d): Crear pedido activo; Modificar y Ver pedidos visibles pero deshabilitados hasta la 4f y la 4e.
+// Menú del portal: Crear pedido (4d) y Ver mis pedidos (4e) activos; Modificar visible pero deshabilitado hasta la 4f.
 export default function MenuPantalla({
   slug,
   sesion,
   onCrear,
+  onVerPedidos,
   onCambiarCliente,
   onCerrada,
 }: Props) {
@@ -96,14 +98,10 @@ export default function MenuPantalla({
             Disponible muy pronto
           </span>
         </button>
-        <button
-          className={`${OPCION} ${OPCION_DESHABILITADA}`}
-          disabled
-          aria-disabled="true"
-        >
+        <button className={OPCION} onClick={onVerPedidos}>
           <span className="text-base font-semibold">Ver mis pedidos</span>
           <span className="text-sm text-mayoreo-ink-soft">
-            Disponible muy pronto
+            Revisa tus pedidos activos y anteriores
           </span>
         </button>
       </div>
