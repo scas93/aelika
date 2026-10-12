@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { fetchPublicPedidoB2bTenant } from "@/lib/api";
 import { PortalError, fetchSesion, type PortalSesion } from "@/lib/portal-api";
 import AccesoPantalla from "./portal/acceso-pantalla";
-import BienvenidaPantalla from "./portal/bienvenida-pantalla";
+import MenuPantalla from "./portal/menu-pantalla";
+import CrearPedido from "./portal/crear/crear-pedido";
 import ElegirClientePantalla from "./portal/elegir-cliente-pantalla";
 
 type Estado =
@@ -13,13 +14,18 @@ type Estado =
   | { tipo: "sin-sesion"; aviso: string | null }
   | { tipo: "no-encontrado" }
   | { tipo: "error"; mensaje: string }
-  | { tipo: "sesion"; sesion: PortalSesion; cambiando: boolean };
+  | {
+      tipo: "sesion";
+      sesion: PortalSesion;
+      cambiando: boolean;
+      vista: "menu" | "crear";
+    };
 
 const MENSAJE_SESION_TERMINADA =
   "Tu sesión terminó. Vuelve a entrar con tu teléfono";
 
-// Portal del cliente B2B (Fase 4, 4b): acceso con teléfono + código de WhatsApp, elección de cliente y bienvenida
-// provisional. Sin sesión siempre se muestra el acceso. El catálogo anterior vive en catalogo.tsx (sin montar).
+// Portal del cliente B2B (Fase 4): acceso con teléfono + código de WhatsApp, elección de cliente, menú y crear pedido
+// (4d). Sin sesión siempre se muestra el acceso.
 // Resuelve el estado inicial o posterior a una acción. Sin setState aquí: lo aplica quien llama.
 async function resolverEstado(
   slug: string,
@@ -27,7 +33,7 @@ async function resolverEstado(
 ): Promise<Estado> {
   try {
     const sesion = await fetchSesion(slug);
-    return { tipo: "sesion", sesion, cambiando: false };
+    return { tipo: "sesion", sesion, cambiando: false, vista: "menu" };
   } catch (e) {
     if (e instanceof PortalError && e.status === 401)
       return { tipo: "sin-sesion", aviso: avisoSiNoHay };
@@ -119,13 +125,24 @@ export default function PortalPage() {
       />
     );
   }
+  if (estado.vista === "crear") {
+    return (
+      <CrearPedido
+        slug={slug}
+        sesion={sesion}
+        onSalir={() => setEstado({ ...estado, vista: "menu" })}
+        onSesionTerminada={() =>
+          setEstado({ tipo: "sin-sesion", aviso: MENSAJE_SESION_TERMINADA })
+        }
+      />
+    );
+  }
   return (
-    <BienvenidaPantalla
+    <MenuPantalla
       slug={slug}
       sesion={sesion}
-      onCambiarCliente={() =>
-        setEstado({ tipo: "sesion", sesion, cambiando: true })
-      }
+      onCrear={() => setEstado({ ...estado, vista: "crear" })}
+      onCambiarCliente={() => setEstado({ ...estado, cambiando: true })}
       onCerrada={() => setEstado({ tipo: "sin-sesion", aviso: null })}
     />
   );

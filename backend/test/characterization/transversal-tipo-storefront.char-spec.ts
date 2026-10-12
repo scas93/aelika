@@ -51,14 +51,22 @@ describe('Transversal · tipo de pedido vs tipo de storefront', () => {
       const slug = s.base.tenant.slug;
       const publico = await postPublicoB2b(s.h, slug, bodyB2b(s.base));
       expectError(publico, 404, 'Negocio no encontrado');
-      for (const ruta of ['', '/catalog', '/codigos-descuento/PROMO10']) {
-        expectError(
-          await request(s.h.app.getHttpServer()).get(
-            `/public/pedidos-b2b/tenants/${slug}${ruta}`,
-          ),
-          404,
-          'Negocio no encontrado',
-        );
+      expectError(
+        await request(s.h.app.getHttpServer()).get(
+          `/public/pedidos-b2b/tenants/${slug}`,
+        ),
+        404,
+        'Negocio no encontrado',
+      );
+      // 4d: el catálogo y la vista previa de códigos de mayoreo ya no existen como rutas públicas (404 de ruta).
+      for (const ruta of ['/catalog', '/codigos-descuento/PROMO10']) {
+        expect(
+          (
+            await request(s.h.app.getHttpServer()).get(
+              `/public/pedidos-b2b/tenants/${slug}${ruta}`,
+            )
+          ).status,
+        ).toBe(404);
       }
       expectError(
         await request(s.h.app.getHttpServer()).get(

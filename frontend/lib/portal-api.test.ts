@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PortalError,
   cerrarSesion,
+  crearPedido,
   fetchSesion,
+  guardarFavorito,
   pedirCodigo,
+  problemasDeError,
   verificarCodigo,
 } from "./portal-api";
 
@@ -73,5 +76,76 @@ describe("portal-api", () => {
     expect(e).toBeInstanceOf(PortalError);
     expect(e.status).toBe(0);
     expect(e.message).toMatch(/conectarnos/);
+  });
+
+  it("crear pedido: POST a /api-portal/portal/pedidos con cuerpo, encabezado del portal y Idempotency-Key", async () => {
+    const f = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => respuesta(201, { pedidos: [], total: 0 }));
+    await crearPedido(
+      "n",
+      [{ fecha: "2026-10-05", items: [{ productId: "p", cantidad: 3 }] }],
+      "gracias",
+      "llave-12345678",
+    );
+    const [url, init] = f.mock.calls[0];
+    const h = init?.headers as Record<string, string>;
+    expect(url).toBe("/api-portal/portal/pedidos");
+    expect(init?.method).toBe("POST");
+    expect(h["x-portal-request"]).toBe("1");
+    expect(h["Idempotency-Key"]).toBe("llave-12345678");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      slug: "n",
+      entregas: [
+        { fecha: "2026-10-05", items: [{ productId: "p", cantidad: 3 }] },
+      ],
+      notaCliente: "gracias",
+    });
+  });
+
+  it("guardar favorito: PUT con cuerpo y encabezado del portal", async () => {
+    const f = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() =>
+        respuesta(200, { favorito: null, noDisponibles: [] }),
+      );
+    await guardarFavorito("n", [{ productId: "p", dias: { LUNES: 2 } }]);
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("/api-portal/portal/favorito");
+    expect(init?.method).toBe("PUT");
+    expect((init?.headers as Record<string, string>)["x-portal-request"]).toBe(
+      "1",
+    );
+    expect(JSON.parse(init?.body as string)).toEqual({
+      slug: "n",
+      lineas: [{ productId: "p", dias: { LUNES: 2 } }],
+    });
+  });
+
+  it("un 409 de crear pedido conserva las fechas rechazadas para mostrarlas", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      respuesta(409, {
+        message: "El jueves 1 de octubre ya no se puede pedir",
+        fechas: [
+          {
+            fecha: "2026-10-01",
+            motivo: "ANTICIPACION_AGREGAR",
+            mensaje: "El jueves 1 de octubre ya no se puede pedir",
+          },
+        ],
+      }),
+    );
+    const e = await crearPedido("n", [], undefined, "llave-12345678").catch(
+      (x) => x,
+    );
+    expect(e.status).toBe(409);
+    expect(problemasDeError(e)).toEqual([
+      {
+        fecha: "2026-10-01",
+        motivo: "ANTICIPACION_AGREGAR",
+        mensaje: "El jueves 1 de octubre ya no se puede pedir",
+      },
+    ]);
+    expect(problemasDeError(new Error("x"))).toEqual([]);
   });
 });

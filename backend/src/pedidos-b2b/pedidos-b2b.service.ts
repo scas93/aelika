@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
-import { round2 } from '../common/money';
 import { toCsv } from '../common/csv';
 import { fechaExcel } from '../common/xlsx';
 import {
@@ -27,6 +26,7 @@ import {
   TipoOrden,
 } from '../../generated/prisma/client';
 import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
+import { bloquearClienteB2b, crearPedidoB2bDeCliente } from './pedidos-b2b-crear';
 import { ClientesService } from '../clientes/clientes.service';
 import { ReglaEventoPedidoService } from '../notificaciones-reglas/regla-evento-pedido.service';
 import { PedidoContexto } from '../notificaciones-reglas/plantilla-variable.type';
@@ -45,14 +45,12 @@ import {
   calcularSemanaDestino,
   diasEntreFechasISO,
   fechaMexicoYMD,
-  nextFolioPedidoB2b,
   resolverItems,
   resolverSemanaYDia,
   sumarDiasISO,
 } from './pedidos-b2b-logica';
 import {
   aRespuestaPedidoB2b,
-  crearOrdenB2b,
   fechaDeDia,
   INCLUDE_PEDIDO,
   INCLUDE_PEDIDO_ADMIN,
@@ -730,84 +728,23 @@ export class PedidosB2bService {
     );
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${dto.clienteId} AND "tenantId" = ${tenantId} FOR UPDATE`;
-      // Se lee de nuevo ya con el candado: baja, descuento y modalidad son los vigentes en este instante.
-      const cliente = await tx.cliente.findFirstOrThrow({
-        where: { id: dto.clienteId },
-        include: { telefonos: { where: { principal: true }, take: 1 } },
-      });
-      if (cliente.bajaAt) {
-        throw new ConflictException(
-          'El cliente está dado de baja: no puede tener pedidos nuevos',
-        );
-      }
-      const principal = cliente.telefonos[0];
-      if (!principal) {
-        throw new ConflictException(
-          'El cliente no tiene un teléfono principal: agrégalo antes de capturar el pedido',
-        );
-      }
-
-      const existente = await tx.order.findFirst({
-        where: {
-          tipo: TipoOrden.B2B,
-          clienteId: cliente.id,
-          cancelado: false,
-          detalleB2b: { semanaInicio },
-        },
-        select: { id: true, folio: true },
-      });
-      if (existente) {
-        throw new ConflictException({
-          statusCode: 409,
-          error: 'Conflict',
-          message: `Este cliente ya tiene el pedido ${existente.folio} para esa semana. Para agregar o cambiar entregas, edita ese pedido.`,
-          folio: existente.folio,
-          pedidoId: existente.id,
-        });
-      }
-
-      const descuentoPorcentaje = cliente.descuentoPorcentaje
-        ? Number(cliente.descuentoPorcentaje)
-        : null;
-      const descuentoTotal = descuentoPorcentaje
-        ? round2(subtotal * (descuentoPorcentaje / 100))
-        : 0;
-      const total = round2(subtotal - descuentoTotal);
-      const folio = await nextFolioPedidoB2b(tx, tenantId);
-
-      const orden = await crearOrdenB2b(
-        tx,
-        {
-          tenantId,
-          folio,
-          clienteId: cliente.id,
-          negocioNombre: cliente.nombre,
-          contactoNombre: principal.nombreContacto ?? cliente.nombre,
-          contactoTelefono: principal.telefono,
-          contactoCorreo: cliente.correo,
-          semanaInicio,
-          modoCobro: cliente.modalidadPago ?? tenant.pedidoB2bModoCobro,
-          minimoPiezasAplicado: tenant.pedidoB2bMinimoPiezas,
-          totalPiezas,
-          subtotal,
-          descuentoTotal,
-          total,
-          // El descuento del cliente no es un código: solo se guarda el % aplicado.
-          codigoDescuentoId: null,
-          codigoDescuentoTexto: null,
-          descuentoPorcentajeAplicado: descuentoPorcentaje,
-          notaCliente: dto.notaCliente?.trim() || null,
-        },
+      // Candado del cliente → revisión de «un pedido por semana» → folio: ver pedidos-b2b-crear.ts (compartido con el portal).
+      const { cliente, principal } = await bloquearClienteB2b(tx, tenantId, dto.clienteId);
+      const creado = await crearPedidoB2bDeCliente(tx, {
+        tenantId,
+        tenant,
+        cliente,
+        principal,
+        semanaInicio,
         resueltos,
-      );
-
-      // Un pedido B2B cuenta desde que nace (cancelado = false), sin depender de estadoPago.
-      await recalcularContadoresCliente(tx, cliente.id);
+        totalPiezas,
+        subtotal,
+        notaCliente: dto.notaCliente,
+      });
 
       return aRespuestaPedidoB2b(
         await tx.order.findUniqueOrThrow({
-          where: { id: orden.id },
+          where: { id: creado.id },
           include: INCLUDE_PEDIDO,
         }),
       );

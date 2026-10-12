@@ -421,7 +421,7 @@ describe('Clientes B2B · pedidos (2d)', () => {
         .post(`/public/pedidos-b2b/tenants/${slug}/pedidos`)
         .send(body);
 
-    it('el POST público responde 409 con el mensaje (con cualquier cuerpo) y no crea nada; el catálogo se sigue viendo', async () => {
+    it('el POST público responde 409 con el mensaje (con cualquier cuerpo) y no crea nada; el catálogo público ya no existe (404)', async () => {
       for (const body of [
         {},
         { negocioNombre: 'X', semanaInicio: SEMANA_PROXIMA, items: items() },
@@ -432,13 +432,14 @@ describe('Clientes B2B · pedidos (2d)', () => {
       }
       expect(await s.h.prisma.order.count()).toBe(0);
       expect(await s.h.prisma.cliente.count()).toBe(0);
+      // 4d: el catálogo de mayoreo dejó de ser público (404); se ve con sesión del portal.
       expect(
         (
           await request(s.h.app.getHttpServer()).get(
             `/public/pedidos-b2b/tenants/${s.base.tenant.slug}/catalog`,
           )
         ).status,
-      ).toBe(200);
+      ).toBe(404);
     });
 
     it('slug inexistente: 404; negocio de menudeo: 404', async () => {

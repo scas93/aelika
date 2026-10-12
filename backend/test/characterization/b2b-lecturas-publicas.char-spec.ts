@@ -71,73 +71,21 @@ describe('B2B · lecturas públicas', () => {
     });
   });
 
-  describe('GET .../catalog', () => {
-    it('forma exacta: categorías activas con sus productos disponibles, ordenados', async () => {
-      const res = await get('/catalog').expect(200);
-      expect(res.body).toStrictEqual({
-        categories: [
-          {
-            id: s.base.categoria.id,
-            nombre: 'Bebidas',
-            products: [
-              { id: s.base.productoA.id, nombre: 'Café americano', descripcion: null, precio: '45', fotoUrl: null, disponible: true },
-              { id: s.base.productoB.id, nombre: 'Concha', descripcion: null, precio: '30.5', fotoUrl: null, disponible: true },
-            ],
-          },
-        ],
-      });
+  // Fase 4 (4d): el catálogo y la vista previa de códigos de descuento de mayoreo ya no son públicos. El catálogo con
+  // precios solo se ve con sesión del portal (GET /portal/catalogo, ver portal-pedidos.char-spec.ts).
+  describe('endpoints públicos de catálogo y descuentos: cerrados (4d)', () => {
+    it('GET .../catalog responde 404 (ya no existe la ruta), con negocio válido o inexistente', async () => {
+      const api = request(s.h.app.getHttpServer());
+      expect((await api.get(`/public/pedidos-b2b/tenants/${s.base.tenant.slug}/catalog`)).status).toBe(404);
+      expect((await api.get('/public/pedidos-b2b/tenants/no-existe/catalog')).status).toBe(404);
     });
 
-    it('a diferencia del storefront B2C, oculta productos no disponibles y categorías inactivas', async () => {
-      await s.h.prisma.product.update({ where: { id: s.base.productoB.id }, data: { disponible: false } });
-      const extra = await s.h.prisma.category.create({ data: { tenantId: s.base.tenant.id, nombre: 'Oculta', activa: false } });
-      await s.h.prisma.product.create({ data: { tenantId: s.base.tenant.id, categoryId: extra.id, nombre: 'Fantasma', precio: '1.00' } });
-      const res = await get('/catalog').expect(200);
-      expect(res.body.categories.map((c: any) => c.nombre)).toStrictEqual(['Bebidas']);
-      expect(res.body.categories[0].products.map((p: any) => p.nombre)).toStrictEqual(['Café americano']);
-    });
-
-    it('ordena categorías por orden y luego nombre; no incluye productos de otro tenant', async () => {
-      await s.h.prisma.category.create({ data: { tenantId: s.base.tenant.id, nombre: 'Aaa', orden: 5 } });
-      await s.h.prisma.category.create({ data: { tenantId: s.base.tenant.id, nombre: 'Zzz', orden: -1 } });
-      await seedBase(s.h.prisma, { slug: 'otro-mayoreo', tipoStorefront: 'RETAIL_B2B' });
-      const res = await get('/catalog').expect(200);
-      expect(res.body.categories.map((c: any) => c.nombre)).toStrictEqual(['Zzz', 'Bebidas', 'Aaa']);
-      const ids = res.body.categories.flatMap((c: any) => c.products.map((p: any) => p.id));
-      expect(ids.sort()).toStrictEqual([s.base.productoA.id, s.base.productoB.id].sort());
-    });
-
-    it('slug inexistente: 404', async () => {
-      expectError(await request(s.h.app.getHttpServer()).get('/public/pedidos-b2b/tenants/no-existe/catalog'), 404, 'Negocio no encontrado');
-    });
-  });
-
-  describe('GET .../codigos-descuento/:codigo (vista previa)', () => {
-    it('devuelve solo el porcentaje (insensible a mayúsculas)', async () => {
+    it('GET .../codigos-descuento/:codigo responde 404, aunque el código exista', async () => {
       await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, { codigo: 'PROMO10', porcentaje: '12.50' });
-      expect((await get('/codigos-descuento/promo10').expect(200)).body).toStrictEqual({ descuentoPorcentaje: 12.5 });
-    });
-
-    it('inexistente o inactivo: 404; vencido: 409; agotado: 409', async () => {
-      expectError(await get('/codigos-descuento/NOEXISTE'), 404, 'El código de descuento no existe o no está activo');
-      await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, { codigo: 'APAGADO', activo: false });
-      expectError(await get('/codigos-descuento/APAGADO'), 404, 'El código de descuento no existe o no está activo');
-      await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, { codigo: 'VIEJO', fechaLimite: '2026-09-29' });
-      expectError(await get('/codigos-descuento/VIEJO'), 409, 'El código de descuento ya no es válido — venció el 2026-09-29');
-    });
-
-    it('un código de otro tenant no existe para este negocio (404)', async () => {
-      const otro = await seedBase(s.h.prisma, { slug: 'otro-mayoreo', tipoStorefront: 'RETAIL_B2B' });
-      await seedCodigoDescuento(s.h.prisma, otro.tenant.id, { codigo: 'AJENO' });
-      expectError(await get('/codigos-descuento/AJENO'), 404, 'El código de descuento no existe o no está activo');
-    });
-
-    it('slug inexistente: 404', async () => {
-      expectError(
-        await request(s.h.app.getHttpServer()).get('/public/pedidos-b2b/tenants/no-existe/codigos-descuento/X'),
-        404,
-        'Negocio no encontrado',
-      );
+      const api = request(s.h.app.getHttpServer());
+      const r = await api.get(`/public/pedidos-b2b/tenants/${s.base.tenant.slug}/codigos-descuento/promo10`);
+      expect(r.status).toBe(404);
+      expect(JSON.stringify(r.body)).not.toContain('12.5');
     });
   });
 });

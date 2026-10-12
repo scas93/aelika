@@ -201,20 +201,16 @@ describe('B2B · aislamiento multi-tenant', () => {
     expect((await postPublicoB2b(s.h, b.tenant.slug, bodyB2b(b))).status).toBe(
       409,
     );
-    expectError(
-      await request(s.h.app.getHttpServer()).get(
-        `/public/pedidos-b2b/tenants/${b.tenant.slug}/codigos-descuento/SOLOA`,
-      ),
-      404,
-      'El código de descuento no existe o no está activo',
-    );
-    const cat = await request(s.h.app.getHttpServer())
-      .get(`/public/pedidos-b2b/tenants/${b.tenant.slug}/catalog`)
-      .expect(200);
-    const ids = cat.body.categories
-      .flatMap((c: any) => c.products.map((p: any) => p.id))
-      .sort();
-    expect(ids).toStrictEqual([b.productoA.id, b.productoB.id].sort());
+    // 4d: el catálogo y la vista previa de códigos ya no son públicos (404); el catálogo con sesión se prueba en el portal.
+    for (const ruta of ['codigos-descuento/SOLOA', 'catalog']) {
+      expect(
+        (
+          await request(s.h.app.getHttpServer()).get(
+            `/public/pedidos-b2b/tenants/${b.tenant.slug}/${ruta}`,
+          )
+        ).status,
+      ).toBe(404);
+    }
     const info = await request(s.h.app.getHttpServer())
       .get(`/public/pedidos-b2b/tenants/${b.tenant.slug}`)
       .expect(200);
