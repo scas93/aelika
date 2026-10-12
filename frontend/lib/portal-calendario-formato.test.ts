@@ -3,6 +3,7 @@ import {
   enlaceContacto,
   etiquetaFecha,
   etiquetaMomento,
+  mensajeContacto,
   textoLimite,
 } from "./portal-calendario-formato";
 import type { DiaCalendarioPortal } from "./portal-api";
@@ -53,6 +54,35 @@ describe("portal-calendario-formato", () => {
     expect(enlaceContacto("3331006915")).toBe("https://wa.me/523331006915");
     expect(enlaceContacto("3331006915", "Hola P-000001")).toBe(
       "https://wa.me/523331006915?text=Hola%20P-000001",
+    );
+  });
+
+  it("mensaje precargado según el contexto, con el nombre del cliente de la sesión", () => {
+    expect(
+      mensajeContacto({
+        tipo: "dia",
+        cliente: "Cafe Entredos",
+        fecha: "2026-10-19",
+      }),
+    ).toBe(
+      "Hola, soy Cafe Entredos. Quiero cambiar mi entrega del lunes 19 de octubre.",
+    );
+    expect(
+      mensajeContacto({
+        tipo: "pedido",
+        cliente: "Cafe Entredos",
+        folios: ["P-000004"],
+      }),
+    ).toBe("Hola, soy Cafe Entredos, sobre mi pedido P-000004.");
+    expect(
+      mensajeContacto({
+        tipo: "pedido",
+        cliente: "Cafe Entredos",
+        folios: ["P-000004", "P-000005"],
+      }),
+    ).toBe("Hola, soy Cafe Entredos, sobre mi pedido P-000004 y P-000005.");
+    expect(mensajeContacto({ tipo: "general", cliente: "Cafe Entredos" })).toBe(
+      "Hola, soy Cafe Entredos, necesito ayuda con mi pedido.",
     );
   });
 });

@@ -1,5 +1,6 @@
 import type {
   CalendarioPortal,
+  DiaCalendarioPortal,
   DiaSemanaPortal,
   EntregaPedidoPortal,
   FavoritoPortal,
@@ -246,4 +247,21 @@ export function favoritoDesdeSeleccion(
     if (Object.keys(dias).length > 0) lineas.push({ productId: id, dias });
   }
   return lineas;
+}
+
+/**
+ * Días que el cliente YA no puede elegir y para los que tiene sentido escribirle al negocio: los que dejaron de cumplir el
+ * tiempo para pedir (o están cerrados), en semanas sin pedido. Los días que simplemente ya pasaron no cuentan.
+ */
+export function diasCerrados(
+  calendario: CalendarioPortal,
+): DiaCalendarioPortal[] {
+  return calendario.semanas
+    .filter((s) => !s.pedido)
+    .flatMap((s) => s.dias)
+    .filter(
+      (d) =>
+        d.estado === "CERRADO" ||
+        (d.estado === "NO_DISPONIBLE" && d.motivo === "ANTICIPACION_AGREGAR"),
+    );
 }

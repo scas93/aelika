@@ -6,7 +6,7 @@ import {
   fetchCalendario,
   type PortalSesion,
 } from "@/lib/portal-api";
-import { enlaceContacto } from "@/lib/portal-calendario-formato";
+import BotonWhatsApp from "./boton-whatsapp";
 import { BTN_ENLACE, CARD } from "./estilos";
 
 interface Props {
@@ -55,11 +55,6 @@ export default function MenuPantalla({
     }
     onCerrada();
   }
-
-  const contacto = enlaceContacto(
-    numeroAtencion,
-    `Hola, soy ${sesion.cliente?.nombre ?? ""} y necesito ayuda`,
-  );
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
@@ -113,16 +108,10 @@ export default function MenuPantalla({
         </button>
       </div>
 
-      {contacto && (
-        <a
-          className="text-sm font-medium underline"
-          href={contacto}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Contactar al negocio
-        </a>
-      )}
+      <BotonWhatsApp
+        numeroAtencion={numeroAtencion}
+        contexto={{ tipo: "general", cliente: sesion.cliente?.nombre ?? "" }}
+      />
     </main>
   );
 }

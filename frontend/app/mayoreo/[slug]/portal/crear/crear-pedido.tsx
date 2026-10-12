@@ -27,6 +27,7 @@ import {
   type Distribucion,
 } from "@/lib/portal-pedido-modelo";
 import { AVISO, BTN_ENLACE, ERROR } from "../estilos";
+import AlertaFlotante from "../alerta-flotante";
 import PasoCatalogo from "./paso-catalogo";
 import PasoConfirmacion from "./paso-confirmacion";
 import PasoDias from "./paso-dias";
@@ -60,6 +61,9 @@ interface Props {
   onSesionTerminada: () => void;
 }
 
+const MENSAJE_FAVORITO_NO_APLICADO =
+  "Tu favorito no se pudo aplicar: ya no hay días disponibles para sus entregas. Elige los días a mano.";
+
 const nuevaLlave = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -82,6 +86,8 @@ export default function CrearPedido({
   const [dist, setDist] = useState<Distribucion>({});
   const [nota, setNota] = useState("");
   const [avisos, setAvisos] = useState<string[]>([]);
+  // Alerta flotante (desaparece sola a los 3 s): hoy solo «el favorito no se pudo aplicar».
+  const [alerta, setAlerta] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [problemas, setProblemas] = useState<ProblemaFechaPortal[]>([]);
@@ -182,10 +188,8 @@ export default function CrearPedido({
       Object.values(catalogo.categories).flatMap((c) => c.products),
     );
     if (!r || r.fechas.length === 0) {
-      setAvisos([
-        ...(r?.avisos ?? []),
-        "Tu favorito no se pudo aplicar: ya no hay días disponibles para sus entregas. Elige los días a mano.",
-      ]);
+      setAvisos(r?.avisos ?? []);
+      setAlerta(MENSAJE_FAVORITO_NO_APLICADO);
       return;
     }
     setFechas(r.fechas);
@@ -289,6 +293,7 @@ export default function CrearPedido({
     }
   }
 
+  const nombreCliente = sesion.cliente?.nombre ?? "";
   const atras =
     paso === "dias" || paso === "confirmacion"
       ? onSalir
@@ -323,6 +328,7 @@ export default function CrearPedido({
       )}
       {paso === "dias" && (
         <PasoDias
+          cliente={nombreCliente}
           calendario={calendario}
           fechas={fechas}
           favorito={favorito}
@@ -374,7 +380,15 @@ export default function CrearPedido({
         />
       )}
       {paso === "confirmacion" && resultado && (
-        <PasoConfirmacion resultado={resultado} onVolver={onSalir} />
+        <PasoConfirmacion
+          resultado={resultado}
+          cliente={nombreCliente}
+          numeroAtencion={calendario.numeroAtencion}
+          onVolver={onSalir}
+        />
+      )}
+      {alerta && (
+        <AlertaFlotante mensaje={alerta} onCerrar={() => setAlerta(null)} />
       )}
     </Contenedor>
   );
