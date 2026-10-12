@@ -285,6 +285,7 @@ export function pedidoB2bEsperado(overrides: Record<string, unknown> = {}) {
     estadoPago: 'PENDIENTE',
     cancelado: false,
     canceladoAt: null,
+    modificadoPorClienteAt: null, // 4f
     minimoPiezasAplicado: 10,
     totalPiezas: 16,
     codigoDescuentoId: null,

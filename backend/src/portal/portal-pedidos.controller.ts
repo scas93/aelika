@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   HttpCode,
   Post,
   Put,
@@ -17,6 +18,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsISO8601,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -36,6 +38,7 @@ import { PortalAccesoService } from './portal-acceso.service';
 import { PortalCatalogoService } from './portal-catalogo.service';
 import { PortalFavoritoService } from './portal-favorito.service';
 import { PortalMisPedidosService } from './portal-mis-pedidos.service';
+import { PortalModificarPedidoService } from './portal-modificar-pedido.service';
 import { PortalPedidosService } from './portal-pedidos.service';
 import { exigirSesionPortal } from './portal-sesion-http';
 
@@ -46,8 +49,34 @@ class SlugQuery {
   @IsString() @IsNotEmpty() @Matches(SLUG) slug!: string;
 }
 
+class ModificarPedidoPortalDto {
+  @IsString() @IsNotEmpty() @Matches(SLUG) slug!: string;
+
+  @IsISO8601() version!: string;
+
+  // Estado deseado de cada fecha que el cliente tocó; `items: []` quita la entrega. Las fechas no mencionadas no cambian.
+  @IsArray()
+  @ArrayMaxSize(7)
+  @ValidateNested({ each: true })
+  @Type(() => ModificarEntregaDto)
+  entregas!: ModificarEntregaDto[];
+
+  // undefined = no tocar; null o vacío = quitar la nota. Nunca trae precios ni estado: el servidor los resuelve.
+  @IsOptional() @IsString() @MaxLength(500) notaCliente?: string | null;
+}
+
 class ListaPedidosQuery extends SlugQuery {
   @IsOptional() @IsString() @MaxLength(10) cursor?: string;
+}
+
+class ModificarEntregaDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'fecha debe ser YYYY-MM-DD' })
+  fecha!: string;
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ItemEntregaDto)
+  items!: ItemEntregaDto[];
 }
 
 class ItemEntregaDto {
@@ -106,6 +135,7 @@ export class PortalPedidosController {
     private readonly favorito: PortalFavoritoService,
     private readonly pedidos: PortalPedidosService,
     private readonly misPedidos: PortalMisPedidosService,
+    private readonly modificar: PortalModificarPedidoService,
   ) {}
 
   private exigirEncabezado(req: Request) {
@@ -165,6 +195,18 @@ export class PortalPedidosController {
     );
   }
 
+  @Get('pedidos-modificables')
+  async pedidosModificables(
+    @Query() q: SlugQuery,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.modificar.listarModificables(
+      await exigirSesionPortal(this.acceso, req, res, q.slug),
+    );
+  }
+
   @Get('pedidos/:folio')
   async detallePedido(
     @Param('folio') folio: string,
@@ -177,6 +219,38 @@ export class PortalPedidosController {
       await exigirSesionPortal(this.acceso, req, res, q.slug),
       folio,
     );
+  }
+
+  @Get('pedidos/:folio/modificar')
+  async estadoModificar(
+    @Param('folio') folio: string,
+    @Query() q: SlugQuery,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.modificar.estado(
+      await exigirSesionPortal(this.acceso, req, res, q.slug),
+      folio,
+    );
+  }
+
+  @Patch('pedidos/:folio')
+  @HttpCode(200)
+  async modificarPedido(
+    @Param('folio') folio: string,
+    @Body() dto: ModificarPedidoPortalDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    this.exigirEncabezado(req);
+    res.setHeader('Cache-Control', 'no-store');
+    const sesion = await exigirSesionPortal(this.acceso, req, res, dto.slug);
+    return this.modificar.modificar(sesion, folio, {
+      entregas: dto.entregas,
+      notaCliente: dto.notaCliente,
+      version: dto.version,
+    });
   }
 
   @Post('pedidos/:folio/favorito')

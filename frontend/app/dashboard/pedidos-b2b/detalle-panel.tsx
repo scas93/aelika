@@ -5,6 +5,7 @@ import { useSession } from "@/lib/session-context";
 import {
   ApiError,
   avanzarPedidoB2b,
+  marcarRevisadoPedidoB2b,
   cancelarPedidoB2b,
   cerrarEntregaPedidoB2b,
   corregirEntregaPedidoB2b,
@@ -21,8 +22,18 @@ import {
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
-import CuadriculaDias, { distribucionVacia, totalDistribucion, type DistribucionDias } from "./cuadricula-dias";
-import { ESTADO_VARIANT, ESTADO_LABEL, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT, puedeCerrarEntregas } from "./estado";
+import CuadriculaDias, {
+  distribucionVacia,
+  totalDistribucion,
+  type DistribucionDias,
+} from "./cuadricula-dias";
+import {
+  ESTADO_VARIANT,
+  ESTADO_LABEL,
+  ESTADO_PAGO_LABEL,
+  ESTADO_PAGO_VARIANT,
+  puedeCerrarEntregas,
+} from "./estado";
 import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
@@ -48,7 +59,10 @@ interface EditItem {
 // el backend necesita un producto vivo para resolver nombre/precio al
 // reenviar el pedido completo (PATCH /:id/items es un reemplazo total), así
 // que no hay forma de reincluirlos tal cual.
-function itemsEditablesDesdePedido(pedido: PedidoB2bDetalle): { items: EditItem[]; omitidos: number } {
+function itemsEditablesDesdePedido(pedido: PedidoB2bDetalle): {
+  items: EditItem[];
+  omitidos: number;
+} {
   const items: EditItem[] = [];
   let omitidos = 0;
   for (const item of pedido.items) {
@@ -60,7 +74,12 @@ function itemsEditablesDesdePedido(pedido: PedidoB2bDetalle): { items: EditItem[
     for (const d of item.distribucion) {
       distribucion[d.dia] = d.cantidad;
     }
-    items.push({ localId: item.id, productId: item.productId, nombreProducto: item.nombreProducto, distribucion });
+    items.push({
+      localId: item.id,
+      productId: item.productId,
+      nombreProducto: item.nombreProducto,
+      distribucion,
+    });
   }
   return { items, omitidos };
 }
@@ -96,7 +115,10 @@ export default function DetallePanel({
   const [guardando, setGuardando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [pagando, setPagando] = useState(false);
-  const [confirmPago, setConfirmPago] = useState<"marcar" | "desmarcar" | null>(null);
+  const [revisando, setRevisando] = useState(false);
+  const [confirmPago, setConfirmPago] = useState<"marcar" | "desmarcar" | null>(
+    null,
+  );
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -112,7 +134,11 @@ export default function DetallePanel({
     setEditMode(false);
     fetchPedidoB2b(token, pedidoId)
       .then(setPedido)
-      .catch((err) => setLoadError(err instanceof ApiError ? err.message : "No se pudo cargar el pedido"));
+      .catch((err) =>
+        setLoadError(
+          err instanceof ApiError ? err.message : "No se pudo cargar el pedido",
+        ),
+      );
   }, [pedidoId, token]);
 
   function startEdit() {
@@ -134,7 +160,11 @@ export default function DetallePanel({
     setActionError(null);
   }
 
-  function setCantidadDia(localId: string, dia: DiaSemanaPedidoB2b, cantidad: Cantidad) {
+  function setCantidadDia(
+    localId: string,
+    dia: DiaSemanaPedidoB2b,
+    cantidad: Cantidad,
+  ) {
     setEditItems((prev) =>
       prev.map((item) =>
         item.localId === localId
@@ -179,15 +209,50 @@ export default function DetallePanel({
             cantidad: cantidadNumero(item.distribucion[value]),
           })),
         })),
+        // Control de concurrencia: si el cliente modificó el pedido mientras se editaba, el servidor responde 409.
+        pedido.updatedAt,
       );
       // La respuesta de editar no trae las entregas (solo GET /:id y cerrar las traen): se vuelve a leer el pedido.
       setPedido(await fetchPedidoB2b(token, pedido.id));
       setEditMode(false);
       onChanged();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "No se pudo guardar el pedido");
+      setActionError(
+        err instanceof ApiError ? err.message : "No se pudo guardar el pedido",
+      );
+      // 409: el pedido cambió desde que se abrió (p. ej. el cliente lo modificó). Se recarga y se sale de la edición, para
+      // que no se vuelva a guardar encima de lo que hizo el cliente.
+      if (err instanceof ApiError && err.status === 409) {
+        try {
+          setPedido(await fetchPedidoB2b(token, pedido.id));
+          setEditMode(false);
+          onChanged();
+        } catch {
+          // si no se pudo recargar, el mensaje ya pide recargar a mano
+        }
+      }
     } finally {
       setGuardando(false);
+    }
+  }
+
+  // «Marcar como revisado»: apaga la marca «Modificado por el cliente» sin cambiar nada más (los 3 roles).
+  async function handleRevisado() {
+    if (!pedido) return;
+    setRevisando(true);
+    setActionError(null);
+    try {
+      await marcarRevisadoPedidoB2b(token, pedido.id);
+      setPedido(await fetchPedidoB2b(token, pedido.id));
+      onChanged();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo marcar como revisado",
+      );
+    } finally {
+      setRevisando(false);
     }
   }
 
@@ -200,7 +265,11 @@ export default function DetallePanel({
       setPedido(await fetchPedidoB2b(token, pedido.id));
       onChanged();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "No se pudo confirmar el pedido");
+      setActionError(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo confirmar el pedido",
+      );
     } finally {
       setAvanzando(false);
     }
@@ -216,7 +285,9 @@ export default function DetallePanel({
       onChanged();
       onClose();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "No se pudo cancelar el pedido");
+      setActionError(
+        err instanceof ApiError ? err.message : "No se pudo cancelar el pedido",
+      );
     } finally {
       setCancelando(false);
     }
@@ -225,11 +296,21 @@ export default function DetallePanel({
   // Por confirmar → Confirmado es lo único manual; En proceso / Completado salen de cerrar entregas.
   const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION";
   // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende del rol).
-  const puedeCerrar = pedido ? puedeCerrarEntregas(pedido.estado, pedido.cancelado) : false;
+  const puedeCerrar = pedido
+    ? puedeCerrarEntregas(pedido.estado, pedido.cancelado)
+    : false;
 
-  async function handleCerrarEntrega(entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") {
+  async function handleCerrarEntrega(
+    entregaId: string,
+    estado: "ENTREGADA" | "NO_RECOGIDA",
+  ) {
     if (!pedido) return;
-    const actualizado = await cerrarEntregaPedidoB2b(token, pedido.id, entregaId, estado);
+    const actualizado = await cerrarEntregaPedidoB2b(
+      token,
+      pedido.id,
+      entregaId,
+      estado,
+    );
     setPedido(actualizado);
     onChanged();
   }
@@ -238,9 +319,13 @@ export default function DetallePanel({
 
   // Días cuya entrega ya está cerrada (Entregada / No recogida): en la edición se ven bloqueados con su estado — se cambian
   // con "Corregir" en esa entrega, no aquí (el servidor también lo rechaza con 409).
-  const diasCerrados = new Map<DiaSemanaPedidoB2b, "ENTREGADA" | "NO_RECOGIDA">();
+  const diasCerrados = new Map<
+    DiaSemanaPedidoB2b,
+    "ENTREGADA" | "NO_RECOGIDA"
+  >();
   for (const e of pedido?.entregas ?? []) {
-    if (e.estado === "ENTREGADA" || e.estado === "NO_RECOGIDA") diasCerrados.set(e.dia, e.estado);
+    if (e.estado === "ENTREGADA" || e.estado === "NO_RECOGIDA")
+      diasCerrados.set(e.dia, e.estado);
   }
 
   // Pago (solo Gerente/Dueño), en cualquier estado del pedido, incluso Cancelado. No mueve el estado del pedido.
@@ -256,16 +341,23 @@ export default function DetallePanel({
       onChanged();
     } catch (err) {
       setConfirmPago(null);
-      setActionError(err instanceof ApiError ? err.message : "No se pudo actualizar el pago");
+      setActionError(
+        err instanceof ApiError ? err.message : "No se pudo actualizar el pago",
+      );
     } finally {
       setPagando(false);
     }
   }
 
   // Corrección del admin sobre una entrega ya cerrada. Los errores los muestra el propio formulario de la entrega.
-  async function handleCorregirEntrega(entregaId: string, payload: CorregirEntregaPedidoB2bPayload) {
+  async function handleCorregirEntrega(
+    entregaId: string,
+    payload: CorregirEntregaPedidoB2bPayload,
+  ) {
     if (!pedido) return;
-    setPedido(await corregirEntregaPedidoB2b(token, pedido.id, entregaId, payload));
+    setPedido(
+      await corregirEntregaPedidoB2b(token, pedido.id, entregaId, payload),
+    );
     onChanged();
   }
 
@@ -277,18 +369,31 @@ export default function DetallePanel({
     }
   }
 
-  const productosDisponibles = products?.filter((p) => !editItems.some((item) => item.productId === p.id)) ?? [];
+  const productosDisponibles =
+    products?.filter(
+      (p) => !editItems.some((item) => item.productId === p.id),
+    ) ?? [];
 
   return (
-    <SidePanel open={pedidoId !== null} onClose={onClose} title={pedido ? `Pedido ${formatearFolioB2b(pedido.folio)}` : "Pedido"}>
+    <SidePanel
+      open={pedidoId !== null}
+      onClose={onClose}
+      title={pedido ? `Pedido ${formatearFolioB2b(pedido.folio)}` : "Pedido"}
+    >
       {loadError && <p className="text-sm text-red-600">{loadError}</p>}
 
-      {!pedido && !loadError && <p className="text-sm text-admin-ink-soft">Cargando...</p>}
+      {!pedido && !loadError && (
+        <p className="text-sm text-admin-ink-soft">Cargando...</p>
+      )}
 
       {pedido && (
         <div className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
-            <Badge variant={pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]}>
+            <Badge
+              variant={
+                pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]
+              }
+            >
               {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
             </Badge>
             <span className="text-sm text-admin-ink-soft">
@@ -302,21 +407,60 @@ export default function DetallePanel({
             </span>
           </div>
 
+          {!pedido.cancelado && pedido.modificadoPorClienteAt && (
+            <div
+              role="status"
+              className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3"
+            >
+              <span className="text-sm font-bold text-admin-ink">
+                Modificado por el cliente
+              </span>
+              <p className="text-sm text-admin-ink">
+                El cliente cambió este pedido desde el portal
+                {pedido.estado === "PENDIENTE_CONFIRMACION"
+                  ? ". La marca se apaga al confirmarlo."
+                  : ". Revísalo y márcalo como revisado cuando lo hayas visto."}
+              </p>
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void handleRevisado()}
+                  disabled={revisando || editMode}
+                >
+                  {revisando ? "Guardando..." : "Marcar como revisado"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
-            <span className="text-sm font-bold text-admin-ink">{pedido.negocioNombre}</span>
+            <span className="text-sm font-bold text-admin-ink">
+              {pedido.negocioNombre}
+            </span>
             {pedido.clienteCodigo && (
-              <span className="text-xs font-semibold text-admin-ink-soft">Cliente · {pedido.clienteCodigo}</span>
+              <span className="text-xs font-semibold text-admin-ink-soft">
+                Cliente · {pedido.clienteCodigo}
+              </span>
             )}
             <span className="text-sm text-admin-ink-soft">
               {pedido.contactoNombre} · {pedido.contactoTelefono}
             </span>
-            {pedido.contactoCorreo && <span className="text-sm text-admin-ink-soft">{pedido.contactoCorreo}</span>}
+            {pedido.contactoCorreo && (
+              <span className="text-sm text-admin-ink-soft">
+                {pedido.contactoCorreo}
+              </span>
+            )}
           </div>
 
           {pedido.notaCliente && (
             <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3">
-              <span className="text-sm font-bold text-admin-ink">Nota del cliente</span>
-              <p className="whitespace-pre-wrap text-sm text-admin-ink">{pedido.notaCliente}</p>
+              <span className="text-sm font-bold text-admin-ink">
+                Nota del cliente
+              </span>
+              <p className="whitespace-pre-wrap text-sm text-admin-ink">
+                {pedido.notaCliente}
+              </p>
             </div>
           )}
 
@@ -326,11 +470,19 @@ export default function DetallePanel({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-bold text-admin-ink">Pago</span>
               <div className="flex items-center gap-2">
-                <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
+                <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>
+                  {ESTADO_PAGO_LABEL[pedido.estadoPago]}
+                </Badge>
                 {pagado && (
                   <span className="text-xs text-admin-ink-soft">
                     {pedido.pagadoAt
-                      ? new Date(pedido.pagadoAt).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      ? new Date(pedido.pagadoAt).toLocaleString("es-MX", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                       : "Fecha no registrada"}
                   </span>
                 )}
@@ -362,7 +514,9 @@ export default function DetallePanel({
           {!editMode ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-admin-ink">Productos</span>
+                <span className="text-sm font-bold text-admin-ink">
+                  Productos
+                </span>
                 {puedeModificar && !pedido.cancelado && (
                   <button
                     type="button"
@@ -375,18 +529,28 @@ export default function DetallePanel({
               </div>
               <ul className="flex flex-col gap-2">
                 {pedido.items.map((item) => (
-                  <li key={item.id} className="flex flex-col gap-0.5 border-b border-admin-border pb-2 last:border-0">
+                  <li
+                    key={item.id}
+                    className="flex flex-col gap-0.5 border-b border-admin-border pb-2 last:border-0"
+                  >
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-semibold text-admin-ink">
                         {item.nombreProducto} × {item.cantidadTotal}
                       </span>
                       <span className="text-admin-ink-soft">
-                        {formatMoney(Number(item.precioUnitario) * item.cantidadTotal)}
+                        {formatMoney(
+                          Number(item.precioUnitario) * item.cantidadTotal,
+                        )}
                       </span>
                     </div>
                     <span className="text-xs text-admin-ink-soft">
-                      {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) => item.distribucion.some((d) => d.dia === value))
-                        .map(({ value, label }) => `${label} ${item.distribucion.find((d) => d.dia === value)?.cantidad}`)
+                      {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) =>
+                        item.distribucion.some((d) => d.dia === value),
+                      )
+                        .map(
+                          ({ value, label }) =>
+                            `${label} ${item.distribucion.find((d) => d.dia === value)?.cantidad}`,
+                        )
                         .join(" · ")}
                     </span>
                   </li>
@@ -395,12 +559,19 @@ export default function DetallePanel({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <span className="text-sm font-bold text-admin-ink">Editar productos</span>
+              <span className="text-sm font-bold text-admin-ink">
+                Editar productos
+              </span>
               {diasCerrados.size > 0 && (
                 <p className="rounded-[var(--radius-admin-control)] bg-admin-bg p-2 text-xs text-admin-ink-soft">
                   Los días con entrega cerrada están bloqueados:{" "}
-                  {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) => diasCerrados.has(value))
-                    .map(({ value, label }) => `${label.slice(0, 3)} (${diasCerrados.get(value) === "ENTREGADA" ? "Entregada" : "No recogida"})`)
+                  {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) =>
+                    diasCerrados.has(value),
+                  )
+                    .map(
+                      ({ value, label }) =>
+                        `${label.slice(0, 3)} (${diasCerrados.get(value) === "ENTREGADA" ? "Entregada" : "No recogida"})`,
+                    )
                     .join(", ")}
                   . Para cambiarlos usa «Corregir» en esa entrega.
                 </p>
@@ -421,9 +592,13 @@ export default function DetallePanel({
                     className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-admin-ink">{item.nombreProducto}</span>
+                      <span className="text-sm font-semibold text-admin-ink">
+                        {item.nombreProducto}
+                      </span>
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-semibold ${total > 0 ? "text-admin-green-dark" : "text-red-600"}`}>
+                        <span
+                          className={`text-xs font-semibold ${total > 0 ? "text-admin-green-dark" : "text-red-600"}`}
+                        >
                           {total} piezas
                         </span>
                         <button
@@ -438,7 +613,9 @@ export default function DetallePanel({
                     <CuadriculaDias
                       nombreProducto={item.nombreProducto}
                       distribucion={item.distribucion}
-                      onChange={(dia, cantidad) => setCantidadDia(item.localId, dia, cantidad)}
+                      onChange={(dia, cantidad) =>
+                        setCantidadDia(item.localId, dia, cantidad)
+                      }
                       cerrados={diasCerrados}
                     />
                   </div>
@@ -458,18 +635,34 @@ export default function DetallePanel({
                     </option>
                   ))}
                 </select>
-                <Button variant="secondary" onClick={addProduct} disabled={!addingProductId}>
+                <Button
+                  variant="secondary"
+                  onClick={addProduct}
+                  disabled={!addingProductId}
+                >
                   Agregar
                 </Button>
               </div>
 
-              {editItems.length === 0 && <p className="text-sm text-red-600">El pedido necesita al menos un producto.</p>}
+              {editItems.length === 0 && (
+                <p className="text-sm text-red-600">
+                  El pedido necesita al menos un producto.
+                </p>
+              )}
 
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={cancelEdit} disabled={guardando}>
+                <Button
+                  variant="secondary"
+                  onClick={cancelEdit}
+                  disabled={guardando}
+                >
                   Cancelar edición
                 </Button>
-                <Button variant="primary" onClick={handleGuardar} disabled={guardando || editItems.length === 0}>
+                <Button
+                  variant="primary"
+                  onClick={handleGuardar}
+                  disabled={guardando || editItems.length === 0}
+                >
                   {guardando ? "Guardando..." : "Guardar cambios"}
                 </Button>
               </div>
@@ -501,27 +694,42 @@ export default function DetallePanel({
             {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
             {pedido.minimoPiezasAplicado > 0 && (
               <span className="text-xs text-admin-ink-soft">
-                {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
+                {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas
+                mínimas
               </span>
             )}
           </div>
 
           {actionError && <p className="text-sm text-red-600">{actionError}</p>}
 
-          {!editMode && (puedeConfirmar || (puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado)) && (
-            <div className="flex flex-wrap gap-2 border-t border-admin-border pt-3">
-              {puedeConfirmar && (
-                <Button variant="primary" onClick={handleAvanzar} disabled={avanzando}>
-                  {avanzando ? "Confirmando..." : "Confirmar pedido"}
-                </Button>
-              )}
-              {puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado && (
-                <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando}>
-                  Cancelar pedido
-                </Button>
-              )}
-            </div>
-          )}
+          {!editMode &&
+            (puedeConfirmar ||
+              (puedeModificar &&
+                pedido.estado !== "COMPLETADO" &&
+                !pedido.cancelado)) && (
+              <div className="flex flex-wrap gap-2 border-t border-admin-border pt-3">
+                {puedeConfirmar && (
+                  <Button
+                    variant="primary"
+                    onClick={handleAvanzar}
+                    disabled={avanzando}
+                  >
+                    {avanzando ? "Confirmando..." : "Confirmar pedido"}
+                  </Button>
+                )}
+                {puedeModificar &&
+                  pedido.estado !== "COMPLETADO" &&
+                  !pedido.cancelado && (
+                    <Button
+                      variant="danger"
+                      onClick={() => setConfirmCancelOpen(true)}
+                      disabled={cancelando}
+                    >
+                      Cancelar pedido
+                    </Button>
+                  )}
+              </div>
+            )}
         </div>
       )}
 
@@ -530,14 +738,30 @@ export default function DetallePanel({
         onClose={() => {
           if (!pagando) setConfirmPago(null);
         }}
-        title={confirmPago === "desmarcar" ? "¿Desmarcar el pago?" : "¿Marcar como pagado?"}
+        title={
+          confirmPago === "desmarcar"
+            ? "¿Desmarcar el pago?"
+            : "¿Marcar como pagado?"
+        }
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmPago(null)} disabled={pagando}>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmPago(null)}
+              disabled={pagando}
+            >
               Volver
             </Button>
-            <Button variant="primary" onClick={() => handlePago(confirmPago === "marcar")} disabled={pagando}>
-              {pagando ? "Guardando..." : confirmPago === "desmarcar" ? "Sí, desmarcar" : "Sí, marcar pagado"}
+            <Button
+              variant="primary"
+              onClick={() => handlePago(confirmPago === "marcar")}
+              disabled={pagando}
+            >
+              {pagando
+                ? "Guardando..."
+                : confirmPago === "desmarcar"
+                  ? "Sí, desmarcar"
+                  : "Sí, marcar pagado"}
             </Button>
           </>
         }
@@ -546,12 +770,14 @@ export default function DetallePanel({
           {confirmPago === "desmarcar"
             ? `¿Desmarcar el pago del pedido ${pedido ? formatearFolioB2b(pedido.folio) : ""}?`
             : `¿Marcar el pedido ${pedido ? formatearFolioB2b(pedido.folio) : ""} como pagado?`}{" "}
-          <span className="font-semibold">Total: {pedido ? formatMoney(pedido.total) : ""}</span>
+          <span className="font-semibold">
+            Total: {pedido ? formatMoney(pedido.total) : ""}
+          </span>
         </p>
         {confirmPago === "desmarcar" && pedido?.modoCobro === "AL_INICIO" && (
           <p className="mt-2 text-xs text-admin-ink-soft">
-            Este negocio cobra por adelantado: desmarcar el pago no regresa el pedido a Por confirmar; seguirá{" "}
-            {ESTADO_LABEL[pedido.estado]}.
+            Este negocio cobra por adelantado: desmarcar el pago no regresa el
+            pedido a Por confirmar; seguirá {ESTADO_LABEL[pedido.estado]}.
           </p>
         )}
       </Modal>
@@ -564,18 +790,28 @@ export default function DetallePanel({
         title="¿Cancelar este pedido?"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmCancelOpen(false)} disabled={cancelando}>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmCancelOpen(false)}
+              disabled={cancelando}
+            >
               Volver
             </Button>
-            <Button variant="danger" onClick={handleCancelar} disabled={cancelando}>
+            <Button
+              variant="danger"
+              onClick={handleCancelar}
+              disabled={cancelando}
+            >
               {cancelando ? "Cancelando..." : "Sí, cancelar"}
             </Button>
           </>
         }
       >
         <p className="text-sm text-admin-ink-soft">
-          Esta acción no se puede deshacer. El pedido {pedido ? formatearFolioB2b(pedido.folio) : ""} de {pedido?.negocioNombre} quedará cancelado: las
-          entregas ya cerradas se conservan y se cobran; las pendientes se cancelan y no se cobran.
+          Esta acción no se puede deshacer. El pedido{" "}
+          {pedido ? formatearFolioB2b(pedido.folio) : ""} de{" "}
+          {pedido?.negocioNombre} quedará cancelado: las entregas ya cerradas se
+          conservan y se cobran; las pendientes se cancelan y no se cobran.
         </p>
       </Modal>
     </SidePanel>

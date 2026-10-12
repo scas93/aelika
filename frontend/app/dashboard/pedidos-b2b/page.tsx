@@ -200,6 +200,9 @@ export default function PedidosB2bPage() {
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1.5">
                   {anterior && <Badge variant="advertencia">Semana anterior</Badge>}
+                  {!pedido.cancelado && pedido.modificadoPorClienteAt && (
+                    <Badge variant="advertencia">Modificado por el cliente</Badge>
+                  )}
                   <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
                 </div>
                 <span className="text-sm font-bold text-admin-ink">{formatMoney(pedido.total)}</span>

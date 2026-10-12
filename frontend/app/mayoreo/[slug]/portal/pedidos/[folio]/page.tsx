@@ -17,6 +17,7 @@ import BotonWhatsApp from "../../boton-whatsapp";
 import {
   AVISO,
   BTN_ENLACE,
+  BTN_PRIMARIO,
   BTN_SECUNDARIO,
   CARD,
   ERROR,
@@ -192,6 +193,14 @@ export default function DetallePedidoPage() {
           {aviso && <p className={AVISO}>{aviso}</p>}
 
           <div className="flex flex-col gap-2">
+            {pedido.modificable && (
+              <Link
+                href={`${base}/portal/pedidos/${encodeURIComponent(pedido.folio)}/modificar`}
+                className={BTN_PRIMARIO + " block text-center"}
+              >
+                Modificar este pedido
+              </Link>
+            )}
             {pedido.esFavorito ? (
               <p className="text-center text-sm font-medium text-mayoreo-ink-soft">
                 ★ Es tu pedido favorito

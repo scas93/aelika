@@ -33,7 +33,7 @@ export interface PortalSesion {
 async function llamar<T>(
   ruta: string,
   opciones: {
-    method?: "GET" | "POST" | "PUT";
+    method?: "GET" | "POST" | "PUT" | "PATCH";
     body?: unknown;
     base?: string;
     headers?: Record<string, string>;
@@ -320,6 +320,10 @@ export interface DetallePedidoPortal extends ResumenPedidoPortal {
   descuentoTotal: number;
   notaCliente: string | null;
   esFavorito: boolean;
+  /** `updatedAt` del pedido, para el control de concurrencia al modificar. */
+  version: string;
+  /** ¿Hay algo que el cliente pueda cambiar ahora? */
+  modificable: boolean;
   entregas: {
     fecha: string;
     estado: EstadoEtiquetadoPortal;
@@ -349,3 +353,79 @@ export const usarPedidoComoFavorito = (slug: string, folio: string) =>
     `/pedidos/${encodeURIComponent(folio)}/favorito`,
     { method: "POST", body: { slug }, base: BASE_PORTAL },
   );
+
+// ---- Modificar pedido (4f). El servidor valida todo (calendario, pago, versión); aquí solo se tipa y se muestra. ----
+
+export interface DiaModificarPortal {
+  fecha: string;
+  diaSemana: string;
+  estado: EstadoDiaPortal;
+  motivo: MotivoDiaPortal | null;
+  limiteAt: string | null;
+  entrega: {
+    estado: string;
+    productos: {
+      productId: string;
+      nombre: string;
+      cantidad: number;
+      precioUnitario: number;
+    }[];
+  } | null;
+}
+
+export interface EstadoModificarPortal {
+  folio: string;
+  /** `updatedAt` del pedido: se devuelve al guardar para detectar cambios hechos mientras se editaba. */
+  version: string;
+  semanaInicio: string;
+  semanaFin: string;
+  estadoPedido: string;
+  pagado: boolean;
+  modificadoPorCliente: boolean;
+  bloqueo: { codigo: string; mensaje: string } | null;
+  horasAgregar: number;
+  horasModificar: number;
+  descuentoPorcentaje: number;
+  minimoPiezas: number;
+  notaCliente: string | null;
+  numeroAtencion: string | null;
+  dias: DiaModificarPortal[];
+}
+
+export interface CambioEntregaPortal {
+  fecha: string;
+  /** Estado deseado de la fecha; `[]` quita la entrega. */
+  items: { productId: string; cantidad: number }[];
+}
+
+export const fetchPedidosModificables = (slug: string) =>
+  llamar<{ pedidos: ResumenPedidoPortal[] }>(
+    `/pedidos-modificables?slug=${encodeURIComponent(slug)}`,
+    { base: BASE_PORTAL },
+  );
+
+export const fetchEstadoModificar = (slug: string, folio: string) =>
+  llamar<EstadoModificarPortal>(
+    `/pedidos/${encodeURIComponent(folio)}/modificar?slug=${encodeURIComponent(slug)}`,
+    { base: BASE_PORTAL },
+  );
+
+export const modificarPedido = (
+  slug: string,
+  folio: string,
+  cuerpo: {
+    version: string;
+    entregas: CambioEntregaPortal[];
+    notaCliente?: string | null;
+  },
+) =>
+  llamar<{ cambio: boolean; pedido: DetallePedidoPortal }>(
+    `/pedidos/${encodeURIComponent(folio)}`,
+    { method: "PATCH", body: { slug, ...cuerpo }, base: BASE_PORTAL },
+  );
+
+/** Código estructurado de un error 409 del servidor (PEDIDO_CAMBIO, PEDIDO_PAGADO, ULTIMA_ENTREGA…). */
+export const codigoDeError = (e: unknown): string | null =>
+  e instanceof PortalError
+    ? ((e.cuerpo as { codigo?: string } | undefined)?.codigo ?? null)
+    : null;

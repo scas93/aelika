@@ -14,20 +14,21 @@ interface Props {
   sesion: PortalSesion;
   onCrear: () => void;
   onVerPedidos: () => void;
+  onModificar: () => void;
   onCambiarCliente: () => void;
   onCerrada: () => void;
 }
 
 const OPCION =
   "flex w-full flex-col items-start gap-0.5 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 text-left shadow-sm transition active:opacity-80";
-const OPCION_DESHABILITADA = "cursor-not-allowed opacity-50";
 
-// Menú del portal: Crear pedido (4d) y Ver mis pedidos (4e) activos; Modificar visible pero deshabilitado hasta la 4f.
+// Menú del portal: Crear pedido (4d), Ver mis pedidos (4e) y Modificar pedido activo (4f).
 export default function MenuPantalla({
   slug,
   sesion,
   onCrear,
   onVerPedidos,
+  onModificar,
   onCambiarCliente,
   onCerrada,
 }: Props) {
@@ -86,16 +87,12 @@ export default function MenuPantalla({
             Elige tus días de entrega y tus productos
           </span>
         </button>
-        <button
-          className={`${OPCION} ${OPCION_DESHABILITADA}`}
-          disabled
-          aria-disabled="true"
-        >
+        <button className={OPCION} onClick={onModificar}>
           <span className="text-base font-semibold">
             Modificar pedido activo
           </span>
           <span className="text-sm text-mayoreo-ink-soft">
-            Disponible muy pronto
+            Cambia cantidades, quita o agrega días
           </span>
         </button>
         <button className={OPCION} onClick={onVerPedidos}>

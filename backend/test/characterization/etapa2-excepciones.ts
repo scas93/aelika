@@ -24,6 +24,8 @@
  *     campos se quitan de las filas B2B tanto del golden como de lo recibido; el resto de la fila se sigue comparando byte a byte.
  *  9. (Fase 2, panel lateral) `GET /pedidos-b2b/:id` suma `notaCliente` y `clienteCodigo` (el código actual del cliente): campos nuevos que el golden
  *     no conoce.
+ * 11. (Fase 4, 4f) `modificadoPorClienteAt`: campo NUEVO de la forma del panel (respuestas de pedido y lista) con la marca
+ *     «Modificado por el cliente»; siempre null en el escenario dorado (nadie modifica desde el portal).
  * 10. (Fase 4, 4d) El catálogo de mayoreo y la vista previa de códigos de descuento ya NO son públicos: las dos consultas «pública
  *     catálogo» y «pública código» responden 404 (el golden trae 200 con el catálogo / el porcentaje). Solo se compara el
  *     código de estado: 404. El catálogo con sesión del portal se cubre en portal-pedidos.char-spec.ts.
@@ -39,6 +41,7 @@ const CAMPOS_NUEVOS = [
   'codigosDescuentoActivo',
   'notaCliente',
   'clienteCodigo',
+  'modificadoPorClienteAt',
 ];
 
 /** (10) Consultas públicas cerradas en la 4d: el golden es 200, ahora 404. */
