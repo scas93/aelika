@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import CantidadInput from "@/components/cantidad-input";
+import CantidadInput, {
+  cantidadNumero,
+  type Cantidad,
+} from "@/components/cantidad-input";
 import {
   PortalError,
   fetchCatalogo,
@@ -26,7 +29,10 @@ import {
   totalesEstimados,
   type Borrador,
 } from "@/lib/portal-modificar-modelo";
+import { rangoSemana } from "@/lib/portal-pedidos-formato";
 import BotonWhatsApp from "../../../boton-whatsapp";
+import IconoBasura from "../../../icono-basura";
+import ModalPortal from "../../../modal-portal";
 import {
   AVISO,
   BTN_ENLACE,
@@ -63,6 +69,14 @@ export default function ModificarPedidoPage() {
   const [confirmando, setConfirmando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState<string | null>(null);
+  // Ventana «¿Cuántos…?» al elegir un producto: el producto se agrega solo al confirmar.
+  const [agregando, setAgregando] = useState<{
+    fecha: string;
+    productId: string;
+  } | null>(null);
+  const [cantidadNueva, setCantidadNueva] = useState<Cantidad>("");
+  // Confirmación al quitar una entrega completa (fecha de la entrega).
+  const [quitando, setQuitando] = useState<string | null>(null);
 
   const leer = useCallback(
     () =>
@@ -222,9 +236,32 @@ export default function ModificarPedidoPage() {
       [fecha]: { ...b[fecha], quitado: !b[fecha].quitado },
     }));
   }
-  function agregarProducto(fecha: string, productId: string) {
+  // Quitar un producto de la entrega (equivale a escribir 0, pero la fila desaparece).
+  function quitarLinea(fecha: string, productId: string) {
+    setBorrador((b) => {
+      const resto = Object.fromEntries(
+        Object.entries(b[fecha].lineas).filter(([id]) => id !== productId),
+      );
+      return { ...b, [fecha]: { ...b[fecha], lineas: resto } };
+    });
+  }
+  function pedirCantidad(fecha: string, productId: string) {
     if (!productId) return;
-    cambiarLinea(fecha, productId, 1);
+    setCantidadNueva("");
+    setAgregando({ fecha, productId });
+  }
+  function confirmarAgregar() {
+    if (!agregando) return;
+    const cantidad = cantidadNumero(cantidadNueva);
+    if (cantidad <= 0) return;
+    const { fecha, productId } = agregando;
+    // Si el producto ya tenía cantidad en ese día, se suma a la que existe.
+    cambiarLinea(
+      fecha,
+      productId,
+      (borrador[fecha]?.lineas[productId] ?? 0) + cantidad,
+    );
+    setAgregando(null);
   }
 
   async function guardar() {
@@ -282,8 +319,7 @@ export default function ModificarPedidoPage() {
         <h1 className="text-xl font-bold">Modificar pedido {folioReal}</h1>
         {estado && (
           <p className="text-sm text-mayoreo-ink-soft">
-            Semana del {etiquetaFecha(estado.semanaInicio)} al{" "}
-            {etiquetaFecha(estado.semanaFin)}
+            Semana del {rangoSemana(estado.semanaInicio, estado.semanaFin)}
           </p>
         )}
       </header>
@@ -341,7 +377,7 @@ export default function ModificarPedidoPage() {
                 className="flex flex-col gap-2 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="text-sm font-semibold capitalize">
+                  <h2 className="text-sm font-semibold">
                     {etiquetaFecha(d.fecha)}
                   </h2>
                   <span className="text-xs text-mayoreo-ink-soft">
@@ -368,14 +404,24 @@ export default function ModificarPedidoPage() {
                       >
                         <span>{nombres.get(id) ?? "Producto"}</span>
                         {editable ? (
-                          <CantidadInput
-                            value={cantidad}
-                            onChange={(v) =>
-                              cambiarLinea(d.fecha, id, v === "" ? 0 : v)
-                            }
-                            aria-label={`${nombres.get(id) ?? "Producto"} el ${etiquetaFecha(d.fecha)}`}
-                            className="mayoreo-input w-24 text-center"
-                          />
+                          <div className="flex items-center gap-2">
+                            <CantidadInput
+                              value={cantidad}
+                              onChange={(v) =>
+                                cambiarLinea(d.fecha, id, v === "" ? 0 : v)
+                              }
+                              aria-label={`${nombres.get(id) ?? "Producto"} el ${etiquetaFecha(d.fecha)}`}
+                              className="mayoreo-input w-24 text-center"
+                            />
+                            <button
+                              type="button"
+                              aria-label={`Quitar ${nombres.get(id) ?? "producto"} del ${etiquetaFecha(d.fecha)}`}
+                              onClick={() => quitarLinea(d.fecha, id)}
+                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-mayoreo-border text-mayoreo-ink-soft transition active:opacity-80"
+                            >
+                              <IconoBasura />
+                            </button>
+                          </div>
                         ) : (
                           <span>{cantidad}</span>
                         )}
@@ -394,7 +440,7 @@ export default function ModificarPedidoPage() {
                   <select
                     className="mayoreo-input"
                     value=""
-                    onChange={(e) => agregarProducto(d.fecha, e.target.value)}
+                    onChange={(e) => pedirCantidad(d.fecha, e.target.value)}
                     aria-label={`Agregar producto el ${etiquetaFecha(d.fecha)}`}
                   >
                     <option value="">Agregar producto…</option>
@@ -410,9 +456,15 @@ export default function ModificarPedidoPage() {
 
                 {editable && dia.existia && (
                   <button
-                    className={BTN_ENLACE + " self-start"}
-                    onClick={() => alternarQuitar(d.fecha)}
+                    type="button"
+                    className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-mayoreo-border bg-mayoreo-card px-3 py-2 text-sm font-medium text-mayoreo-ink-soft transition active:opacity-80"
+                    onClick={() =>
+                      dia.quitado
+                        ? alternarQuitar(d.fecha)
+                        : setQuitando(d.fecha)
+                    }
                   >
+                    {!dia.quitado && <IconoBasura className="h-4 w-4" />}
                     {dia.quitado ? "Deshacer" : "Quitar esta entrega"}
                   </button>
                 )}
@@ -527,6 +579,85 @@ export default function ModificarPedidoPage() {
           )}
         </>
       )}
+
+      {agregando && (
+        <ModalPortal
+          titulo={`¿Cuántos para ${etiquetaFecha(agregando.fecha)}?`}
+          onCerrar={() => setAgregando(null)}
+        >
+          <p className="text-sm text-mayoreo-ink-soft">
+            {nombres.get(agregando.productId) ?? "Producto"}
+          </p>
+          <CantidadInput
+            autoFocus
+            value={cantidadNueva}
+            onChange={setCantidadNueva}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmarAgregar();
+            }}
+            aria-label="Cantidad"
+            className="mayoreo-input w-full text-center"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={BTN_SECUNDARIO}
+              onClick={() => setAgregando(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className={BTN_PRIMARIO}
+              disabled={cantidadNumero(cantidadNueva) <= 0}
+              onClick={confirmarAgregar}
+            >
+              Agregar
+            </button>
+          </div>
+        </ModalPortal>
+      )}
+
+      {quitando && borrador[quitando] && (
+        <ModalPortal
+          titulo={`¿Quitar la entrega del ${etiquetaFecha(quitando)}?`}
+          onCerrar={() => setQuitando(null)}
+        >
+          <ResumenQuitar dia={borrador[quitando]} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={BTN_SECUNDARIO}
+              onClick={() => setQuitando(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className={BTN_PRIMARIO}
+              onClick={() => {
+                alternarQuitar(quitando);
+                setQuitando(null);
+              }}
+            >
+              Quitar
+            </button>
+          </div>
+        </ModalPortal>
+      )}
     </main>
+  );
+}
+
+// «Se quitarán 2 productos (5 piezas)» con singular y plural correctos.
+function ResumenQuitar({ dia }: { dia: Borrador[string] }) {
+  const lineas = Object.values(lineasEfectivas(dia));
+  const productos = lineas.length;
+  const piezas = lineas.reduce((s, c) => s + c, 0);
+  return (
+    <p className="text-sm">
+      Se quitarán {productos} {productos === 1 ? "producto" : "productos"} (
+      {piezas} {piezas === 1 ? "pieza" : "piezas"}).
+    </p>
   );
 }

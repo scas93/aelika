@@ -132,7 +132,7 @@ export default function DetallePedidoPage() {
                 className="flex flex-col gap-2 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold capitalize">
+                  <span className="text-sm font-semibold">
                     {etiquetaFechaEntrega(e.fecha)}
                   </span>
                   <span

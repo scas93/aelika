@@ -38,9 +38,13 @@ const MOMENTO = new Intl.DateTimeFormat("es-MX", {
   timeZone: ZONA,
 });
 
-/** "lun, 5 oct" a partir de YYYY-MM-DD (sin desfase de zona). */
+/**
+ * "Lun 5 de oct" a partir de YYYY-MM-DD (sin desfase de zona): mayúscula solo en la primera letra del día; el resto, en
+ * minúsculas. No usar `capitalize` de CSS en estos textos: pondría también "De" y "Oct" en mayúscula.
+ */
 export function etiquetaFecha(fechaISO: string): string {
-  return DIA.format(new Date(`${fechaISO}T00:00:00Z`));
+  const t = DIA.format(new Date(`${fechaISO}T00:00:00Z`)).replace(/\./g, "");
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 /** "vie, 2 oct, 20:00" en hora de Ciudad de México. */
