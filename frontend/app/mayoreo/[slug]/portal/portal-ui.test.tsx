@@ -315,6 +315,7 @@ describe("menú: botón de WhatsApp", () => {
         slug="banetto"
         sesion={sesion}
         onCrear={() => {}}
+        onVerPedidos={() => {}}
         onCambiarCliente={() => {}}
         onCerrada={() => {}}
       />,
@@ -327,6 +328,27 @@ describe("menú: botón de WhatsApp", () => {
     );
   });
 
+  it("Ver mis pedidos está habilitado y abre la lista; Modificar sigue deshabilitado", async () => {
+    fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")]));
+    const onVerPedidos = vi.fn();
+    render(
+      <MenuPantalla
+        slug="banetto"
+        sesion={sesion}
+        onCrear={() => {}}
+        onVerPedidos={onVerPedidos}
+        onCambiarCliente={() => {}}
+        onCerrada={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Ver mis pedidos/ }));
+    expect(onVerPedidos).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: /Modificar pedido activo/ }),
+    ).toBeDisabled();
+    await waitFor(() => expect(fetchCalendario).toHaveBeenCalled());
+  });
+
   it("sin número de atención: no hay botón", async () => {
     fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")], null));
     render(
@@ -334,6 +356,7 @@ describe("menú: botón de WhatsApp", () => {
         slug="banetto"
         sesion={sesion}
         onCrear={() => {}}
+        onVerPedidos={() => {}}
         onCambiarCliente={() => {}}
         onCerrada={() => {}}
       />,

@@ -30,6 +30,17 @@ export class PortalFavoritoService {
     return sesion.cliente;
   }
 
+  /** Líneas guardadas tal cual (sin filtrar por disponibilidad); null si no hay favorito. Solo del cliente de la sesión. */
+  async leerCrudo(sesion: SesionValida): Promise<LineaFavorito[] | null> {
+    const c = this.exigirCliente(sesion);
+    const fila = await this.prisma.cliente.findFirst({
+      where: { id: c.id, tenantId: sesion.tenant.id },
+      select: { favoritoB2b: true },
+    });
+    const crudo = fila?.favoritoB2b as { lineas?: LineaFavorito[] } | null;
+    return crudo?.lineas?.length ? crudo.lineas : null;
+  }
+
   /** Favorito vigente: las líneas de productos que ya no están disponibles se quitan y se nombran aparte. */
   async obtener(sesion: SesionValida) {
     const c = this.exigirCliente(sesion);
