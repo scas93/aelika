@@ -216,6 +216,7 @@ export const OMITIR_CAMPOS_B2B = {
   descuentoPorcentaje: true,
   modalidadPago: true,
   bajaAt: true,
+  favoritoB2b: true,
 } as const;
 
 /**

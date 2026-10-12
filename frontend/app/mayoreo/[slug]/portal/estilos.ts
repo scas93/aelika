@@ -10,3 +10,9 @@ export const BTN_SECUNDARIO =
 export const BTN_ENLACE =
   "text-sm font-medium text-mayoreo-ink-soft underline disabled:no-underline disabled:opacity-60";
 export const ERROR = "rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700";
+export const AVISO =
+  "rounded-lg bg-mayoreo-accent-soft px-3 py-2 text-sm text-mayoreo-ink";
+export const dinero = (n: number) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(
+    n,
+  );

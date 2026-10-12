@@ -29,6 +29,11 @@ export interface CodigosStore {
   ): Promise<ResultadoVerificacion>;
   /** Suma 1 al contador (el TTL se fija al crearlo) y devuelve el valor nuevo. */
   incrementar(clave: string, ttlSegundos: number): Promise<number>;
+  /** Idempotencia (4d): guarda `valor` solo si la clave no existe. true = quedó reservada por este llamador. */
+  reservar(clave: string, valor: string, ttlSegundos: number): Promise<boolean>;
+  leer(clave: string): Promise<string | null>;
+  escribir(clave: string, valor: string, ttlSegundos: number): Promise<void>;
+  borrar(clave: string): Promise<void>;
 }
 
 // KEYS[1] = clave; ARGV[1] = hash candidato; ARGV[2] = máximo de intentos.
@@ -101,6 +106,24 @@ export class RedisCodigosStore implements CodigosStore, OnModuleDestroy {
     );
   }
 
+  async reservar(clave: string, valor: string, ttlSegundos: number) {
+    return (
+      (await this.redis.set(clave, valor, 'EX', ttlSegundos, 'NX')) === 'OK'
+    );
+  }
+
+  async leer(clave: string) {
+    return this.redis.get(clave);
+  }
+
+  async escribir(clave: string, valor: string, ttlSegundos: number) {
+    await this.redis.set(clave, valor, 'EX', ttlSegundos);
+  }
+
+  async borrar(clave: string) {
+    await this.redis.del(clave);
+  }
+
   onModuleDestroy() {
     this.redis.disconnect();
   }
@@ -115,11 +138,13 @@ export class MemoriaCodigosStore implements CodigosStore {
     { hash: string; intentos: number; venceMs: number }
   >();
   private contadores = new Map<string, { n: number; venceMs: number }>();
+  private textos = new Map<string, { valor: string; venceMs: number }>();
 
   reset() {
     this.caido = false;
     this.codigos.clear();
     this.contadores.clear();
+    this.textos.clear();
   }
 
   private caer(): Promise<never> {
@@ -177,5 +202,42 @@ export class MemoriaCodigosStore implements CodigosStore {
     }
     c.n += 1;
     return Promise.resolve(c.n);
+  }
+
+  private vigente(clave: string): string | null {
+    const t = this.textos.get(clave);
+    if (!t || t.venceMs <= Date.now()) {
+      this.textos.delete(clave);
+      return null;
+    }
+    return t.valor;
+  }
+
+  reservar(
+    clave: string,
+    valor: string,
+    ttlSegundos: number,
+  ): Promise<boolean> {
+    if (this.caido) return this.caer();
+    if (this.vigente(clave) !== null) return Promise.resolve(false);
+    this.textos.set(clave, { valor, venceMs: Date.now() + ttlSegundos * 1000 });
+    return Promise.resolve(true);
+  }
+
+  leer(clave: string): Promise<string | null> {
+    if (this.caido) return this.caer();
+    return Promise.resolve(this.vigente(clave));
+  }
+
+  escribir(clave: string, valor: string, ttlSegundos: number): Promise<void> {
+    if (this.caido) return this.caer();
+    this.textos.set(clave, { valor, venceMs: Date.now() + ttlSegundos * 1000 });
+    return Promise.resolve();
+  }
+
+  borrar(clave: string): Promise<void> {
+    if (this.caido) return this.caer();
+    this.textos.delete(clave);
+    return Promise.resolve();
   }
 }

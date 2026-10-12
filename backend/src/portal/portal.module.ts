@@ -5,13 +5,24 @@ import { EnviarCodigoAccesoService } from './enviar-codigo-acceso.service';
 import { PortalAccesoController } from './portal-acceso.controller';
 import { PortalAccesoService } from './portal-acceso.service';
 import { PortalCalendarioController } from './portal-calendario.controller';
+import { PortalCatalogoService } from './portal-catalogo.service';
+import { PortalFavoritoService } from './portal-favorito.service';
+import { PortalPedidosController } from './portal-pedidos.controller';
+import { PortalPedidosService } from './portal-pedidos.service';
 import { PortalCalendarioService } from './portal-calendario.service';
 
 @Module({
-  controllers: [PortalAccesoController, PortalCalendarioController],
+  controllers: [
+    PortalAccesoController,
+    PortalCalendarioController,
+    PortalPedidosController,
+  ],
   providers: [
     PortalAccesoService,
     PortalCalendarioService,
+    PortalCatalogoService,
+    PortalFavoritoService,
+    PortalPedidosService,
     EnviarCodigoAccesoService,
     {
       provide: CODIGOS_STORE,

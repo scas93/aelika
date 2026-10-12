@@ -57,13 +57,14 @@ describe('Módulos por negocio y tienda de menudeo cerrada para B2B', () => {
         403,
         msg,
       );
-      expectError(
-        await anon(s).get(
-          `/public/pedidos-b2b/tenants/${s.base.tenant.slug}/codigos-descuento/PROMO10`,
-        ),
-        404,
-        NF,
-      );
+      // 4d: la vista previa pública de códigos ya no existe (404 de ruta), con el módulo apagado o encendido.
+      expect(
+        (
+          await anon(s).get(
+            `/public/pedidos-b2b/tenants/${s.base.tenant.slug}/codigos-descuento/PROMO10`,
+          )
+        ).status,
+      ).toBe(404);
     });
 
     // Fase 2: el descuento ya no se pide con un código sino que viene del cliente, así que el módulo apagado ya no tiene un

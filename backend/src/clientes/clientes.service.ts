@@ -96,7 +96,10 @@ export class ClientesService {
       this.tenantPrisma.client.cliente.findMany({
         where,
         // Los campos B2B solo se exponen al pedir canal=B2B; sin canal el contrato es el de siempre.
-        omit: canal === ClienteCanal.B2B ? {} : OMITIR_CAMPOS_B2B,
+        omit:
+          canal === ClienteCanal.B2B
+            ? { favoritoB2b: true }
+            : OMITIR_CAMPOS_B2B,
         orderBy: { [query.ordenarPor]: query.orden },
         skip,
         take: query.limit,

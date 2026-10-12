@@ -1458,25 +1458,6 @@ export interface PublicPedidoB2bTenantInfo {
   semanaDestino: PedidoB2bSemanaDestino;
 }
 
-export interface PublicPedidoB2bProduct {
-  id: string;
-  nombre: string;
-  descripcion: string | null;
-  precio: string;
-  fotoUrl: string | null;
-  disponible: boolean;
-}
-
-export interface PublicPedidoB2bCategory {
-  id: string;
-  nombre: string;
-  products: PublicPedidoB2bProduct[];
-}
-
-export interface PublicPedidoB2bCatalog {
-  categories: PublicPedidoB2bCategory[];
-}
-
 export interface PedidoB2bItemDiaInput {
   dia: DiaSemanaPedidoB2b;
   cantidad: number;
@@ -1485,25 +1466,6 @@ export interface PedidoB2bItemDiaInput {
 export interface PedidoB2bItemInput {
   productId: string;
   distribucion: PedidoB2bItemDiaInput[];
-}
-
-export interface CreatePublicPedidoB2bPayload {
-  negocioNombre: string;
-  contactoNombre: string;
-  contactoTelefono: string;
-  contactoCorreo: string;
-  semanaInicio: string;
-  codigoDescuento?: string;
-  // Mismos 6 campos + requiereFactura que CreatePublicOrderPayload (B2C) —
-  // solo se mandan cuando aplica según facturacionModo, ver pedido-flow.tsx.
-  requiereFactura?: boolean;
-  facturaRazonSocial?: string;
-  facturaRfc?: string;
-  facturaRegimenFiscal?: string;
-  facturaUsoCfdi?: string;
-  facturaCodigoPostal?: string;
-  facturaCorreo?: string;
-  items: PedidoB2bItemInput[];
 }
 
 export interface PublicPedidoB2bItem {
@@ -1546,22 +1508,8 @@ export function fetchPublicPedidoB2bTenant(slug: string) {
   return request<PublicPedidoB2bTenantInfo>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}`);
 }
 
-export function fetchPublicPedidoB2bCatalog(slug: string) {
-  return request<PublicPedidoB2bCatalog>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/catalog`);
-}
-
-export function previewPedidoB2bCodigoDescuento(slug: string, codigo: string) {
-  return request<{ descuentoPorcentaje: number }>(
-    `/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/codigos-descuento/${encodeURIComponent(codigo)}`,
-  );
-}
-
-export function createPublicPedidoB2b(slug: string, payload: CreatePublicPedidoB2bPayload) {
-  return request<PublicPedidoB2b>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/pedidos`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+// El catálogo y la creación de pedidos de mayoreo ya no son públicos (Fase 4): se hacen con sesión del portal
+// (lib/portal-api.ts → GET /portal/catalogo, POST /portal/pedidos).
 
 // --- Pedidos B2B — panel autenticado (/dashboard/pedidos-b2b) ---
 

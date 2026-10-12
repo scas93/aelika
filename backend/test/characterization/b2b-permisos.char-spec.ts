@@ -233,16 +233,17 @@ describe('B2B · permisos por rol', () => {
   });
 
   describe('endpoints públicos del storefront: sin JWT', () => {
-    it('info, catálogo y vista previa responden sin token', async () => {
+    it('la info responde sin token; el catálogo y la vista previa de códigos ya no son públicos (4d)', async () => {
       await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, {
         codigo: 'PROMO10',
       });
       const base = `/public/pedidos-b2b/tenants/${s.base.tenant.slug}`;
       expect((await anon().get(base)).status).toBe(200);
-      expect((await anon().get(`${base}/catalog`)).status).toBe(200);
+      // Fase 4 (4d): el catálogo con precios solo se ve con sesión del portal; la vista previa de códigos se retiró.
+      expect((await anon().get(`${base}/catalog`)).status).toBe(404);
       expect(
         (await anon().get(`${base}/codigos-descuento/PROMO10`)).status,
-      ).toBe(200);
+      ).toBe(404);
       // Fase 2: el POST público de pedidos está cerrado (409 con mensaje); ya no crea pedidos.
       expect(
         (await anon().post(`${base}/pedidos`).send(bodyB2b(s.base))).status,

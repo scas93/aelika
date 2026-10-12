@@ -24,6 +24,9 @@
  *     campos se quitan de las filas B2B tanto del golden como de lo recibido; el resto de la fila se sigue comparando byte a byte.
  *  9. (Fase 2, panel lateral) `GET /pedidos-b2b/:id` suma `notaCliente` y `clienteCodigo` (el código actual del cliente): campos nuevos que el golden
  *     no conoce.
+ * 10. (Fase 4, 4d) El catálogo de mayoreo y la vista previa de códigos de descuento ya NO son públicos: las dos consultas «pública
+ *     catálogo» y «pública código» responden 404 (el golden trae 200 con el catálogo / el porcentaje). Solo se compara el
+ *     código de estado: 404. El catálogo con sesión del portal se cubre en portal-pedidos.char-spec.ts.
  */
 const CAMPOS_NUEVOS = [
   'pagadoAt',
@@ -37,6 +40,9 @@ const CAMPOS_NUEVOS = [
   'notaCliente',
   'clienteCodigo',
 ];
+
+/** (10) Consultas públicas cerradas en la 4d: el golden es 200, ahora 404. */
+const CONSULTAS_PUBLICAS_CERRADAS = ['pública catálogo', 'pública código'];
 
 type Dorado = { status: number; body?: any; texto?: string[] };
 export interface OpcionesExcepciones {
@@ -73,6 +79,7 @@ export function adaptarAlDorado(
   recibido: Dorado,
   op: OpcionesExcepciones,
 ): Dorado {
+  if (CONSULTAS_PUBLICAS_CERRADAS.includes(nombre)) return { status: recibido.status }; // (10)
   recibido = sinIdentidadB2b(nombre, recibido);
   if (recibido.texto) {
     const texto = recibido.texto.map((l) => {
@@ -126,6 +133,7 @@ export function ajustarDorado(
   dorado: Dorado,
   op: OpcionesExcepciones,
 ): Dorado {
+  if (CONSULTAS_PUBLICAS_CERRADAS.includes(nombre)) return { status: 404 }; // (10)
   dorado = sinIdentidadB2b(nombre, dorado);
   // (5) Fase 1b: GET /pedidos-b2b ahora respeta `estados=A,B` (antes el listado lo ignoraba y devolvía todos los no cancelados,
   // incluido el Despachado p1). Con los 3 estados activos, el Completado/Despachado ya no entra.

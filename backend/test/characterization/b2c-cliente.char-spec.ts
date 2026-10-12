@@ -23,6 +23,7 @@ describe('B2C · Cliente derivado del pedido', () => {
       bajaAt: null,
       codigo: null,
       descuentoPorcentaje: null,
+      favoritoB2b: null,
       direccion: null,
       modalidadPago: null,
       nombre: 'Ana Prueba',

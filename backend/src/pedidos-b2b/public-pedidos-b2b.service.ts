@@ -10,10 +10,7 @@ import {
   mensajeVentanaCerrada,
   ventanaDesdeTenant,
 } from '../common/ventana-recepcion-b2b';
-import {
-  calcularSemanaDestino,
-  resolverCodigoDescuento,
-} from './pedidos-b2b-logica';
+import { calcularSemanaDestino } from './pedidos-b2b-logica';
 
 export const MENSAJE_PEDIDOS_EN_LINEA_CERRADOS =
   'Los pedidos en línea de mayoreo se habilitan con tu cuenta de cliente. Contáctanos.';
@@ -95,70 +92,8 @@ export class PublicPedidosB2bService {
     };
   }
 
-  async getCatalog(slug: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    if (!tenant) {
-      throw new NotFoundException('Negocio no encontrado');
-    }
-
-    // A diferencia del catálogo B2C (PublicService.getCatalog), este no trae
-    // modifierGroups ni promotions — el módulo B2B no tiene modificadores, y
-    // su descuento es por código de texto (PedidoB2bCodigoDescuento), no
-    // Promotion. Solo productos disponibles: a diferencia del storefront de
-    // pickup (que muestra agotados con badge porque el stock cambia
-    // hora a hora), este es un pedido de abasto semanal a futuro — no tiene
-    // sentido ofrecer algo no disponible para armar la semana.
-    const categories = await this.prisma.category.findMany({
-      where: { tenantId: tenant.id, activa: true },
-      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-      select: {
-        id: true,
-        nombre: true,
-        products: {
-          where: { tenantId: tenant.id, disponible: true },
-          orderBy: { nombre: 'asc' },
-          select: {
-            id: true,
-            nombre: true,
-            descripcion: true,
-            precio: true,
-            fotoUrl: true,
-            disponible: true,
-          },
-        },
-      },
-    });
-
-    return { categories };
-  }
-
-  /**
-   * Preview de un código de descuento — no lista códigos (no hay endpoint de
-   * enumeración pública), solo resuelve uno exacto por texto, igual que
-   * createPedido. Permite al storefront mostrar el % antes de confirmar,
-   * pero el pedido en sí siempre vuelve a resolver el código server-side al
-   * crearse — nunca confía en el porcentaje que el cliente ya vio.
-   */
-  async previewCodigoDescuento(slug: string, codigo: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    if (!tenant) {
-      throw new NotFoundException('Negocio no encontrado');
-    }
-
-    const { descuentoPorcentajeAplicado } = await resolverCodigoDescuento(
-      this.prisma,
-      tenant.id,
-      codigo,
-      0,
-    );
-    return { descuentoPorcentaje: descuentoPorcentajeAplicado };
-  }
+  // getCatalog y previewCodigoDescuento se retiraron (Fase 4, 4d): el catálogo y los precios de mayoreo solo se ven con
+  // sesión del portal (PortalCatalogoService) y el descuento es un % del cliente, no un código escrito en la tienda.
 
   /**
    * El storefront anónimo de mayoreo ya no crea pedidos: un pedido B2B pertenece a un cliente dado de alta por un

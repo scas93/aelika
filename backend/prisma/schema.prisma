@@ -1147,6 +1147,9 @@ model Cliente {
   modalidadPago       PedidoB2bModoCobro?
   // Baja lógica: no puede pedir ni entrar; sus pedidos activos siguen y el historial se conserva.
   bajaAt              DateTime?
+  // Pedido favorito del cliente en el portal (Fase 4, 4d): UNO por cliente. Plantilla por día de la semana, sin precios:
+  // { guardadoAt, lineas: [{ productId, nombre, dias: { LUNES: 3, ... } }] }. Lo comparten todos los teléfonos autorizados.
+  favoritoB2b         Json?
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   telefonos      ClienteTelefono[]
