@@ -3,17 +3,20 @@
 import type { CalendarioPortal, FavoritoPortal } from "@/lib/portal-api";
 import {
   ETIQUETA_MOTIVO,
-  enlaceContacto,
   etiquetaFecha,
   textoLimite,
 } from "@/lib/portal-calendario-formato";
+import { diasCerrados } from "@/lib/portal-pedido-modelo";
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import { AVISO, BTN_PRIMARIO, BTN_SECUNDARIO, CARD } from "../estilos";
+import BotonWhatsApp from "../boton-whatsapp";
 
 const MENSAJE_YA_TIENE_PEDIDO =
   "Ya tienes pedido para esta semana. Para agregar o cambiar entregas, usa Modificar pedido activo";
 
 interface Props {
+  /** Nombre del cliente de la sesión (va en el mensaje precargado de WhatsApp). */
+  cliente: string;
   calendario: CalendarioPortal;
   fechas: string[];
   favorito: FavoritoPortal | null;
@@ -24,6 +27,7 @@ interface Props {
 
 // Paso 1: elegir los días de entrega. Solo se pueden elegir los días `AGREGABLE` de semanas sin pedido (el servidor decide).
 export default function PasoDias({
+  cliente,
   calendario,
   fechas,
   favorito,
@@ -31,7 +35,16 @@ export default function PasoDias({
   onUsarFavorito,
   onContinuar,
 }: Props) {
-  const contacto = enlaceContacto(calendario.numeroAtencion);
+  // Contacto con el negocio (solo si hay número de atención). Un solo día cerrado → botón junto a ese día con su mensaje;
+  // varios días cerrados o una semana que ya tiene pedido → UN solo botón con el mensaje genérico, para no repetirlo.
+  const cerrados = diasCerrados(calendario);
+  const semanasConPedido = calendario.semanas.filter((s) => s.pedido);
+  const diaUnico =
+    cerrados.length === 1 && semanasConPedido.length === 0 ? cerrados[0] : null;
+  const hayContactoGeneral =
+    calendario.numeroAtencion !== null &&
+    !diaUnico &&
+    (cerrados.length > 0 || semanasConPedido.length > 0);
   return (
     <div className="flex flex-col gap-4">
       <div className={CARD}>
@@ -56,21 +69,9 @@ export default function PasoDias({
             {semana.esActual ? " (en curso)" : ""}
           </h3>
           {semana.pedido ? (
-            <div className="flex flex-col gap-2">
-              <p className={AVISO}>
-                {MENSAJE_YA_TIENE_PEDIDO} (pedido {semana.pedido.folio}).
-              </p>
-              {contacto && (
-                <a
-                  className="text-sm font-medium underline"
-                  href={contacto}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Contactar al negocio
-                </a>
-              )}
-            </div>
+            <p className={AVISO}>
+              {MENSAJE_YA_TIENE_PEDIDO} (pedido {semana.pedido.folio}).
+            </p>
           ) : (
             <ul className="flex flex-col divide-y divide-mayoreo-border">
               {semana.dias.map((d) => {
@@ -115,6 +116,15 @@ export default function PasoDias({
                         ✓
                       </span>
                     </button>
+                    {diaUnico?.fecha === d.fecha && (
+                      <div className="pb-2.5">
+                        <BotonWhatsApp
+                          compacto
+                          numeroAtencion={calendario.numeroAtencion}
+                          contexto={{ tipo: "dia", cliente, fecha: d.fecha }}
+                        />
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -122,6 +132,19 @@ export default function PasoDias({
           )}
         </section>
       ))}
+
+      {hayContactoGeneral && (
+        <div className={CARD + " gap-2"}>
+          <p className="text-sm text-mayoreo-ink-soft">
+            ¿Necesitas pedir o cambiar una entrega que ya no se puede elegir
+            aquí? Escríbenos.
+          </p>
+          <BotonWhatsApp
+            numeroAtencion={calendario.numeroAtencion}
+            contexto={{ tipo: "general", cliente }}
+          />
+        </div>
+      )}
 
       <button
         className={BTN_PRIMARIO}

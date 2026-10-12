@@ -1,19 +1,34 @@
 "use client";
 
+import { useEffect } from "react";
 import type { ResultadoPedidoPortal } from "@/lib/portal-api";
 import { etiquetaFecha } from "@/lib/portal-calendario-formato";
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import { BTN_PRIMARIO, CARD, dinero } from "../estilos";
+import BotonWhatsApp from "../boton-whatsapp";
 
 // Paso 5: confirmación con el o los folios y el resumen (datos que devuelve el servidor, no los calculados aquí).
 export default function PasoConfirmacion({
   resultado,
+  cliente,
+  numeroAtencion,
   onVolver,
 }: {
   resultado: ResultadoPedidoPortal;
+  /** Nombre del cliente de la sesión (mensaje precargado de WhatsApp). */
+  cliente: string;
+  numeroAtencion: string | null;
   onVolver: () => void;
 }) {
   const varios = resultado.pedidos.length > 1;
+
+  // La confirmación aparece al final de un flujo largo: siempre se abre arriba, también en el celular (donde el
+  // navegador conserva el desplazamiento de la pantalla anterior).
+  useEffect(() => {
+    subirAlInicio();
+    const id = requestAnimationFrame(subirAlInicio);
+    return () => cancelAnimationFrame(id);
+  }, []);
   return (
     <div className="flex flex-col gap-4">
       <div className={CARD}>
@@ -85,9 +100,32 @@ export default function PasoConfirmacion({
           Total de los dos pedidos: {dinero(resultado.total)}
         </p>
       )}
+      {numeroAtencion && (
+        <div className={CARD + " gap-2"}>
+          <p className="text-sm text-mayoreo-ink-soft">
+            ¿Dudas con tu pedido? Escríbenos.
+          </p>
+          <BotonWhatsApp
+            numeroAtencion={numeroAtencion}
+            contexto={{
+              tipo: "pedido",
+              cliente,
+              folios: resultado.pedidos.map((p) => p.folio),
+            }}
+          />
+        </div>
+      )}
       <button className={BTN_PRIMARIO} onClick={onVolver}>
         Volver al menú
       </button>
     </div>
   );
+}
+
+/** Lleva la página al inicio (window y los contenedores de desplazamiento que usan algunos navegadores móviles). */
+export function subirAlInicio() {
+  window.scrollTo(0, 0);
+  const el = document.scrollingElement;
+  if (el) el.scrollTop = 0;
+  document.body.scrollTop = 0;
 }

@@ -66,3 +66,34 @@ export function enlaceContacto(
   const base = `https://wa.me/52${numeroAtencion}`;
   return texto ? `${base}?text=${encodeURIComponent(texto)}` : base;
 }
+
+const FECHA_LARGA = new Intl.DateTimeFormat("es-MX", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/** "lunes 19 de octubre" a partir de YYYY-MM-DD (sin desfase de zona y sin la coma que agrega Intl). */
+export function etiquetaFechaLarga(fechaISO: string): string {
+  const partes = FECHA_LARGA.formatToParts(new Date(`${fechaISO}T00:00:00Z`));
+  const v = (t: string) => partes.find((p) => p.type === t)?.value ?? "";
+  return `${v("weekday")} ${v("day")} de ${v("month")}`;
+}
+
+export type ContextoContacto =
+  | { tipo: "dia"; cliente: string; fecha: string } // día cerrado (fecha YYYY-MM-DD)
+  | { tipo: "pedido"; cliente: string; folios: string[] } // confirmación de pedido
+  | { tipo: "general"; cliente: string }; // menú y cualquier otro lugar
+
+/** Texto precargado del mensaje de WhatsApp según el contexto, con el nombre del cliente de la sesión. */
+export function mensajeContacto(c: ContextoContacto): string {
+  switch (c.tipo) {
+    case "dia":
+      return `Hola, soy ${c.cliente}. Quiero cambiar mi entrega del ${etiquetaFechaLarga(c.fecha)}.`;
+    case "pedido":
+      return `Hola, soy ${c.cliente}, sobre mi pedido ${c.folios.join(" y ")}.`;
+    default:
+      return `Hola, soy ${c.cliente}, necesito ayuda con mi pedido.`;
+  }
+}

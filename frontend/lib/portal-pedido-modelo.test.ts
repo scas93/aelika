@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aplicarFavorito,
   construirEntregas,
+  diasCerrados,
   fechasElegibles,
   favoritoDesdeSeleccion,
   repartirParejo,
@@ -258,5 +259,23 @@ describe("favorito", () => {
     expect(lineas).toEqual([
       { productId: "p1", dias: { VIERNES: 4, DOMINGO: 2 } },
     ]);
+  });
+});
+
+describe("diasCerrados", () => {
+  it("solo los días que dejaron de cumplir el tiempo para pedir, en semanas sin pedido (los pasados no cuentan)", () => {
+    const cal = calendario([
+      semana("2026-09-28", { pedido: true, noDisponibles: [0] }),
+      semana("2026-10-05", { noDisponibles: [0, 1] }),
+    ]);
+    // En la semana con pedido no se listan días; en la otra, lunes y martes (ANTICIPACION_AGREGAR).
+    expect(diasCerrados(cal).map((d) => d.fecha)).toEqual([
+      "2026-10-05",
+      "2026-10-06",
+    ]);
+  });
+
+  it("ninguno cuando todo es elegible", () => {
+    expect(diasCerrados(calendario([semana("2026-10-05")]))).toEqual([]);
   });
 });
