@@ -21,6 +21,12 @@ const dia = (extra: Partial<DiaCalendarioPortal>): DiaCalendarioPortal => ({
 });
 
 describe("portal-calendario-formato", () => {
+  it("la fecha: solo la primera letra del día en mayúscula, el resto en minúsculas", () => {
+    expect(etiquetaFecha("2026-10-12")).toBe("Lun 12 de oct");
+    expect(etiquetaFecha("2026-10-04")).toBe("Dom 4 de oct");
+    expect(etiquetaFecha("2026-12-01")).toBe("Mar 1 de dic");
+  });
+
   it("la fecha no se corre por zona horaria", () => {
     expect(etiquetaFecha("2026-10-05")).toMatch(/5/);
     expect(etiquetaFecha("2026-10-05").toLowerCase()).toMatch(/lun/);

@@ -231,7 +231,7 @@ describe("días: botón de WhatsApp", () => {
       "Hola, soy Cafe Entredos. Quiero cambiar mi entrega del miércoles 7 de octubre.",
     );
     // Está dentro del renglón de ese día, no en otro.
-    expect(bs[0].closest("li")).toHaveTextContent(/mié/);
+    expect(bs[0].closest("li")).toHaveTextContent(/mié/i);
     // Los días que solo "ya pasaron" no llevan botón.
     expect(screen.getAllByText(/Ya pasó/).length).toBe(2);
   });

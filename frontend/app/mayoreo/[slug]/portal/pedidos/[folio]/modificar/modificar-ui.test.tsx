@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { EstadoModificarPortal } from "@/lib/portal-api";
 
@@ -200,17 +201,22 @@ describe("modificar pedido", () => {
     expect(await screen.findByText("Cambios guardados")).toBeInTheDocument();
   });
 
-  it("quitar una entrega manda items vacío; quitar todas bloquea el guardado", async () => {
+  it("quitar una entrega pide confirmación y manda items vacío; hasta confirmar no cambia nada", async () => {
     modificarPedido.mockResolvedValue({
       cambio: true,
       pedido: { estado: { codigo: "PENDIENTE_CONFIRMACION" } },
     });
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    const quitar = screen.getAllByRole("button", {
-      name: "Quitar esta entrega",
-    });
-    fireEvent.click(quitar[0]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+    );
+    // La ventana aparece y todavía no hay cambios que guardar.
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Guardar cambios" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Confirmar y guardar" }),
@@ -229,10 +235,14 @@ describe("modificar pedido", () => {
     );
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    for (const b of screen.getAllByRole("button", {
-      name: "Quitar esta entrega",
-    }))
-      fireEvent.click(b);
+    // Cada entrega se quita con su confirmación.
+    for (let i = 0; i < 2; i += 1) {
+      fireEvent.click(
+        screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    }
     expect(
       screen.getByText(/debe conservar al menos una entrega/),
     ).toBeInTheDocument();
@@ -289,5 +299,198 @@ describe("modificar pedido", () => {
       await screen.findAllByText(/ya no se puede modificar/),
     ).not.toHaveLength(0);
     await waitFor(() => expect(fetchEstadoModificar).toHaveBeenCalledTimes(2));
+  });
+
+  // ---- Ajustes de interfaz (4f) ----
+
+  it("bote de basura: quita el producto de la entrega y manda ese cambio; escribir 0 sigue funcionando", async () => {
+    modificarPedido.mockResolvedValue({
+      cambio: true,
+      pedido: { estado: { codigo: "PENDIENTE_CONFIRMACION" } },
+    });
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    const basura = screen.getByRole("button", {
+      name: /Quitar Café americano del Vie 2 de oct/,
+    });
+    // Tamaño cómodo para el dedo (44 px).
+    expect(basura.className).toMatch(/h-11/);
+    expect(basura.className).toMatch(/w-11/);
+    fireEvent.click(basura);
+    // La fila desaparece (ya no hay cantidad para ese día)…
+    expect(
+      screen.queryByLabelText(/Café americano el Vie 2 de oct/),
+    ).toBeNull();
+    // …y escribir 0 en otro día sigue siendo válido.
+    fireEvent.change(screen.getByLabelText(/Café americano el Sáb 3 de oct/), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirmar y guardar" }),
+    );
+    await waitFor(() => expect(modificarPedido).toHaveBeenCalled());
+    expect(modificarPedido.mock.calls[0][2].entregas).toEqual([
+      { fecha: "2026-10-02", items: [] },
+      { fecha: "2026-10-03", items: [] },
+    ]);
+  });
+
+  it("agregar producto: pregunta «¿Cuántos para …?», con el campo enfocado; Cancelar no agrega nada", async () => {
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    fireEvent.change(
+      screen.getByLabelText(/Agregar producto el Vie 2 de oct/),
+      { target: { value: "B" } },
+    );
+    const ventana = await screen.findByRole("dialog");
+    expect(
+      within(ventana).getByText("¿Cuántos para Vie 2 de oct?"),
+    ).toBeInTheDocument();
+    const campo = within(ventana).getByLabelText("Cantidad");
+    expect(campo).toHaveFocus();
+    fireEvent.change(campo, { target: { value: "4" } });
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // Nada se agregó: sigue sin haber cambios y la Concha no está en el día.
+    expect(
+      screen.getByRole("button", { name: "Guardar cambios" }),
+    ).toBeDisabled();
+    expect(screen.queryByLabelText(/Concha el Vie 2 de oct/)).toBeNull();
+  });
+
+  it("agregar producto: Agregar lo incluye con la cantidad escrita y se manda al guardar; sin cantidad no deja", async () => {
+    modificarPedido.mockResolvedValue({
+      cambio: true,
+      pedido: { estado: { codigo: "PENDIENTE_CONFIRMACION" } },
+    });
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    fireEvent.change(
+      screen.getByLabelText(/Agregar producto el Vie 2 de oct/),
+      { target: { value: "B" } },
+    );
+    const ventana = await screen.findByRole("dialog");
+    // Sin cantidad el botón está deshabilitado.
+    expect(
+      within(ventana).getByRole("button", { name: "Agregar" }),
+    ).toBeDisabled();
+    fireEvent.change(within(ventana).getByLabelText("Cantidad"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(within(ventana).getByRole("button", { name: "Agregar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      (screen.getByLabelText(/Concha el Vie 2 de oct/) as HTMLInputElement)
+        .value,
+    ).toBe("4");
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirmar y guardar" }),
+    );
+    await waitFor(() => expect(modificarPedido).toHaveBeenCalled());
+    expect(modificarPedido.mock.calls[0][2].entregas).toEqual([
+      {
+        fecha: "2026-10-02",
+        items: [
+          { productId: "A", cantidad: 2 },
+          { productId: "B", cantidad: 4 },
+        ],
+      },
+    ]);
+  });
+
+  it("quitar entrega: confirmación con el número de productos y piezas; Cancelar no quita nada", async () => {
+    fetchEstadoModificar.mockResolvedValue(
+      estado({
+        dias: estado().dias.map((d) =>
+          d.fecha === "2026-10-02" && d.entrega
+            ? {
+                ...d,
+                entrega: {
+                  ...d.entrega,
+                  productos: [
+                    ...d.entrega.productos,
+                    {
+                      productId: "B",
+                      nombre: "Concha",
+                      cantidad: 3,
+                      precioUnitario: 30.5,
+                    },
+                  ],
+                },
+              }
+            : d,
+        ),
+      }),
+    );
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+    );
+    const ventana = await screen.findByRole("dialog");
+    expect(
+      within(ventana).getByText("¿Quitar la entrega del Vie 2 de oct?"),
+    ).toBeInTheDocument();
+    expect(
+      within(ventana).getByText(/Se quitarán 2 productos \(5 piezas\)/),
+    ).toBeInTheDocument();
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Guardar cambios" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("Esta entrega se quitará al guardar."),
+    ).toBeNull();
+  });
+
+  it("quitar entrega: singular correcto (1 producto, 1 pieza)", async () => {
+    fetchEstadoModificar.mockResolvedValue(
+      estado({
+        dias: estado().dias.map((d) =>
+          d.fecha === "2026-10-02" && d.entrega
+            ? {
+                ...d,
+                entrega: {
+                  ...d.entrega,
+                  productos: [
+                    {
+                      productId: "A",
+                      nombre: "Café americano",
+                      cantidad: 1,
+                      precioUnitario: 45,
+                    },
+                  ],
+                },
+              }
+            : d,
+        ),
+      }),
+    );
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+    );
+    expect(
+      await screen.findByText(/Se quitarán 1 producto \(1 pieza\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("las fechas salen como «Vie 2 de oct» (solo la primera letra en mayúscula), no «Vie 2 De Oct»", async () => {
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    const titulos = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    expect(titulos).toContain("Vie 2 de oct");
+    expect(titulos).toContain("Sáb 3 de oct");
+    for (const t of titulos) expect(t).not.toMatch(/ De | Oct/);
+    // El estilo no debe volver a capitalizar cada palabra.
+    const h = screen.getByRole("heading", { level: 2, name: "Vie 2 de oct" });
+    expect(h.className).not.toMatch(/capitalize/);
   });
 });
