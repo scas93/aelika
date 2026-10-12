@@ -160,9 +160,7 @@ export function aplicarFavorito(
   catalogo: ProductoCatalogoPortal[],
 ): ResultadoFavorito | null {
   if (!favorito.favorito) return null;
-  const semana = calendario.semanas.find(
-    (s) => !s.pedido && s.dias.some((d) => d.estado === "AGREGABLE"),
-  );
+  const semana = primerPeriodoSinPedido(calendario);
   if (!semana) return null;
   const vigentes = new Set(catalogo.map((p) => p.id));
   const avisos: string[] = [];
@@ -264,4 +262,16 @@ export function diasCerrados(
         d.estado === "CERRADO" ||
         (d.estado === "NO_DISPONIBLE" && d.motivo === "ANTICIPACION_AGREGAR"),
     );
+}
+
+/**
+ * Primera semana donde se puede crear un pedido: sin pedido y con al menos un día disponible. Es donde se aplica el
+ * favorito; sin ella (ambas semanas ya tienen pedido o están cerradas) «Usar mi favorito» no se ofrece.
+ */
+export function primerPeriodoSinPedido(
+  calendario: CalendarioPortal,
+): SemanaCalendarioPortal | undefined {
+  return calendario.semanas.find(
+    (s) => !s.pedido && s.dias.some((d) => d.estado === "AGREGABLE"),
+  );
 }

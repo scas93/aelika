@@ -363,7 +363,7 @@ describe("alerta flotante", () => {
   });
 });
 
-describe("crear pedido: el favorito no se pudo aplicar", () => {
+describe("crear pedido: favorito", () => {
   const sesion = {
     negocio: { nombre: "Banetto" },
     telefonoTerminacion: "6915",
@@ -371,42 +371,34 @@ describe("crear pedido: el favorito no se pudo aplicar", () => {
     clientes: [{ id: "c1", nombre: "Cafe Entredos" }],
     requiereSeleccion: false,
   };
-
-  it("muestra la alerta flotante con el mismo texto y se quita sola; la pantalla sigue usable", async () => {
-    // Ambas semanas ya tienen pedido: no hay dónde aplicar el favorito.
-    fetchCalendario.mockResolvedValue(
-      calendario([
-        semana("2026-09-28", { pedido: true }),
-        semana("2026-10-05", { pedido: true }),
-      ]),
-    );
-    fetchCatalogo.mockResolvedValue({
-      cliente: { id: "c1", nombre: "Cafe Entredos" },
-      descuentoPorcentaje: 0,
-      minimoPiezas: 0,
-      categories: [
-        {
-          id: "k",
-          nombre: "Pan",
-          products: [
-            {
-              id: "p1",
-              nombre: "Espiral",
-              descripcion: null,
-              precio: 65,
-              fotoUrl: null,
-            },
-          ],
-        },
-      ],
-    });
-    fetchFavorito.mockResolvedValue({
-      favorito: {
-        guardadoAt: null,
-        lineas: [{ productId: "p1", nombre: "Espiral", dias: { LUNES: 5 } }],
+  const catalogo = {
+    cliente: { id: "c1", nombre: "Cafe Entredos" },
+    descuentoPorcentaje: 0,
+    minimoPiezas: 0,
+    categories: [
+      {
+        id: "k",
+        nombre: "Pan",
+        products: [
+          {
+            id: "p1",
+            nombre: "Espiral",
+            descripcion: null,
+            precio: 65,
+            fotoUrl: null,
+          },
+        ],
       },
-      noDisponibles: [],
-    });
+    ],
+  };
+  const conFavorito = (dias: Record<string, number>) => ({
+    favorito: {
+      guardadoAt: null,
+      lineas: [{ productId: "p1", nombre: "Espiral", dias }],
+    },
+    noDisponibles: [],
+  });
+  const montar = () =>
     render(
       <CrearPedido
         slug="banetto"
@@ -415,6 +407,62 @@ describe("crear pedido: el favorito no se pudo aplicar", () => {
         onSesionTerminada={() => {}}
       />,
     );
+
+  it("sin ninguna semana disponible para crear (ambas ya tienen pedido) no se ofrece «Usar mi favorito»", async () => {
+    fetchCalendario.mockResolvedValue(
+      calendario([
+        semana("2026-09-28", { pedido: true }),
+        semana("2026-10-05", { pedido: true }),
+      ]),
+    );
+    fetchCatalogo.mockResolvedValue(catalogo);
+    fetchFavorito.mockResolvedValue(conFavorito({ LUNES: 5 }));
+    montar();
+    await screen.findByText("Elige tus días de entrega");
+    expect(
+      screen.queryByRole("button", { name: "Usar mi favorito" }),
+    ).toBeNull();
+  });
+
+  it("tampoco cuando las semanas sin pedido no tienen ningún día disponible", async () => {
+    const cerrada = semana("2026-10-05", {
+      noDisponibles: [0, 1, 2, 3, 4, 5, 6],
+    });
+    fetchCalendario.mockResolvedValue(
+      calendario([semana("2026-09-28", { pedido: true }), cerrada]),
+    );
+    fetchCatalogo.mockResolvedValue(catalogo);
+    fetchFavorito.mockResolvedValue(conFavorito({ LUNES: 5 }));
+    montar();
+    await screen.findByText("Elige tus días de entrega");
+    expect(
+      screen.queryByRole("button", { name: "Usar mi favorito" }),
+    ).toBeNull();
+  });
+
+  it("con una semana disponible el botón sí aparece", async () => {
+    fetchCalendario.mockResolvedValue(
+      calendario([
+        semana("2026-09-28", { pedido: true }),
+        semana("2026-10-05"),
+      ]),
+    );
+    fetchCatalogo.mockResolvedValue(catalogo);
+    fetchFavorito.mockResolvedValue(conFavorito({ LUNES: 5 }));
+    montar();
+    expect(
+      await screen.findByRole("button", { name: "Usar mi favorito" }),
+    ).toBeInTheDocument();
+  });
+
+  it("si hay semana pero el favorito no cabe, muestra la alerta flotante con el mismo texto y se quita sola; la pantalla sigue usable", async () => {
+    // Semana libre, pero el único día del favorito (lunes) ya no se puede pedir.
+    fetchCalendario.mockResolvedValue(
+      calendario([semana("2026-10-05", { noDisponibles: [0] })]),
+    );
+    fetchCatalogo.mockResolvedValue(catalogo);
+    fetchFavorito.mockResolvedValue(conFavorito({ LUNES: 5 }));
+    montar();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Usar mi favorito" }),

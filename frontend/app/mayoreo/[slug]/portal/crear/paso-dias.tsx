@@ -6,7 +6,10 @@ import {
   etiquetaFecha,
   textoLimite,
 } from "@/lib/portal-calendario-formato";
-import { diasCerrados } from "@/lib/portal-pedido-modelo";
+import {
+  diasCerrados,
+  primerPeriodoSinPedido,
+} from "@/lib/portal-pedido-modelo";
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import { AVISO, BTN_PRIMARIO, BTN_SECUNDARIO, CARD } from "../estilos";
 import BotonWhatsApp from "../boton-whatsapp";
@@ -55,7 +58,7 @@ export default function PasoDias({
             {calendario.horasAgregar} horas de anticipación.
           </p>
         </div>
-        {favorito?.favorito && (
+        {favorito?.favorito && primerPeriodoSinPedido(calendario) && (
           <button className={BTN_SECUNDARIO} onClick={onUsarFavorito}>
             Usar mi favorito
           </button>
