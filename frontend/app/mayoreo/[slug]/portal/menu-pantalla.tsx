@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   cerrarSesion,
   fetchCalendario,
   type PortalSesion,
 } from "@/lib/portal-api";
 import BotonWhatsApp from "./boton-whatsapp";
-import { BTN_ENLACE, CARD } from "./estilos";
+import { CLASE_BOTON_CIRCULAR } from "./encabezado-pantalla";
+import { WRAPPER } from "./estilos";
 
 interface Props {
   slug: string;
@@ -19,6 +20,8 @@ interface Props {
   onCerrada: () => void;
 }
 
+const ITEM_MENU =
+  "flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-mayoreo-ink transition active:opacity-80 disabled:opacity-50";
 const OPCION =
   "flex w-full flex-col items-start gap-0.5 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 text-left shadow-sm transition active:opacity-80";
 
@@ -33,6 +36,9 @@ export default function MenuPantalla({
   onCerrada,
 }: Props) {
   const [cerrando, setCerrando] = useState(false);
+  // Menú de la cuenta (cambiar de cliente / cerrar sesión): se cierra al tocar fuera, con Escape o al elegir una opción.
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const cuentaRef = useRef<HTMLDivElement>(null);
   const [numeroAtencion, setNumeroAtencion] = useState<string | null>(null);
   const clienteId = sesion.cliente?.id;
 
@@ -49,6 +55,24 @@ export default function MenuPantalla({
     };
   }, [slug, clienteId]);
 
+  useEffect(() => {
+    if (!menuAbierto) return;
+    const fuera = (e: MouseEvent | TouchEvent) => {
+      if (!cuentaRef.current?.contains(e.target as Node)) setMenuAbierto(false);
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuAbierto(false);
+    };
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("touchstart", fuera);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("touchstart", fuera);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [menuAbierto]);
+
   async function cerrar() {
     setCerrando(true);
     try {
@@ -60,27 +84,97 @@ export default function MenuPantalla({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-      <header className="flex flex-col gap-1">
-        <p className="text-sm text-mayoreo-ink-soft">{sesion.negocio.nombre}</p>
-        <h1 className="text-xl font-bold">Hola, {sesion.cliente?.nombre}</h1>
-        <div className="flex gap-4">
-          {sesion.clientes.length > 1 && (
-            <button className={BTN_ENLACE} onClick={onCambiarCliente}>
-              Cambiar de cliente
-            </button>
-          )}
+    <main className={WRAPPER}>
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm text-mayoreo-ink-soft">
+            {sesion.negocio.nombre}
+          </p>
+          <h1 className="text-xl font-bold">Hola, {sesion.cliente?.nombre}</h1>
+        </div>
+        <div ref={cuentaRef} className="relative shrink-0">
           <button
-            className={BTN_ENLACE}
-            disabled={cerrando}
-            onClick={() => void cerrar()}
+            type="button"
+            aria-label="Tu cuenta"
+            aria-haspopup="menu"
+            aria-expanded={menuAbierto}
+            className={CLASE_BOTON_CIRCULAR}
+            onClick={() => setMenuAbierto((a) => !a)}
           >
-            {cerrando ? "Cerrando…" : "Cerrar sesión"}
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
+            </svg>
           </button>
+          {menuAbierto && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-30 mt-2 flex w-56 flex-col divide-y divide-mayoreo-border overflow-hidden rounded-xl border border-mayoreo-border bg-mayoreo-card shadow-lg"
+            >
+              {sesion.clientes.length > 1 && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={ITEM_MENU}
+                  onClick={() => {
+                    setMenuAbierto(false);
+                    onCambiarCliente();
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" />
+                  </svg>
+                  Cambiar de cliente
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                className={ITEM_MENU}
+                disabled={cerrando}
+                onClick={() => {
+                  setMenuAbierto(false);
+                  void cerrar();
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+                {cerrando ? "Cerrando…" : "Cerrar sesión"}
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <div className={CARD + " gap-3"}>
+      <div className="flex flex-col gap-3">
         <button className={OPCION} onClick={onCrear}>
           <span className="text-base font-semibold">Crear pedido</span>
           <span className="text-sm text-mayoreo-ink-soft">
