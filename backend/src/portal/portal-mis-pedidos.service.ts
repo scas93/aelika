@@ -51,6 +51,11 @@ const SELECT_PEDIDO = {
   modificadoPorClienteAt: true,
   descuentoTotal: true,
   total: true,
+  // Solo la fecha y el estado de cada entrega (para «fechasEntrega» de la lista); el detalle la sobrescribe con más campos.
+  entregas: {
+    orderBy: { fecha: 'asc' as const },
+    select: { fecha: true, estado: true },
+  },
   detalleB2b: {
     select: {
       semanaInicio: true,
@@ -104,6 +109,8 @@ export interface ResumenPedidoPortal {
   modificadoPorCliente: boolean;
   totalPiezas: number;
   total: number;
+  /** Fechas (YYYY-MM-DD, ascendentes) de las entregas del pedido que siguen vigentes (sin las canceladas). Solo lectura. */
+  fechasEntrega: string[];
 }
 
 function estadoDe(f: Pick<FilaResumen, 'estadoPedido' | 'cancelado'>) {
@@ -130,7 +137,20 @@ function resumen(f: FilaResumen): ResumenPedidoPortal {
     modificadoPorCliente: !f.cancelado && f.modificadoPorClienteAt !== null,
     totalPiezas: d.totalPiezas,
     total: num(f.total),
+    fechasEntrega: [
+      ...new Set(
+        f.entregas
+          .filter((e) => e.estado !== 'CANCELADA')
+          .map((e) => iso(e.fecha)),
+      ),
+    ].sort(),
   };
+}
+
+/** El detalle ya trae sus entregas completas: no repite `fechasEntrega` (es solo de las listas). */
+function resumenSinFechas(f: FilaResumen) {
+  const { fechasEntrega: _omitido, ...r } = resumen(f);
+  return r;
 }
 
 /**
@@ -320,7 +340,7 @@ export class PortalMisPedidosService {
       });
 
     return {
-      ...resumen(f),
+      ...resumenSinFechas(f),
       entregas,
       subtotal: num(d.subtotal),
       descuentoPorcentaje: num(d.descuentoPorcentajeAplicado),

@@ -170,6 +170,7 @@ describe('Portal · ver mis pedidos (4e)', () => {
           modificadoPorCliente: false,
           totalPiezas: 6,
           total: 255.5,
+          fechasEntrega: ['2026-10-02', '2026-10-03'],
         },
       ]);
       expect(r.body.anteriores).toHaveLength(1);
