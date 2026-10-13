@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   PortalError,
   fetchPedidosModificables,
@@ -10,7 +10,8 @@ import {
 } from "@/lib/portal-api";
 import { rangoSemana } from "@/lib/portal-pedidos-formato";
 import BotonWhatsApp from "../boton-whatsapp";
-import { BTN_ENLACE, CARD, ERROR, dinero } from "../estilos";
+import { CARD, ERROR, dinero, WRAPPER } from "../estilos";
+import EncabezadoPantalla from "../encabezado-pantalla";
 import PedidoChips from "../pedidos/pedido-chips";
 import { useSesionPortal } from "../pedidos/usar-sesion-portal";
 
@@ -20,6 +21,8 @@ export default function ElegirPedidoModificarPage() {
   const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
   const [pedidos, setPedidos] = useState<ResumenPedidoPortal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Al volver desde «Modificar pedido» (`?lista=1`) se muestra la lista aunque quede un solo pedido, sin volver a entrar.
+  const verLista = useSearchParams().get("lista") === "1";
 
   useEffect(() => {
     if (!sesion) return;
@@ -27,9 +30,9 @@ export default function ElegirPedidoModificarPage() {
     fetchPedidosModificables(slug)
       .then((r) => {
         if (!activo) return;
-        if (r.pedidos.length === 1)
+        if (r.pedidos.length === 1 && !verLista)
           router.replace(
-            `${base}/portal/pedidos/${encodeURIComponent(r.pedidos[0].folio)}/modificar`,
+            `${base}/portal/pedidos/${encodeURIComponent(r.pedidos[0].folio)}/modificar?desde=menu`,
           );
         else setPedidos(r.pedidos);
       })
@@ -46,16 +49,11 @@ export default function ElegirPedidoModificarPage() {
     return () => {
       activo = false;
     };
-  }, [sesion, slug, base, router]);
+  }, [sesion, slug, base, router, verLista]);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-      <header className="flex flex-col gap-1">
-        <Link href={base} className={BTN_ENLACE}>
-          ← Volver al menú
-        </Link>
-        <h1 className="text-xl font-bold">Modificar pedido activo</h1>
-      </header>
+    <main className={WRAPPER}>
+      <EncabezadoPantalla titulo="Modificar pedido activo" href={base} />
       {error && <p className={ERROR}>{error}</p>}
       {!pedidos && !error && <p className="text-mayoreo-ink-soft">Cargando…</p>}
       {pedidos && pedidos.length === 0 && (
@@ -75,7 +73,7 @@ export default function ElegirPedidoModificarPage() {
       {pedidos?.map((p) => (
         <Link
           key={p.folio}
-          href={`${base}/portal/pedidos/${encodeURIComponent(p.folio)}/modificar`}
+          href={`${base}/portal/pedidos/${encodeURIComponent(p.folio)}/modificar?desde=lista`}
           className="flex flex-col gap-2 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm active:opacity-80"
         >
           <div className="flex items-baseline justify-between gap-2">

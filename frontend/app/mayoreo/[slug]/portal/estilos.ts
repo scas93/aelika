@@ -1,6 +1,6 @@
 // Clases compartidas de las pantallas del portal (mismos tokens mayoreo-* que el resto de /mayoreo).
 export const WRAPPER =
-  "mx-auto flex min-h-screen w-full max-w-md flex-col bg-mayoreo-bg font-mayoreo text-mayoreo-ink";
+  "mx-auto flex w-full max-w-md flex-col gap-4 bg-mayoreo-bg px-4 pt-6 pb-8 font-mayoreo text-mayoreo-ink";
 export const CARD =
   "flex flex-col gap-4 rounded-xl bg-mayoreo-card p-5 shadow-sm";
 export const BTN_PRIMARIO =

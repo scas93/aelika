@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PortalError, pedirCodigo, verificarCodigo } from "@/lib/portal-api";
-import { BTN_ENLACE, BTN_PRIMARIO, CARD, ERROR } from "./estilos";
+import { BTN_ENLACE, BTN_PRIMARIO, CARD, ERROR, WRAPPER } from "./estilos";
 
 const ESPERA_REENVIO_S = 30;
 const clave = (slug: string) => `aelika_portal_tel_${slug}`;
@@ -93,7 +93,7 @@ export default function AccesoPantalla({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
+    <main className={WRAPPER}>
       <div className={CARD}>
         <div>
           <p className="text-sm text-mayoreo-ink-soft">{negocio}</p>

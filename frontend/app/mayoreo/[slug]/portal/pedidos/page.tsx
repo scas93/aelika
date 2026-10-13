@@ -11,7 +11,8 @@ import {
 } from "@/lib/portal-api";
 import { rangoSemana } from "@/lib/portal-pedidos-formato";
 import BotonWhatsApp from "../boton-whatsapp";
-import { BTN_ENLACE, BTN_SECUNDARIO, CARD, ERROR, dinero } from "../estilos";
+import { BTN_SECUNDARIO, CARD, ERROR, dinero, WRAPPER } from "../estilos";
+import EncabezadoPantalla from "../encabezado-pantalla";
 import PedidoChips from "./pedido-chips";
 import { useSesionPortal } from "./usar-sesion-portal";
 
@@ -86,18 +87,8 @@ export default function MisPedidosPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-      <header className="flex flex-col gap-1">
-        <Link href={base} className={BTN_ENLACE}>
-          ← Volver al menú
-        </Link>
-        <h1 className="text-xl font-bold">Mis pedidos</h1>
-        {sesion?.cliente && (
-          <p className="text-sm text-mayoreo-ink-soft">
-            {sesion.cliente.nombre}
-          </p>
-        )}
-      </header>
+    <main className={WRAPPER}>
+      <EncabezadoPantalla titulo="Mis pedidos" href={base} />
 
       {error && <p className={ERROR}>{error}</p>}
       {!lista && !error && <p className="text-mayoreo-ink-soft">Cargando…</p>}

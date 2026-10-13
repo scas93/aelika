@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 import { fetchPublicPedidoB2bTenant } from "@/lib/api";
 import { PortalError, fetchSesion, type PortalSesion } from "@/lib/portal-api";
@@ -9,6 +14,7 @@ import AccesoPantalla from "./portal/acceso-pantalla";
 import MenuPantalla from "./portal/menu-pantalla";
 import CrearPedido from "./portal/crear/crear-pedido";
 import ElegirClientePantalla from "./portal/elegir-cliente-pantalla";
+import { WRAPPER } from "./portal/estilos";
 
 type Estado =
   | { tipo: "cargando" }
@@ -31,10 +37,11 @@ const MENSAJE_SESION_TERMINADA =
 async function resolverEstado(
   slug: string,
   avisoSiNoHay: string | null,
+  vista: "menu" | "crear" = "menu",
 ): Promise<Estado> {
   try {
     const sesion = await fetchSesion(slug);
-    return { tipo: "sesion", sesion, cambiando: false, vista: "menu" };
+    return { tipo: "sesion", sesion, cambiando: false, vista };
   } catch (e) {
     if (e instanceof PortalError && e.status === 401)
       return { tipo: "sin-sesion", aviso: avisoSiNoHay };
@@ -53,6 +60,10 @@ export default function PortalPage() {
   const pathname = usePathname();
   const [estado, setEstado] = useState<Estado>({ tipo: "cargando" });
   const [nombrePublico, setNombrePublico] = useState("Mayoreo");
+  // `?vista=crear`: regreso al paso de días de «Crear pedido» desde «← Atrás» de Modificar pedido.
+  const searchParams = useSearchParams();
+  // Se lee una sola vez al montar (con useSearchParams, que ya refleja la navegación en curso).
+  const [quiereCrear] = useState(() => searchParams.get("vista") === "crear");
 
   const recargar = useCallback(
     (aviso: string | null = null) => {
@@ -63,9 +74,15 @@ export default function PortalPage() {
 
   useEffect(() => {
     let activo = true;
-    void resolverEstado(slug, null).then((e) => {
-      if (activo) setEstado(e);
-    });
+    // `?vista=crear` (leído una sola vez al montar, ver `quiereCrear`): se limpia la URL; es idempotente, así que el doble
+    // efecto de desarrollo no pierde el origen.
+    if (quiereCrear)
+      window.history.replaceState(null, "", window.location.pathname);
+    void resolverEstado(slug, null, quiereCrear ? "crear" : "menu").then(
+      (e) => {
+        if (activo) setEstado(e);
+      },
+    );
     // Nombre del negocio para la pantalla de acceso (info pública que ya existe); si falla, queda el genérico.
     fetchPublicPedidoB2bTenant(slug)
       .then((t) => {
@@ -75,28 +92,28 @@ export default function PortalPage() {
     return () => {
       activo = false;
     };
-  }, [slug]);
+  }, [slug, quiereCrear]);
 
   const nombreNegocio =
     estado.tipo === "sesion" ? estado.sesion.negocio.nombre : nombrePublico;
 
   if (estado.tipo === "cargando") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-mayoreo-bg font-mayoreo">
+      <main className={WRAPPER}>
         <p className="text-mayoreo-ink-soft">Cargando…</p>
       </main>
     );
   }
   if (estado.tipo === "no-encontrado") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-mayoreo-bg p-4 font-mayoreo">
+      <main className={WRAPPER}>
         <p className="text-mayoreo-ink-soft">No encontramos este negocio.</p>
       </main>
     );
   }
   if (estado.tipo === "error") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-mayoreo-bg p-4 font-mayoreo">
+      <main className={WRAPPER}>
         <p className="text-mayoreo-ink-soft">{estado.mensaje}</p>
         <button className="text-sm underline" onClick={() => recargar()}>
           Reintentar

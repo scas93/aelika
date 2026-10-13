@@ -6,7 +6,7 @@ import {
   elegirCliente,
   type PortalSesion,
 } from "@/lib/portal-api";
-import { BTN_SECUNDARIO, CARD, ERROR } from "./estilos";
+import { BTN_SECUNDARIO, CARD, ERROR, WRAPPER } from "./estilos";
 
 interface Props {
   slug: string;
@@ -44,7 +44,7 @@ export default function ElegirClientePantalla({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
+    <main className={WRAPPER}>
       <div className={CARD}>
         <div>
           <p className="text-sm text-mayoreo-ink-soft">
