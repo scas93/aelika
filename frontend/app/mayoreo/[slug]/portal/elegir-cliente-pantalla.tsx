@@ -6,7 +6,7 @@ import {
   elegirCliente,
   type PortalSesion,
 } from "@/lib/portal-api";
-import { BTN_SECUNDARIO, CARD, ERROR, WRAPPER } from "./estilos";
+import { ERROR, OPCION, WRAPPER } from "./estilos";
 
 interface Props {
   slug: string;
@@ -45,28 +45,22 @@ export default function ElegirClientePantalla({
 
   return (
     <main className={WRAPPER}>
-      <div className={CARD}>
-        <div>
-          <p className="text-sm text-mayoreo-ink-soft">
-            {sesion.negocio.nombre}
-          </p>
-          <h1 className="text-xl font-bold">
-            ¿Con cuál cliente quieres entrar?
-          </h1>
-        </div>
-        {error && <p className={ERROR}>{error}</p>}
-        <div className="flex flex-col gap-2">
-          {sesion.clientes.map((c) => (
-            <button
-              key={c.id}
-              className={BTN_SECUNDARIO}
-              disabled={eligiendo !== null}
-              onClick={() => void elegir(c.id)}
-            >
-              {c.nombre}
-            </button>
-          ))}
-        </div>
+      <header className="flex flex-col gap-1">
+        <p className="text-sm text-mayoreo-ink-soft">{sesion.negocio.nombre}</p>
+        <h1 className="text-xl font-bold">¿Con cuál cliente quieres entrar?</h1>
+      </header>
+      {error && <p className={ERROR}>{error}</p>}
+      <div className="flex flex-col gap-3">
+        {sesion.clientes.map((c) => (
+          <button
+            key={c.id}
+            className={OPCION}
+            disabled={eligiendo !== null}
+            onClick={() => void elegir(c.id)}
+          >
+            <span className="text-base font-semibold">{c.nombre}</span>
+          </button>
+        ))}
       </div>
     </main>
   );

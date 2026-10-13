@@ -8,7 +8,7 @@ import {
 } from "@/lib/portal-api";
 import BotonWhatsApp from "./boton-whatsapp";
 import { CLASE_BOTON_CIRCULAR } from "./encabezado-pantalla";
-import { WRAPPER } from "./estilos";
+import { OPCION, WRAPPER } from "./estilos";
 
 interface Props {
   slug: string;
@@ -22,8 +22,6 @@ interface Props {
 
 const ITEM_MENU =
   "flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-mayoreo-ink transition active:opacity-80 disabled:opacity-50";
-const OPCION =
-  "flex w-full flex-col items-start gap-0.5 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 text-left shadow-sm transition active:opacity-80";
 
 // Menú del portal: Crear pedido (4d), Ver mis pedidos (4e) y Modificar pedido activo (4f).
 export default function MenuPantalla({
