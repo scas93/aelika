@@ -157,16 +157,14 @@ afterEach(() => {
 });
 
 describe("modificar pedido", () => {
-  it("muestra editables los días permitidos y de solo lectura (con WhatsApp) el cerrado", async () => {
+  it("muestra editables los días permitidos y de solo lectura (sin botón) el cerrado", async () => {
     render(<Page />);
     expect(
       await screen.findByLabelText(/Café americano el .*2 oct/i),
     ).toBeInTheDocument();
-    // El día cerrado no tiene input, pero sí el botón de contacto.
+    // El día cerrado no tiene input ni botón de contacto.
     expect(screen.queryByLabelText(/Café americano el .*1 oct/i)).toBeNull();
-    expect(
-      screen.getAllByRole("link", { name: /Escribir por WhatsApp/ }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /Escribir por WhatsApp/ })).toBeNull();
     // Encabezado: semana corta y folio; ya no hay recuadro con el texto de reglas.
     expect(screen.getByText("Semana 28 sep – 4 oct")).toBeInTheDocument();
     expect(screen.queryByText("Pedido P-000001")).toBeNull();

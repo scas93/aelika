@@ -418,21 +418,6 @@ export default function ModificarPedidoPage() {
                             ))}
                           </ul>
                         )}
-                        {d.entrega && (
-                          <div className="pt-1">
-                            <BotonWhatsApp
-                              compacto
-                              numeroAtencion={
-                                numeroAtencion ?? estado.numeroAtencion
-                              }
-                              contexto={{
-                                tipo: "dia",
-                                cliente,
-                                fecha: d.fecha,
-                              }}
-                            />
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -510,10 +495,11 @@ export default function ModificarPedidoPage() {
 
                 {!dia.existia && !abierto && (
                   <button
-                    className={BTN_SECUNDARIO}
+                    type="button"
+                    className="self-start py-2 pr-3 text-left text-sm font-medium text-mayoreo-ink transition active:opacity-80"
                     onClick={() => setAbiertos((s) => new Set(s).add(d.fecha))}
                   >
-                    Agregar este día
+                    + Pedir para este día
                   </button>
                 )}
 
