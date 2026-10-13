@@ -193,11 +193,14 @@ describe("detalle del pedido", () => {
   it("entregas con estado (incluida la cancelada), productos, descuento, nota y total", async () => {
     fetchPedido.mockResolvedValue(detalle());
     render(<DetallePage />);
-    expect(await screen.findByText(/2 × Concha/)).toBeInTheDocument();
+    // Solo cantidades: nombre y cantidad por separado, sin «×» ni precios.
+    expect(await screen.findByText("Concha")).toBeInTheDocument();
+    expect(screen.queryByText(/×/)).toBeNull();
+    expect(screen.queryByText(/c\/u/)).toBeNull();
     expect(fetchPedido).toHaveBeenCalledWith("banetto", "P-000001");
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
     expect(screen.getByText("Cancelada")).toBeInTheDocument();
-    expect(screen.getByText(/Descuento \(10%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/10% de descuento/)).toBeInTheDocument();
     expect(screen.getByText(/Tocar el timbre/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Usar este pedido como favorito" }),
@@ -207,6 +210,17 @@ describe("detalle del pedido", () => {
     const wa = screen.getByRole("link", { name: /Escribir por WhatsApp/ });
     expect(decodeURIComponent(wa.getAttribute("href") ?? "")).toContain(
       "sobre mi pedido P-000001",
+    );
+  });
+
+  it("pedido modificable: «Modificar pedido» en la barra fija, hacia la pantalla de modificar con origen «detalle»", async () => {
+    fetchPedido.mockResolvedValue(detalle({ modificable: true }));
+    render(<DetallePage />);
+    const enlace = await screen.findByRole("link", {
+      name: "Modificar pedido",
+    });
+    expect(enlace.getAttribute("href")).toBe(
+      "/mayoreo/banetto/portal/pedidos/P-000001/modificar?desde=detalle",
     );
   });
 

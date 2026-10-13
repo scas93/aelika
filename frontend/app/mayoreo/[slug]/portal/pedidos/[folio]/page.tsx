@@ -9,27 +9,32 @@ import {
   usarPedidoComoFavorito,
   type DetallePedidoPortal,
 } from "@/lib/portal-api";
-import {
-  etiquetaFechaEntrega,
-  rangoSemana,
-} from "@/lib/portal-pedidos-formato";
+import { hora12, rangoSemanaCorto } from "@/lib/portal-calendario-formato";
 import BotonWhatsApp from "../../boton-whatsapp";
 import {
   AVISO,
   BTN_ENLACE,
   BTN_PRIMARIO,
-  BTN_SECUNDARIO,
   CARD,
   ERROR,
-  dinero,
+  WRAPPER,
 } from "../../estilos";
+import EncabezadoPantalla from "../../encabezado-pantalla";
+import BarraAccionFija from "../../crear/barra-accion-fija";
+import {
+  BloqueRecoge,
+  DiaEntrega,
+  TarjetaTotal,
+} from "../../crear/bloques-pedido";
 import PedidoChips from "../pedido-chips";
 import { useSesionPortal } from "../usar-sesion-portal";
 
-// Detalle de un pedido (4e): entregas por fecha con su estado, productos, descuento, nota y total. Solo lectura.
+// Detalle de un pedido (4e): total, estado, entregas por fecha con su estado y productos (solo cantidades), lugar y hora de
+// recolección. Solo lectura; «Modificar pedido» va en la barra fija cuando el pedido se puede modificar.
 export default function DetallePedidoPage() {
   const { slug, folio } = useParams<{ slug: string; folio: string }>();
-  const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
+  const { sesion, numeroAtencion, ubicacion, horaEntrega, base, router } =
+    useSesionPortal(slug);
   const [pedido, setPedido] = useState<DetallePedidoPortal | null>(null);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,12 +97,15 @@ export default function DetallePedidoPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-      <header className="flex flex-col gap-1">
-        <Link href={`${base}/portal/pedidos`} className={BTN_ENLACE}>
-          ← Mis pedidos
-        </Link>
-      </header>
+    <main className={WRAPPER}>
+      <EncabezadoPantalla
+        titulo={
+          pedido
+            ? `Semana ${rangoSemanaCorto(pedido.semanaInicio, pedido.semanaFin)}`
+            : undefined
+        }
+        href={`${base}/portal/pedidos`}
+      />
 
       {noEncontrado && (
         <div className={CARD}>
@@ -113,101 +121,52 @@ export default function DetallePedidoPage() {
 
       {pedido && (
         <>
-          <section className={CARD + " gap-2"}>
-            <div className="flex items-baseline justify-between gap-2">
-              <h1 className="text-xl font-bold">{pedido.folio}</h1>
-              <span className="text-xl font-bold">{dinero(pedido.total)}</span>
+          <TarjetaTotal
+            total={pedido.total}
+            subtotal={pedido.subtotal}
+            descuento={pedido.descuentoTotal}
+            descuentoPorcentaje={pedido.descuentoPorcentaje}
+          />
+          <PedidoChips pedido={pedido} conFechaPago />
+
+          <section className={CARD + " gap-3"}>
+            <div className="flex flex-col gap-3">
+              {pedido.entregas.map((e) => (
+                <DiaEntrega
+                  key={e.fecha}
+                  fecha={e.fecha}
+                  estado={e.estado}
+                  lineas={e.productos.map((p) => ({
+                    clave: p.nombre,
+                    nombre: p.nombre,
+                    cantidad: p.cantidad,
+                  }))}
+                />
+              ))}
             </div>
+            <BloqueRecoge
+              direccion={ubicacion}
+              hora={horaEntrega ? hora12(horaEntrega) : undefined}
+              className="border-t border-mayoreo-border pt-3"
+            />
+          </section>
+
+          {pedido.notaCliente && (
             <p className="text-sm text-mayoreo-ink-soft">
-              Semana del {rangoSemana(pedido.semanaInicio, pedido.semanaFin)}
+              Tu nota: {pedido.notaCliente}
             </p>
-            <PedidoChips pedido={pedido} conFechaPago />
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold">Entregas</h2>
-            {pedido.entregas.map((e) => (
-              <div
-                key={e.fecha}
-                className="flex flex-col gap-2 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold">
-                    {etiquetaFechaEntrega(e.fecha)}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      e.estado.codigo === "CANCELADA"
-                        ? "bg-red-50 text-red-700"
-                        : e.estado.codigo === "ENTREGADA"
-                          ? "bg-green-50 text-green-800"
-                          : "bg-mayoreo-accent-soft text-mayoreo-ink"
-                    }`}
-                  >
-                    {e.estado.etiqueta}
-                  </span>
-                </div>
-                <ul className="flex flex-col gap-1">
-                  {e.productos.map((p) => (
-                    <li
-                      key={p.nombre}
-                      className="flex items-baseline justify-between gap-2 text-sm"
-                    >
-                      <span>
-                        {p.cantidad} × {p.nombre}
-                        <span className="text-mayoreo-ink-soft">
-                          {" "}
-                          ({dinero(p.precioUnitario)} c/u)
-                        </span>
-                      </span>
-                      <span>{dinero(p.subtotal)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </section>
-
-          <section className={CARD + " gap-2"}>
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>{dinero(pedido.subtotal)}</span>
-            </div>
-            {pedido.descuentoTotal > 0 && (
-              <div className="flex justify-between text-sm">
-                <span>Descuento ({pedido.descuentoPorcentaje}%)</span>
-                <span>−{dinero(pedido.descuentoTotal)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold">
-              <span>Total</span>
-              <span>{dinero(pedido.total)}</span>
-            </div>
-            {pedido.notaCliente && (
-              <p className="border-t border-mayoreo-border pt-2 text-sm text-mayoreo-ink-soft">
-                Tu nota: {pedido.notaCliente}
-              </p>
-            )}
-          </section>
+          )}
 
           {aviso && <p className={AVISO}>{aviso}</p>}
 
-          <div className="flex flex-col gap-2">
-            {pedido.modificable && (
-              <Link
-                href={`${base}/portal/pedidos/${encodeURIComponent(pedido.folio)}/modificar`}
-                className={BTN_PRIMARIO + " block text-center"}
-              >
-                Modificar este pedido
-              </Link>
-            )}
+          <div className="flex flex-col items-start gap-3">
             {pedido.esFavorito ? (
-              <p className="text-center text-sm font-medium text-mayoreo-ink-soft">
+              <p className="text-sm font-medium text-mayoreo-ink-soft">
                 ★ Es tu pedido favorito
               </p>
             ) : (
               <button
-                className={BTN_SECUNDARIO}
+                className={BTN_ENLACE}
                 disabled={guardando}
                 onClick={() => void usarComoFavorito()}
               >
@@ -216,6 +175,7 @@ export default function DetallePedidoPage() {
             )}
             {sesion?.cliente && (
               <BotonWhatsApp
+                discreto
                 numeroAtencion={numeroAtencion}
                 contexto={{
                   tipo: "pedido",
@@ -225,6 +185,17 @@ export default function DetallePedidoPage() {
               />
             )}
           </div>
+
+          {pedido.modificable && (
+            <BarraAccionFija>
+              <Link
+                href={`${base}/portal/pedidos/${encodeURIComponent(pedido.folio)}/modificar?desde=detalle`}
+                className={BTN_PRIMARIO + " block text-center"}
+              >
+                Modificar pedido
+              </Link>
+            </BarraAccionFija>
+          )}
         </>
       )}
     </main>

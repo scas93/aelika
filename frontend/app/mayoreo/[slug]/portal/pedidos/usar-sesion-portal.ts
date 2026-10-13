@@ -19,6 +19,9 @@ export function useSesionPortal(slug: string) {
   const base = rutaBasePortal(pathname, slug);
   const [sesion, setSesion] = useState<PortalSesion | null>(null);
   const [numeroAtencion, setNumeroAtencion] = useState<string | null>(null);
+  // Datos del negocio que ya trae el calendario: dirección y hora de recolección.
+  const [ubicacion, setUbicacion] = useState<string | null>(null);
+  const [horaEntrega, setHoraEntrega] = useState<string | null>(null);
 
   useEffect(() => {
     let activo = true;
@@ -34,7 +37,10 @@ export function useSesionPortal(slug: string) {
     // Solo para el botón de WhatsApp: si falla, simplemente no aparece.
     fetchCalendario(slug)
       .then((c) => {
-        if (activo) setNumeroAtencion(c.numeroAtencion);
+        if (!activo) return;
+        setNumeroAtencion(c.numeroAtencion);
+        setUbicacion(c.ubicacion ?? null);
+        setHoraEntrega(c.horaEntrega ?? null);
       })
       .catch(() => undefined);
     return () => {
@@ -42,5 +48,5 @@ export function useSesionPortal(slug: string) {
     };
   }, [slug, base, router]);
 
-  return { sesion, numeroAtencion, base, router };
+  return { sesion, numeroAtencion, ubicacion, horaEntrega, base, router };
 }
