@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import CantidadInput, {
   cantidadNumero,
   type Cantidad,
@@ -18,8 +18,9 @@ import {
 } from "@/lib/portal-api";
 import {
   ETIQUETA_MOTIVO,
-  etiquetaFecha,
-  etiquetaMomento,
+  etiquetaFechaCorta,
+  rangoSemanaCorto,
+  textoAgregaAntes,
 } from "@/lib/portal-calendario-formato";
 import {
   borradorInicial,
@@ -29,18 +30,18 @@ import {
   totalesEstimados,
   type Borrador,
 } from "@/lib/portal-modificar-modelo";
-import { rangoSemana } from "@/lib/portal-pedidos-formato";
 import BotonWhatsApp from "../../../boton-whatsapp";
+import ControlCantidad from "../../../control-cantidad";
 import IconoBasura from "../../../icono-basura";
+import EncabezadoPantalla from "../../../encabezado-pantalla";
 import ModalPortal from "../../../modal-portal";
 import {
-  AVISO,
-  BTN_ENLACE,
   BTN_PRIMARIO,
   BTN_SECUNDARIO,
   CARD,
   ERROR,
   dinero,
+  WRAPPER,
 } from "../../../estilos";
 import { useSesionPortal } from "../../usar-sesion-portal";
 
@@ -56,6 +57,17 @@ export default function ModificarPedidoPage() {
   const { slug, folio } = useParams<{ slug: string; folio: string }>();
   const folioReal = decodeURIComponent(folio);
   const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
+  // «Atrás» regresa a donde vino el cliente (`?desde=`): la lista de pedidos modificables, el detalle del pedido, el paso de días de «Crear pedido» o, sin
+  // origen conocido (URL directa) o desde el menú, el menú.
+  const desde = useSearchParams().get("desde");
+  const hrefAtras =
+    desde === "lista"
+      ? `${base}/portal/modificar?lista=1`
+      : desde === "detalle"
+        ? `${base}/portal/pedidos/${encodeURIComponent(folioReal)}`
+        : desde === "dias"
+          ? `${base}?vista=crear`
+          : base;
 
   const [estado, setEstado] = useState<EstadoModificarPortal | null>(null);
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
@@ -156,6 +168,25 @@ export default function ModificarPedidoPage() {
     return s;
   }, [estado]);
 
+  // Días en orden cronológico; los consecutivos que no se pueden editar se agrupan en una sola tarjeta compacta.
+  const bloques = useMemo(() => {
+    type Dia = EstadoModificarPortal["dias"][number];
+    const out: (
+      { tipo: "dia"; dia: Dia } | { tipo: "cerrados"; dias: Dia[] }
+    )[] = [];
+    for (const d of estado?.dias ?? []) {
+      if (!borrador[d.fecha]) continue;
+      if (editables.has(d.fecha)) {
+        out.push({ tipo: "dia", dia: d });
+        continue;
+      }
+      const ultimo = out[out.length - 1];
+      if (ultimo?.tipo === "cerrados") ultimo.dias.push(d);
+      else out.push({ tipo: "cerrados", dias: [d] });
+    }
+    return out;
+  }, [estado, borrador, editables]);
+
   const nombres = useMemo(() => {
     const m = new Map<string, string>();
     for (const d of estado?.dias ?? [])
@@ -178,10 +209,8 @@ export default function ModificarPedidoPage() {
 
   if (noEncontrado) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-        <Link href={`${base}/portal/pedidos`} className={BTN_ENLACE}>
-          ← Mis pedidos
-        </Link>
+      <main className={WRAPPER}>
+        <EncabezadoPantalla href={`${base}/portal/pedidos`} />
         <div className={CARD}>
           <p className="text-sm text-mayoreo-ink-soft">
             No encontramos este pedido.
@@ -195,7 +224,7 @@ export default function ModificarPedidoPage() {
 
   if (guardado) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
+      <main className={WRAPPER}>
         <div className={CARD}>
           <h1 className="text-xl font-bold">Cambios guardados</h1>
           <p className="text-sm">{guardado}</p>
@@ -204,6 +233,9 @@ export default function ModificarPedidoPage() {
             className={BTN_PRIMARIO + " block text-center"}
           >
             Ver mi pedido
+          </Link>
+          <Link href={base} className={BTN_SECUNDARIO + " block text-center"}>
+            Volver al menú
           </Link>
         </div>
       </main>
@@ -308,21 +340,15 @@ export default function ModificarPedidoPage() {
   const bloqueado = !!estado?.bloqueo;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 pb-8 font-mayoreo text-mayoreo-ink">
-      <header className="flex flex-col gap-1">
-        <Link
-          href={`${base}/portal/pedidos/${encodeURIComponent(folioReal)}`}
-          className={BTN_ENLACE}
-        >
-          ← Volver al pedido
-        </Link>
-        <h1 className="text-xl font-bold">Modificar pedido {folioReal}</h1>
-        {estado && (
-          <p className="text-sm text-mayoreo-ink-soft">
-            Semana del {rangoSemana(estado.semanaInicio, estado.semanaFin)}
-          </p>
-        )}
-      </header>
+    <main className={WRAPPER}>
+      <EncabezadoPantalla
+        titulo={
+          estado
+            ? `Semana ${rangoSemanaCorto(estado.semanaInicio, estado.semanaFin)}`
+            : "Modificar pedido"
+        }
+        href={hrefAtras}
+      />
 
       {error && <p className={ERROR}>{error}</p>}
       {problemas.length > 0 && (
@@ -350,27 +376,75 @@ export default function ModificarPedidoPage() {
 
       {estado && !bloqueado && (
         <>
-          <div className={AVISO}>
-            Puedes cambiar un día hasta {estado.horasModificar} horas antes de
-            la entrega, y agregar un día hasta {estado.horasAgregar} horas
-            antes. Al guardar, todos los productos del pedido se recalculan con
-            los precios de hoy, incluidos los de entregas ya cerradas.
-            {estado.estadoPedido === "CONFIRMADO_SURTIENDO" &&
-              " Tu pedido está confirmado: al guardar volverá a Por confirmar hasta que lo confirmemos otra vez."}
-          </div>
-
-          {estado.dias.map((d) => {
+          {bloques.map((b) => {
+            if (b.tipo === "cerrados") {
+              // Días que no se pueden editar: una sola tarjeta compacta, una fila por día (en su lugar cronológico).
+              return (
+                <section
+                  key={b.dias[0].fecha}
+                  className="flex flex-col divide-y divide-mayoreo-border rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm"
+                >
+                  {b.dias.map((d) => {
+                    const lineas = Object.entries(
+                      lineasEfectivas(borrador[d.fecha]),
+                    );
+                    return (
+                      <div
+                        key={d.fecha}
+                        className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0"
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <h2 className="text-sm font-semibold">
+                            {etiquetaFechaCorta(d.fecha)}
+                          </h2>
+                          <span className="text-xs text-mayoreo-ink-soft">
+                            {d.motivo ? ETIQUETA_MOTIVO[d.motivo] : ""}
+                          </span>
+                        </div>
+                        {lineas.length > 0 && (
+                          <ul className="flex flex-col gap-0.5">
+                            {lineas.map(([id, cantidad]) => (
+                              <li
+                                key={id}
+                                className="flex items-baseline justify-between gap-3 text-sm text-mayoreo-ink-soft"
+                              >
+                                <span className="min-w-0">
+                                  {nombres.get(id) ?? "Producto"}
+                                </span>
+                                <span className="shrink-0 tabular-nums">
+                                  {cantidad}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {d.entrega && (
+                          <div className="pt-1">
+                            <BotonWhatsApp
+                              compacto
+                              numeroAtencion={
+                                numeroAtencion ?? estado.numeroAtencion
+                              }
+                              contexto={{
+                                tipo: "dia",
+                                cliente,
+                                fecha: d.fecha,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            }
+            const d = b.dia;
             const dia = borrador[d.fecha];
-            if (!dia) return null;
-            const editable = editables.has(d.fecha);
             const lineas = lineasEfectivas(dia);
-            const mostrarLineas = editable ? { ...dia.lineas } : lineas;
             const abierto = abiertos.has(d.fecha) || dia.existia;
             const sinProductos =
-              editable &&
-              dia.existia &&
-              !dia.quitado &&
-              Object.keys(lineas).length === 0;
+              dia.existia && !dia.quitado && Object.keys(lineas).length === 0;
             return (
               <section
                 key={d.fecha}
@@ -378,13 +452,13 @@ export default function ModificarPedidoPage() {
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <h2 className="text-sm font-semibold">
-                    {etiquetaFecha(d.fecha)}
+                    {etiquetaFechaCorta(d.fecha)}
                   </h2>
                   <span className="text-xs text-mayoreo-ink-soft">
-                    {d.estado === "MODIFICABLE" && d.limiteAt
-                      ? `Hasta ${etiquetaMomento(d.limiteAt)}`
+                    {d.estado === "MODIFICABLE"
+                      ? ""
                       : d.estado === "AGREGABLE" && d.limiteAt
-                        ? `Agregar hasta ${etiquetaMomento(d.limiteAt)}`
+                        ? textoAgregaAntes(d.limiteAt)
                         : d.motivo
                           ? ETIQUETA_MOTIVO[d.motivo]
                           : ""}
@@ -396,37 +470,35 @@ export default function ModificarPedidoPage() {
                     Esta entrega se quitará al guardar.
                   </p>
                 ) : (
-                  <ul className="flex flex-col gap-2">
-                    {Object.entries(mostrarLineas).map(([id, cantidad]) => (
-                      <li
-                        key={id}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span>{nombres.get(id) ?? "Producto"}</span>
-                        {editable ? (
-                          <div className="flex items-center gap-2">
-                            <CantidadInput
+                  <ul className="flex flex-col gap-1">
+                    {Object.entries(dia.lineas).map(([id, cantidad]) => {
+                      const nombre = nombres.get(id) ?? "Producto";
+                      return (
+                        <li
+                          key={id}
+                          className="flex items-center justify-between gap-2 text-sm"
+                        >
+                          <span className="min-w-0">{nombre}</span>
+                          <div className="flex shrink-0 items-center">
+                            <ControlCantidad
                               value={cantidad}
-                              onChange={(v) =>
-                                cambiarLinea(d.fecha, id, v === "" ? 0 : v)
-                              }
-                              aria-label={`${nombres.get(id) ?? "Producto"} el ${etiquetaFecha(d.fecha)}`}
-                              className="mayoreo-input w-24 text-center"
+                              onChange={(n) => cambiarLinea(d.fecha, id, n)}
+                              etiqueta={`${nombre} el ${etiquetaFechaCorta(d.fecha)}`}
+                              etiquetaMenos={`Una pieza menos: ${nombre} (${etiquetaFechaCorta(d.fecha)})`}
+                              etiquetaMas={`Una pieza más: ${nombre} (${etiquetaFechaCorta(d.fecha)})`}
                             />
                             <button
                               type="button"
-                              aria-label={`Quitar ${nombres.get(id) ?? "producto"} del ${etiquetaFecha(d.fecha)}`}
+                              aria-label={`Quitar ${nombre} del ${etiquetaFechaCorta(d.fecha)}`}
                               onClick={() => quitarLinea(d.fecha, id)}
-                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-mayoreo-border text-mayoreo-ink-soft transition active:opacity-80"
+                              className="flex h-11 w-11 shrink-0 items-center justify-center text-mayoreo-ink-soft transition active:opacity-80"
                             >
                               <IconoBasura />
                             </button>
                           </div>
-                        ) : (
-                          <span>{cantidad}</span>
-                        )}
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
@@ -436,39 +508,7 @@ export default function ModificarPedidoPage() {
                   </p>
                 )}
 
-                {editable && !dia.quitado && abierto && (
-                  <select
-                    className="mayoreo-input"
-                    value=""
-                    onChange={(e) => pedirCantidad(d.fecha, e.target.value)}
-                    aria-label={`Agregar producto el ${etiquetaFecha(d.fecha)}`}
-                  >
-                    <option value="">Agregar producto…</option>
-                    {catalogo
-                      .filter((p) => !((dia.lineas[p.id] ?? 0) > 0))
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nombre} — {dinero(p.precio)}
-                        </option>
-                      ))}
-                  </select>
-                )}
-
-                {editable && dia.existia && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-mayoreo-border bg-mayoreo-card px-3 py-2 text-sm font-medium text-mayoreo-ink-soft transition active:opacity-80"
-                    onClick={() =>
-                      dia.quitado
-                        ? alternarQuitar(d.fecha)
-                        : setQuitando(d.fecha)
-                    }
-                  >
-                    {!dia.quitado && <IconoBasura className="h-4 w-4" />}
-                    {dia.quitado ? "Deshacer" : "Quitar esta entrega"}
-                  </button>
-                )}
-                {editable && !dia.existia && !abierto && (
+                {!dia.existia && !abierto && (
                   <button
                     className={BTN_SECUNDARIO}
                     onClick={() => setAbiertos((s) => new Set(s).add(d.fecha))}
@@ -477,12 +517,52 @@ export default function ModificarPedidoPage() {
                   </button>
                 )}
 
-                {!editable && d.entrega && (
-                  <BotonWhatsApp
-                    compacto
-                    numeroAtencion={numeroAtencion ?? estado.numeroAtencion}
-                    contexto={{ tipo: "dia", cliente, fecha: d.fecha }}
-                  />
+                {(abierto || dia.existia) && (
+                  <div className="flex items-center justify-between gap-3">
+                    {!dia.quitado && abierto ? (
+                      // El texto abre el mismo selector nativo de productos de siempre (el <select> va encima, transparente).
+                      <label className="relative inline-flex cursor-pointer items-center py-2 pr-3 text-sm font-medium text-mayoreo-ink">
+                        <span aria-hidden="true">+ Agregar producto</span>
+                        <select
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          value=""
+                          onChange={(e) =>
+                            pedirCantidad(d.fecha, e.target.value)
+                          }
+                          aria-label={`Agregar producto el ${etiquetaFechaCorta(d.fecha)}`}
+                        >
+                          <option value="">Agregar producto…</option>
+                          {catalogo
+                            .filter((p) => !((dia.lineas[p.id] ?? 0) > 0))
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.nombre} — {dinero(p.precio)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <span />
+                    )}
+                    {dia.existia && (
+                      <button
+                        type="button"
+                        className={`inline-flex items-center gap-1.5 text-sm font-medium transition active:opacity-80 ${
+                          dia.quitado
+                            ? "text-mayoreo-ink-soft underline"
+                            : "text-red-700"
+                        }`}
+                        onClick={() =>
+                          dia.quitado
+                            ? alternarQuitar(d.fecha)
+                            : setQuitando(d.fecha)
+                        }
+                      >
+                        {!dia.quitado && <IconoBasura className="h-4 w-4" />}
+                        {dia.quitado ? "Deshacer" : "Quitar este día"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </section>
             );
@@ -582,7 +662,7 @@ export default function ModificarPedidoPage() {
 
       {agregando && (
         <ModalPortal
-          titulo={`¿Cuántos para ${etiquetaFecha(agregando.fecha)}?`}
+          titulo={`¿Cuántos para ${etiquetaFechaCorta(agregando.fecha)}?`}
           onCerrar={() => setAgregando(null)}
         >
           <p className="text-sm text-mayoreo-ink-soft">
@@ -620,7 +700,7 @@ export default function ModificarPedidoPage() {
 
       {quitando && borrador[quitando] && (
         <ModalPortal
-          titulo={`¿Quitar la entrega del ${etiquetaFecha(quitando)}?`}
+          titulo={`¿Quitar la entrega del ${etiquetaFechaCorta(quitando)}?`}
           onCerrar={() => setQuitando(null)}
         >
           <ResumenQuitar dia={borrador[quitando]} />

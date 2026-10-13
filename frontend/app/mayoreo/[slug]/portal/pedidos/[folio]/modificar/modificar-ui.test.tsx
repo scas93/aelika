@@ -11,12 +11,14 @@ import type { EstadoModificarPortal } from "@/lib/portal-api";
 
 // Modificar pedido (4f): días editables y bloqueados, qué se manda al guardar, errores del servidor.
 
+let searchActual = "";
 const replace = vi.fn();
 const router = { replace, push: vi.fn() };
 vi.mock("next/navigation", () => ({
   useParams: () => ({ slug: "banetto", folio: "P-000001" }),
   usePathname: () => "/mayoreo/banetto/portal/pedidos/P-000001/modificar",
   useRouter: () => router,
+  useSearchParams: () => new URLSearchParams(searchActual),
 }));
 
 const fetchSesion = vi.fn();
@@ -149,6 +151,7 @@ beforeEach(() => {
   fetchEstadoModificar.mockResolvedValue(estado());
 });
 afterEach(() => {
+  searchActual = "";
   cleanup();
   vi.clearAllMocks();
 });
@@ -157,19 +160,18 @@ describe("modificar pedido", () => {
   it("muestra editables los días permitidos y de solo lectura (con WhatsApp) el cerrado", async () => {
     render(<Page />);
     expect(
-      await screen.findByLabelText(/Café americano el .*2 de oct/i),
+      await screen.findByLabelText(/Café americano el .*2 oct/i),
     ).toBeInTheDocument();
     // El día cerrado no tiene input, pero sí el botón de contacto.
-    expect(screen.queryByLabelText(/Café americano el .*1 de oct/i)).toBeNull();
+    expect(screen.queryByLabelText(/Café americano el .*1 oct/i)).toBeNull();
     expect(
       screen.getAllByRole("link", { name: /Escribir por WhatsApp/ }).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/volverá a Por confirmar hasta que lo confirmemos/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/incluidos los de entregas ya cerradas/),
-    ).toBeInTheDocument();
+    // Encabezado: semana corta y folio; ya no hay recuadro con el texto de reglas.
+    expect(screen.getByText("Semana 28 sep – 4 oct")).toBeInTheDocument();
+    expect(screen.queryByText("Pedido P-000001")).toBeNull();
+    expect(screen.queryByText(/Puedes cambiar un día hasta/)).toBeNull();
+    expect(screen.queryByText(/Cambia antes del/)).toBeNull();
   });
 
   it("sin cambios el botón de guardar está deshabilitado; con cambios manda solo la fecha que cambió", async () => {
@@ -183,7 +185,7 @@ describe("modificar pedido", () => {
     });
     expect(guardar).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/Café americano el .*3 de oct/i), {
+    fireEvent.change(screen.getByLabelText(/Café americano el .*3 oct/i), {
       target: { value: "5" },
     });
     expect(guardar).toBeEnabled();
@@ -209,7 +211,7 @@ describe("modificar pedido", () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+      screen.getAllByRole("button", { name: "Quitar este día" })[0],
     );
     // La ventana aparece y todavía no hay cambios que guardar.
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
@@ -238,7 +240,7 @@ describe("modificar pedido", () => {
     // Cada entrega se quita con su confirmación.
     for (let i = 0; i < 2; i += 1) {
       fireEvent.click(
-        screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+        screen.getAllByRole("button", { name: "Quitar este día" })[0],
       );
       fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
       expect(screen.queryByRole("dialog")).toBeNull();
@@ -273,20 +275,20 @@ describe("modificar pedido", () => {
 
   it("si el servidor rechaza (409), muestra el motivo y vuelve a leer el pedido", async () => {
     modificarPedido.mockRejectedValue(
-      new PortalError("El 2 de octubre ya no se puede modificar", 409, {
+      new PortalError("El 2 octubre ya no se puede modificar", 409, {
         codigo: "FECHAS_NO_DISPONIBLES",
         fechas: [
           {
             fecha: "2026-10-02",
             motivo: "ANTICIPACION_MODIFICAR",
-            mensaje: "El viernes 2 de octubre ya no se puede modificar",
+            mensaje: "El viernes 2 octubre ya no se puede modificar",
           },
         ],
       }),
     );
     render(<Page />);
     fireEvent.change(
-      await screen.findByLabelText(/Café americano el .*3 de oct/i),
+      await screen.findByLabelText(/Café americano el .*3 oct/i),
       {
         target: { value: "5" },
       },
@@ -311,18 +313,16 @@ describe("modificar pedido", () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
     const basura = screen.getByRole("button", {
-      name: /Quitar Café americano del Vie 2 de oct/,
+      name: /Quitar Café americano del Vie 2 oct/,
     });
     // Tamaño cómodo para el dedo (44 px).
     expect(basura.className).toMatch(/h-11/);
     expect(basura.className).toMatch(/w-11/);
     fireEvent.click(basura);
     // La fila desaparece (ya no hay cantidad para ese día)…
-    expect(
-      screen.queryByLabelText(/Café americano el Vie 2 de oct/),
-    ).toBeNull();
+    expect(screen.queryByLabelText(/Café americano el Vie 2 oct/)).toBeNull();
     // …y escribir 0 en otro día sigue siendo válido.
-    fireEvent.change(screen.getByLabelText(/Café americano el Sáb 3 de oct/), {
+    fireEvent.change(screen.getByLabelText(/Café americano el Sáb 3 oct/), {
       target: { value: "0" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -339,13 +339,12 @@ describe("modificar pedido", () => {
   it("agregar producto: pregunta «¿Cuántos para …?», con el campo enfocado; Cancelar no agrega nada", async () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    fireEvent.change(
-      screen.getByLabelText(/Agregar producto el Vie 2 de oct/),
-      { target: { value: "B" } },
-    );
+    fireEvent.change(screen.getByLabelText(/Agregar producto el Vie 2 oct/), {
+      target: { value: "B" },
+    });
     const ventana = await screen.findByRole("dialog");
     expect(
-      within(ventana).getByText("¿Cuántos para Vie 2 de oct?"),
+      within(ventana).getByText("¿Cuántos para Vie 2 oct?"),
     ).toBeInTheDocument();
     const campo = within(ventana).getByLabelText("Cantidad");
     expect(campo).toHaveFocus();
@@ -356,7 +355,7 @@ describe("modificar pedido", () => {
     expect(
       screen.getByRole("button", { name: "Guardar cambios" }),
     ).toBeDisabled();
-    expect(screen.queryByLabelText(/Concha el Vie 2 de oct/)).toBeNull();
+    expect(screen.queryByLabelText(/Concha el Vie 2 oct/)).toBeNull();
   });
 
   it("agregar producto: Agregar lo incluye con la cantidad escrita y se manda al guardar; sin cantidad no deja", async () => {
@@ -366,10 +365,9 @@ describe("modificar pedido", () => {
     });
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    fireEvent.change(
-      screen.getByLabelText(/Agregar producto el Vie 2 de oct/),
-      { target: { value: "B" } },
-    );
+    fireEvent.change(screen.getByLabelText(/Agregar producto el Vie 2 oct/), {
+      target: { value: "B" },
+    });
     const ventana = await screen.findByRole("dialog");
     // Sin cantidad el botón está deshabilitado.
     expect(
@@ -381,8 +379,7 @@ describe("modificar pedido", () => {
     fireEvent.click(within(ventana).getByRole("button", { name: "Agregar" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
-      (screen.getByLabelText(/Concha el Vie 2 de oct/) as HTMLInputElement)
-        .value,
+      (screen.getByLabelText(/Concha el Vie 2 oct/) as HTMLInputElement).value,
     ).toBe("4");
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -428,11 +425,11 @@ describe("modificar pedido", () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+      screen.getAllByRole("button", { name: "Quitar este día" })[0],
     );
     const ventana = await screen.findByRole("dialog");
     expect(
-      within(ventana).getByText("¿Quitar la entrega del Vie 2 de oct?"),
+      within(ventana).getByText("¿Quitar la entrega del Vie 2 oct?"),
     ).toBeInTheDocument();
     expect(
       within(ventana).getByText(/Se quitarán 2 productos \(5 piezas\)/),
@@ -473,24 +470,91 @@ describe("modificar pedido", () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Quitar esta entrega" })[0],
+      screen.getAllByRole("button", { name: "Quitar este día" })[0],
     );
     expect(
       await screen.findByText(/Se quitarán 1 producto \(1 pieza\)/),
     ).toBeInTheDocument();
   });
 
-  it("las fechas salen como «Vie 2 de oct» (solo la primera letra en mayúscula), no «Vie 2 De Oct»", async () => {
+  it("las fechas salen como «Vie 2 oct» (solo la primera letra en mayúscula), no «Vie 2 De Oct»", async () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
     const titulos = screen
       .getAllByRole("heading", { level: 2 })
       .map((h) => h.textContent);
-    expect(titulos).toContain("Vie 2 de oct");
-    expect(titulos).toContain("Sáb 3 de oct");
+    expect(titulos).toContain("Vie 2 oct");
+    expect(titulos).toContain("Sáb 3 oct");
     for (const t of titulos) expect(t).not.toMatch(/ De | Oct/);
     // El estilo no debe volver a capitalizar cada palabra.
-    const h = screen.getByRole("heading", { level: 2, name: "Vie 2 de oct" });
+    const h = screen.getByRole("heading", { level: 2, name: "Vie 2 oct" });
     expect(h.className).not.toMatch(/capitalize/);
+  });
+});
+
+describe("modificar pedido: «Atrás» vuelve al origen", () => {
+  const atras = async () =>
+    (await screen.findByRole("link", { name: "Atrás" })).getAttribute("href");
+
+  it("sin origen (URL directa) o desde el menú: al menú", async () => {
+    render(<Page />);
+    expect(await atras()).toBe("/mayoreo/banetto");
+  });
+
+  it("desde el menú con un solo pedido: al menú", async () => {
+    searchActual = "desde=menu";
+    render(<Page />);
+    expect(await atras()).toBe("/mayoreo/banetto");
+  });
+
+  it("desde la lista de pedidos modificables: a la lista", async () => {
+    searchActual = "desde=lista";
+    render(<Page />);
+    expect(await atras()).toBe("/mayoreo/banetto/portal/modificar?lista=1");
+  });
+
+  it("desde el paso de días de «Crear pedido»: de regreso a ese paso", async () => {
+    searchActual = "desde=dias";
+    render(<Page />);
+    expect(await atras()).toBe("/mayoreo/banetto?vista=crear");
+  });
+
+  it("desde el detalle del pedido: al detalle", async () => {
+    searchActual = "desde=detalle";
+    render(<Page />);
+    expect(await atras()).toBe("/mayoreo/banetto/portal/pedidos/P-000001");
+  });
+});
+
+describe("modificar pedido: control − / + y días cerrados", () => {
+  it("«+» suma una pieza, «−» resta y no baja de 0; el número también se escribe", async () => {
+    render(<Page />);
+    const campo = (await screen.findByLabelText(
+      /Café americano el .*3 oct/i,
+    )) as HTMLInputElement;
+    const antes = Number(campo.value);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Una pieza más: Café americano \(.*3 oct\)/,
+      }),
+    );
+    expect(Number(campo.value)).toBe(antes + 1);
+    fireEvent.change(campo, { target: { value: "0" } });
+    expect(
+      screen.getByRole("button", {
+        name: /Una pieza menos: Café americano \(.*3 oct\)/,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("los días cerrados van juntos en una tarjeta, sin controles de edición", async () => {
+    render(<Page />);
+    await screen.findByLabelText(/Café americano el .*3 oct/i);
+    const cerrado = screen.getByRole("heading", { name: /1 oct/ });
+    const tarjeta = cerrado.closest("section")!;
+    expect(within(tarjeta).queryByRole("spinbutton")).toBeNull();
+    expect(
+      within(tarjeta).queryByRole("button", { name: /Quitar este día/ }),
+    ).toBeNull();
   });
 });
