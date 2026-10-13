@@ -185,9 +185,6 @@ export default function PasoResumen({
                 ? "Completa el mínimo para enviar"
                 : `Enviar pedido · ${dinero(total)}`}
           </button>
-          <p className="text-center text-xs text-mayoreo-ink-soft">
-            Queda por confirmar por el negocio
-          </p>
         </div>
       </BarraAccionFija>
     </div>
