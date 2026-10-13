@@ -106,6 +106,8 @@ export class PortalCalendarioService {
       horizonteSemanas: parametros.horizonteSemanas,
       // Contacto del negocio ya normalizado a 10 dígitos (null = sin botón «Contactar al negocio»).
       numeroAtencion: t.numeroAtencion,
+      // Dirección del negocio (solo lectura, para «Recoge en» de la confirmación); null si no hay una capturada.
+      ubicacion: t.ubicacion?.trim() || null,
       cliente: sesion.cliente,
       pedidosActivos: activos,
       // Sin tope aparte: una semana por pedido, así que el máximo es el número de semanas del horizonte.

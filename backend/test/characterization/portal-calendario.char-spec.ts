@@ -218,6 +218,7 @@ describe('Portal · calendario (4c)', () => {
         portalHorasModificar: 6,
         portalHorizonteSemanas: 2,
         numeroAtencion: '5512345678',
+        ubicacion: ' Justo Sierra 2117, Guadalajara ',
       });
       const r = await calendario(cookie).expect(200);
       expect(r.body).toMatchObject({
@@ -227,6 +228,7 @@ describe('Portal · calendario (4c)', () => {
         horizonteSemanas: 2,
         maximoActivos: 3,
         numeroAtencion: '5512345678',
+        ubicacion: 'Justo Sierra 2117, Guadalajara',
       });
       expect(r.body.semanas).toHaveLength(3);
       // Jueves 18:30 CDMX = viernes 00:30Z; límite = jueves 00:30Z (miércoles 18:30 CDMX).
