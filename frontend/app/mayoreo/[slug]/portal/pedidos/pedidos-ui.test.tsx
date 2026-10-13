@@ -65,6 +65,7 @@ const resumen = (
   modificadoPorCliente: false,
   totalPiezas: 6,
   total: 255.5,
+  fechasEntrega: ["2026-09-28", "2026-09-30"],
   ...extra,
 });
 
@@ -128,31 +129,55 @@ describe("lista de pedidos", () => {
     };
     fetchPedidos.mockResolvedValue(lista);
     render(<ListaPage />);
-    expect(await screen.findByText("P-000002")).toBeInTheDocument();
-    expect(screen.getByText("Por confirmar")).toBeInTheDocument();
+    expect(await screen.findByText("Por confirmar")).toBeInTheDocument();
+    // La tarjeta no muestra folio: semana, días con recolección y piezas.
+    expect(screen.queryByText("P-000002")).toBeNull();
+    expect(screen.getAllByText("Semana 28 sep – 4 oct")).toHaveLength(2);
+    expect(screen.getAllByText("Lun 28 · Mié 30 · 6 pzas")).toHaveLength(2);
     expect(screen.getByText("Completado")).toBeInTheDocument();
     expect(screen.queryByText(/PENDIENTE_CONFIRMACION/)).toBeNull();
     expect(screen.queryByText("Modificado por el cliente")).toBeNull();
-    const enlace = screen.getByText("P-000001").closest("a");
-    expect(enlace).toHaveAttribute(
-      "href",
-      "/mayoreo/banetto/portal/pedidos/P-000001",
-    );
+    expect(
+      screen
+        .getAllByRole("link")
+        .some(
+          (a) =>
+            a.getAttribute("href") ===
+            "/mayoreo/banetto/portal/pedidos/P-000001",
+        ),
+    ).toBe(true);
     expect(
       screen.getByRole("link", { name: /Escribir por WhatsApp/ }),
     ).toBeInTheDocument();
   });
 
-  it("muestra la marca «Modificado por el cliente» cuando el servidor la enciende", async () => {
+  it("la tarjeta de la lista no muestra la marca «Modificado por el cliente» (es para el negocio)", async () => {
     fetchPedidos.mockResolvedValue({
       activos: [resumen("P-000003", { modificadoPorCliente: true })],
       anteriores: [],
       siguienteCursor: null,
     });
     render(<ListaPage />);
-    expect(
-      await screen.findByText("Modificado por el cliente"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Por confirmar")).toBeInTheDocument();
+    expect(screen.queryByText("Modificado por el cliente")).toBeNull();
+  });
+
+  it("activos: la semana más próxima primero", async () => {
+    fetchPedidos.mockResolvedValue({
+      activos: [
+        resumen("P-000005", {
+          semanaInicio: "2026-10-12",
+          semanaFin: "2026-10-18",
+        }),
+        resumen("P-000004"),
+      ],
+      anteriores: [],
+      siguienteCursor: null,
+    });
+    render(<ListaPage />);
+    await screen.findAllByText(/^Semana /);
+    const semanas = screen.getAllByText(/^Semana /).map((e) => e.textContent);
+    expect(semanas).toEqual(["Semana 28 sep – 4 oct", "Semana 12–18 oct"]);
   });
 
   it("sin pedidos: mensajes vacíos; «Ver más» pide la siguiente página", async () => {
@@ -171,7 +196,9 @@ describe("lista de pedidos", () => {
       await screen.findByText("No tienes pedidos activos."),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ver más" }));
-    expect(await screen.findByText("P-000009")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText("Semana 28 sep – 4 oct")).toHaveLength(2),
+    );
     expect(fetchPedidos).toHaveBeenLastCalledWith("banetto", "20");
     expect(screen.queryByRole("button", { name: "Ver más" })).toBeNull();
   });
@@ -188,6 +215,23 @@ describe("lista de pedidos", () => {
 describe("detalle del pedido", () => {
   beforeEach(() => {
     params = { slug: "banetto", folio: "P-000001" };
+  });
+
+  it("no muestra el pago ni la marca «Modificado por el cliente»", async () => {
+    fetchPedido.mockResolvedValue(
+      detalle({
+        modificadoPorCliente: true,
+        pago: {
+          estado: "PAGADO",
+          etiqueta: "Pagado",
+          pagadoAt: "2026-10-02T18:00:00.000Z",
+        },
+      }),
+    );
+    render(<DetallePage />);
+    expect(await screen.findByText("Concha")).toBeInTheDocument();
+    expect(screen.queryByText(/Pagado|Pago pendiente/)).toBeNull();
+    expect(screen.queryByText(/Modificado por el cliente/)).toBeNull();
   });
 
   it("entregas con estado (incluida la cancelada), productos, descuento, nota y total", async () => {

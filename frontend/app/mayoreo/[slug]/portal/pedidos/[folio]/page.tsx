@@ -127,7 +127,7 @@ export default function DetallePedidoPage() {
             descuento={pedido.descuentoTotal}
             descuentoPorcentaje={pedido.descuentoPorcentaje}
           />
-          <PedidoChips pedido={pedido} conFechaPago />
+          <PedidoChips pedido={pedido} />
 
           <section className={CARD + " gap-3"}>
             <div className="flex flex-col gap-3">

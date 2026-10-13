@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   PortalError,
@@ -9,11 +8,11 @@ import {
   type ListaPedidosPortal,
   type ResumenPedidoPortal,
 } from "@/lib/portal-api";
-import { rangoSemana } from "@/lib/portal-pedidos-formato";
+import { porSemanaAscendente } from "@/lib/portal-pedidos-formato";
 import BotonWhatsApp from "../boton-whatsapp";
-import { BTN_SECUNDARIO, CARD, ERROR, dinero, WRAPPER } from "../estilos";
+import { BTN_SECUNDARIO, CARD, ERROR, WRAPPER } from "../estilos";
 import EncabezadoPantalla from "../encabezado-pantalla";
-import PedidoChips from "./pedido-chips";
+import TarjetaPedido from "./tarjeta-pedido";
 import { useSesionPortal } from "./usar-sesion-portal";
 
 // Ver mis pedidos (4e): activos arriba, anteriores paginados abajo. Cada tarjeta lleva al detalle (folio en la URL).
@@ -69,21 +68,13 @@ export default function MisPedidosPage() {
     }
   }
 
-  const tarjeta = (p: ResumenPedidoPortal) => (
-    <Link
+  const tarjeta = (p: ResumenPedidoPortal, conSemanaRelativa: boolean) => (
+    <TarjetaPedido
       key={p.folio}
+      pedido={p}
+      conSemanaRelativa={conSemanaRelativa}
       href={`${base}/portal/pedidos/${encodeURIComponent(p.folio)}`}
-      className="flex flex-col gap-2 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm active:opacity-80"
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-base font-bold">{p.folio}</span>
-        <span className="text-base font-semibold">{dinero(p.total)}</span>
-      </div>
-      <span className="text-sm text-mayoreo-ink-soft">
-        Semana del {rangoSemana(p.semanaInicio, p.semanaFin)}
-      </span>
-      <PedidoChips pedido={p} />
-    </Link>
+    />
   );
 
   return (
@@ -104,7 +95,7 @@ export default function MisPedidosPage() {
                 </p>
               </div>
             ) : (
-              lista.activos.map(tarjeta)
+              porSemanaAscendente(lista.activos).map((p) => tarjeta(p, true))
             )}
           </section>
 
@@ -117,7 +108,7 @@ export default function MisPedidosPage() {
                 </p>
               </div>
             ) : (
-              anteriores.map(tarjeta)
+              anteriores.map((p) => tarjeta(p, false))
             )}
             {cursor && (
               <button

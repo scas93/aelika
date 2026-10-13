@@ -308,6 +308,8 @@ export interface ResumenPedidoPortal {
   modificadoPorCliente: boolean;
   totalPiezas: number;
   total: number;
+  /** Fechas (YYYY-MM-DD, ascendentes) de las entregas vigentes del pedido. */
+  fechasEntrega: string[];
 }
 
 export interface ListaPedidosPortal {
@@ -316,7 +318,8 @@ export interface ListaPedidosPortal {
   siguienteCursor: string | null;
 }
 
-export interface DetallePedidoPortal extends ResumenPedidoPortal {
+export interface DetallePedidoPortal
+  extends Omit<ResumenPedidoPortal, "fechasEntrega"> {
   subtotal: number;
   descuentoPorcentaje: number;
   descuentoTotal: number;

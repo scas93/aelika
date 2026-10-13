@@ -4,6 +4,8 @@ import {
   fechaPago,
   rangoSemana,
   rutaBasePortal,
+  etiquetaSemanaRelativa,
+  porSemanaAscendente,
 } from "./portal-pedidos-formato";
 
 describe("formato de Ver mis pedidos", () => {
@@ -31,5 +33,38 @@ describe("formato de Ver mis pedidos", () => {
     expect(claseChipEstado("CANCELADO")).toContain("red");
     expect(claseChipEstado("COMPLETADO")).toContain("green");
     expect(claseChipEstado("PENDIENTE_CONFIRMACION")).toContain("accent");
+  });
+});
+
+// Hoy = miércoles 14 oct 2026 → semana actual: lunes 12 oct.
+describe("etiquetaSemanaRelativa", () => {
+  it("esta semana, próxima y ninguna en otro caso", () => {
+    expect(etiquetaSemanaRelativa("2026-10-12", "2026-10-14")).toBe(
+      "Esta semana",
+    );
+    expect(etiquetaSemanaRelativa("2026-10-19", "2026-10-14")).toBe(
+      "Próxima semana",
+    );
+    expect(etiquetaSemanaRelativa("2026-10-05", "2026-10-14")).toBeNull();
+    expect(etiquetaSemanaRelativa("2026-10-26", "2026-10-14")).toBeNull();
+  });
+  it("en domingo la semana en curso sigue siendo la del lunes anterior", () => {
+    expect(etiquetaSemanaRelativa("2026-10-12", "2026-10-18")).toBe(
+      "Esta semana",
+    );
+    expect(etiquetaSemanaRelativa("2026-10-19", "2026-10-18")).toBe(
+      "Próxima semana",
+    );
+  });
+});
+
+describe("porSemanaAscendente", () => {
+  it("ordena la semana más próxima primero sin mutar", () => {
+    const l = [
+      { folio: "B", semanaInicio: "2026-10-19" },
+      { folio: "A", semanaInicio: "2026-10-12" },
+    ];
+    expect(porSemanaAscendente(l).map((p) => p.folio)).toEqual(["A", "B"]);
+    expect(l[0].folio).toBe("B");
   });
 });

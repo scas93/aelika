@@ -52,3 +52,42 @@ export function rutaBasePortal(pathname: string, slug: string): string {
   const i = pathname.indexOf(`/${slug}`);
   return i < 0 ? `/mayoreo/${slug}` : pathname.slice(0, i + slug.length + 1);
 }
+
+/** Hoy en Ciudad de México como YYYY-MM-DD. */
+export function hoyMexicoISO(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(ahora);
+}
+
+function sumarDias(iso: string, dias: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/** «Esta semana» / «Próxima semana» si la semana (lunes YYYY-MM-DD) es la actual o la siguiente; null en otro caso. */
+export function etiquetaSemanaRelativa(
+  semanaInicio: string,
+  hoy: string = hoyMexicoISO(),
+): string | null {
+  const dow = new Date(`${hoy}T00:00:00Z`).getUTCDay(); // 0 = domingo
+  const lunes = sumarDias(hoy, -((dow + 6) % 7));
+  if (semanaInicio === lunes) return "Esta semana";
+  if (semanaInicio === sumarDias(lunes, 7)) return "Próxima semana";
+  return null;
+}
+
+/** Orden cronológico: la semana más próxima primero (a igual semana, por folio). */
+export function porSemanaAscendente<
+  T extends { semanaInicio: string; folio: string },
+>(pedidos: T[]): T[] {
+  return [...pedidos].sort(
+    (a, b) =>
+      a.semanaInicio.localeCompare(b.semanaInicio) ||
+      a.folio.localeCompare(b.folio),
+  );
+}
