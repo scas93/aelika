@@ -16,7 +16,6 @@ import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import DetallePanel from "./detalle-panel";
 import NuevoPedidoPanel from "./nuevo-pedido-panel";
-import { formatearFolioB2b } from "@/lib/format";
 
 // Sin paginación a propósito, mismo criterio que la pestaña "Activos" de
 // /dashboard/pedidos (Order): el backend no soporta "estado distinto de X"
@@ -190,8 +189,7 @@ export default function PedidosB2bPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-admin-ink">{formatearFolioB2b(pedido.folio)}</span>
-                  <span className="text-sm font-semibold text-admin-ink">{pedido.negocioNombre}</span>
+                  <span className="text-base font-bold text-admin-ink">{pedido.negocioNombre}</span>
                 </div>
                 <span className="text-sm text-admin-ink-soft">
                   {pedido.totalPiezas} piezas · Semana del {formatFecha(pedido.semanaInicio)}
