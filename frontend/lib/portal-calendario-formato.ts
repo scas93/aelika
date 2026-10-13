@@ -47,6 +47,15 @@ export function etiquetaFecha(fechaISO: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+/** "Jue 15 oct" (sin «de») a partir de YYYY-MM-DD, sin desfase de zona. */
+export function etiquetaFechaCorta(fechaISO: string): string {
+  const partes = DIA.formatToParts(new Date(`${fechaISO}T00:00:00Z`));
+  const v = (t: string) =>
+    (partes.find((p) => p.type === t)?.value ?? "").replace(/\./g, "");
+  const dia = v("weekday");
+  return `${dia.charAt(0).toUpperCase()}${dia.slice(1)} ${v("day")} ${v("month")}`;
+}
+
 /** "vie, 2 oct, 20:00" en hora de Ciudad de México. */
 export function etiquetaMomento(iso: string): string {
   return MOMENTO.format(new Date(iso));
@@ -59,6 +68,70 @@ export function textoLimite(dia: DiaCalendarioPortal): string | null {
   return dia.estado === "AGREGABLE" || dia.estado === "MODIFICABLE"
     ? `Hasta ${cuando}`
     : `Cerró ${cuando}`;
+}
+
+const PARTES_LIMITE = new Intl.DateTimeFormat("es-MX", {
+  weekday: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: ZONA,
+});
+
+/** "sáb 17, 8:00 pm" (12 horas, hora de Ciudad de México) a partir del instante límite. */
+function momento12(iso: string): string {
+  const partes = PARTES_LIMITE.formatToParts(new Date(iso));
+  const v = (t: string) => partes.find((p) => p.type === t)?.value ?? "";
+  const hora = Number(v("hour"));
+  const sufijo = hora >= 12 ? "pm" : "am";
+  return `${v("weekday").replace(/\./g, "")} ${v("day")}, ${hora % 12 || 12}:${v("minute")} ${sufijo}`;
+}
+
+/** "Pide antes del sáb 17, 8:00 pm". */
+export function textoPideAntes(iso: string): string {
+  return `Pide antes del ${momento12(iso)}`;
+}
+
+/** "Cambia antes del mié 14, 2:00 pm". */
+export function textoCambiaAntes(iso: string): string {
+  return `Cambia antes del ${momento12(iso)}`;
+}
+
+/** "Agrega antes del jue 15, 8:00 pm". */
+export function textoAgregaAntes(iso: string): string {
+  return `Agrega antes del ${momento12(iso)}`;
+}
+
+/** "08:00" → "8:00 am", "18:30" → "6:30 pm" (12 horas). */
+export function hora12(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return hhmm;
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`;
+}
+
+const MES_CORTO = [
+  "ene",
+  "feb",
+  "mar",
+  "abr",
+  "may",
+  "jun",
+  "jul",
+  "ago",
+  "sep",
+  "oct",
+  "nov",
+  "dic",
+];
+
+/** "19–25 oct", o "26 oct – 1 nov" si la semana cruza de mes. Recibe YYYY-MM-DD (sin desfase de zona). */
+export function rangoSemanaCorto(inicio: string, fin: string): string {
+  const [, mi, di] = inicio.split("-").map(Number);
+  const [, mf, df] = fin.split("-").map(Number);
+  return mi === mf
+    ? `${di}–${df} ${MES_CORTO[mi - 1]}`
+    : `${di} ${MES_CORTO[mi - 1]} – ${df} ${MES_CORTO[mf - 1]}`;
 }
 
 /** wa.me del número de atención (10 dígitos nacionales) con un texto opcional; null si no hay número. */

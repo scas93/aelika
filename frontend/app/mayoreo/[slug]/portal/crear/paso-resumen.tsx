@@ -1,23 +1,17 @@
 "use client";
 
-import { etiquetaFecha } from "@/lib/portal-calendario-formato";
-import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
+import { useEffect, useRef } from "react";
+import { rangoSemanaCorto } from "@/lib/portal-calendario-formato";
 import type { ProblemaFechaPortal } from "@/lib/portal-api";
 import type { EntregaPedidoPortal } from "@/lib/portal-api";
-import type { TotalesSemana } from "@/lib/portal-pedido-modelo";
-import {
-  AVISO,
-  BTN_PRIMARIO,
-  BTN_SECUNDARIO,
-  CARD,
-  ERROR,
-  dinero,
-} from "../estilos";
+import { round2, type TotalesSemana } from "@/lib/portal-pedido-modelo";
+import { AVISO, BTN_PRIMARIO, CARD, ERROR, dinero } from "../estilos";
+import BarraAccionFija from "./barra-accion-fija";
+import { DiaEntrega, TarjetaTotal } from "./bloques-pedido";
 
 interface Props {
   entregas: EntregaPedidoPortal[];
   nombres: Map<string, string>;
-  precios: Record<string, number>;
   totales: TotalesSemana[];
   descuentoPorcentaje: number;
   minimoPiezas: number;
@@ -26,16 +20,16 @@ interface Props {
   enviando: boolean;
   error: string | null;
   problemas: ProblemaFechaPortal[];
-  favoritoEstado: "ninguno" | "guardando" | "guardado" | "error";
-  onGuardarFavorito: () => void;
+  /** Vuelve al paso de productos conservando todo lo armado. */
+  onAgregar: () => void;
   onEnviar: () => void;
 }
 
-// Paso 4: resumen con totales por semana (un pedido por semana), nota opcional y envío.
+// Paso 4: resumen. Total general arriba, una tarjeta por semana (un pedido por semana) con su avance contra el mínimo,
+// totales, nota opcional y envío. El detalle del mínimo vive en las tarjetas; la barra fija solo lleva el botón.
 export default function PasoResumen({
   entregas,
   nombres,
-  precios,
   totales,
   descuentoPorcentaje,
   minimoPiezas,
@@ -44,77 +38,120 @@ export default function PasoResumen({
   enviando,
   error,
   problemas,
-  favoritoEstado,
-  onGuardarFavorito,
+  onAgregar,
   onEnviar,
 }: Props) {
-  const total = totales.reduce((s, t) => s + t.total, 0);
+  const total = round2(totales.reduce((s, t) => s + t.total, 0));
+  const subtotal = round2(totales.reduce((s, t) => s + t.subtotal, 0));
+  const descuento = round2(totales.reduce((s, t) => s + t.descuento, 0));
   const bajoMinimo = totales.some((t) => t.faltanPiezas > 0);
+  const hayMinimo = minimoPiezas > 0;
+
+  // Errores del servidor / calendario: recuadro arriba; la pantalla se desplaza hasta él cuando aparece.
+  const avisoRef = useRef<HTMLDivElement>(null);
+  const hayAviso = problemas.length > 0 || !!error;
+  useEffect(() => {
+    if (hayAviso)
+      avisoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hayAviso, error, problemas]);
+
   return (
     <div className="flex flex-col gap-4">
-      <div className={CARD}>
-        <h2 className="text-lg font-bold">Revisa tu pedido</h2>
-        {totales.length > 1 && (
-          <p className="text-sm text-mayoreo-ink-soft">
-            Elegiste días de dos semanas: se crea un pedido por semana, los dos
-            al mismo tiempo.
-          </p>
-        )}
-      </div>
-
-      {totales.map((t) => (
-        <section key={t.semanaInicio} className={CARD + " gap-3"}>
-          <h3 className="text-sm font-semibold">
-            Semana del {rangoSemanaTexto(t.semanaInicio, t.semanaFin)}
-          </h3>
-          {entregas
-            .filter((e) => t.fechas.includes(e.fecha))
-            .map((e) => (
-              <div key={e.fecha} className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">
-                  {etiquetaFecha(e.fecha)}
-                </span>
-                {e.items.map((it) => (
-                  <span
-                    key={it.productId}
-                    className="flex justify-between text-sm text-mayoreo-ink-soft"
-                  >
-                    <span>
-                      {it.cantidad} × {nombres.get(it.productId) ?? "Producto"}
-                    </span>
-                    <span>
-                      {dinero((precios[it.productId] ?? 0) * it.cantidad)}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            ))}
-          <div className="flex flex-col gap-0.5 border-t border-mayoreo-border pt-2 text-sm">
-            <span className="flex justify-between">
-              <span>Subtotal ({t.piezas} piezas)</span>
-              <span>{dinero(t.subtotal)}</span>
-            </span>
-            {descuentoPorcentaje > 0 && (
-              <span className="flex justify-between text-mayoreo-ink-soft">
-                <span>Descuento {descuentoPorcentaje}%</span>
-                <span>−{dinero(t.descuento)}</span>
-              </span>
-            )}
-            <span className="flex justify-between font-semibold">
-              <span>Total</span>
-              <span>{dinero(t.total)}</span>
-            </span>
-          </div>
-          {t.faltanPiezas > 0 && (
-            <p className={ERROR}>
-              Esta semana necesita al menos {minimoPiezas} piezas: te faltan{" "}
-              {t.faltanPiezas}. Regresa a agregar productos.
+      {hayAviso && (
+        <div ref={avisoRef} className="flex scroll-mt-4 flex-col gap-1">
+          {problemas.map((p) => (
+            <p key={p.fecha} className={ERROR}>
+              {p.mensaje}
+            </p>
+          ))}
+          {problemas.length > 0 && (
+            <p className={AVISO}>
+              Actualizamos el calendario. Revisa tus días y vuelve a enviar.
             </p>
           )}
-        </section>
-      ))}
+          {error && problemas.length === 0 && <p className={ERROR}>{error}</p>}
+        </div>
+      )}
 
-      <div className={CARD + " gap-2"}>
+      <TarjetaTotal
+        total={total}
+        subtotal={subtotal}
+        descuento={descuento}
+        descuentoPorcentaje={descuentoPorcentaje}
+      />
+
+      {totales.map((t) => {
+        const cumple = t.faltanPiezas === 0;
+        const avance = hayMinimo
+          ? Math.min(100, (t.piezas / minimoPiezas) * 100)
+          : 0;
+        return (
+          <section key={t.semanaInicio} className={CARD + " gap-3"}>
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold">
+                Semana {rangoSemanaCorto(t.semanaInicio, t.semanaFin)}
+              </h3>
+              {hayMinimo && (
+                <span
+                  className={`text-sm font-semibold ${cumple ? "text-green-700" : "text-amber-700"}`}
+                >
+                  {t.piezas} / {minimoPiezas} pzas
+                </span>
+              )}
+            </div>
+            {hayMinimo && (
+              <>
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-mayoreo-border"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={minimoPiezas}
+                  aria-valuenow={Math.min(t.piezas, minimoPiezas)}
+                  aria-label="Piezas contra el mínimo"
+                >
+                  <div
+                    className={`h-full rounded-full ${cumple ? "bg-green-600" : "bg-amber-500"}`}
+                    style={{ width: `${avance}%` }}
+                  />
+                </div>
+                {cumple ? (
+                  <p className="text-sm font-medium text-green-700">
+                    ✓ Mínimo cubierto
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    <span>Faltan {t.faltanPiezas} pzas para el mínimo</span>
+                    <button
+                      type="button"
+                      className="shrink-0 font-semibold underline"
+                      onClick={onAgregar}
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex flex-col gap-3">
+              {entregas
+                .filter((e) => t.fechas.includes(e.fecha))
+                .map((e) => (
+                  <DiaEntrega
+                    key={e.fecha}
+                    fecha={e.fecha}
+                    lineas={e.items.map((it) => ({
+                      clave: it.productId,
+                      nombre: nombres.get(it.productId) ?? "Producto",
+                      cantidad: it.cantidad,
+                    }))}
+                  />
+                ))}
+            </div>
+          </section>
+        );
+      })}
+
+      <div className="flex flex-col gap-2 border-t border-mayoreo-border pt-3">
         <label
           className="flex flex-col gap-1 text-sm font-medium"
           htmlFor="nota"
@@ -127,64 +164,32 @@ export default function PasoResumen({
             value={nota}
             onChange={(e) => onNota(e.target.value)}
           />
+          {totales.length > 1 && (
+            <span className="text-xs font-normal text-mayoreo-ink-soft">
+              La nota se guarda en los dos pedidos.
+            </span>
+          )}
         </label>
-        {totales.length > 1 && (
-          <p className="text-xs text-mayoreo-ink-soft">
-            La nota se guarda en los dos pedidos.
-          </p>
-        )}
       </div>
 
-      <div className={CARD + " gap-2"}>
-        <button
-          className={BTN_SECUNDARIO}
-          disabled={favoritoEstado === "guardando" || enviando}
-          onClick={onGuardarFavorito}
-        >
-          {favoritoEstado === "guardando"
-            ? "Guardando favorito…"
-            : favoritoEstado === "guardado"
-              ? "Guardado como tu favorito ✓"
-              : "Guardar como mi favorito"}
-        </button>
-        <p className="text-xs text-mayoreo-ink-soft">
-          Tu favorito guarda los productos y cantidades por día de la semana (de
-          la primera semana que elegiste), sin precios. Reemplaza al favorito
-          anterior.
-        </p>
-        {favoritoEstado === "error" && (
-          <p className={ERROR}>
-            No pudimos guardar tu favorito. Intenta de nuevo.
-          </p>
-        )}
-      </div>
-
-      {problemas.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {problemas.map((p) => (
-            <p key={p.fecha} className={ERROR}>
-              {p.mensaje}
-            </p>
-          ))}
-          <p className={AVISO}>
-            Actualizamos el calendario. Revisa tus días y vuelve a enviar.
+      <BarraAccionFija>
+        <div className="flex flex-col gap-2">
+          <button
+            className={BTN_PRIMARIO}
+            disabled={enviando || bajoMinimo}
+            onClick={onEnviar}
+          >
+            {enviando
+              ? "Enviando pedido…"
+              : bajoMinimo
+                ? "Completa el mínimo para enviar"
+                : `Enviar pedido · ${dinero(total)}`}
+          </button>
+          <p className="text-center text-xs text-mayoreo-ink-soft">
+            Queda por confirmar por el negocio
           </p>
         </div>
-      )}
-      {error && problemas.length === 0 && <p className={ERROR}>{error}</p>}
-
-      <div className="flex flex-col gap-1">
-        <button
-          className={BTN_PRIMARIO}
-          disabled={enviando || bajoMinimo}
-          onClick={onEnviar}
-        >
-          {enviando ? "Enviando pedido…" : `Enviar pedido · ${dinero(total)}`}
-        </button>
-        <p className="text-center text-xs text-mayoreo-ink-soft">
-          El pedido queda por confirmar hasta que el negocio lo confirme.
-        </p>
-      </div>
+      </BarraAccionFija>
     </div>
   );
 }

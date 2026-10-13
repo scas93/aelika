@@ -1,21 +1,23 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname, useParams } from "next/navigation";
 import type { CalendarioPortal, FavoritoPortal } from "@/lib/portal-api";
 import {
   ETIQUETA_MOTIVO,
   etiquetaFecha,
+  rangoSemanaCorto,
   textoLimite,
+  textoPideAntes,
 } from "@/lib/portal-calendario-formato";
+import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 import {
   diasCerrados,
   primerPeriodoSinPedido,
 } from "@/lib/portal-pedido-modelo";
-import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
-import { AVISO, BTN_PRIMARIO, BTN_SECUNDARIO, CARD } from "../estilos";
+import { BTN_PRIMARIO, BTN_SECUNDARIO, CARD } from "../estilos";
 import BotonWhatsApp from "../boton-whatsapp";
-
-const MENSAJE_YA_TIENE_PEDIDO =
-  "Ya tienes pedido para esta semana. Para agregar o cambiar entregas, usa Modificar pedido activo";
+import BarraAccionFija from "./barra-accion-fija";
 
 interface Props {
   /** Nombre del cliente de la sesión (va en el mensaje precargado de WhatsApp). */
@@ -38,6 +40,9 @@ export default function PasoDias({
   onUsarFavorito,
   onContinuar,
 }: Props) {
+  const pathname = usePathname() ?? "";
+  const { slug } = useParams<{ slug: string }>() ?? { slug: "" };
+  const base = rutaBasePortal(pathname, slug);
   // Contacto con el negocio (solo si hay número de atención). Un solo día cerrado → botón junto a ese día con su mensaje;
   // varios días cerrados o una semana que ya tiene pedido → UN solo botón con el mensaje genérico, para no repetirlo.
   const cerrados = diasCerrados(calendario);
@@ -50,48 +55,81 @@ export default function PasoDias({
     (cerrados.length > 0 || semanasConPedido.length > 0);
   return (
     <div className="flex flex-col gap-4">
-      <div className={CARD}>
-        <div>
-          <h2 className="text-lg font-bold">Elige tus días de entrega</h2>
-          <p className="text-sm text-mayoreo-ink-soft">
-            Las entregas son a las {calendario.horaEntrega}. Pide con al menos{" "}
-            {calendario.horasAgregar} horas de anticipación.
-          </p>
-        </div>
-        {favorito?.favorito && primerPeriodoSinPedido(calendario) && (
-          <button className={BTN_SECUNDARIO} onClick={onUsarFavorito}>
-            Usar mi favorito
-          </button>
-        )}
+      <div className="flex flex-col gap-1">
+        <p className="text-sm text-mayoreo-ink-soft">
+          Las entregas son a las {calendario.horaEntrega}. Pide con al menos{" "}
+          {calendario.horasAgregar} horas de anticipación.
+        </p>
       </div>
+      {favorito?.favorito && primerPeriodoSinPedido(calendario) && (
+        <button className={BTN_SECUNDARIO} onClick={onUsarFavorito}>
+          Usar mi favorito
+        </button>
+      )}
 
-      {calendario.semanas.map((semana) => (
-        <section key={semana.semanaInicio} className={CARD + " gap-2"}>
-          <h3 className="text-sm font-semibold">
-            Semana del {rangoSemanaTexto(semana.semanaInicio, semana.semanaFin)}
-            {semana.esActual ? " (en curso)" : ""}
-          </h3>
-          {semana.pedido ? (
-            <p className={AVISO}>
-              {MENSAJE_YA_TIENE_PEDIDO} (pedido {semana.pedido.folio}).
-            </p>
-          ) : (
+      {calendario.semanas.map((semana) => {
+        const rango = rangoSemanaCorto(semana.semanaInicio, semana.semanaFin);
+        const enCurso = semana.esActual ? " (en curso)" : "";
+        if (semana.pedido) {
+          // Mismo criterio que el servidor (semanaModificable): sin pagar y con algún día que se pueda modificar o agregar.
+          const modificable =
+            !semana.pedido.pagado &&
+            semana.dias.some(
+              (d) => d.estado === "MODIFICABLE" || d.estado === "AGREGABLE",
+            );
+          return (
+            <section key={semana.semanaInicio} className={CARD + " gap-3"}>
+              <h3 className="text-sm font-semibold">
+                Semana {rango}
+                {enCurso}
+              </h3>
+              <p className="flex items-start gap-2 text-sm">
+                <span className="text-green-700" aria-hidden="true">
+                  ✓
+                </span>
+                <span>Ya tienes un pedido para esta semana</span>
+              </p>
+              {modificable ? (
+                <Link
+                  href={`${base}/portal/pedidos/${encodeURIComponent(semana.pedido.folio)}/modificar?desde=dias`}
+                  className={BTN_SECUNDARIO + " block text-center"}
+                >
+                  Modificar pedido
+                </Link>
+              ) : (
+                <p className="text-sm text-mayoreo-ink-soft">
+                  Este pedido ya no se puede modificar
+                </p>
+              )}
+            </section>
+          );
+        }
+        return (
+          <section key={semana.semanaInicio} className={CARD + " gap-2"}>
+            <h3 className="text-sm font-semibold">
+              Semana {rango}
+              {enCurso}
+            </h3>
             <ul className="flex flex-col divide-y divide-mayoreo-border">
               {semana.dias.map((d) => {
                 const elegible =
                   d.estado === "AGREGABLE" && d.accion === "CREAR_PEDIDO";
                 const elegido = fechas.includes(d.fecha);
-                const limite = textoLimite(d);
+                const limite =
+                  elegible && d.limiteAt
+                    ? textoPideAntes(d.limiteAt)
+                    : textoLimite(d);
                 return (
                   <li key={d.fecha}>
                     <button
                       type="button"
+                      role="checkbox"
+                      aria-checked={elegido}
                       disabled={!elegible}
-                      aria-pressed={elegido}
                       onClick={() => onToggle(d.fecha)}
-                      className={`flex w-full items-center justify-between gap-3 py-2.5 text-left ${
+                      className={`-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition ${
                         elegible ? "" : "cursor-not-allowed opacity-50"
-                      }`}
+                      } ${elegido ? "bg-mayoreo-accent-soft" : ""}`}
                     >
                       <span className="flex flex-col">
                         <span className="text-sm font-medium">
@@ -100,19 +138,21 @@ export default function PasoDias({
                         <span className="text-xs text-mayoreo-ink-soft">
                           {elegible
                             ? limite
-                            : [
-                                d.motivo ? ETIQUETA_MOTIVO[d.motivo] : null,
-                                limite,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
+                            : d.motivo === "ANTICIPACION_AGREGAR"
+                              ? "Ya no hay tiempo para hacer pedido"
+                              : [
+                                  d.motivo ? ETIQUETA_MOTIVO[d.motivo] : null,
+                                  limite,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
                         </span>
                       </span>
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-sm ${
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-sm ${
                           elegido
                             ? "border-mayoreo-button bg-mayoreo-button text-white"
-                            : "border-mayoreo-border text-transparent"
+                            : "border-mayoreo-ink-soft bg-mayoreo-card text-transparent"
                         }`}
                         aria-hidden="true"
                       >
@@ -132,9 +172,9 @@ export default function PasoDias({
                 );
               })}
             </ul>
-          )}
-        </section>
-      ))}
+          </section>
+        );
+      })}
 
       {hayContactoGeneral && (
         <div className={CARD + " gap-2"}>
@@ -149,16 +189,18 @@ export default function PasoDias({
         </div>
       )}
 
-      <button
-        className={BTN_PRIMARIO}
-        disabled={fechas.length === 0}
-        onClick={onContinuar}
-      >
-        Continuar
-        {fechas.length > 0
-          ? ` (${fechas.length} ${fechas.length === 1 ? "día" : "días"})`
-          : ""}
-      </button>
+      <BarraAccionFija>
+        <button
+          className={BTN_PRIMARIO}
+          disabled={fechas.length === 0}
+          onClick={onContinuar}
+        >
+          Continuar
+          {fechas.length > 0
+            ? ` · ${fechas.length} ${fechas.length === 1 ? "día" : "días"}`
+            : ""}
+        </button>
+      </BarraAccionFija>
     </div>
   );
 }

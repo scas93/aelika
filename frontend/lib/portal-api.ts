@@ -152,6 +152,8 @@ export interface CalendarioPortal {
   horasModificar: number;
   horizonteSemanas: number;
   numeroAtencion: string | null;
+  /** Dirección del negocio (para «Recoge en»); null si no hay una capturada. */
+  ubicacion?: string | null;
   cliente: PortalClienteResumen;
   pedidosActivos: number;
   maximoActivos: number;

@@ -52,7 +52,6 @@ export default function PasoCatalogo({
         />
       )}
       <div className={CARD + " gap-3"}>
-        <h2 className="text-lg font-bold">Elige tus productos</h2>
         <input
           className="mayoreo-input"
           type="search"

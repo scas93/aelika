@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   enlaceContacto,
   etiquetaFecha,
+  etiquetaFechaCorta,
+  hora12,
   etiquetaMomento,
   mensajeContacto,
+  rangoSemanaCorto,
   textoLimite,
+  textoAgregaAntes,
+  textoCambiaAntes,
+  textoPideAntes,
 } from "./portal-calendario-formato";
 import type { DiaCalendarioPortal } from "./portal-api";
 
@@ -89,6 +95,51 @@ describe("portal-calendario-formato", () => {
     ).toBe("Hola, soy Cafe Entredos, sobre mi pedido P-000004 y P-000005.");
     expect(mensajeContacto({ tipo: "general", cliente: "Cafe Entredos" })).toBe(
       "Hola, soy Cafe Entredos, necesito ayuda con mi pedido.",
+    );
+  });
+});
+
+describe("textoPideAntes y rangoSemanaCorto", () => {
+  it("hora límite en 12 horas, hora de Ciudad de México", () => {
+    // 2026-10-18 02:00Z = sáb 17 de oct, 20:00 en CDMX (UTC−6)
+    expect(textoPideAntes("2026-10-18T02:00:00.000Z")).toBe(
+      "Pide antes del sáb 17, 8:00 pm",
+    );
+    expect(textoPideAntes("2026-10-17T14:00:00.000Z")).toBe(
+      "Pide antes del sáb 17, 8:00 am",
+    );
+  });
+
+  it("rango corto dentro del mes y cruzando de mes", () => {
+    expect(rangoSemanaCorto("2026-10-19", "2026-10-25")).toBe("19–25 oct");
+    expect(rangoSemanaCorto("2026-10-26", "2026-11-01")).toBe("26 oct – 1 nov");
+  });
+});
+
+describe("etiquetaFechaCorta", () => {
+  it("«Jue 15 oct», sin «de» y sin desfase de zona", () => {
+    expect(etiquetaFechaCorta("2026-10-15")).toBe("Jue 15 oct");
+    expect(etiquetaFechaCorta("2026-11-01")).toBe("Dom 1 nov");
+  });
+});
+
+describe("hora12", () => {
+  it("convierte HH:mm a 12 horas con am/pm", () => {
+    expect(hora12("08:00")).toBe("8:00 am");
+    expect(hora12("12:00")).toBe("12:00 pm");
+    expect(hora12("00:15")).toBe("12:15 am");
+    expect(hora12("18:30")).toBe("6:30 pm");
+  });
+});
+
+describe("textoCambiaAntes y textoAgregaAntes", () => {
+  it("mismo formato de 12 horas que «Pide antes»", () => {
+    // 2026-10-14 20:00Z = mié 14, 2:00 pm en CDMX
+    expect(textoCambiaAntes("2026-10-14T20:00:00.000Z")).toBe(
+      "Cambia antes del mié 14, 2:00 pm",
+    );
+    expect(textoAgregaAntes("2026-10-16T02:00:00.000Z")).toBe(
+      "Agrega antes del jue 15, 8:00 pm",
     );
   });
 });

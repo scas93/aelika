@@ -12,22 +12,42 @@ export default function BotonWhatsApp({
   numeroAtencion,
   contexto,
   compacto = false,
+  secundario = false,
+  discreto = false,
 }: {
   numeroAtencion: string | null;
   contexto: ContextoContacto;
   /** Versión más chica para ponerlo junto a un día; la completa ocupa todo el ancho. */
   compacto?: boolean;
+  /** Estilo de botón secundario (borde, fondo claro) para ir debajo de un botón principal. */
+  secundario?: boolean;
+  /** Enlace de texto discreto (sin botón), para el final de una pantalla. */
+  discreto?: boolean;
 }) {
   const href = enlaceContacto(numeroAtencion, mensajeContacto(contexto));
   if (!href) return null;
+  if (discreto)
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-mayoreo-ink-soft underline"
+      >
+        <IconoWhatsApp className="h-4 w-4" />
+        Escribir por WhatsApp
+      </a>
+    );
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-mayoreo-whatsapp font-semibold text-white shadow-sm transition hover:bg-mayoreo-whatsapp-dark active:opacity-80 ${
-        compacto ? "px-3 py-1.5 text-xs" : "w-full px-4 py-3 text-base"
-      }`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:opacity-80 ${
+        secundario
+          ? "border border-mayoreo-border bg-mayoreo-card text-mayoreo-ink"
+          : "bg-mayoreo-whatsapp text-white shadow-sm hover:bg-mayoreo-whatsapp-dark"
+      } ${compacto ? "px-3 py-1.5 text-xs" : "w-full px-4 py-3 text-base"}`}
     >
       <IconoWhatsApp className={compacto ? "h-4 w-4" : "h-5 w-5"} />
       Escribir por WhatsApp

@@ -7,7 +7,6 @@ import {
   fetchCalendario,
   fetchCatalogo,
   fetchFavorito,
-  guardarFavorito,
   problemasDeError,
   type CalendarioPortal,
   type CatalogoPortal,
@@ -19,14 +18,14 @@ import {
 import {
   aplicarFavorito,
   construirEntregas,
-  favoritoDesdeSeleccion,
   repartirParejo,
   sumaDistribucion,
   totalesPorSemana,
   type Carrito,
   type Distribucion,
 } from "@/lib/portal-pedido-modelo";
-import { AVISO, BTN_ENLACE, ERROR } from "../estilos";
+import { AVISO, ERROR, WRAPPER } from "../estilos";
+import EncabezadoPantalla from "../encabezado-pantalla";
 import AlertaFlotante from "../alerta-flotante";
 import PasoCatalogo from "./paso-catalogo";
 import PasoConfirmacion from "./paso-confirmacion";
@@ -35,12 +34,12 @@ import PasoDistribucion from "./paso-distribucion";
 import PasoResumen from "./paso-resumen";
 
 type Paso = "dias" | "catalogo" | "distribucion" | "resumen" | "confirmacion";
-const TITULO: Record<Paso, string> = {
-  dias: "Días de entrega",
-  catalogo: "Productos",
-  distribucion: "Reparto por día",
-  resumen: "Resumen",
-  confirmacion: "Listo",
+const TITULO: Record<Paso, string | undefined> = {
+  dias: "Elige tus días de entrega",
+  catalogo: "Elige tus productos",
+  distribucion: "¿Qué día quieres cada producto?",
+  resumen: "Revisa tu pedido",
+  confirmacion: undefined,
 };
 const ANTERIOR: Partial<Record<Paso, Paso>> = {
   catalogo: "dias",
@@ -94,9 +93,6 @@ export default function CrearPedido({
   const [resultado, setResultado] = useState<ResultadoPedidoPortal | null>(
     null,
   );
-  const [favoritoEstado, setFavoritoEstado] = useState<
-    "ninguno" | "guardando" | "guardado" | "error"
-  >("ninguno");
   const llave = useRef<{ firma: string; key: string } | null>(null);
 
   const terminarSesion = (e: unknown) => {
@@ -279,20 +275,6 @@ export default function CrearPedido({
     }
   }
 
-  async function guardarComoFavorito() {
-    const lineas = favoritoDesdeSeleccion(carrito, dist, fechas, calendario);
-    if (lineas.length === 0) return setFavoritoEstado("error");
-    setFavoritoEstado("guardando");
-    try {
-      const f = await guardarFavorito(slug, lineas);
-      setDatos((d) => (d ? { ...d, favorito: f } : d));
-      setFavoritoEstado("guardado");
-    } catch (e) {
-      if (terminarSesion(e)) return;
-      setFavoritoEstado("error");
-    }
-  }
-
   const nombreCliente = sesion.cliente?.nombre ?? "";
   const atras =
     paso === "dias" || paso === "confirmacion"
@@ -365,7 +347,6 @@ export default function CrearPedido({
         <PasoResumen
           entregas={entregas}
           nombres={nombres}
-          precios={precios}
           totales={totales}
           descuentoPorcentaje={catalogo.descuentoPorcentaje}
           minimoPiezas={catalogo.minimoPiezas}
@@ -374,8 +355,7 @@ export default function CrearPedido({
           enviando={enviando}
           error={error}
           problemas={problemas}
-          favoritoEstado={favoritoEstado}
-          onGuardarFavorito={() => void guardarComoFavorito()}
+          onAgregar={() => setPaso("catalogo")}
           onEnviar={() => void enviar()}
         />
       )}
@@ -384,6 +364,8 @@ export default function CrearPedido({
           resultado={resultado}
           cliente={nombreCliente}
           numeroAtencion={calendario.numeroAtencion}
+          horaEntrega={calendario.horaEntrega}
+          ubicacion={calendario.ubicacion ?? null}
           onVolver={onSalir}
         />
       )}
@@ -399,22 +381,16 @@ function Contenedor({
   onAtras,
   children,
 }: {
-  titulo: string;
+  titulo?: string;
   onAtras?: () => void;
   children: React.ReactNode;
 }) {
+  const conEncabezado = !!onAtras || !!titulo;
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-mayoreo-bg p-4 font-mayoreo text-mayoreo-ink">
-      <header className="flex items-center justify-between">
-        {onAtras ? (
-          <button className={BTN_ENLACE} onClick={onAtras}>
-            ← Atrás
-          </button>
-        ) : (
-          <span />
-        )}
-        <span className="text-sm font-semibold">{titulo}</span>
-      </header>
+    <main className={WRAPPER}>
+      {conEncabezado && (
+        <EncabezadoPantalla titulo={titulo} onAtras={onAtras} />
+      )}
       {children}
     </main>
   );

@@ -164,6 +164,8 @@ describe("confirmación del pedido", () => {
         resultado={resultado}
         cliente="Cafe Entredos"
         numeroAtencion="3331006915"
+        horaEntrega="08:00"
+        ubicacion={null}
         onVolver={() => {}}
       />,
     );
@@ -176,6 +178,8 @@ describe("confirmación del pedido", () => {
         resultado={resultado}
         cliente="Cafe Entredos"
         numeroAtencion="3331006915"
+        horaEntrega="08:00"
+        ubicacion={null}
         onVolver={() => {}}
       />,
     );
@@ -195,11 +199,53 @@ describe("confirmación del pedido", () => {
         resultado={resultado}
         cliente="Cafe Entredos"
         numeroAtencion={null}
+        horaEntrega="08:00"
+        ubicacion={null}
         onVolver={() => {}}
       />,
     );
     expect(botones()).toHaveLength(0);
     expect(screen.queryByText(/Escribir por WhatsApp/)).toBeNull();
+  });
+});
+
+describe("confirmación: cuándo y dónde recojo", () => {
+  it("una fila por día con la hora de recolección y las piezas, dirección y línea de total/folio", () => {
+    render(
+      <PasoConfirmacion
+        resultado={resultado}
+        cliente="Cafe Entredos"
+        numeroAtencion={null}
+        horaEntrega="08:00"
+        ubicacion="Justo Sierra 2117, Guadalajara"
+        onVolver={() => {}}
+      />,
+    );
+    expect(screen.getByText("Tus recolecciones")).toBeInTheDocument();
+    expect(screen.getAllByText(/8:00 am/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Recoge en")).toBeInTheDocument();
+    expect(
+      screen.getByText("Justo Sierra 2117, Guadalajara"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Total $650.00 · Folio P-000004"),
+    ).toBeInTheDocument();
+    // Ya no repite productos ni desglose.
+    expect(screen.queryByText("Espiral")).toBeNull();
+  });
+
+  it("sin dirección capturada no hay bloque «Recoge en»", () => {
+    render(
+      <PasoConfirmacion
+        resultado={resultado}
+        cliente="Cafe Entredos"
+        numeroAtencion={null}
+        horaEntrega="08:00"
+        ubicacion="  "
+        onVolver={() => {}}
+      />,
+    );
+    expect(screen.queryByText("Recoge en")).toBeNull();
   });
 });
 
@@ -294,7 +340,49 @@ describe("días: botón de WhatsApp", () => {
       />,
     );
     expect(
-      screen.getByText(/Ya no hay tiempo para pedirlo/),
+      screen.getByText("Ya no hay tiempo para hacer pedido"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("días: semana con pedido", () => {
+  const props = (cal: CalendarioPortal) => ({
+    cliente: "Cafe Entredos",
+    calendario: cal,
+    fechas: [] as string[],
+    favorito: null,
+    onToggle: () => {},
+    onUsarFavorito: () => {},
+    onContinuar: () => {},
+  });
+
+  it("es una tarjeta en su lugar cronológico con botón «Modificar pedido» hacia ese folio", () => {
+    render(
+      <PasoDias
+        {...props(
+          calendario([
+            semana("2026-09-28", { pedido: true }),
+            semana("2026-10-05"),
+          ]),
+        )}
+      />,
+    );
+    expect(
+      screen.getByText("Ya tienes un pedido para esta semana"),
+    ).toBeInTheDocument();
+    const enlace = screen.getByRole("link", { name: "Modificar pedido" });
+    expect(enlace.getAttribute("href")).toMatch(
+      /\/portal\/pedidos\/P-000001\/modificar\?desde=dias$/,
+    );
+  });
+
+  it("si ya no se puede modificar (pedido pagado) no hay botón, solo el aviso en gris", () => {
+    const pagada = semana("2026-09-28", { pedido: true });
+    pagada.pedido!.pagado = true;
+    render(<PasoDias {...props(calendario([pagada, semana("2026-10-05")]))} />);
+    expect(screen.queryByRole("link", { name: "Modificar pedido" })).toBeNull();
+    expect(
+      screen.getByText("Este pedido ya no se puede modificar"),
     ).toBeInTheDocument();
   });
 });
@@ -510,4 +598,59 @@ describe("crear pedido: favorito", () => {
       timeout: 4500,
     });
   }, 10000);
+});
+
+describe("menú: botón de cuenta", () => {
+  const base = {
+    negocio: { nombre: "Banetto" },
+    telefonoTerminacion: "6915",
+    cliente: { id: "c1", nombre: "Cafe Entredos" },
+    requiereSeleccion: false,
+  };
+  const montar = (clientes: { id: string; nombre: string }[]) => {
+    fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")]));
+    const onCambiarCliente = vi.fn();
+    render(
+      <MenuPantalla
+        slug="banetto"
+        sesion={{ ...base, clientes }}
+        onCrear={() => {}}
+        onVerPedidos={() => {}}
+        onModificar={() => {}}
+        onCambiarCliente={onCambiarCliente}
+        onCerrada={() => {}}
+      />,
+    );
+    return { onCambiarCliente };
+  };
+
+  it("un solo cliente: el menú solo trae «Cerrar sesión»", () => {
+    montar([{ id: "c1", nombre: "Cafe Entredos" }]);
+    expect(screen.queryByText("Cerrar sesión")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tu cuenta" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Cerrar sesión" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Cambiar de cliente" }),
+    ).toBeNull();
+  });
+
+  it("varios clientes: «Cambiar de cliente» hace lo de siempre y cierra el menú; tocar fuera también lo cierra", () => {
+    const { onCambiarCliente } = montar([
+      { id: "c1", nombre: "Cafe Entredos" },
+      { id: "c2", nombre: "Cafe Dos" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Tu cuenta" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Cambiar de cliente" }),
+    );
+    expect(onCambiarCliente).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tu cuenta" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
 });
