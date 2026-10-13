@@ -228,6 +228,35 @@ Este archivo resume las decisiones de arquitectura y el alcance de la fase actua
     - **Marca «Modificado por el cliente»:** `Order.modificadoPorClienteAt` (timestamp, null = sin marca; migración aditiva `20261012200000_portal_modificado_por_cliente`). La enciende el portal; la apagan `avanzar`, `marcarPagado` cuando confirma (AL_INICIO) y la acción nueva de abajo; editar desde el panel NO la apaga. El portal la ve en lista/detalle (`modificadoPorCliente`, oculta en pedidos cancelados) y el panel como `modificadoPorClienteAt` en Pedidos activos (lista y panel lateral). **Adición NO incluida en `docs/diseno-operacion.md`** (aprobada por el producto en la 4f): `PATCH /pedidos-b2b/:id/marcar-revisado` (los 3 roles, idempotente, solo apaga la marca) y el botón «Marcar como revisado» del panel lateral. Existe porque un pedido En proceso o Completado nunca se vuelve a confirmar y su marca no tendría otra forma de apagarse.
     - **Concurrencia panel/portal:** `PATCH /pedidos-b2b/:id/items` acepta `version` OPCIONAL (el `updatedAt` que cargó el panel); si no coincide → 409 «El cliente modificó este pedido mientras lo editabas, recárgalo». El panel lo manda siempre y, tras un 409, recarga el pedido y sale de la edición. Sin `version` el comportamiento es el de siempre. Nota de pruebas: el reloj de la suite está congelado, así que `updatedAt` no cambia solo; los tests de versión adelantan el reloj con `jest.setSystemTime`.
     - **Frontend:** «Modificar pedido activo» habilitado en el menú → `/mayoreo/[slug]/portal/modificar` (elige entre pedidos modificables; con uno entra directo) → `/mayoreo/[slug]/portal/pedidos/[folio]/modificar`: una tarjeta por día (editable lo que el servidor permite; lo cerrado en solo lectura con el botón de WhatsApp de contexto `dia`), totales estimados (`frontend/lib/portal-modificar-modelo.ts`, el servidor calcula el real), aviso de que se recalculan todos los precios con los de hoy, y confirmación antes de guardar. El detalle del pedido (4e) suma `modificable` y `version`.
+  - **4g — Envío real del código de acceso por WhatsApp (lado Aelika; rama `feature/portal-b2b-4g`, solo staging).** El código sale por el MISMO webhook de Botpress de siempre (`Tenant.botWebhookUrl` + `x-bp-secret`); Aelika no guarda ni usa el token de Meta. Si el envío falla, el cliente ve el mismo texto genérico de siempre y el fallo solo queda en el registro del servidor (sin teléfono completo ni código). **No se toca el callback de las reglas de pedidos (`/internal/reglas-envios`), el límite de códigos ni el resto del acceso.** Para que un negocio envíe hacen falta los TRES: `Tenant.portalPlantillaNombre`, `Tenant.portalPlantillaIdioma` (sin valor por defecto) y `Tenant.botWebhookUrl`; sin alguno el acceso queda inerte (misma respuesta, sin generar código ni consumir límites). Plantilla aprobada en la línea de prueba: nombre `auth`, idioma `es`, categoría autenticación, cuerpo `{{1}} es tu código de verificación.`, una variable y botón de copiar código. Código: `backend/src/portal/enviar-codigo-acceso.service.ts` (envío, timeout de 10 s), `estado-envio-codigo.service.ts` (registro en Redis) y `portal-codigos-callback.controller.ts` (callback).
+    - **Contrato que Botpress recibe** (`POST` al webhook del negocio; encabezados `Content-Type: application/json` y `x-bp-secret: <Tenant.botWebhookSecret>` si existe):
+      ```json
+      {
+        "correlacionId": "3f6c1c9e-2b0a-4d57-9a43-0d1f6a7e8b21",
+        "negocio": "banetto-mayorista",
+        "telefono": "+523331006915",
+        "categoria": "AUTHENTICATION",
+        "plantilla": { "nombre": "auth", "idioma": "es" },
+        "variables": ["482915"],
+        "boton": { "tipo": "COPIAR_CODIGO", "valor": "482915" }
+      }
+      ```
+      `variables` es un ARREGLO posicional (la plantilla tiene una variable: el código → `{{1}}`). `boton` es OPCIONAL para Botpress: puede ignorarlo; Meta exige el código también en el parámetro del botón de copiar código (componente `button`, `sub_type: url`, índice 0, texto = `boton.valor`), así que el flujo debe mandarlo ahí o el mensaje se rechaza. `negocio` es el slug del negocio (el bot es compartido por varios negocios; no es dato sensible). `correlacionId` identifica el envío: debe volver tal cual en el callback. La respuesta del webhook no importa más que su código HTTP: 2xx = aceptado (el envío sigue «en curso»), cualquier otro o más de 10 s sin respuesta = el envío se marca `FALLO`.
+    - **Callback que Botpress debe llamar** cuando sepa el resultado (idealmente en ambos casos):
+      ```
+      PATCH https://<api>/internal/portal-codigos/3f6c1c9e-2b0a-4d57-9a43-0d1f6a7e8b21/estado
+      X-Api-Key: <Tenant.botApiKey del negocio>     (el mismo guard del callback de reglas; NO es x-bp-secret)
+      Content-Type: application/json
+      ```
+      ```json
+      { "estado": "EXITO" }
+      ```
+      ```json
+      { "estado": "FALLO", "motivo": "Plantilla rechazada por Meta (131026)" }
+      ```
+      Respuestas: `200 { "id": "<correlacionId>", "estado": "EXITO" | "FALLO" }`; `401` sin llave o con llave incorrecta; `404` si el id no existe, ya venció (24 h) o es de otro negocio (indistinguibles); `400` si `estado` no es `EXITO`/`FALLO` o `motivo` pasa de 500 caracteres; `503` si Redis no responde (reintentar). Un estado terminal no cambia (un callback repetido o tardío responde 200 con el estado vigente). El `motivo` se sanea antes de escribirse en el registro del servidor (una línea, 200 caracteres, secuencias de 6+ dígitos reemplazadas por `***`): aun así, no mandar teléfonos ni códigos ahí.
+    - **Registro del envío:** solo en Redis (`portal:envio:<correlacionId>`, TTL 24 h) con `{ tenantId, estado, motivo?, creadoAt, actualizadoAt }`; sin teléfono ni código, y SIN usar `ReglaEnvioLog` (esa tabla exige cliente, es de las reglas de pedidos y cuenta para el candado de marketing). El portal no lee este estado ni cambia nada de lo que ve el cliente: es para el equipo técnico (el warn del servidor en `FALLO`). Si Botpress nunca llama al callback, el envío se queda `EN_CURSO` hasta que venza el registro.
+    - **Para la prueba real en staging:** (1) `portalPlantillaNombre = 'auth'` y `portalPlantillaIdioma = 'es'` en `banetto-mayorista` (el webhook y el secreto ya existen: es el mismo bot compartido que usan las reglas); (2) apagar `PORTAL_CODIGO_EN_LOG` en staging para que el código no aparezca en el registro del servidor; (3) configurar el workflow en Botpress Studio según el contrato de arriba.
   - **Datos de prueba:** `backend/src/scripts/portal-cliente-prueba.ts` (dry-run por defecto) deja un teléfono como principal de UN cliente activo de un negocio.
 - **Railway: el enlace de la CLI es por directorio.** `railway status`/`railway ssh` usan el proyecto enlazado en el directorio actual (desde `backend/` puede ser producción). Pasa siempre `-p <project> -e <environment>` y verifica el dominio; ver `backend/scripts/etapa1/README.md`.
 

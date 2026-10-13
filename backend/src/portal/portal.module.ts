@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CODIGOS_STORE, RedisCodigosStore } from './codigos-store';
 import { EnviarCodigoAccesoService } from './enviar-codigo-acceso.service';
+import { EstadoEnvioCodigoService } from './estado-envio-codigo.service';
+import { PortalCodigosCallbackController } from './portal-codigos-callback.controller';
 import { PortalAccesoController } from './portal-acceso.controller';
 import { PortalAccesoService } from './portal-acceso.service';
 import { PortalCalendarioController } from './portal-calendario.controller';
@@ -18,6 +20,7 @@ import { PortalCalendarioService } from './portal-calendario.service';
     PortalAccesoController,
     PortalCalendarioController,
     PortalPedidosController,
+    PortalCodigosCallbackController,
   ],
   providers: [
     PortalAccesoService,
@@ -28,6 +31,7 @@ import { PortalCalendarioService } from './portal-calendario.service';
     PortalMisPedidosService,
     PortalModificarPedidoService,
     EnviarCodigoAccesoService,
+    EstadoEnvioCodigoService,
     {
       provide: CODIGOS_STORE,
       useFactory: (config: ConfigService) =>
