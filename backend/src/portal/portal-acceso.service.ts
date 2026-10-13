@@ -128,12 +128,15 @@ export class PortalAccesoService {
 
     // Sin forma de entregar el código (ni "código visible" ni plantilla+webhook), el acceso está inerte: misma
     // respuesta, sin generar código ni consumir límites. Es lo que ocurre en producción hasta que haya plantilla.
+    // El idioma es obligatorio: no hay valor por defecto (la plantilla de autenticación es de un idioma concreto).
     const puedeEnviar = Boolean(
-      tenant.portalPlantillaNombre && tenant.botWebhookUrl,
+      tenant.portalPlantillaNombre &&
+      tenant.portalPlantillaIdioma &&
+      tenant.botWebhookUrl,
     );
     if (!codigoVisibleActivo() && !puedeEnviar) {
       this.logger.warn(
-        `Acceso al portal inerte para ${tenant.slug}: sin plantilla/webhook y sin modo "código visible"`,
+        `Acceso al portal inerte para ${tenant.slug}: sin plantilla (nombre e idioma)/webhook y sin modo "código visible"`,
       );
       return respuesta;
     }
@@ -202,6 +205,7 @@ export class PortalAccesoService {
     // El envío no se espera (el tiempo de respuesta no debe delatar si el número era cliente).
     void this.envio
       .enviar({
+        tenantId: tenant.id,
         tenantSlug: tenant.slug,
         botWebhookUrl: tenant.botWebhookUrl,
         botWebhookSecret: tenant.botWebhookSecret,
