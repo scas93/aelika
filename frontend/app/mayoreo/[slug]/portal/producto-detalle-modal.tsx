@@ -31,11 +31,17 @@ export default function ProductoDetalleModal({
   cantidadInicial,
   onConfirm,
   onClose,
+  etiquetaCantidad = "Cantidad total de tu pedido",
+  textoConfirmar,
 }: {
   product: ProductoModal;
   cantidadInicial: number;
   onConfirm: (cantidad: number) => void;
   onClose: () => void;
+  /** Texto sobre el control de cantidad (por defecto el de «Crear pedido»). */
+  etiquetaCantidad?: string;
+  /** Si se da, el botón siempre dice esto y no deja confirmar con 0 (para agregar un producto nuevo). */
+  textoConfirmar?: string;
 }) {
   // Puede quedar vacío mientras se escribe; vacío cuenta como 0 al guardar.
   const [campo, setCampo] = useState<Cantidad>(cantidadInicial);
@@ -74,7 +80,7 @@ export default function ProductoDetalleModal({
 
         <div className="mt-5 flex flex-col gap-3">
           <span className="text-xs font-medium text-mayoreo-ink-soft">
-            Cantidad total de tu pedido
+            {etiquetaCantidad}
           </span>
 
           <div className="flex items-center justify-center gap-3">
@@ -141,9 +147,10 @@ export default function ProductoDetalleModal({
           <button
             type="button"
             onClick={() => onConfirm(cantidad)}
-            className={BTN_PRIMARY}
+            disabled={textoConfirmar !== undefined && cantidad <= 0}
+            className={`${BTN_PRIMARY} disabled:opacity-50`}
           >
-            {cantidad > 0 ? "Guardar" : "Quitar del pedido"}
+            {textoConfirmar ?? (cantidad > 0 ? "Guardar" : "Quitar del pedido")}
           </button>
         </div>
       </div>

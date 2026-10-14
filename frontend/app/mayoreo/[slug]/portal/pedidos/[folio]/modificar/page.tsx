@@ -3,10 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import CantidadInput, {
-  cantidadNumero,
-  type Cantidad,
-} from "@/components/cantidad-input";
 import {
   PortalError,
   fetchCatalogo,
@@ -35,6 +31,8 @@ import ControlCantidad from "../../../control-cantidad";
 import IconoBasura from "../../../icono-basura";
 import EncabezadoPantalla from "../../../encabezado-pantalla";
 import ModalPortal from "../../../modal-portal";
+import HojaAgregarProducto from "../../../hoja-agregar-producto";
+import ProductoDetalleModal from "../../../producto-detalle-modal";
 import {
   BTN_PRIMARIO,
   BTN_SECUNDARIO,
@@ -71,6 +69,9 @@ export default function ModificarPedidoPage() {
 
   const [estado, setEstado] = useState<EstadoModificarPortal | null>(null);
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
+  const [categorias, setCategorias] = useState<
+    NonNullable<Awaited<ReturnType<typeof fetchCatalogo>>>["categories"]
+  >([]);
   const [original, setOriginal] = useState<Borrador>({});
   const [borrador, setBorrador] = useState<Borrador>({});
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
@@ -82,11 +83,12 @@ export default function ModificarPedidoPage() {
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState<string | null>(null);
   // Ventana «¿Cuántos…?» al elegir un producto: el producto se agrega solo al confirmar.
+  // «+ Agregar producto»: hoja inferior del día (fecha) y, al tocar un producto, la ventana de cantidad.
+  const [hojaFecha, setHojaFecha] = useState<string | null>(null);
   const [agregando, setAgregando] = useState<{
     fecha: string;
     productId: string;
   } | null>(null);
-  const [cantidadNueva, setCantidadNueva] = useState<Cantidad>("");
   // Confirmación al quitar una entrega completa (fecha de la entrega).
   const [quitando, setQuitando] = useState<string | null>(null);
 
@@ -107,6 +109,7 @@ export default function ModificarPedidoPage() {
     ) => {
       setEstado(e);
       setCatalogo(c ? c.categories.flatMap((x) => x.products) : []);
+      setCategorias(c ? c.categories : []);
       const b = borradorInicial(e.dias);
       setOriginal(b);
       setBorrador(structuredClone(b));
@@ -168,23 +171,18 @@ export default function ModificarPedidoPage() {
     return s;
   }, [estado]);
 
-  // Días en orden cronológico; los consecutivos que no se pueden editar se agrupan en una sola tarjeta compacta.
-  const bloques = useMemo(() => {
+  // Dos secciones, cada una en orden cronológico: lo que aún se puede modificar y lo cerrado (solo los días que tienen productos).
+  const { diasEditables, diasCerrados } = useMemo(() => {
     type Dia = EstadoModificarPortal["dias"][number];
-    const out: (
-      { tipo: "dia"; dia: Dia } | { tipo: "cerrados"; dias: Dia[] }
-    )[] = [];
+    const diasEditables: Dia[] = [];
+    const diasCerrados: Dia[] = [];
     for (const d of estado?.dias ?? []) {
       if (!borrador[d.fecha]) continue;
-      if (editables.has(d.fecha)) {
-        out.push({ tipo: "dia", dia: d });
-        continue;
-      }
-      const ultimo = out[out.length - 1];
-      if (ultimo?.tipo === "cerrados") ultimo.dias.push(d);
-      else out.push({ tipo: "cerrados", dias: [d] });
+      if (editables.has(d.fecha)) diasEditables.push(d);
+      else if (Object.keys(lineasEfectivas(borrador[d.fecha])).length > 0)
+        diasCerrados.push(d);
     }
-    return out;
+    return { diasEditables, diasCerrados };
   }, [estado, borrador, editables]);
 
   const nombres = useMemo(() => {
@@ -277,15 +275,8 @@ export default function ModificarPedidoPage() {
       return { ...b, [fecha]: { ...b[fecha], lineas: resto } };
     });
   }
-  function pedirCantidad(fecha: string, productId: string) {
-    if (!productId) return;
-    setCantidadNueva("");
-    setAgregando({ fecha, productId });
-  }
-  function confirmarAgregar() {
-    if (!agregando) return;
-    const cantidad = cantidadNumero(cantidadNueva);
-    if (cantidad <= 0) return;
+  function confirmarAgregar(cantidad: number) {
+    if (!agregando || cantidad <= 0) return;
     const { fecha, productId } = agregando;
     // Si el producto ya tenía cantidad en ese día, se suma a la que existe.
     cambiarLinea(
@@ -294,6 +285,7 @@ export default function ModificarPedidoPage() {
       (borrador[fecha]?.lineas[productId] ?? 0) + cantidad,
     );
     setAgregando(null);
+    setHojaFecha(null);
   }
 
   async function guardar() {
@@ -376,55 +368,49 @@ export default function ModificarPedidoPage() {
 
       {estado && !bloqueado && (
         <>
-          {bloques.map((b) => {
-            if (b.tipo === "cerrados") {
-              // Días que no se pueden editar: una sola tarjeta compacta, una fila por día (en su lugar cronológico).
-              return (
-                <section
-                  key={b.dias[0].fecha}
-                  className="flex flex-col divide-y divide-mayoreo-border rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm"
-                >
-                  {b.dias.map((d) => {
-                    const lineas = Object.entries(
-                      lineasEfectivas(borrador[d.fecha]),
-                    );
-                    return (
-                      <div
-                        key={d.fecha}
-                        className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0"
-                      >
-                        <div className="flex items-baseline justify-between gap-2">
-                          <h2 className="text-sm font-semibold">
-                            {etiquetaFechaCorta(d.fecha)}
-                          </h2>
-                          <span className="text-xs text-mayoreo-ink-soft">
-                            {d.motivo ? ETIQUETA_MOTIVO[d.motivo] : ""}
-                          </span>
-                        </div>
-                        {lineas.length > 0 && (
-                          <ul className="flex flex-col gap-0.5">
-                            {lineas.map(([id, cantidad]) => (
-                              <li
-                                key={id}
-                                className="flex items-baseline justify-between gap-3 text-sm text-mayoreo-ink-soft"
-                              >
-                                <span className="min-w-0">
-                                  {nombres.get(id) ?? "Producto"}
-                                </span>
-                                <span className="shrink-0 tabular-nums">
-                                  {cantidad}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    );
-                  })}
-                </section>
-              );
-            }
-            const d = b.dia;
+          {diasCerrados.length > 0 && (
+            <>
+              <h2 className="text-sm font-semibold text-mayoreo-ink-soft">
+                Ya no se pueden modificar
+              </h2>
+              <section className="flex flex-col divide-y divide-mayoreo-border rounded-xl border border-mayoreo-border bg-mayoreo-card p-4 shadow-sm">
+                {diasCerrados.map((d) => (
+                  <div
+                    key={d.fecha}
+                    className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0"
+                  >
+                    <h3 className="text-sm font-semibold">
+                      {etiquetaFechaCorta(d.fecha)}
+                    </h3>
+                    <ul className="flex flex-col gap-0.5">
+                      {Object.entries(lineasEfectivas(borrador[d.fecha])).map(
+                        ([id, cantidad]) => (
+                          <li
+                            key={id}
+                            className="flex items-baseline justify-between gap-3 text-sm text-mayoreo-ink-soft"
+                          >
+                            <span className="min-w-0">
+                              {nombres.get(id) ?? "Producto"}
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              {cantidad}
+                            </span>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                ))}
+              </section>
+            </>
+          )}
+
+          {diasEditables.length > 0 && (
+            <h2 className="text-sm font-semibold text-mayoreo-ink-soft">
+              Puedes modificar
+            </h2>
+          )}
+          {diasEditables.map((d) => {
             const dia = borrador[d.fecha];
             const lineas = lineasEfectivas(dia);
             const abierto = abiertos.has(d.fecha) || dia.existia;
@@ -506,27 +492,13 @@ export default function ModificarPedidoPage() {
                 {(abierto || dia.existia) && (
                   <div className="flex items-center justify-between gap-3">
                     {!dia.quitado && abierto ? (
-                      // El texto abre el mismo selector nativo de productos de siempre (el <select> va encima, transparente).
-                      <label className="relative inline-flex cursor-pointer items-center py-2 pr-3 text-sm font-medium text-mayoreo-ink">
-                        <span aria-hidden="true">+ Agregar producto</span>
-                        <select
-                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                          value=""
-                          onChange={(e) =>
-                            pedirCantidad(d.fecha, e.target.value)
-                          }
-                          aria-label={`Agregar producto el ${etiquetaFechaCorta(d.fecha)}`}
-                        >
-                          <option value="">Agregar producto…</option>
-                          {catalogo
-                            .filter((p) => !((dia.lineas[p.id] ?? 0) > 0))
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.nombre} — {dinero(p.precio)}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
+                      <button
+                        type="button"
+                        className="py-2 pr-3 text-left text-sm font-medium text-mayoreo-ink transition active:opacity-80"
+                        onClick={() => setHojaFecha(d.fecha)}
+                      >
+                        + Agregar producto
+                      </button>
                     ) : (
                       <span />
                     )}
@@ -646,43 +618,42 @@ export default function ModificarPedidoPage() {
         </>
       )}
 
-      {agregando && (
-        <ModalPortal
-          titulo={`¿Cuántos para ${etiquetaFechaCorta(agregando.fecha)}?`}
-          onCerrar={() => setAgregando(null)}
-        >
-          <p className="text-sm text-mayoreo-ink-soft">
-            {nombres.get(agregando.productId) ?? "Producto"}
-          </p>
-          <CantidadInput
-            autoFocus
-            value={cantidadNueva}
-            onChange={setCantidadNueva}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmarAgregar();
-            }}
-            aria-label="Cantidad"
-            className="mayoreo-input w-full text-center"
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={BTN_SECUNDARIO}
-              onClick={() => setAgregando(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className={BTN_PRIMARIO}
-              disabled={cantidadNumero(cantidadNueva) <= 0}
-              onClick={confirmarAgregar}
-            >
-              Agregar
-            </button>
-          </div>
-        </ModalPortal>
+      {hojaFecha && borrador[hojaFecha] && (
+        <HojaAgregarProducto
+          titulo={`Agregar a ${etiquetaFechaCorta(hojaFecha)}`}
+          categorias={categorias}
+          excluidos={
+            new Set(
+              Object.entries(borrador[hojaFecha].lineas)
+                .filter(([, n]) => n > 0)
+                .map(([id]) => id),
+            )
+          }
+          onElegir={(p) => setAgregando({ fecha: hojaFecha, productId: p.id })}
+          onCerrar={() => {
+            setAgregando(null);
+            setHojaFecha(null);
+          }}
+        />
       )}
+
+      {agregando &&
+        (() => {
+          const producto = categorias
+            .flatMap((c) => c.products)
+            .find((p) => p.id === agregando.productId);
+          if (!producto) return null;
+          return (
+            <ProductoDetalleModal
+              product={producto}
+              cantidadInicial={0}
+              etiquetaCantidad={`Cantidad para ${etiquetaFechaCorta(agregando.fecha)}`}
+              textoConfirmar="Agregar"
+              onConfirm={confirmarAgregar}
+              onClose={() => setAgregando(null)}
+            />
+          );
+        })()}
 
       {quitando && borrador[quitando] && (
         <ModalPortal

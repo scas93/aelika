@@ -161,6 +161,8 @@ export default function AccesoPantalla({
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                // Enfocado al llegar a esta pantalla: el teclado queda abierto y puede ofrecer el código recibido.
+                autoFocus
                 maxLength={6}
                 placeholder="••••••"
                 value={codigo}

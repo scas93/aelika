@@ -334,44 +334,81 @@ describe("modificar pedido", () => {
     ]);
   });
 
-  it("agregar producto: pregunta «¿Cuántos para …?», con el campo enfocado; Cancelar no agrega nada", async () => {
+  // Abre la hoja inferior de «+ Agregar producto» del día indicado y la devuelve.
+  async function abrirHoja(dia = "Vie 2 oct") {
+    const fila = screen
+      .getByRole("heading", { name: dia })
+      .closest("section") as HTMLElement;
+    fireEvent.click(
+      within(fila).getByRole("button", { name: "+ Agregar producto" }),
+    );
+    return screen.findByRole("dialog", { name: `Agregar a ${dia}` });
+  }
+
+  it("agregar producto: hoja inferior sin los productos que ya están en el día; el buscador filtra; ✕ y el fondo la cierran", async () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    fireEvent.change(screen.getByLabelText(/Agregar producto el Vie 2 oct/), {
-      target: { value: "B" },
+    expect(document.querySelector("select")).toBeNull();
+    const hoja = await abrirHoja();
+    // «Café americano» (A) ya está en ese día: solo se ofrece la Concha, bajo su categoría.
+    expect(within(hoja).getByText("Bebidas")).toBeInTheDocument();
+    expect(within(hoja).getByText("Concha")).toBeInTheDocument();
+    expect(within(hoja).queryByText("Café americano")).toBeNull();
+    fireEvent.change(within(hoja).getByLabelText("Buscar producto"), {
+      target: { value: "zzz" },
     });
-    const ventana = await screen.findByRole("dialog");
-    expect(
-      within(ventana).getByText("¿Cuántos para Vie 2 oct?"),
-    ).toBeInTheDocument();
-    const campo = within(ventana).getByLabelText("Cantidad");
-    expect(campo).toHaveFocus();
-    fireEvent.change(campo, { target: { value: "4" } });
-    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar" }));
+    expect(within(hoja).queryByText("Concha")).toBeNull();
+    fireEvent.click(within(hoja).getByRole("button", { name: "Cerrar" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    // Nada se agregó: sigue sin haber cambios y la Concha no está en el día.
+    // Fondo oscurecido: tocar fuera también cierra.
+    const otra = await abrirHoja();
+    fireEvent.click(otra.parentElement as HTMLElement);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("agregar producto: pide la cantidad con − / +; Cancelar vuelve a la hoja y no agrega nada", async () => {
+    render(<Page />);
+    await screen.findByRole("button", { name: "Guardar cambios" });
+    const hoja = await abrirHoja();
+    fireEvent.click(within(hoja).getByRole("button", { name: /Concha/ }));
+    // La ventana de cantidad (la del paso «Crear pedido») se abre encima de la hoja.
+    const ventana = (
+      await screen.findByText("Cantidad para Vie 2 oct")
+    ).closest(".fixed") as HTMLElement;
+    expect(
+      within(ventana).getByText("Cantidad para Vie 2 oct"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(ventana).getByRole("button", { name: "Agregar una pieza" }),
+    );
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar" }));
+    expect(
+      screen.getByRole("dialog", { name: "Agregar a Vie 2 oct" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(
       screen.getByRole("button", { name: "Guardar cambios" }),
     ).toBeDisabled();
     expect(screen.queryByLabelText(/Concha el Vie 2 oct/)).toBeNull();
   });
 
-  it("agregar producto: Agregar lo incluye con la cantidad escrita y se manda al guardar; sin cantidad no deja", async () => {
+  it("agregar producto: Agregar lo incluye con la cantidad elegida, cierra la hoja y se manda al guardar; con 0 no deja", async () => {
     modificarPedido.mockResolvedValue({
       cambio: true,
       pedido: { estado: { codigo: "PENDIENTE_CONFIRMACION" } },
     });
     render(<Page />);
     await screen.findByRole("button", { name: "Guardar cambios" });
-    fireEvent.change(screen.getByLabelText(/Agregar producto el Vie 2 oct/), {
-      target: { value: "B" },
-    });
-    const ventana = await screen.findByRole("dialog");
-    // Sin cantidad el botón está deshabilitado.
+    const hoja = await abrirHoja();
+    fireEvent.click(within(hoja).getByRole("button", { name: /Concha/ }));
+    // La ventana de cantidad (la del paso «Crear pedido») se abre encima de la hoja.
+    const ventana = (
+      await screen.findByText("Cantidad para Vie 2 oct")
+    ).closest(".fixed") as HTMLElement;
     expect(
       within(ventana).getByRole("button", { name: "Agregar" }),
     ).toBeDisabled();
-    fireEvent.change(within(ventana).getByLabelText("Cantidad"), {
+    fireEvent.change(within(ventana).getByLabelText("Cantidad total"), {
       target: { value: "4" },
     });
     fireEvent.click(within(ventana).getByRole("button", { name: "Agregar" }));
@@ -545,14 +582,57 @@ describe("modificar pedido: control − / + y días cerrados", () => {
     ).toBeDisabled();
   });
 
-  it("los días cerrados van juntos en una tarjeta, sin controles de edición", async () => {
+  it("dos secciones: «Ya no se pueden modificar» primero y «Puedes modificar» después, sin motivos, en solo lectura", async () => {
     render(<Page />);
     await screen.findByLabelText(/Café americano el .*3 oct/i);
-    const cerrado = screen.getByRole("heading", { name: /1 oct/ });
-    const tarjeta = cerrado.closest("section")!;
+    const puedes = screen.getByRole("heading", { name: "Puedes modificar" });
+    const cerrados = screen.getByRole("heading", {
+      name: "Ya no se pueden modificar",
+    });
+    expect(
+      cerrados.compareDocumentPosition(puedes) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const tarjeta = screen
+      .getByRole("heading", { name: "Jue 1 oct" })
+      .closest("section")!;
+    expect(within(tarjeta).getByText("Café americano")).toBeInTheDocument();
     expect(within(tarjeta).queryByRole("spinbutton")).toBeNull();
     expect(
       within(tarjeta).queryByRole("button", { name: /Quitar este día/ }),
     ).toBeNull();
+    expect(screen.queryByText(/Ya pasó|Ya no hay tiempo/)).toBeNull();
+  });
+
+  it("sin días cerrados con productos no aparece la sección; sin días editables solo se ve la de cerrados", async () => {
+    // Cerrado sin productos: no se muestra.
+    fetchEstadoModificar.mockResolvedValue(
+      estado({
+        dias: estado().dias.map((d) =>
+          d.fecha === "2026-10-01"
+            ? { ...d, entrega: { ...d.entrega!, productos: [] } }
+            : d,
+        ),
+      }),
+    );
+    const { unmount } = render(<Page />);
+    await screen.findByLabelText(/Café americano el .*3 oct/i);
+    expect(screen.getByText("Puedes modificar")).toBeInTheDocument();
+    expect(screen.queryByText("Ya no se pueden modificar")).toBeNull();
+    unmount();
+
+    // Solo cerrados: no aparece «Puedes modificar».
+    fetchEstadoModificar.mockResolvedValue(
+      estado({
+        dias: estado().dias.map((d) =>
+          d.estado === "CERRADO"
+            ? d
+            : { ...d, estado: "CERRADO", motivo: "PASADO" as const },
+        ),
+      }),
+    );
+    render(<Page />);
+    await screen.findByText("Ya no se pueden modificar");
+    expect(screen.queryByText("Puedes modificar")).toBeNull();
   });
 });
