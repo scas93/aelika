@@ -36,6 +36,8 @@ export default function CatalogoPage() {
   const { user, token } = useSession();
   const canWrite = user.rol === "GERENTE" || user.rol === "DUENO";
   const [tab, setTab] = useState<Tab>("catalogo");
+  const esB2b = user.tenant.tipoStorefront === "RETAIL_B2B";
+  const tabActivo: Tab = esB2b ? "catalogo" : tab;
 
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
@@ -119,19 +121,22 @@ export default function CatalogoPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Tabs
-        items={[
-          { key: "catalogo", label: "Categorías y productos", icon: "📋" },
-          { key: "promociones", label: "Promociones", icon: "🏷️" },
-          { key: "modificadores", label: "Modificadores", icon: "🧩" },
-        ]}
-        active={tab}
-        onChange={(key) => setTab(key as Tab)}
-      />
+      {/* B2B no usa promociones ni modificadores: sin pestañas (solo Categorías y productos). */}
+      {!esB2b && (
+        <Tabs
+          items={[
+            { key: "catalogo", label: "Categorías y productos", icon: "📋" },
+            { key: "promociones", label: "Promociones", icon: "🏷️" },
+            { key: "modificadores", label: "Modificadores", icon: "🧩" },
+          ]}
+          active={tab}
+          onChange={(key) => setTab(key as Tab)}
+        />
+      )}
 
-      {tab === "promociones" ? (
+      {tabActivo === "promociones" ? (
         <PromotionsSection token={token} canWrite={canWrite} />
-      ) : tab === "modificadores" ? (
+      ) : tabActivo === "modificadores" ? (
         <ModifiersSection token={token} canWrite={canWrite} />
       ) : (
         <>
@@ -483,7 +488,10 @@ function ProductsSection({
                     >
                       {product.nombre}
                     </span>
-                    <span className="text-sm text-admin-ink-soft">${product.precio}</span>
+                    <span className="text-sm text-admin-ink-soft">
+                      ${product.precio}
+                      {product.erpId ? ` · ERP ${product.erpId}` : ""}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Link href={`/dashboard/catalogo/productos/${product.id}`} className={LINK_BTN_SECONDARY}>
@@ -560,6 +568,8 @@ interface ProductFormValues {
   descripcion?: string;
   precio: number;
   fotoUrl?: string;
+  // ID del ERP: '' al editar quita el ID; al crear, undefined si está vacío.
+  erpId?: string;
   categoryId: string;
 }
 
@@ -578,6 +588,7 @@ function ProductForm({
   const [descripcion, setDescripcion] = useState(initial.descripcion ?? "");
   const [precio, setPrecio] = useState<number | string>(initial.precio);
   const [fotoUrl, setFotoUrl] = useState(initial.fotoUrl ?? "");
+  const [erpId, setErpId] = useState(initial.erpId ?? "");
   const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -595,6 +606,7 @@ function ProductForm({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        erpId: erpId.trim(),
         categoryId,
       });
     } catch (err) {
@@ -648,6 +660,13 @@ function ProductForm({
         Foto (URL, opcional)
         <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} placeholder="https://..." className="admin-input" />
       </label>
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+        ID del ERP (opcional)
+        <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
+        <span className="text-xs font-normal text-admin-ink-soft">
+          Para integraciones. No puede repetirse en otro producto de tu negocio; vacío = sin ID.
+        </span>
+      </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -682,6 +701,7 @@ function NewProductPanel({
   const [descripcion, setDescripcion] = useState("");
   const [precio, setPrecio] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
+  const [erpId, setErpId] = useState("");
   const [categoryId, setCategoryId] = useState(defaultCategoryId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -692,6 +712,7 @@ function NewProductPanel({
     setDescripcion("");
     setPrecio("");
     setFotoUrl("");
+    setErpId("");
     setCategoryId(defaultCategoryId);
     setError(null);
   }
@@ -716,12 +737,14 @@ function NewProductPanel({
         descripcion: descripcion.trim() || undefined,
         precio: precioNumber,
         fotoUrl: fotoUrl.trim() || undefined,
+        erpId: erpId.trim() || undefined,
         categoryId,
       });
       setNombre("");
       setDescripcion("");
       setPrecio("");
       setFotoUrl("");
+      setErpId("");
       setCategoryId(defaultCategoryId);
       if (keepOpen) {
         firstFieldRef.current?.focus();
@@ -796,6 +819,13 @@ function NewProductPanel({
             placeholder="https://..."
             className="admin-input"
           />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+          ID del ERP (opcional)
+          <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
+          <span className="text-xs font-normal text-admin-ink-soft">
+            Para integraciones. No puede repetirse en otro producto de tu negocio; vacío = sin ID.
+          </span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

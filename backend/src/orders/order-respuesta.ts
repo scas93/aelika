@@ -36,8 +36,11 @@ export function exigirDetalleB2C<T extends { id?: string; detalleB2c?: DetalleB2
   return order as T & { detalleB2c: DetalleB2C };
 }
 
-/** Forma de salida: sin los campos internos (`tipo`, `detalleB2c`, `huellaCheckout`) ni los del módulo B2B (`cancelado`, `canceladoAt`). */
-type RespuestaOrder<T> = Omit<T, 'tipo' | 'detalleB2c' | 'huellaCheckout' | 'cancelado' | 'canceladoAt'>;
+/** Forma de salida: sin los campos internos (`tipo`, `detalleB2c`, `huellaCheckout`) ni los del módulo B2B (`cancelado`, `canceladoAt`, `modificadoPorClienteAt`). */
+type RespuestaOrder<T> = Omit<
+  T,
+  'tipo' | 'detalleB2c' | 'huellaCheckout' | 'cancelado' | 'canceladoAt' | 'modificadoPorClienteAt'
+>;
 
 /**
  * ÚNICO punto donde una orden (fila de Prisma + su relación `detalleB2c`) se
@@ -58,9 +61,11 @@ export function aRespuestaOrder<T extends { id?: string; tipo?: unknown; detalle
     huellaCheckout: _huella,
     cancelado: _cancelado,
     canceladoAt: _canceladoAt,
+    // modificadoPorClienteAt (4f) también es del módulo B2B.
+    modificadoPorClienteAt: _modificadoPorClienteAt,
     detalleB2c: _detalle,
     ...resto
-  } = order as T & { cancelado?: unknown; canceladoAt?: unknown };
+  } = order as T & { cancelado?: unknown; canceladoAt?: unknown; modificadoPorClienteAt?: unknown };
   const base = sinOrdenEnItems(resto);
   const campos = Object.fromEntries(CAMPOS_DETALLE_B2C.map((campo) => [campo, detalleB2c[campo]]));
   return { ...base, ...campos } as RespuestaOrder<T>;

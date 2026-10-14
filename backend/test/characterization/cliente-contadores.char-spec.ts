@@ -1,7 +1,7 @@
 import { tokenFor } from './auth';
 import { conectarStripe } from './db';
 import { apiRol, crearPublicoB2b } from './b2b-helpers';
-import { auth, bodyCheckout, crearPedidoTarjeta, eventoPaymentIntent, postCheckout, postWebhook, usarSuite } from './helpers';
+import { auth, bodyCheckout, crearPedidoTarjeta, eventoPaymentIntent, postCheckoutMixto, postWebhook, usarSuite } from './helpers';
 
 // Pedidos TARJETA no pagados · A2: contadores de Cliente derivados de pedidos contables
 // (B2C = Order PAGADO, B2B = PedidoB2b no cancelado). Fechas = createdAt del pedido;
@@ -15,7 +15,7 @@ describe('Cliente · contadores derivados de pedidos contables', () => {
   const HOY = 'desde=2026-09-30T06:00:00.000Z&hasta=2026-10-01T05:59:59.999Z';
 
   it('EFECTIVO nace PAGADO: cuenta al crear (totalPedidos 1, fechas = pedido)', async () => {
-    await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base));
+    await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base));
     const [c] = await clientes();
     expect(c.totalPedidos).toBe(1);
     expect(iso(c.primerPedidoAt)).toBe('2026-09-30T16:00:00.000Z');
@@ -51,7 +51,7 @@ describe('Cliente · contadores derivados de pedidos contables', () => {
 
   it('intento no pagado tras un pedido pagado: el cliente sigue en 1 y ultimoPedidoAt no salta al intento', async () => {
     await conectarStripe(s.h.prisma, s.base.tenant.id);
-    await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base)); // EFECTIVO 16:00
+    await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base)); // EFECTIVO 16:00
     jest.setSystemTime(new Date('2026-09-30T18:00:00.000Z'));
     await crearPedidoTarjeta(s.h, s.base); // intento 18:00, nunca se paga
     const [c] = await clientes();
@@ -121,7 +121,7 @@ describe('Cliente · contadores derivados de pedidos contables', () => {
     });
 
     it('un pedido B2B no cuenta para un Cliente B2C con el mismo teléfono (canales separados)', async () => {
-      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteTelefono: '5599990000' }));
+      await postCheckoutMixto(s.h, s.base.tenant.slug, bodyCheckout(s.base, { clienteTelefono: '5599990000' }));
       await crearPublicoB2b(s.h, s.base, { contactoTelefono: '5599990000' });
       const todos = await clientes();
       expect(todos.map((c) => `${c.canal}:${c.totalPedidos}`).sort()).toStrictEqual(['B2B:1', 'B2C:1']);

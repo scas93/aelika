@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useSession } from "@/lib/session-context";
 import Tabs from "../_components/Tabs";
+import { moduloActivo } from "../nav-items";
 import RegistrarClienteTab from "./registrar-cliente-tab";
 import RegistrarCompraTab from "./registrar-compra-tab";
 import ClientesInscritosTab from "./clientes-inscritos-tab";
@@ -15,6 +16,10 @@ type TabKey = "cliente" | "compra" | "inscritos";
 export default function LealtadPage() {
   const { token, user } = useSession();
   const [tab, setTab] = useState<TabKey>("cliente");
+
+  if (!moduloActivo(user.tenant.modulosDesactivados, "LEALTAD")) {
+    return <p className="text-sm text-admin-ink-soft">Este módulo no está habilitado para tu negocio.</p>;
+  }
 
   return (
     <div className="flex flex-col gap-4">

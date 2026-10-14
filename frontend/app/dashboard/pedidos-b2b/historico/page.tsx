@@ -4,15 +4,24 @@ import { useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
-  exportPedidosB2bCsv,
+  exportPedidosB2bXlsx,
   fetchPedidosB2b,
   type FiltroImporte,
   type PaginatedPedidosB2b,
-  type PedidoB2bEstado,
+  type PedidoB2bEstadoPago,
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_LABEL, ESTADO_VARIANT } from "../estado";
+import {
+  ESTADO_LABEL,
+  ESTADO_VARIANT,
+  ESTADO_FILTRO_LABEL,
+  ESTADOS_FILTRO_HISTORICO,
+  ESTADOS_PAGO_FILTRO,
+  ESTADO_PAGO_LABEL,
+  ESTADO_PAGO_VARIANT,
+  type EstadoFiltroHistorico,
+} from "../estado";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
@@ -22,9 +31,10 @@ import { FiltroSelectPopover } from "../../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
 import HistoricoDetallePanel from "./historico-detalle-panel";
+import { formatearFolioB2b } from "@/lib/format";
+import { hoyYYYYMMDD } from "@/lib/fecha";
 
 const LIMIT = 25;
-const ESTADOS_FILTRO: PedidoB2bEstado[] = ["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "DESPACHADO"];
 
 function formatSemana(iso: string): string {
   // timeZone: "UTC" — semanaInicio es un @db.Date sin hora, ver el mismo
@@ -36,7 +46,7 @@ function formatSemana(iso: string): string {
 // estado real cuando aplica — no hay variante "cancelado" en ESTADO_VARIANT,
 // se resuelve aquí igual que ahí (peligro).
 const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
-  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">#{pedido.folio}</span> },
+  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">{formatearFolioB2b(pedido.folio)}</span> },
   { key: "negocio", header: "Negocio", render: (pedido) => pedido.negocioNombre },
   { key: "semana", header: "Semana", render: (pedido) => formatSemana(pedido.semanaInicio) },
   {
@@ -48,6 +58,11 @@ const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
       ) : (
         <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
       ),
+  },
+  {
+    key: "pago",
+    header: "Pago",
+    render: (pedido) => <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>,
   },
   { key: "total", header: "Total", align: "right", render: (pedido) => formatMoney(pedido.total) },
 ];
@@ -91,9 +106,9 @@ export default function PedidosB2bHistoricoPage() {
   const { token } = useSession();
 
   const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
-  const [estado, setEstado] = useState<PedidoB2bEstado | null>(null);
+  const [estado, setEstado] = useState<EstadoFiltroHistorico | null>(null);
+  const [estadoPago, setEstadoPago] = useState<PedidoB2bEstadoPago | null>(null);
   const [negocioNombre, setNegocioNombre] = useState<string | null>(null);
-  const [cancelado, setCancelado] = useState<boolean | null>(null);
   const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
   // Sin autofetch en cambios de filtro a propósito — no se muestra nada
@@ -124,9 +139,13 @@ export default function PedidosB2bHistoricoPage() {
     return {
       desde,
       hasta,
-      estado: estado ?? undefined,
+      // "Cancelado" es el flag, no un valor de estado; los otros 4 estados excluyen a los cancelados.
+      estado: estado && estado !== "CANCELADO" ? estado : undefined,
       negocioNombre: negocioNombre?.trim() || undefined,
-      cancelado: cancelado ?? undefined,
+      estadoPago: estadoPago ?? undefined,
+      // Históricos nunca muestra pedidos activos (Por confirmar, Confirmado, En proceso), ni con filtros vacíos.
+      soloHistorico: true,
+      cancelado: estado === "CANCELADO" ? true : estado ? false : undefined,
       operador: importe?.operador,
       valor: importe?.valor,
       valorHasta: importe?.valorHasta,
@@ -151,11 +170,11 @@ export default function PedidosB2bHistoricoPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const blob = await exportPedidosB2bCsv(token, filtrosActuales());
+      const blob = await exportPedidosB2bXlsx(token, filtrosActuales());
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "pedidos-b2b-historico.csv";
+      a.download = `historico-${hoyYYYYMMDD()}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -174,14 +193,30 @@ export default function PedidosB2bHistoricoPage() {
           <FilterPill
             filterKey="estado"
             label="Estado"
-            valueLabel={estado ? ESTADO_LABEL[estado] : null}
+            valueLabel={estado ? ESTADO_FILTRO_LABEL[estado] : null}
             onClear={() => setEstado(null)}
           >
             {({ close }) => (
               <FiltroSelectPopover
-                opciones={ESTADOS_FILTRO.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
+                opciones={ESTADOS_FILTRO_HISTORICO.map((e) => ({ value: e, label: ESTADO_FILTRO_LABEL[e] }))}
                 valorAplicado={estado}
                 onAplicar={setEstado}
+                close={close}
+              />
+            )}
+          </FilterPill>
+
+          <FilterPill
+            filterKey="estadoPago"
+            label="Pago"
+            valueLabel={estadoPago ? ESTADO_PAGO_LABEL[estadoPago] : null}
+            onClear={() => setEstadoPago(null)}
+          >
+            {({ close }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
+                valorAplicado={estadoPago}
+                onAplicar={setEstadoPago}
                 close={close}
               />
             )}
@@ -197,25 +232,6 @@ export default function PedidosB2bHistoricoPage() {
 
           <FilterPill filterKey="negocio" label="Negocio" valueLabel={negocioNombre?.trim() || null} onClear={() => setNegocioNombre(null)}>
             {({ close }) => <FiltroNegocioPopover valorAplicado={negocioNombre} onAplicar={setNegocioNombre} close={close} />}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="cancelado"
-            label="Cancelado"
-            valueLabel={cancelado === null ? null : cancelado ? "Sí" : "No"}
-            onClear={() => setCancelado(null)}
-          >
-            {({ close }) => (
-              <FiltroSelectPopover
-                opciones={[
-                  { value: "true", label: "Sí" },
-                  { value: "false", label: "No" },
-                ]}
-                valorAplicado={cancelado === null ? null : String(cancelado)}
-                onAplicar={(value) => setCancelado(value === null ? null : value === "true")}
-                close={close}
-              />
-            )}
           </FilterPill>
         </FilterBar>
 
@@ -262,7 +278,15 @@ export default function PedidosB2bHistoricoPage() {
         </>
       )}
 
-      <HistoricoDetallePanel pedidoId={selectedId} onClose={() => setSelectedId(null)} />
+      {/* Tras editar, corregir o cambiar el pago, la lista se vuelve a consultar (un Completado que recibe una entrega vuelve a
+          En proceso y deja de ser "histórico"). El panel conserva el pedido abierto con su estado nuevo. */}
+      <HistoricoDetallePanel
+        pedidoId={selectedId}
+        onClose={() => setSelectedId(null)}
+        onChanged={() => {
+          if (searched) void ejecutarBusqueda(result?.page ?? 1);
+        }}
+      />
     </div>
   );
 }

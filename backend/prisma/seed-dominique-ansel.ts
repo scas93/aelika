@@ -23,10 +23,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaClient, Prisma } from '../generated/prisma/client';
 import { generateApiKey } from '../src/common/api-key';
-import { normalizarHorarioSemana, type HorarioSemana } from '../src/common/horario';
-import { Role, TipoStorefront, FacturacionModo, PedidoB2bModoCobro, DiaSemana } from '../generated/prisma/enums';
+import { sembrarClienteB2b } from '../src/clientes/cliente-b2b';
+import {
+  normalizarHorarioSemana,
+  type HorarioSemana,
+} from '../src/common/horario';
+import {
+  Role,
+  TipoStorefront,
+  FacturacionModo,
+  PedidoB2bModoCobro,
+  DiaSemana,
+} from '../generated/prisma/enums';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -73,24 +83,51 @@ interface MenuData {
     usosMaximos: number | null;
     fechaLimite: string | null;
   }[];
+  clientesB2b: {
+    sufijo: string;
+    nombre: string;
+    direccion: string;
+    descuentoPorcentaje: number | null;
+    modalidadPago: keyof typeof PedidoB2bModoCobro | null;
+    telefonos: {
+      telefono: string;
+      principal: boolean;
+      nombreContacto: string | null;
+    }[];
+  }[];
   categorias: MenuCategoria[];
 }
 
 function loadMenu(): MenuData {
-  const filePath = path.join(__dirname, 'data', 'seed-dominique-ansel-menu.json');
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const filePath = path.join(
+    __dirname,
+    'data',
+    'seed-dominique-ansel-menu.json',
+  );
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as MenuData;
 }
 
 async function ensureCategory(tenantId: string, nombre: string, orden: number) {
-  const existing = await prisma.category.findFirst({ where: { tenantId, nombre } });
+  const existing = await prisma.category.findFirst({
+    where: { tenantId, nombre },
+  });
   if (existing) {
-    return prisma.category.update({ where: { id: existing.id }, data: { orden } });
+    return prisma.category.update({
+      where: { id: existing.id },
+      data: { orden },
+    });
   }
   return prisma.category.create({ data: { tenantId, nombre, orden } });
 }
 
-async function ensureProduct(tenantId: string, categoryId: string, producto: MenuProducto) {
-  const existing = await prisma.product.findFirst({ where: { tenantId, nombre: producto.nombre } });
+async function ensureProduct(
+  tenantId: string,
+  categoryId: string,
+  producto: MenuProducto,
+) {
+  const existing = await prisma.product.findFirst({
+    where: { tenantId, nombre: producto.nombre },
+  });
   const data = {
     categoryId,
     descripcion: producto.descripcion ?? null,
@@ -101,14 +138,21 @@ async function ensureProduct(tenantId: string, categoryId: string, producto: Men
   if (existing) {
     return prisma.product.update({ where: { id: existing.id }, data });
   }
-  return prisma.product.create({ data: { tenantId, nombre: producto.nombre, ...data } });
+  return prisma.product.create({
+    data: { tenantId, nombre: producto.nombre, ...data },
+  });
 }
 
 async function main() {
   const menu = loadMenu();
 
-  const duenoPasswordHash = await bcrypt.hash(menu.tenant.duenoDemo.password, 10);
-  const horarioAtencion = normalizarHorarioSemana(menu.tenant.horarioAtencion) as any;
+  const duenoPasswordHash = await bcrypt.hash(
+    menu.tenant.duenoDemo.password,
+    10,
+  );
+  const horarioAtencion = normalizarHorarioSemana(
+    menu.tenant.horarioAtencion,
+  ) as unknown as Prisma.InputJsonValue;
 
   const tenantData = {
     nombre: menu.tenant.nombre,
@@ -120,9 +164,11 @@ async function main() {
     facturacionModo: FacturacionModo[menu.tenant.facturacionModo],
     pedidoB2bMinimoPiezas: menu.tenant.pedidoB2b.minimoPiezas,
     pedidoB2bModoCobro: PedidoB2bModoCobro[menu.tenant.pedidoB2b.modoCobro],
-    pedidoB2bVentanaAperturaDia: DiaSemana[menu.tenant.pedidoB2b.ventanaAperturaDia],
+    pedidoB2bVentanaAperturaDia:
+      DiaSemana[menu.tenant.pedidoB2b.ventanaAperturaDia],
     pedidoB2bVentanaAperturaHora: menu.tenant.pedidoB2b.ventanaAperturaHora,
-    pedidoB2bVentanaCierreDia: DiaSemana[menu.tenant.pedidoB2b.ventanaCierreDia],
+    pedidoB2bVentanaCierreDia:
+      DiaSemana[menu.tenant.pedidoB2b.ventanaCierreDia],
     pedidoB2bVentanaCierreHora: menu.tenant.pedidoB2b.ventanaCierreHora,
   };
 
@@ -150,7 +196,11 @@ async function main() {
 
   let totalProductos = 0;
   for (const categoria of menu.categorias) {
-    const created = await ensureCategory(tenant.id, categoria.nombre, categoria.orden);
+    const created = await ensureCategory(
+      tenant.id,
+      categoria.nombre,
+      categoria.orden,
+    );
     for (const producto of categoria.productos) {
       await ensureProduct(tenant.id, created.id, producto);
       totalProductos += 1;
@@ -159,7 +209,9 @@ async function main() {
 
   for (const codigo of menu.codigosDescuento) {
     await prisma.pedidoB2bCodigoDescuento.upsert({
-      where: { tenantId_codigo: { tenantId: tenant.id, codigo: codigo.codigo } },
+      where: {
+        tenantId_codigo: { tenantId: tenant.id, codigo: codigo.codigo },
+      },
       update: {
         descuentoPorcentaje: codigo.descuentoPorcentaje,
         activo: codigo.activo,
@@ -177,10 +229,31 @@ async function main() {
     });
   }
 
-  console.log(`Seed de Dominique Ansel Bakery listo: tenant "${tenant.slug}" (${tenant.tipoStorefront})`);
-  console.log(`  ${menu.tenant.duenoDemo.email} / ${menu.tenant.duenoDemo.password} (DUENO)`);
-  console.log(`  ${menu.categorias.length} categorías, ${totalProductos} productos`);
+  // Clientes B2B por alta (código {slug}-{sufijo}, teléfonos autorizados y principal). Teléfonos ficticios.
+  for (const cliente of menu.clientesB2b) {
+    await sembrarClienteB2b(prisma, {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      ...cliente,
+      modalidadPago: cliente.modalidadPago
+        ? PedidoB2bModoCobro[cliente.modalidadPago]
+        : null,
+    });
+  }
+
+  console.log(
+    `Seed de Dominique Ansel Bakery listo: tenant "${tenant.slug}" (${tenant.tipoStorefront})`,
+  );
+  console.log(
+    `  ${menu.tenant.duenoDemo.email} / ${menu.tenant.duenoDemo.password} (DUENO)`,
+  );
+  console.log(
+    `  ${menu.categorias.length} categorías, ${totalProductos} productos`,
+  );
   console.log(`  ${menu.codigosDescuento.length} código(s) de descuento B2B`);
+  console.log(
+    `  ${menu.clientesB2b.length} cliente(s) B2B: ${menu.clientesB2b.map((c) => `${tenant.slug}-${c.sufijo}`).join(', ')}`,
+  );
   console.log('');
   console.log('Pendiente de configurar manualmente en este ambiente:');
   console.log(`  - botApiKey (Botpress): ${tenant.botApiKey}`);

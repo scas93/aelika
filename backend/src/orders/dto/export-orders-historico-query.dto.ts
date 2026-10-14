@@ -1,4 +1,5 @@
 import { IsDateString, IsEnum, IsIn, IsOptional } from 'class-validator';
+import { ESTADOS_B2C } from '../estados-b2c';
 import { EstadoPedido, MetodoPago } from '../../../generated/prisma/enums';
 import { GRUPOS_ESTADO_PAGO, type GrupoEstadoPago } from '../../common/estado-pago';
 
@@ -6,7 +7,7 @@ import { GRUPOS_ESTADO_PAGO, type GrupoEstadoPago } from '../../common/estado-pa
 // endpoint has no pagination, it returns every matching row as CSV.
 export class ExportOrdersHistoricoQueryDto {
   @IsOptional()
-  @IsEnum(EstadoPedido)
+  @IsIn(ESTADOS_B2C)
   estadoPedido?: EstadoPedido;
 
   @IsOptional()

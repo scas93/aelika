@@ -101,6 +101,7 @@ export default function PedidosHistoricoPage() {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el error al iniciar cada consulta (mismo criterio que el resto de listados)
     setError(null);
     fetchOrdersHistorico(token, {
       estadoPedido: estadoPedido ?? undefined,

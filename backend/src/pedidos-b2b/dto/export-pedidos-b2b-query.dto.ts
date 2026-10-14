@@ -2,20 +2,20 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { PedidoB2bEstado } from '../../../generated/prisma/enums';
+import { ESTADOS_B2B_FILTRO, ESTADOS_PAGO_B2B_FILTRO, type EstadoB2bFiltro, type EstadoPagoB2bFiltro } from '../pedidos-b2b-estados';
 
 // Mismos filtros que ListPedidosB2bQueryDto sin paginación — el export
 // devuelve todas las filas que apliquen, como ExportOrdersHistoricoQueryDto.
 export class ExportPedidosB2bQueryDto {
   @IsOptional()
-  @IsEnum(PedidoB2bEstado)
-  estado?: PedidoB2bEstado;
+  @IsIn(ESTADOS_B2B_FILTRO)
+  estado?: EstadoB2bFiltro;
 
   @IsOptional()
   @IsString()
@@ -34,8 +34,8 @@ export class ExportPedidosB2bQueryDto {
     typeof value === 'string' ? value.split(',') : value,
   )
   @IsArray()
-  @IsEnum(PedidoB2bEstado, { each: true })
-  estados?: PedidoB2bEstado[];
+  @IsIn(ESTADOS_B2B_FILTRO, { each: true })
+  estados?: EstadoB2bFiltro[];
 
   // `@Type(() => Boolean)` NO sirve aquí — Boolean('false') === true en JS
   // (cualquier string no vacío es truthy), así que "?cancelado=false" se
@@ -46,6 +46,24 @@ export class ExportPedidosB2bQueryDto {
   )
   @IsBoolean()
   cancelado?: boolean;
+
+  // Históricos: solo pedidos Completados y Cancelados. Parámetro aparte (en vez de cambiar el listado sin filtros) para no
+  // alterar el contrato de los demás consumidores de GET /pedidos-b2b (Pedidos activos pide por semana y por estado).
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  soloHistorico?: boolean;
+
+  // Solo pedidos de semanas ANTERIORES a esta fecha (semanaInicio < semanaAntesDe, "YYYY-MM-DD"): los pedidos activos que
+  // quedaron de semanas pasadas. Se combina con el resto de filtros.
+  @IsOptional()
+  @IsDateString()
+  semanaAntesDe?: string;
+
+  // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
+  @IsOptional()
+  @IsIn(ESTADOS_PAGO_B2B_FILTRO)
+  estadoPago?: EstadoPagoB2bFiltro;
 
   @IsOptional()
   @IsDateString()

@@ -25,6 +25,16 @@ export default tseslint.config(
     },
   },
   {
+    // Las pruebas HTTP leen `res.body` (any de supertest) y filas de la base: las reglas no-unsafe-* solo meten ruido.
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+    },
+  },
+  {
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',

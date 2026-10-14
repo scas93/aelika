@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { normalizarHorarioSemana } from '../common/horario';
 import { generateApiKey } from '../common/api-key';
+import { normalizarNumeroAtencion } from '../common/telefono';
 import { resolverMensajeBienvenida } from '../common/mensaje-bienvenida';
 import {
   normalizarVentanaRecepcion,
@@ -46,6 +47,11 @@ const SETTINGS_SELECT = {
   pedidoB2bVentanaAperturaHora: true,
   pedidoB2bVentanaCierreDia: true,
   pedidoB2bVentanaCierreHora: true,
+  portalHoraEntrega: true,
+  portalHorasAgregarDia: true,
+  portalHorasModificar: true,
+  portalHorizonteSemanas: true,
+  numeroAtencion: true,
 } as const;
 
 const API_BASE_URL_DEFAULT = 'http://localhost:3001';
@@ -98,6 +104,14 @@ export class TenantService {
         botWebhookUrl: dto.botWebhookUrl,
         botWebhookSecret: dto.botWebhookSecret,
         candadoMarketingDias: dto.candadoMarketingDias,
+        portalHoraEntrega: dto.portalHoraEntrega,
+        portalHorasAgregarDia: dto.portalHorasAgregarDia,
+        portalHorasModificar: dto.portalHorasModificar,
+        portalHorizonteSemanas: dto.portalHorizonteSemanas,
+        numeroAtencion:
+          dto.numeroAtencion !== undefined
+            ? normalizarNumeroAtencion(dto.numeroAtencion)
+            : undefined,
       },
       select: SETTINGS_SELECT,
     });
@@ -274,6 +288,11 @@ export class TenantService {
     pedidoB2bVentanaAperturaHora: string | null;
     pedidoB2bVentanaCierreDia: DiaSemana | null;
     pedidoB2bVentanaCierreHora: string | null;
+    portalHoraEntrega: string;
+    portalHorasAgregarDia: number;
+    portalHorasModificar: number;
+    portalHorizonteSemanas: number;
+    numeroAtencion: string | null;
   }) {
     return {
       nombre: tenant.nombre,
@@ -293,6 +312,11 @@ export class TenantService {
       pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
       pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
       ventanaRecepcionB2b: ventanaDesdeTenant(tenant),
+      portalHoraEntrega: tenant.portalHoraEntrega,
+      portalHorasAgregarDia: tenant.portalHorasAgregarDia,
+      portalHorasModificar: tenant.portalHorasModificar,
+      portalHorizonteSemanas: tenant.portalHorizonteSemanas,
+      numeroAtencion: tenant.numeroAtencion,
     };
   }
 }

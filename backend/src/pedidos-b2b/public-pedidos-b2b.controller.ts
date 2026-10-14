@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
-import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { TenantB2bPublicGuard } from './tenant-b2b.guard';
 
@@ -21,21 +20,13 @@ export class PublicPedidosB2bController {
     return this.publicPedidosB2bService.getTenantInfo(slug);
   }
 
-  @Get('tenants/:slug/catalog')
-  getCatalog(@Param('slug') slug: string) {
-    return this.publicPedidosB2bService.getCatalog(slug);
-  }
+  // El catálogo de mayoreo y la vista previa de códigos de descuento ya NO son públicos (Fase 4, 4d): el catálogo y los
+  // precios solo se ven con sesión del portal (GET /portal/catalogo) y el descuento es un % del cliente, no un código.
 
-  @Get('tenants/:slug/codigos-descuento/:codigo')
-  previewCodigoDescuento(
-    @Param('slug') slug: string,
-    @Param('codigo') codigo: string,
-  ) {
-    return this.publicPedidosB2bService.previewCodigoDescuento(slug, codigo);
-  }
-
+  // Cerrado: los pedidos de mayoreo se crean desde el portal con sesión (POST /portal/pedidos). Sin @Body a propósito,
+  // siempre 409 con el mismo mensaje.
   @Post('tenants/:slug/pedidos')
-  createPedido(@Param('slug') slug: string, @Body() dto: CreatePedidoB2bDto) {
-    return this.publicPedidosB2bService.createPedido(slug, dto);
+  createPedido(@Param('slug') slug: string) {
+    return this.publicPedidosB2bService.rechazarPedidoAnonimo(slug);
   }
 }

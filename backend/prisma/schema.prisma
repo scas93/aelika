@@ -70,6 +70,9 @@ model Tenant {
   // para el backfill de tenants creados antes de este campo, que
   // históricamente eran todos retail de pickup. Ver TipoStorefront arriba.
   tipoStorefront               TipoStorefront     @default(RETAIL_B2C)
+  // Módulos opcionales apagados para este negocio (valores de backend/src/common/modulos.ts: LEALTAD,
+  // CODIGOS_DESCUENTO). Vacío = todo encendido (default de todos los tenants). Se cambia por seed/API interna, sin pantalla.
+  modulosDesactivados          String[]           @default([])
   // Obligatorio en RegisterDto (sin default a nivel de API) para tenants
   // nuevos; nullable en DB para no romper tenants ya existentes (Entredós,
   // Banetto), que se actualizarán manualmente desde Ajustes. Ver GiroNegocio.
@@ -105,6 +108,22 @@ model Tenant {
   // es como la integración Webhook de Botpress lo espera).
   botWebhookUrl                String?
   botWebhookSecret             String?
+  // Plantilla de WhatsApp (categoría AUTHENTICATION) con la que el portal manda el código de acceso. Sin valor = el
+  // portal no envía WhatsApp (solo el modo "código visible" de pruebas). Se asigna cuando Meta la apruebe.
+  portalPlantillaNombre        String?
+  portalPlantillaIdioma        String?
+  // Calendario del portal del cliente B2B (Fase 4, 4c). Todo en hora de Ciudad de México. Ver
+  // docs/diseno-operacion.md ("Reglas de pedido") y backend/src/portal/portal-calendario.ts.
+  // Hora de entrega "HH:mm" (la misma para todas las entregas del negocio).
+  portalHoraEntrega            String             @default("08:00")
+  // Horas de anticipación para CREAR o AGREGAR un día (la entrega debe quedar a >= N horas de ahora).
+  portalHorasAgregarDia        Int                @default(36)
+  // Horas de anticipación para MODIFICAR o QUITAR una entrega ya existente.
+  portalHorasModificar         Int                @default(18)
+  // Semanas que el portal deja pedir DESPUÉS de la semana en curso (0 = solo la semana en curso, 1 = en curso + siguiente).
+  portalHorizonteSemanas       Int                @default(1)
+  // Teléfono de atención del negocio (10 dígitos). Vacío = el portal no muestra «Contactar al negocio».
+  numeroAtencion               String?
   // Umbral del candado de frecuencia (ReglaCandadoService, Etapa 1): días
   // mínimos entre dos envíos MARKETING al mismo Cliente. Null = usa el
   // default en código (7 días, ver ReglaCandadoService) — nunca se
@@ -115,11 +134,11 @@ model Tenant {
   // FacturacionModo and PublicService.createOrder.
   facturacionModo              FacturacionModo    @default(DESACTIVADO)
   // Stripe Connect connected account for this tenant (platform = Aelika).
-  // Null until POST /internal/tenants/:slug/stripe-account is called — see
-  // InternalService. chargesEnabled/payoutsEnabled mirror the connected
-  // account's own fields of the same name, refreshed from Stripe (never
-  // trusted as stale) by GET /internal/tenants/:slug/stripe-status and by
-  // the account.updated webhook event.
+  // Null until POST /tenant/me/stripe-account is called — see
+  // TenantService.createOrContinueStripeAccount. chargesEnabled/payoutsEnabled
+  // mirror the connected account's capabilities, refreshed from Stripe (never
+  // trusted as stale) by GET /tenant/me/stripe-status and by the v2
+  // capability_status_updated webhook events.
   stripeAccountId              String?            @unique
   stripeChargesEnabled         Boolean            @default(false)
   stripePayoutsEnabled         Boolean            @default(false)
@@ -167,6 +186,8 @@ model Tenant {
   notificacionCanalConfigs  NotificacionCanalConfig[]
   notificacionEventoConfigs NotificacionEventoConfig[]
   clientes                  Cliente[]
+  sesionesPortal            SesionPortal[]
+  clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
   loyaltyCards              LoyaltyCard[]
@@ -220,6 +241,9 @@ model Product {
   precio      Decimal  @db.Decimal(10, 2)
   fotoUrl     String?
   disponible  Boolean  @default(true)
+  // ID del producto en el ERP del negocio (opcional, para integraciones). Vacío se normaliza a NULL;
+  // los NULL repetidos no chocan en el unique.
+  erpId       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -229,6 +253,7 @@ model Product {
   modifierGroups ProductModifierGroup[]
   pedidoB2bItems PedidoB2bItem[]
 
+  @@unique([tenantId, erpId])
   @@index([tenantId])
   @@index([categoryId])
   @@map("products")
@@ -264,6 +289,10 @@ enum EstadoPedido {
   CONFIRMADO_SURTIENDO
   LISTO_ENTREGA
   DESPACHADO
+  // Solo B2B (calculados a partir de las entregas, nunca B2C): EN_PROCESO = al menos una entrega cerrada y quedan
+  // pendientes; COMPLETADO = todas las entregas no canceladas cerradas. B2B "Cancelado" NO es un valor: es Order.cancelado.
+  EN_PROCESO
+  COMPLETADO
 }
 
 enum CanalOrigen {
@@ -533,6 +562,10 @@ model Order {
   // (ver aRespuestaOrder). La escribe el módulo B2B.
   cancelado             Boolean          @default(false)
   canceladoAt           DateTime?
+  // Fase 4 · 4f: marca «Modificado por el cliente» (solo B2B). Se enciende con la hora cuando el cliente modifica el
+  // pedido desde el portal (cantidades, entregas o nota) y se apaga al volver a confirmar o con «Marcar como revisado»
+  // en el panel. null = sin marca. Nunca la escribe el panel al editar.
+  modificadoPorClienteAt DateTime?
   // Etapa 1: tipo de orden. NOT NULL con DEFAULT 'B2C' en la BD (y aquí) hasta la
   // Etapa 1b, para que el contenedor anterior —que no lo escribe— siga creando
   // órdenes durante un despliegue/reversa. El código nuevo lo escribe explícito.
@@ -640,6 +673,11 @@ model DetalleB2B {
   codigoDescuentoId           String?
   codigoDescuentoTexto        String?
   descuentoPorcentajeAplicado Decimal?           @db.Decimal(5, 2)
+  // Fecha y hora en que el admin marcó el pedido como Pagado (sin usuario); null mientras está Pendiente. Desmarcar lo limpia.
+  // Pedidos pagados antes de este campo (migrados) quedan en null: se sabe que están pagados, no cuándo.
+  pagadoAt                    DateTime?
+  // Nota libre del cliente (opcional). Se ve en el panel lateral del pedido y sale en el Excel.
+  notaCliente                 String?
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -654,6 +692,8 @@ enum EstadoEntrega {
   PENDIENTE
   LISTA
   ENTREGADA
+  // Cerrada sin que el cliente la recogiera: queda registrada y se cobra igual que ENTREGADA.
+  NO_RECOGIDA
   CANCELADA
 }
 
@@ -1084,7 +1124,10 @@ model Cliente {
   // antes de guardar: solo dígitos, últimos 10 — así "+52 55 1111 2222",
   // "55-1111-2222" y "5511112222" resuelven al mismo Cliente. Nunca se
   // guarda el formato crudo capturado en el pedido.
-  telefono       String
+  // NULL solo en clientes B2B: su(s) teléfono(s) viven en ClienteTelefono (un mismo número
+  // puede estar en varios clientes B2B). En B2C siempre viene y el unique de abajo sigue
+  // igual — Postgres no considera iguales dos NULL, así que no choca con los B2B.
+  telefono       String?
   // Nombre y correo más recientemente capturados — se sobreescriben en cada
   // pedido nuevo del mismo cliente (ver ClientesService). correo es opcional
   // porque Order.clienteCorreo lo es; un pedido sin correo nunca borra un
@@ -1098,15 +1141,57 @@ model Cliente {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // --- Solo clientes B2B (NULL en B2C). Los da de alta un admin; ver docs/diseno-operacion.md ---
+  // {Tenant.slug}-{slug del cliente}. Único por negocio; no se edita después de crearlo.
+  codigo              String?
+  direccion           String?
+  // % sobre el total del pedido; NULL o 0 = sin descuento. Se snapshotea en el pedido al crearlo.
+  descuentoPorcentaje Decimal?            @db.Decimal(5, 2)
+  // NULL = usa la modalidad de cobro del negocio.
+  modalidadPago       PedidoB2bModoCobro?
+  // Baja lógica: no puede pedir ni entrar; sus pedidos activos siguen y el historial se conserva.
+  bajaAt              DateTime?
+  // Pedido favorito del cliente en el portal (Fase 4, 4d): UNO por cliente. Plantilla por día de la semana, sin precios:
+  // { guardadoAt, lineas: [{ productId, nombre, dias: { LUNES: 3, ... } }] }. Lo comparten todos los teléfonos autorizados.
+  favoritoB2b         Json?
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  telefonos      ClienteTelefono[]
+  sesionesPortal SesionPortal[]
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
   loyaltyCard    LoyaltyCard?
 
   @@unique([tenantId, canal, telefono])
+  @@unique([tenantId, codigo])
   @@index([tenantId])
+  @@index([tenantId, canal, bajaAt])
   @@map("clientes")
+}
+
+// Teléfonos autorizados de un cliente B2B. Un mismo número puede estar en varios clientes
+// (del mismo negocio o de negocios distintos): la unicidad es por cliente, no global.
+// Invariantes (en el servicio, bajo FOR UPDATE del Cliente): al menos 1 teléfono y exactamente
+// 1 principal. "Un solo principal por cliente" también lo garantiza un índice único parcial
+// (UNIQUE ("clienteId") WHERE principal) creado a mano en la migración — Prisma no lo modela.
+model ClienteTelefono {
+  id             String   @id @default(uuid())
+  tenantId       String
+  clienteId      String
+  // Normalizado con normalizarTelefono (solo dígitos, últimos 10).
+  telefono       String
+  principal      Boolean  @default(false)
+  // Quién es la persona de ese número (opcional).
+  nombreContacto String?
+  createdAt      DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([clienteId, telefono])
+  @@index([tenantId, telefono])
+  @@map("cliente_telefonos")
 }
 
 // ---------------------------------------------------------------------------
@@ -1419,4 +1504,31 @@ model ReglaEnvioLog {
   // evaluación de regla Marketing — ver ReglaCandadoService.
   @@index([tenantId, clienteId, categoria, createdAt])
   @@map("regla_envio_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Portal del cliente B2B (Fase 4, entrega 4b). Sesión del cliente en su dispositivo: token opaco en una cookie
+// __Host-portal_<slug> (aquí solo vive su hash), 90 días renovables en cada uso. La sesión es del TELÉFONO, no de un
+// cliente: `clienteId` es el cliente activo (null mientras el teléfono, autorizado en varios clientes, no elige).
+// Se revalida contra ClienteTelefono/Cliente en cada petición (ver backend/src/portal/). No es tabla de tenant
+// (los endpoints del portal son públicos y usan PrismaService directo).
+// ---------------------------------------------------------------------------
+model SesionPortal {
+  id            String   @id @default(uuid())
+  tenantId      String
+  // Normalizado con normalizarTelefono (10 dígitos).
+  telefono      String
+  clienteId     String?
+  tokenHash     String   @unique
+  dispositivoId String?
+  userAgent     String?
+  creadaAt      DateTime @default(now())
+  ultimoUsoAt   DateTime @default(now())
+  venceAt       DateTime
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, telefono])
+  @@map("sesiones_portal")
 }

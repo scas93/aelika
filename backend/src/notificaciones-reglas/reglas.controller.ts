@@ -1,16 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ReglasService } from './reglas.service';
 import { CreateReglaDto } from './dto/create-regla.dto';
 import { UpdateReglaDto } from './dto/update-regla.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Role } from '../../generated/prisma/enums';
+import { ReglasAccesoGuard } from './reglas-acceso.guard';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 
-// Restringido a DUENO en su totalidad (decisión de producto ya tomada,
-// mismo criterio que TenantController/UsersController) — a diferencia de
-// Catálogo/Promociones, ni siquiera el GET está abierto a otros roles.
-@Roles(Role.DUENO)
+// Dueño siempre; Gerente solo en tenants RETAIL_B2B (ReglasAccesoGuard); Operador nunca — ni siquiera el GET. En
+// RETAIL_B2C sigue siendo solo Dueño.
+@UseGuards(ReglasAccesoGuard)
 @Controller('reglas')
 export class ReglasController {
   constructor(private readonly reglasService: ReglasService) {}

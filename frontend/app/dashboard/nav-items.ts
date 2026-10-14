@@ -98,7 +98,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes/pagos", label: "Cobros con tarjeta", icon: IconCreditCard },
   { href: "/dashboard/ajustes/conexion-whatsapp", label: "Conexión WhatsApp", icon: IconRobot },
   { href: "/dashboard/ajustes/envios", label: "Puntos de envío", icon: IconTruckDelivery },
-  { href: "/dashboard/ajustes/pedidos-b2b", label: "Ventana de recepción de pedidos", icon: IconClock },
+  { href: "/dashboard/ajustes/pedidos-b2b", label: "Pedidos de mayoreo", icon: IconClock },
   { href: "/dashboard/ajustes/codigos-descuento", label: "Códigos de descuento", icon: IconTag },
   { href: "/dashboard/ajustes/notificaciones", label: "Canales de notificación", icon: IconBell },
 
@@ -152,14 +152,26 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
   "/dashboard/notificaciones/seguimiento/nueva",
 ]);
 
-export function getNavItems(rol: Role, tipoStorefront: TipoStorefront): NavItem[] {
+// Notificaciones (reglas): Dueño siempre; Gerente solo en tenants RETAIL_B2B (el backend aplica la misma regla); Operador nunca.
+export function puedeVerNotificaciones(rol: Role, tipoStorefront: TipoStorefront): boolean {
+  return rol === "DUENO" || (rol === "GERENTE" && tipoStorefront === "RETAIL_B2B");
+}
+
+// Módulos opcionales que un negocio puede tener apagados (Tenant.modulosDesactivados, se configura por seed/API).
+export type ModuloOpcional = "LEALTAD" | "CODIGOS_DESCUENTO";
+export function moduloActivo(modulosDesactivados: string[] | undefined, modulo: ModuloOpcional): boolean {
+  return !(modulosDesactivados ?? []).includes(modulo);
+}
+
+export function getNavItems(rol: Role, tipoStorefront: TipoStorefront, modulosDesactivados: string[] = []): NavItem[] {
   return ALL_NAV_ITEMS.filter((item) => {
     if (HREFS_OCULTOS_DEL_SIDEBAR.has(item.href)) return false;
-    if (item.href === "/dashboard") return rol === "GERENTE" || rol === "DUENO";
+    if (item.href === "/dashboard") return tipoStorefront === "RETAIL_B2B" || rol !== "OPERADOR";
+    if (item.href === "/dashboard/lealtad") return moduloActivo(modulosDesactivados, "LEALTAD");
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";
-    if (item.href === "/dashboard/notificaciones") return rol === "DUENO";
+    if (item.href === "/dashboard/notificaciones") return puedeVerNotificaciones(rol, tipoStorefront);
     if (tipoStorefront === "RETAIL_B2B" && HREFS_NO_APLICAN_A_RETAIL_B2B.has(item.href)) return false;
     if (tipoStorefront !== "RETAIL_B2B" && HREFS_SOLO_RETAIL_B2B.has(item.href)) return false;
     return true;

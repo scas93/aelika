@@ -1,9 +1,19 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 const PRISMA_NOT_FOUND = 'P2025';
+
+/** Código de un error conocido de Prisma (P2002, P2025...), o undefined si no lo es. */
+function codigoPrisma(error: unknown): string | undefined {
+  return (error as { code?: string } | null)?.code;
+}
 
 @Injectable()
 export class ProductsService {
@@ -42,18 +52,24 @@ export class ProductsService {
   async create(dto: CreateProductDto) {
     await this.assertCategoryBelongsToTenant(dto.categoryId);
 
-    return this.tenantPrisma.client.product.create({
-      // tenantId is required by the generated types but injected at runtime
-      // by the tenant-scoped query extension (see TenantPrismaService).
-      data: {
-        nombre: dto.nombre,
-        descripcion: dto.descripcion,
-        precio: dto.precio,
-        categoryId: dto.categoryId,
-        fotoUrl: dto.fotoUrl,
-        disponible: dto.disponible ?? true,
-      } as any,
-    });
+    try {
+      return await this.tenantPrisma.client.product.create({
+        // tenantId is required by the generated types but injected at runtime
+        // by the tenant-scoped query extension (see TenantPrismaService).
+        data: {
+          nombre: dto.nombre,
+          descripcion: dto.descripcion,
+          precio: dto.precio,
+          categoryId: dto.categoryId,
+          fotoUrl: dto.fotoUrl,
+          disponible: dto.disponible ?? true,
+          erpId: dto.erpId ?? null,
+        } as unknown as Prisma.ProductUncheckedCreateInput,
+      });
+    } catch (error: unknown) {
+      this.rethrowErpIdDuplicado(error);
+      throw error;
+    }
   }
 
   async update(id: string, dto: UpdateProductDto) {
@@ -66,11 +82,19 @@ export class ProductsService {
         where: { id },
         data: dto,
       });
-    } catch (error: any) {
-      if (error?.code === PRISMA_NOT_FOUND) {
+    } catch (error: unknown) {
+      if (codigoPrisma(error) === PRISMA_NOT_FOUND) {
         throw new NotFoundException('Producto no encontrado');
       }
+      this.rethrowErpIdDuplicado(error);
       throw error;
+    }
+  }
+
+  /** @@unique([tenantId, erpId]): dos productos del mismo negocio no pueden compartir ID del ERP. */
+  private rethrowErpIdDuplicado(error: unknown) {
+    if (codigoPrisma(error) === 'P2002') {
+      throw new ConflictException('Ya existe otro producto con ese ID del ERP');
     }
   }
 
@@ -79,8 +103,8 @@ export class ProductsService {
 
     try {
       await this.tenantPrisma.client.product.delete({ where: { id } });
-    } catch (error: any) {
-      if (error?.code === PRISMA_NOT_FOUND) {
+    } catch (error: unknown) {
+      if (codigoPrisma(error) === PRISMA_NOT_FOUND) {
         throw new NotFoundException('Producto no encontrado');
       }
       throw error;
@@ -94,19 +118,22 @@ export class ProductsService {
    * a real FK with onDelete: Restrict). Check for it explicitly.
    */
   private async assertNotInActivePromotion(productId: string) {
-    const referencingPromotion = await this.tenantPrisma.client.promotion.findFirst({
-      where: {
-        activa: true,
-        OR: [
-          { config: { path: ['productId'], equals: productId } },
-          { config: { path: ['productIds'], array_contains: productId } },
-        ],
-      },
-      select: { id: true },
-    });
+    const referencingPromotion =
+      await this.tenantPrisma.client.promotion.findFirst({
+        where: {
+          activa: true,
+          OR: [
+            { config: { path: ['productId'], equals: productId } },
+            { config: { path: ['productIds'], array_contains: productId } },
+          ],
+        },
+        select: { id: true },
+      });
 
     if (referencingPromotion) {
-      throw new ConflictException('No puedes eliminar un producto que está en una promoción activa');
+      throw new ConflictException(
+        'No puedes eliminar un producto que está en una promoción activa',
+      );
     }
   }
 

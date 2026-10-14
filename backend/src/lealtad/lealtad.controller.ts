@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ModuloActivoGuard, RequiereModulo } from '../common/modulos';
 import { LealtadService } from './lealtad.service';
 import { AltaClienteLealtadDto } from './dto/alta-cliente-lealtad.dto';
 import { TokenTarjetaDto } from './dto/token-tarjeta.dto';
@@ -12,6 +13,8 @@ import type { JwtPayload } from '../common/types/jwt-payload.type';
 // es quien está parado escaneando, no solo Gerente/Dueño. La protección de
 // los 3 endpoints es la misma que la del resto del panel: JWT + RolesGuard
 // (globales vía APP_GUARD) y aislamiento por tenant vía TenantPrismaService.
+@UseGuards(ModuloActivoGuard)
+@RequiereModulo('LEALTAD')
 @Controller('lealtad')
 @Roles(Role.OPERADOR, Role.GERENTE, Role.DUENO)
 export class LealtadController {

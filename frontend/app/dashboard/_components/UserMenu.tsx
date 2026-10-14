@@ -33,10 +33,12 @@ export default function UserMenu() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  // Cierra en cada cambio de ruta.
-  useEffect(() => {
+  // Cierra en cada cambio de ruta (ajuste de estado durante el render, en vez de un efecto con setState).
+  const [rutaPrevia, setRutaPrevia] = useState(pathname);
+  if (rutaPrevia !== pathname) {
+    setRutaPrevia(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   return (
     <div ref={containerRef} className="relative w-full">

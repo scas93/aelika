@@ -79,6 +79,8 @@ export async function proxy(request: NextRequest) {
   return NextResponse.rewrite(url);
 }
 
+// /api-portal/* (rewrite de next.config.ts hacia la API del portal) pasa sin reescribirse y sin consultar el tipo de
+// storefront: no es una ruta de negocio.
 export const config = {
-  matcher: ["/((?!_next|favicon.ico).*)"],
+  matcher: ["/((?!_next|api-portal(?:/|$)|favicon.ico).*)"],
 };

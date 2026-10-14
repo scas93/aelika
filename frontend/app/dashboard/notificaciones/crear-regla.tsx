@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session-context";
 import { createRegla, type ReglaMensajeCategoria } from "@/lib/api";
 import ReglaForm from "./regla-form";
+import { puedeVerNotificaciones } from "../nav-items";
 
 interface CrearReglaProps {
   categoria: ReglaMensajeCategoria;
@@ -16,8 +17,8 @@ export default function CrearRegla({ categoria, basePath }: CrearReglaProps) {
   const { user, token } = useSession();
   const router = useRouter();
 
-  if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar las reglas de notificación.</p>;
+  if (!puedeVerNotificaciones(user.rol, user.tenant.tipoStorefront)) {
+    return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
   }
 
   return (

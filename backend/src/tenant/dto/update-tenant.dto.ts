@@ -5,6 +5,9 @@ import {
   IsInt,
   IsOptional,
   IsPositive,
+  Matches,
+  Max,
+  Min,
   IsString,
   IsUrl,
   MaxLength,
@@ -54,7 +57,7 @@ export class UpdateTenantDto {
 
   @IsOptional()
   @IsInt()
-  @IsPositive()
+  @Min(0) // 0 = sin mínimo
   pedidoB2bMinimoPiezas?: number;
 
   // Todo-o-nada: si se manda, deben venir los 4 campos (validados dentro de
@@ -87,4 +90,35 @@ export class UpdateTenantDto {
   @IsInt()
   @IsPositive()
   candadoMarketingDias?: number;
+
+  // Calendario del portal del cliente B2B (Fase 4, 4c). Hora en Ciudad de México.
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'portalHoraEntrega debe ser una hora HH:mm válida',
+  })
+  portalHoraEntrega?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(168)
+  portalHorasAgregarDia?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(168)
+  portalHorasModificar?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(4)
+  portalHorizonteSemanas?: number;
+
+  // Opcional: null o "" lo quita. Se normaliza a 10 dígitos (acepta espacios, guiones y lada +52).
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  numeroAtencion?: string | null;
 }

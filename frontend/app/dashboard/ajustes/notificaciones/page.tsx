@@ -27,7 +27,7 @@ export default function NotificacionesAjustesPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de notificaciones");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [token]);
 
   useEffect(() => {

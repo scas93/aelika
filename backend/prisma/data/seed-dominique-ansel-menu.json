@@ -67,6 +67,41 @@
       "fechaLimite": null
     }
   ],
+  "clientesB2b": [
+    {
+      "sufijo": "polanco",
+      "nombre": "Dominique Ansel Polanco",
+      "direccion": "Av. Presidente Masaryk 360, Col. Polanco, CDMX",
+      "descuentoPorcentaje": 20,
+      "modalidadPago": null,
+      "telefonos": [
+        {
+          "telefono": "5555020001",
+          "principal": true,
+          "nombreContacto": "Andrea Soto"
+        },
+        {
+          "telefono": "5555020002",
+          "principal": false,
+          "nombreContacto": null
+        }
+      ]
+    },
+    {
+      "sufijo": "roma",
+      "nombre": "Dominique Ansel Roma",
+      "direccion": "Calle Álvaro Obregón 120, Col. Roma Norte, CDMX",
+      "descuentoPorcentaje": null,
+      "modalidadPago": null,
+      "telefonos": [
+        {
+          "telefono": "5555020001",
+          "principal": true,
+          "nombreContacto": "Andrea Soto"
+        }
+      ]
+    }
+  ],
   "categorias": [
     {
       "orden": 1,

@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, ValidateNested } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsISO8601,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { PedidoB2bItemInputDto } from './pedido-b2b-item-input.dto';
 
 // Full replace, same convention as PromotionsService.update's `config`: the
@@ -12,4 +18,11 @@ export class UpdatePedidoB2bItemsDto {
   @ValidateNested({ each: true })
   @Type(() => PedidoB2bItemInputDto)
   items: PedidoB2bItemInputDto[];
+
+  // Control de concurrencia opcional y aditivo (Fase 4 · 4f): el `updatedAt` del pedido tal como lo cargó el panel. Si el
+  // pedido cambió desde entonces (p. ej. el cliente lo modificó en el portal) → 409. Sin `version` el comportamiento
+  // es el de siempre.
+  @IsOptional()
+  @IsISO8601()
+  version?: string;
 }

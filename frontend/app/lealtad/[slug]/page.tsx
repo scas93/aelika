@@ -115,6 +115,7 @@ export default function LealtadPublicoPage() {
   return (
     <div className={`${WRAPPER} justify-center gap-6`}>
       <div className="flex flex-col items-center gap-2 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element -- <img> plano a propósito: cada negocio trae URLs externas y next.config no define remotePatterns */}
         {tenant.logoUrl && <img src={tenant.logoUrl} alt={tenant.nombre} className="h-16 w-16 rounded-full object-cover" />}
         <h1 className="text-lg font-semibold">{tenant.nombre}</h1>
         <p className="text-black/60">Regístrate para empezar a juntar sellos en tu tarjeta de lealtad.</p>

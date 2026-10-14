@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session-context";
 import { ApiError, fetchRegla, updateRegla, type Regla, type ReglaMensajeCategoria } from "@/lib/api";
 import ReglaForm from "./regla-form";
+import { puedeVerNotificaciones } from "../nav-items";
 
 interface EditarReglaProps {
   id: string;
@@ -32,8 +33,8 @@ export default function EditarRegla({ id, categoria, basePath }: EditarReglaProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar las reglas de notificación.</p>;
+  if (!puedeVerNotificaciones(user.rol, user.tenant.tipoStorefront)) {
+    return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
   }
 
   if (error) {

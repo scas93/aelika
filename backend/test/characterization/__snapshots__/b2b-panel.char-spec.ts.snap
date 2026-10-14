@@ -2,6 +2,6 @@
 
 exports[`B2B · panel GET /pedidos-b2b/dia/:fecha (entregas del día) CSV del día: cabeceras, CRLF/BOM y filas (una por producto) 1`] = `
 "﻿Folio,Negocio,Contacto,Teléfono,Producto,Cantidad
-2,Bodega Dos,Dos,5511000002,Café americano,6
-3,Cafetería Tres,Tres,5511000003,Concha,10"
+P-000002,Bodega Dos,Dos,5511000002,Café americano,6
+P-000003,Cafetería Tres,Tres,5511000003,Concha,10"
 `;

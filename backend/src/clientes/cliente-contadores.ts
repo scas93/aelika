@@ -1,7 +1,15 @@
-import { ClienteCanal, EstadoPago, Prisma, TipoOrden } from '../../generated/prisma/client';
+import {
+  ClienteCanal,
+  EstadoPago,
+  Prisma,
+  TipoOrden,
+} from '../../generated/prisma/client';
 
 /** Lo mínimo que necesita el recálculo: sirve el cliente Prisma raíz, una transacción o el de tenant (con cast). */
-export type ClienteContadoresDb = Pick<Prisma.TransactionClient, 'cliente' | 'order'>;
+export type ClienteContadoresDb = Pick<
+  Prisma.TransactionClient,
+  'cliente' | 'order'
+>;
 
 /**
  * Única fuente de verdad de `Cliente.totalPedidos` / `primerPedidoAt` / `ultimoPedidoAt`
@@ -38,8 +46,14 @@ export interface ContadoresCliente {
  * (`scripts/corregir-contadores.ts`) usa este mismo cálculo para el dry-run y la verificación.
  * Devuelve `null` si el cliente no existe.
  */
-export async function calcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<ContadoresCliente | null> {
-  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { canal: true, createdAt: true } });
+export async function calcularContadoresCliente(
+  db: ClienteContadoresDb,
+  clienteId: string,
+): Promise<ContadoresCliente | null> {
+  const cliente = await db.cliente.findUnique({
+    where: { id: clienteId },
+    select: { canal: true, createdAt: true },
+  });
   if (!cliente) return null;
 
   const agregado =
@@ -51,7 +65,11 @@ export async function calcularContadoresCliente(db: ClienteContadoresDb, cliente
           _max: { createdAt: true },
         })
       : await db.order.aggregate({
-          where: { clienteId, tipo: TipoOrden.B2C, estadoPago: EstadoPago.PAGADO },
+          where: {
+            clienteId,
+            tipo: TipoOrden.B2C,
+            estadoPago: EstadoPago.PAGADO,
+          },
           _count: true,
           _min: { createdAt: true },
           _max: { createdAt: true },
@@ -65,7 +83,10 @@ export async function calcularContadoresCliente(db: ClienteContadoresDb, cliente
   };
 }
 
-export async function recalcularContadoresCliente(db: ClienteContadoresDb, clienteId: string): Promise<void> {
+export async function recalcularContadoresCliente(
+  db: ClienteContadoresDb,
+  clienteId: string,
+): Promise<void> {
   const contadores = await calcularContadoresCliente(db, clienteId);
   if (!contadores) return;
   await db.cliente.update({ where: { id: clienteId }, data: contadores });

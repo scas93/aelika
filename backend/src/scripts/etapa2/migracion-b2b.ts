@@ -272,7 +272,7 @@ export async function agregados(tx: Tx, setSql: string) {
             (SELECT count(*)::int FROM order_items oi WHERE oi."orderId" IN (SELECT id FROM s) AND oi."tenantId"=te.id) AS lineas_item,
             (SELECT coalesce(sum(ei.cantidad),0)::int FROM entrega_items ei JOIN entregas e ON e.id=ei."entregaId"
               WHERE e."orderId" IN (SELECT id FROM s) AND ei."tenantId"=te.id) AS piezas_en_dias,
-            string_agg(o.folio, ',' ORDER BY o.folio::int) AS folios
+            string_agg(o.folio, ',' ORDER BY CASE WHEN o.folio ~ '^[0-9]+$' THEN o.folio::int END) AS folios
        FROM orders o JOIN detalles_b2b d ON d."orderId"=o.id JOIN tenants te ON te.id=o."tenantId"
       WHERE o.tipo='B2B' AND o.id IN (SELECT id FROM s) GROUP BY te.id, te.slug ORDER BY te.slug`,
   );

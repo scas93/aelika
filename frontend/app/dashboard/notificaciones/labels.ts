@@ -15,11 +15,14 @@ import { ESTADO_LABEL as ESTADO_LABEL_PEDIDO_B2B } from "../pedidos-b2b/estado";
 // LISTO_ENTREGA), 4 para ORDER — ver ReglaTriggerOrigenPedido en schema.prisma.
 export const ESTATUS_POR_ORIGEN: Record<ReglaTriggerOrigenPedido, { value: string; label: string }[]> = {
   ORDER: ESTADOS_ORDER.map((value) => ({ value, label: ESTADO_LABEL_ORDER[value] })),
-  PEDIDO_B2B: (Object.keys(ESTADO_LABEL_PEDIDO_B2B) as (keyof typeof ESTADO_LABEL_PEDIDO_B2B)[]).map((value) => ({
-    value,
-    label: ESTADO_LABEL_PEDIDO_B2B[value],
-  })),
+  // DESPACHADO ya no existe para pedidos B2B (despachar se reemplazó por cerrar entregas): no se ofrece en reglas nuevas.
+  PEDIDO_B2B: (Object.keys(ESTADO_LABEL_PEDIDO_B2B) as (keyof typeof ESTADO_LABEL_PEDIDO_B2B)[])
+    .filter((value) => value !== "DESPACHADO")
+    .map((value) => ({ value, label: ESTADO_LABEL_PEDIDO_B2B[value] })),
 };
+
+// Las reglas ya existentes sobre Despachado de un pedido B2B no se borran: se siguen mostrando (y guardando) con esta etiqueta.
+export const ESTATUS_B2B_DESPACHADO_OBSOLETO = { value: "DESPACHADO", label: "Despachado (ya no se usa)" };
 
 export const TRIGGER_LABEL: Record<ReglaTriggerTipo, string> = {
   EVENTO_PEDIDO: "Evento de pedido",

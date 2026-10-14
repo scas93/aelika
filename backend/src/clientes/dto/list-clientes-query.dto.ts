@@ -1,6 +1,8 @@
 import { Transform, Type } from 'class-transformer';
+import { ClienteCanal } from '../../../generated/prisma/enums';
 import {
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsOptional,
@@ -46,7 +48,14 @@ export class ListClientesQueryDto {
   // Solo clientes con totalPedidos > 0 (Top clientes del Dashboard). Opcional:
   // sin él, el directorio conserva a los clientes con 0 pedidos.
   @IsOptional()
-  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
   @IsBoolean()
   conPedidos?: boolean;
+
+  // Opcional: solo clientes de ese canal. Sin él, el contrato es el de siempre (todos los canales).
+  @IsOptional()
+  @IsEnum(ClienteCanal)
+  canal?: ClienteCanal;
 }

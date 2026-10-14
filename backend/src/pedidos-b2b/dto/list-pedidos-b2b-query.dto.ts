@@ -1,8 +1,9 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PedidoB2bEstado } from '../../../generated/prisma/enums';
+import { ESTADOS_B2B_FILTRO, ESTADOS_PAGO_B2B_FILTRO, type EstadoB2bFiltro, type EstadoPagoB2bFiltro } from '../pedidos-b2b-estados';
 import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
 
 // desde/hasta filtran sobre semanaInicio — la dimensión de negocio natural
@@ -21,8 +22,8 @@ import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto
 // GET /pedidos-b2b con el mismo DTO.
 export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   @IsOptional()
-  @IsEnum(PedidoB2bEstado)
-  estado?: PedidoB2bEstado;
+  @IsIn(ESTADOS_B2B_FILTRO)
+  estado?: EstadoB2bFiltro;
 
   // Coincidencia parcial, case-insensitive — ver
   // PedidosB2bService.buildWhere (Prisma `contains` + `mode: 'insensitive'`).
@@ -44,6 +45,31 @@ export class ListPedidosB2bQueryDto extends FiltroImporteQueryDto {
   )
   @IsBoolean()
   cancelado?: boolean;
+
+  // Variante multi-valor de `estado` ("estados=A,B"), como en el export: Pedidos activos pide los 3 estados activos de una vez.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsIn(ESTADOS_B2B_FILTRO, { each: true })
+  estados?: EstadoB2bFiltro[];
+
+  // Históricos: solo pedidos Completados y Cancelados. Parámetro aparte (en vez de cambiar el listado sin filtros) para no
+  // alterar el contrato de los demás consumidores de GET /pedidos-b2b (Pedidos activos pide por semana y por estado).
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  soloHistorico?: boolean;
+
+  // Solo pedidos de semanas ANTERIORES a esta fecha (semanaInicio < semanaAntesDe, "YYYY-MM-DD"): los pedidos activos que
+  // quedaron de semanas pasadas. Se combina con el resto de filtros.
+  @IsOptional()
+  @IsDateString()
+  semanaAntesDe?: string;
+
+  // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
+  @IsOptional()
+  @IsIn(ESTADOS_PAGO_B2B_FILTRO)
+  estadoPago?: EstadoPagoB2bFiltro;
 
   @IsOptional()
   @IsDateString()

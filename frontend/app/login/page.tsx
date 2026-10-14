@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ApiError, login } from "@/lib/api";
+import { ApiError, fetchCurrentUser, login } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 import Button from "@/app/dashboard/_components/Button";
 
@@ -21,10 +21,10 @@ export default function LoginPage() {
     try {
       const session = await login({ email, password });
       saveSession(session);
-      // Operador no tiene acceso a /dashboard (Inicio, ver DashboardPage) —
-      // aterriza directo en Pedidos, la pantalla que sí puede usar. Gerente
-      // y Dueño mantienen el destino de siempre.
-      router.push(session.user.rol === "OPERADOR" ? "/dashboard/pedidos" : "/dashboard");
+      // B2B: todos los roles aterrizan en Inicio. B2C: Operador en Pedidos (no ve Inicio), Gerente y Dueño en Inicio.
+      const me = await fetchCurrentUser(session.accessToken);
+      const esB2b = me.tenant.tipoStorefront === "RETAIL_B2B";
+      router.push(!esB2b && session.user.rol === "OPERADOR" ? "/dashboard/pedidos" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión");
     } finally {

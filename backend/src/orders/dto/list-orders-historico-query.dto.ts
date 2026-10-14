@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { ESTADOS_B2C } from '../estados-b2c';
 import { EstadoPedido, MetodoPago } from '../../../generated/prisma/enums';
 import { GRUPOS_ESTADO_PAGO, type GrupoEstadoPago } from '../../common/estado-pago';
 import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto';
@@ -9,7 +10,7 @@ import { FiltroImporteQueryDto } from '../../common/dto/filtro-importe-query.dto
 // valorHasta (heredados de FiltroImporteQueryDto) filtran sobre Order.total.
 export class ListOrdersHistoricoQueryDto extends FiltroImporteQueryDto {
   @IsOptional()
-  @IsEnum(EstadoPedido)
+  @IsIn(ESTADOS_B2C)
   estadoPedido?: EstadoPedido;
 
   @IsOptional()

@@ -31,6 +31,7 @@ import {
   grupoDeEstadoPago,
   type GrupoEstadoPago,
 } from '../common/estado-pago';
+import { ESTADOS_B2C } from './estados-b2c';
 import { FiltroImporteOperador, filtroImporteWhere } from '../common/filtro-importe';
 
 // Sequential, one-way status flow (see CLAUDE.md) — no arbitrary jumps, no
@@ -40,6 +41,9 @@ const SIGUIENTE_ESTADO: Record<EstadoPedido, EstadoPedido | null> = {
   [EstadoPedido.CONFIRMADO_SURTIENDO]: EstadoPedido.LISTO_ENTREGA,
   [EstadoPedido.LISTO_ENTREGA]: EstadoPedido.DESPACHADO,
   [EstadoPedido.DESPACHADO]: null,
+  // Estados solo de B2B: un pedido B2C nunca llega aquí.
+  [EstadoPedido.EN_PROCESO]: null,
+  [EstadoPedido.COMPLETADO]: null,
 };
 
 // Evento de notificación (audiencia CLIENTE) disparado por cada transición
@@ -185,7 +189,7 @@ export class OrdersService {
     });
     const conteoPorEstado = new Map(grupos.map((g) => [g.estadoPedido, g._count]));
 
-    return Object.values(EstadoPedido).map((estadoPedido) => ({
+    return ESTADOS_B2C.map((estadoPedido) => ({
       estadoPedido,
       conteo: conteoPorEstado.get(estadoPedido) ?? 0,
     }));

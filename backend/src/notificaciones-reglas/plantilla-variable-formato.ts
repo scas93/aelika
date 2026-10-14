@@ -50,6 +50,9 @@ export const ESTADO_PEDIDO_LABEL: Record<EstadoPedido, string> = {
   CONFIRMADO_SURTIENDO: 'Confirmado y surtiendo',
   LISTO_ENTREGA: 'Listo para entrega',
   DESPACHADO: 'Despachado',
+  // Solo B2B; B2C nunca los tiene. Sin esto el Record no compila.
+  EN_PROCESO: 'En proceso',
+  COMPLETADO: 'Completado',
 };
 
 export const PEDIDO_B2B_ESTADO_LABEL: Record<PedidoB2bEstado, string> = {

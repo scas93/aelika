@@ -1,29 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useSession } from "@/lib/session-context";
 import { ApiError, fetchPedidosB2bResumen, type PedidoB2bResumen } from "@/lib/api";
 import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import Card from "./_components/Card";
 import SummaryCard, { SUMMARY_GRID } from "./_components/SummaryCard";
-
-// Cada folio de este módulo enlaza a la lista de Pedidos activos — no al
-// detalle directo (fuera de alcance de este widget, ver auditoría) — con el
-// folio visible ahí mismo para ubicarlo.
-const PEDIDOS_ACTIVOS_HREF = "/dashboard/pedidos-b2b";
-
-function FolioLink({ folio }: { folio: string }) {
-  return (
-    <Link
-      href={PEDIDOS_ACTIVOS_HREF}
-      className="shrink-0 text-xs font-bold text-admin-green-dark hover:underline"
-    >
-      #{folio}
-    </Link>
-  );
-}
 
 export default function InicioB2B() {
   const { token } = useSession();
@@ -51,8 +34,9 @@ export default function InicioB2B() {
         <SeccionTitulo titulo="Semana en curso" inicio={semanaEnCurso.inicio} fin={semanaEnCurso.fin} />
 
         <div className={SUMMARY_GRID}>
-          <SummaryCard label="Pendientes de confirmación" value={semanaEnCurso.pendientesConfirmacion} error={null} />
-          <SummaryCard label="Confirmados y surtiendo" value={semanaEnCurso.confirmadosSurtiendo} error={null} />
+          <SummaryCard label="Por confirmar" value={semanaEnCurso.pendientesConfirmacion} error={null} />
+          <SummaryCard label="Confirmados" value={semanaEnCurso.confirmadosSurtiendo} error={null} />
+          <SummaryCard label="En proceso" value={semanaEnCurso.enProceso} error={null} />
           <SummaryCard label="Piezas de la semana" value={semanaEnCurso.totalPiezas} error={null} />
         </div>
 
@@ -142,7 +126,6 @@ function ListaEntregas({
               <span className="truncate text-admin-ink">{entrega.negocioNombre}</span>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="font-semibold text-admin-ink">{entrega.cantidad} pzas</span>
-                <FolioLink folio={entrega.folio} />
               </div>
             </li>
           ))}
@@ -174,7 +157,6 @@ function PendientesMasAntiguos({
                 <span className="font-semibold text-amber-800">
                   {pendiente.diasPendiente} {pendiente.diasPendiente === 1 ? "día" : "días"}
                 </span>
-                <FolioLink folio={pendiente.folio} />
               </div>
             </li>
           ))}

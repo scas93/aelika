@@ -1,6 +1,6 @@
 import { configurarB2b, seedCodigoDescuento } from './db';
 import { Suite } from './helpers';
-import { apiRol, bodyB2b, crearAdminB2b, crearPublicoB2b, ItemInput } from './b2b-helpers';
+import { apiRol, bodyB2b, cerrarEntregasB2b, crearAdminB2b, crearPublicoB2b, ItemInput } from './b2b-helpers';
 
 export interface EscenarioB2b {
   ids: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6', string>;
@@ -15,7 +15,7 @@ const B = (s: Suite) => s.base.productoB.id;
  * Mínimo de piezas 10. "Hoy" = miércoles 2026-09-30 (CDMX). Semanas (lunes) distintas en pares para
  * poder probar el orden; los empates de semana se comparan sin depender del orden.
  *
- *  p1 · 09-10 público  Abarrotes Uno   sem 09-14  A: LUN 12                  12 pzas $540    → DESPACHADO, PAGADO
+ *  p1 · 09-10 público  Abarrotes Uno   sem 09-14  A: LUN 12                  12 pzas $540    → COMPLETADO, PAGADO
  *  p2 · 09-25 público  Bodega Dos      sem 09-28  A: LUN 6 + MIE 6           12 pzas $540    → CONFIRMADO_SURTIENDO
  *  p3 · 09-26 público  Cafetería Tres  sem 09-28  B: MIE 10                  10 pzas $305    → PENDIENTE
  *  p4 · 09-28 público  Deli Cuatro     sem 10-05  A: LUN 10 + B: JUE 5       15 pzas $602.5, PROMO10 (−10%) → $542.25, PENDIENTE
@@ -42,7 +42,7 @@ export async function crearEscenarioB2b(s: Suite): Promise<EscenarioB2b> {
   const p1 = await crearPublicoB2b(h, base, { ...contacto('01', 'Abarrotes Uno'), semanaInicio: '2026-09-14', items: [item(A(s), [['LUNES', 12]])] });
   await dueno.patch(`/pedidos-b2b/${p1.id}/avanzar`).expect(200);
   await dueno.patch(`/pedidos-b2b/${p1.id}/marcar-pagado`).expect(200);
-  await dueno.patch(`/pedidos-b2b/${p1.id}/avanzar`).expect(200);
+  await cerrarEntregasB2b(dueno, p1.id); // su única entrega (LUN 12) → Entregada → el pedido queda COMPLETADO
 
   en('2026-09-25T15:00:00.000Z');
   const p2 = await crearPublicoB2b(h, base, {

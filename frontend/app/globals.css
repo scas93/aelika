@@ -82,6 +82,9 @@
   --color-mayoreo-ink-soft: #666666;
   --color-mayoreo-border: #e4e1da;
   --color-mayoreo-button: #1a1613;
+  /* Botón «Escribir por WhatsApp» del portal: verde de WhatsApp oscurecido para que el texto blanco pase contraste. */
+  --color-mayoreo-whatsapp: #0f7b6c;
+  --color-mayoreo-whatsapp-dark: #0b6357;
   --font-mayoreo: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 

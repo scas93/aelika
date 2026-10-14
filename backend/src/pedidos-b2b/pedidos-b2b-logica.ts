@@ -286,14 +286,23 @@ export function calcularSemanaDestino(now = new Date()): {
   return { inicio: inicio.toISOString().slice(0, 10), fin: fin.toISOString().slice(0, 10) };
 }
 
+/** Formato del folio B2B nuevo: "P-" + consecutivo de 6 dígitos por negocio (ej. P-000001). */
+const FOLIO_B2B_NUEVO = /^P-\d{6}$/;
+
+/**
+ * Los folios B2B anteriores son numéricos simples ("1", "2"…) y se conservan tal cual. El consecutivo nuevo arranca en
+ * P-000001 por negocio aunque existan folios viejos: solo cuenta los folios con formato nuevo, así el cálculo no falla
+ * con folios viejos ni nuevos y la unicidad (tenantId, tipo, folio) nunca choca ("12" ≠ "P-000012").
+ */
 export async function nextFolioPedidoB2b(
   tx: Prisma.TransactionClient,
   tenantId: string,
 ): Promise<string> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId} || ':pedidoB2b'))`;
   const rows = await tx.$queryRaw<{ max: number | null }[]>`
-    SELECT MAX(CAST(folio AS INTEGER)) AS max FROM orders WHERE "tenantId" = ${tenantId} AND tipo = 'B2B'
+    SELECT MAX(CAST(substring(folio FROM 3) AS INTEGER)) AS max FROM orders
+    WHERE "tenantId" = ${tenantId} AND tipo = 'B2B' AND folio ~ ${FOLIO_B2B_NUEVO.source}
   `;
   const next = (rows[0]?.max ?? 0) + 1;
-  return String(next);
+  return `P-${String(next).padStart(6, '0')}`;
 }

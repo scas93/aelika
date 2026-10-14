@@ -93,7 +93,8 @@ export interface CurrentUser {
   email: string;
   rol: Role;
   tenantId: string;
-  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string };
+  // modulosDesactivados: módulos opcionales apagados para el negocio ("LEALTAD", "CODIGOS_DESCUENTO"); vacío = todo encendido.
+  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[] };
 }
 
 export interface Category {
@@ -114,6 +115,8 @@ export interface Product {
   precio: string;
   fotoUrl: string | null;
   disponible: boolean;
+  // ID del producto en el ERP del negocio (opcional, único por negocio).
+  erpId: string | null;
 }
 
 export interface CreateCategoryPayload {
@@ -135,6 +138,7 @@ export interface CreateProductPayload {
   categoryId: string;
   fotoUrl?: string;
   disponible?: boolean;
+  erpId?: string;
 }
 
 export interface UpdateProductPayload {
@@ -144,6 +148,8 @@ export interface UpdateProductPayload {
   categoryId?: string;
   fotoUrl?: string;
   disponible?: boolean;
+  // Vacío ('') quita el ID; el servidor lo guarda como null.
+  erpId?: string;
 }
 
 export interface TeamUser {
@@ -267,6 +273,7 @@ export interface ProductDetail extends Product {
 
 export interface PublicTenantInfo {
   nombre: string;
+  tipoStorefront: TipoStorefront;
   logoUrl: string | null;
   horarioAtencion: HorarioSemana | null;
   ubicacion: string | null;
@@ -548,6 +555,15 @@ export interface TenantSettings {
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
   ventanaRecepcionB2b: VentanaRecepcionB2b | null;
+  // Mínimo de piezas por pedido de mayoreo; 0 = sin mínimo.
+  pedidoB2bMinimoPiezas: number;
+  // Calendario del portal del cliente B2B (hora de Ciudad de México).
+  portalHoraEntrega: string;
+  portalHorasAgregarDia: number;
+  portalHorasModificar: number;
+  portalHorizonteSemanas: number;
+  // 10 dígitos, o null = sin número (el portal oculta «Contactar al negocio»).
+  numeroAtencion: string | null;
 }
 
 export interface TenantStripeStatus {
@@ -568,6 +584,14 @@ export interface UpdateTenantSettingsPayload {
   // configurada"), omitido para no tocarla — mismo contrato que
   // UpdateTenantDto.ventanaRecepcionB2b en el backend.
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
+  // Entero ≥ 0 (0 = sin mínimo).
+  pedidoB2bMinimoPiezas?: number;
+  // Calendario del portal: HH:mm; horas enteras 0–168; semanas 0–4; número de 10 dígitos (null o "" lo quita).
+  portalHoraEntrega?: string;
+  portalHorasAgregarDia?: number;
+  portalHorasModificar?: number;
+  portalHorizonteSemanas?: number;
+  numeroAtencion?: string | null;
   botWebhookUrl?: string;
   botWebhookSecret?: string;
   candadoMarketingDias?: number;
@@ -1395,7 +1419,11 @@ export const DIAS_SEMANA_PEDIDO_B2B: { value: DiaSemanaPedidoB2b; label: string 
 ];
 
 export type PedidoB2bModoCobro = "AL_INICIO" | "AL_FINAL";
-export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "DESPACHADO";
+// B2B: Por confirmar / Confirmado / En proceso / Completado. "Cancelado" NO es un valor: lo da `cancelado` (igual que en B2C).
+// El servidor devuelve siempre COMPLETADO; "DESPACHADO" solo se conserva en el tipo porque el enum de reglas de
+// notificación (legado) todavía lo incluye.
+export type PedidoB2bEstado = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "EN_PROCESO" | "COMPLETADO" | "DESPACHADO";
+export type PedidoB2bEstadoEntrega = "PENDIENTE" | "LISTA" | "ENTREGADA" | "NO_RECOGIDA" | "CANCELADA";
 export type PedidoB2bEstadoPago = "PENDIENTE" | "PAGADO";
 
 // Semana calendario (lunes-domingo) a la que aplicará el pedido en curso —
@@ -1425,26 +1453,9 @@ export interface PublicPedidoB2bTenantInfo {
   // Mismo Tenant.facturacionModo que ya usa /tienda — controla si el
   // checkbox "Quiero factura" del resumen se muestra/exige.
   facturacionModo: FacturacionModo;
+  // false = módulo Códigos de descuento apagado: el storefront no muestra el campo de código.
+  codigosDescuentoActivo: boolean;
   semanaDestino: PedidoB2bSemanaDestino;
-}
-
-export interface PublicPedidoB2bProduct {
-  id: string;
-  nombre: string;
-  descripcion: string | null;
-  precio: string;
-  fotoUrl: string | null;
-  disponible: boolean;
-}
-
-export interface PublicPedidoB2bCategory {
-  id: string;
-  nombre: string;
-  products: PublicPedidoB2bProduct[];
-}
-
-export interface PublicPedidoB2bCatalog {
-  categories: PublicPedidoB2bCategory[];
 }
 
 export interface PedidoB2bItemDiaInput {
@@ -1455,25 +1466,6 @@ export interface PedidoB2bItemDiaInput {
 export interface PedidoB2bItemInput {
   productId: string;
   distribucion: PedidoB2bItemDiaInput[];
-}
-
-export interface CreatePublicPedidoB2bPayload {
-  negocioNombre: string;
-  contactoNombre: string;
-  contactoTelefono: string;
-  contactoCorreo: string;
-  semanaInicio: string;
-  codigoDescuento?: string;
-  // Mismos 6 campos + requiereFactura que CreatePublicOrderPayload (B2C) —
-  // solo se mandan cuando aplica según facturacionModo, ver pedido-flow.tsx.
-  requiereFactura?: boolean;
-  facturaRazonSocial?: string;
-  facturaRfc?: string;
-  facturaRegimenFiscal?: string;
-  facturaUsoCfdi?: string;
-  facturaCodigoPostal?: string;
-  facturaCorreo?: string;
-  items: PedidoB2bItemInput[];
 }
 
 export interface PublicPedidoB2bItem {
@@ -1516,22 +1508,8 @@ export function fetchPublicPedidoB2bTenant(slug: string) {
   return request<PublicPedidoB2bTenantInfo>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}`);
 }
 
-export function fetchPublicPedidoB2bCatalog(slug: string) {
-  return request<PublicPedidoB2bCatalog>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/catalog`);
-}
-
-export function previewPedidoB2bCodigoDescuento(slug: string, codigo: string) {
-  return request<{ descuentoPorcentaje: number }>(
-    `/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/codigos-descuento/${encodeURIComponent(codigo)}`,
-  );
-}
-
-export function createPublicPedidoB2b(slug: string, payload: CreatePublicPedidoB2bPayload) {
-  return request<PublicPedidoB2b>(`/public/pedidos-b2b/tenants/${encodeURIComponent(slug)}/pedidos`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+// El catálogo y la creación de pedidos de mayoreo ya no son públicos (Fase 4): se hacen con sesión del portal
+// (lib/portal-api.ts → GET /portal/catalogo, POST /portal/pedidos).
 
 // --- Pedidos B2B — panel autenticado (/dashboard/pedidos-b2b) ---
 
@@ -1548,6 +1526,8 @@ export interface PedidoB2bReportable {
   estadoPago: PedidoB2bEstadoPago;
   modoCobro: PedidoB2bModoCobro;
   cancelado: boolean;
+  // Marca «Modificado por el cliente» (null = sin marca).
+  modificadoPorClienteAt: string | null;
   totalPiezas: number;
   total: string;
   createdAt: string;
@@ -1564,14 +1544,43 @@ export interface PaginatedPedidosB2b {
 // Detalle completo (GET /pedidos-b2b/:id) — mismos campos que PublicPedidoB2b
 // más los que solo tienen sentido del lado autenticado (cancelado,
 // minimoPiezasAplicado, etc.).
+export interface PedidoB2bEntrega {
+  id: string;
+  fecha: string;
+  dia: DiaSemanaPedidoB2b;
+  estado: PedidoB2bEstadoEntrega;
+  // Fecha y hora del cierre (solo Entregada / No recogida).
+  cerradaAt: string | null;
+  // Pendiente de un día anterior a hoy (hora de Ciudad de México): la calcula el servidor, no se cierra sola.
+  atrasada: boolean;
+}
+
 export interface PedidoB2bDetalle extends PublicPedidoB2b {
   cancelado: boolean;
   canceladoAt: string | null;
+  // Marca «Modificado por el cliente»: la enciende el portal y se apaga al reconfirmar o con «Marcar como revisado».
+  modificadoPorClienteAt?: string | null;
+  // Versión del pedido para el control de concurrencia al editar (se manda como `version`).
+  updatedAt?: string;
   minimoPiezasAplicado: number;
+  // Solo en las respuestas del panel (no en el storefront público).
+  entregas?: PedidoB2bEntrega[];
+  // Fecha y hora en que se marcó Pagado (también solo en la forma del panel). null si está Pendiente, o si se pagó antes de
+  // que existiera este dato.
+  pagadoAt?: string | null;
+  // Solo en GET /pedidos-b2b/:id (panel lateral): nota libre del cliente y código actual del cliente (null en pedidos viejos).
+  notaCliente?: string | null;
+  clienteCodigo?: string | null;
 }
 
 export interface ListPedidosB2bFilter extends FiltroImporte {
   estado?: PedidoB2bEstado;
+  // Multi-valor (Pedidos activos pide los 3 estados activos de una vez).
+  estados?: PedidoB2bEstado[];
+  // Históricos: solo pedidos Completados y Cancelados.
+  soloHistorico?: boolean;
+  // Solo pedidos de semanas ANTERIORES a esta fecha ("YYYY-MM-DD"): los activos que quedaron de semanas pasadas.
+  semanaAntesDe?: string;
   cancelado?: boolean;
   desde?: string;
   hasta?: string;
@@ -1580,17 +1589,23 @@ export interface ListPedidosB2bFilter extends FiltroImporte {
   // necesita resolver este filtro en el servidor (a diferencia de "Pedidos
   // activos", que trae todo sin paginar y filtra en el cliente).
   negocioNombre?: string;
+  // Filtro de Históricos por estado de pago.
+  estadoPago?: PedidoB2bEstadoPago;
   page?: number;
   limit?: number;
 }
 
 export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   const params = new URLSearchParams();
-  if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.estados && filter.estados.length > 0) params.set("estados", filter.estados.join(","));
+  else if (filter?.estado) params.set("estado", filter.estado);
+  if (filter?.soloHistorico) params.set("soloHistorico", "true");
+  if (filter?.semanaAntesDe) params.set("semanaAntesDe", filter.semanaAntesDe);
   if (filter?.cancelado !== undefined) params.set("cancelado", String(filter.cancelado));
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
   appendFiltroImporte(params, filter);
@@ -1630,6 +1645,7 @@ export interface PedidoB2bResumen {
     fin: string;
     pendientesConfirmacion: number;
     confirmadosSurtiendo: number;
+    enProceso: number;
     totalPiezas: number;
     entregasHoy: PedidoB2bEntregaResumen[];
     entregasManana: PedidoB2bEntregaResumen[];
@@ -1648,11 +1664,20 @@ export function fetchPedidosB2bResumen(token: string) {
   return request<PedidoB2bResumen>("/pedidos-b2b/resumen", { headers: authHeaders(token) });
 }
 
-export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[]) {
+// `version` (opcional): el updatedAt del pedido tal como se cargó. Si cambió (p. ej. el cliente lo modificó en el portal), 409.
+export function updatePedidoB2bItems(token: string, id: string, items: PedidoB2bItemInput[], version?: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/items`, {
     method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, ...(version ? { version } : {}) }),
+  });
+}
+
+// Apaga la marca «Modificado por el cliente» sin cambiar nada más. Abierto a los 3 roles.
+export function marcarRevisadoPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/marcar-revisado`, {
+    method: "PATCH",
+    headers: authHeaders(token),
   });
 }
 
@@ -1663,10 +1688,43 @@ export function avanzarPedidoB2b(token: string, id: string) {
   });
 }
 
+// Cierra UNA entrega (nunca en bloque). Abierto a los 3 roles. Solo pedidos Confirmados o En proceso.
+export function cerrarEntregaPedidoB2b(token: string, pedidoId: string, entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${pedidoId}/entregas/${entregaId}/cerrar`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ estado }),
+  });
+}
+
 export function marcarPagadoPedidoB2b(token: string, id: string) {
   return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/marcar-pagado`, {
     method: "PATCH",
     headers: authHeaders(token),
+  });
+}
+
+// Solo Gerente/Dueño. Regresa el pago a Pendiente y limpia la fecha; nunca mueve el estado del pedido.
+export function desmarcarPagadoPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${id}/desmarcar-pagado`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+  });
+}
+
+export interface CorregirEntregaPedidoB2bPayload {
+  // Solo entre Entregada y No recogida; sin él se conserva el estado.
+  estado?: "ENTREGADA" | "NO_RECOGIDA";
+  // El conjunto COMPLETO de líneas que debe quedar en la entrega (nunca precios: salen del catálogo).
+  items: { productId: string; cantidad: number }[];
+}
+
+// Corrección del admin (Gerente/Dueño) sobre una entrega YA cerrada, en cualquier estado del pedido.
+export function corregirEntregaPedidoB2b(token: string, pedidoId: string, entregaId: string, payload: CorregirEntregaPedidoB2bPayload) {
+  return request<PedidoB2bDetalle>(`/pedidos-b2b/${pedidoId}/entregas/${entregaId}/corregir`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -1692,11 +1750,13 @@ export interface ExportPedidosB2bFilter {
   desde?: string;
   hasta?: string;
   negocioNombre?: string;
+  estadoPago?: PedidoB2bEstadoPago;
+  soloHistorico?: boolean;
 }
 
-// Bypasses request() on purpose, igual que exportOrdersHistoricoCsv — este
-// endpoint regresa un CSV, no JSON.
-export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB2bFilter): Promise<Blob> {
+// Bypasses request() on purpose: este endpoint regresa un archivo Excel (.xlsx), no JSON. El CSV del backend
+// (GET /pedidos-b2b/export) ya no lo usa el panel.
+export async function exportPedidosB2bXlsx(token: string, filter?: ExportPedidosB2bFilter): Promise<Blob> {
   const params = new URLSearchParams();
   if (filter?.estados && filter.estados.length > 0) params.set("estados", filter.estados.join(","));
   else if (filter?.estado) params.set("estado", filter.estado);
@@ -1704,9 +1764,11 @@ export async function exportPedidosB2bCsv(token: string, filter?: ExportPedidosB
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
+  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  if (filter?.soloHistorico) params.set("soloHistorico", "true");
   const query = params.toString();
 
-  const res = await fetch(`${API_URL}/pedidos-b2b/export${query ? `?${query}` : ""}`, {
+  const res = await fetch(`${API_URL}/pedidos-b2b/export-xlsx${query ? `?${query}` : ""}`, {
     headers: authHeaders(token),
   });
 
@@ -1737,6 +1799,12 @@ export interface PedidoB2bEntregaDia {
   contactoNombre: string;
   contactoTelefono: string;
   estado: PedidoB2bEstado;
+  cancelado: boolean;
+  // La entrega de ESTE día (id para cerrarla con cerrarEntregaPedidoB2b; las Canceladas no vienen).
+  entregaId: string;
+  entregaEstado: PedidoB2bEstadoEntrega;
+  cerradaAt: string | null;
+  atrasada: boolean;
   items: PedidoB2bEntregaDiaItem[];
 }
 
@@ -1749,10 +1817,9 @@ export function fetchPedidosB2bDia(token: string, fecha: string) {
   });
 }
 
-// Bypasses request() on purpose, mismo motivo que exportPedidosB2bCsv — CSV,
-// no JSON.
-export async function exportPedidosB2bDiaCsv(token: string, fecha: string): Promise<Blob> {
-  const res = await fetch(`${API_URL}/pedidos-b2b/dia/${encodeURIComponent(fecha)}/export`, {
+// Bypasses request() on purpose, mismo motivo que exportPedidosB2bXlsx — archivo Excel, no JSON.
+export async function exportPedidosB2bDiaXlsx(token: string, fecha: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}/pedidos-b2b/dia/${encodeURIComponent(fecha)}/export-xlsx`, {
     headers: authHeaders(token),
   });
 
@@ -1932,3 +1999,194 @@ export function altaClienteLealtadPublico(slug: string, nombre: string, telefono
 }
 
 export { ApiError };
+
+
+// ---------------------------------------------------------------------------
+// Clientes B2B (Fase 2): /clientes-b2b (Gerente/Dueño, salvo el selector) y captura de pedidos desde el panel.
+// ---------------------------------------------------------------------------
+
+export type ClienteB2bEstadoFiltro = "ACTIVOS" | "BAJA" | "TODOS";
+export type ModalidadPagoB2b = "AL_INICIO" | "AL_FINAL";
+
+export interface ClienteB2bFila {
+  id: string;
+  codigo: string | null;
+  nombre: string;
+  direccion: string | null;
+  descuentoPorcentaje: number | null;
+  modalidadPago: ModalidadPagoB2b | null;
+  activo: boolean;
+  bajaAt: string | null;
+  telefonoPrincipal: string | null;
+  nombreContactoPrincipal: string | null;
+  pedidosActivos: number;
+  incompleto: boolean;
+  createdAt: string;
+}
+
+export interface PaginatedClientesB2b {
+  data: ClienteB2bFila[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ClienteB2bTelefono {
+  id: string;
+  telefono: string;
+  principal: boolean;
+  nombreContacto: string | null;
+}
+
+export interface ClienteB2bDetalle {
+  id: string;
+  codigo: string | null;
+  nombre: string;
+  direccion: string | null;
+  descuentoPorcentaje: number | null;
+  modalidadPago: ModalidadPagoB2b | null;
+  activo: boolean;
+  bajaAt: string | null;
+  pedidosActivos: number;
+  incompleto: boolean;
+  totalPedidos: number;
+  ultimoPedidoAt: string | null;
+  createdAt: string;
+  telefonos: ClienteB2bTelefono[];
+}
+
+// Selector de la captura de pedidos (los 3 roles): solo lo mínimo de los clientes activos.
+export interface ClienteB2bSelectorItem {
+  id: string;
+  nombre: string;
+  codigo: string | null;
+  descuentoPorcentaje: number | null;
+}
+
+export interface TelefonoClienteB2bInput {
+  telefono: string;
+  principal?: boolean;
+  nombreContacto?: string;
+}
+
+export interface CreateClienteB2bPayload {
+  nombre: string;
+  sufijo: string;
+  direccion: string;
+  descuentoPorcentaje?: number;
+  modalidadPago?: ModalidadPagoB2b;
+  telefonos: TelefonoClienteB2bInput[];
+}
+
+export interface UpdateClienteB2bPayload {
+  nombre?: string;
+  direccion?: string;
+  // null borra el descuento / la modalidad (queda la del negocio).
+  descuentoPorcentaje?: number | null;
+  modalidadPago?: ModalidadPagoB2b | null;
+}
+
+export function fetchClientesB2b(
+  token: string,
+  filtros: { q?: string; estado?: ClienteB2bEstadoFiltro; page?: number; limit?: number } = {},
+) {
+  const params = new URLSearchParams();
+  if (filtros.q) params.set("q", filtros.q);
+  if (filtros.estado) params.set("estado", filtros.estado);
+  if (filtros.page) params.set("page", String(filtros.page));
+  if (filtros.limit) params.set("limit", String(filtros.limit));
+  const query = params.toString();
+  return request<PaginatedClientesB2b>(`/clientes-b2b${query ? `?${query}` : ""}`, { headers: authHeaders(token) });
+}
+
+export function fetchClientesB2bSelector(token: string) {
+  return request<ClienteB2bSelectorItem[]>("/clientes-b2b/selector", { headers: authHeaders(token) });
+}
+
+export function fetchClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}`, { headers: authHeaders(token) });
+}
+
+export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {
+  return request<ClienteB2bDetalle>("/clientes-b2b", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateClienteB2b(token: string, id: string, payload: UpdateClienteB2bPayload) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function bajaClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/baja`, { method: "POST", headers: authHeaders(token) });
+}
+
+export function reactivarClienteB2b(token: string, id: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/reactivar`, { method: "POST", headers: authHeaders(token) });
+}
+
+export function agregarTelefonoClienteB2b(token: string, id: string, payload: TelefonoClienteB2bInput) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function editarTelefonoClienteB2b(
+  token: string,
+  id: string,
+  telefonoId: string,
+  payload: { telefono?: string; nombreContacto?: string | null },
+) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function cambiarPrincipalClienteB2b(token: string, id: string, telefonoId: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}/principal`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function quitarTelefonoClienteB2b(token: string, id: string, telefonoId: string) {
+  return request<ClienteB2bDetalle>(`/clientes-b2b/${id}/telefonos/${telefonoId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export interface CreatePedidoB2bPayload {
+  clienteId: string;
+  semanaInicio: string;
+  items: PedidoB2bItemInput[];
+  notaCliente?: string;
+}
+
+// Captura por teléfono (los 3 roles). 409 si el cliente está de baja o ya tiene pedido esa semana.
+export function createPedidoB2b(token: string, payload: CreatePedidoB2bPayload) {
+  return request<PedidoB2bDetalle>("/pedidos-b2b", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+// Aviso previo de la captura: el pedido (no cancelado) que el cliente ya tiene esa semana, o null.
+export function fetchPedidoB2bExistente(token: string, clienteId: string, semanaInicio: string) {
+  const params = new URLSearchParams({ clienteId, semanaInicio });
+  return request<{ id: string; folio: string } | null>(`/pedidos-b2b/existente?${params.toString()}`, {
+    headers: authHeaders(token),
+  });
+}
