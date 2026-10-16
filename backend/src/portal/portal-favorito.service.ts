@@ -145,4 +145,97 @@ export class PortalFavoritoService {
     });
     return { favorito, noDisponibles: [] as string[] };
   }
+
+  /**
+   * Guarda el favorito de UN día de la semana («tu lunes favorito»): reemplaza solo las cantidades de ese día dentro del
+   * favorito del cliente y no toca los demás. Si no había favorito, lo crea con solo ese día. La lectura-modificación-escritura
+   * se hace con el cliente bloqueado (FOR UPDATE), así que dos guardados simultáneos de días distintos conservan ambos días.
+   * Responde lo mismo que `obtener` (favorito vigente completo y productos no disponibles).
+   */
+  async guardarDia(
+    sesion: SesionValida,
+    dia: DiaSemana,
+    lineas: { productId: string; cantidad: number }[],
+  ) {
+    const c = this.exigirCliente(sesion);
+    if (!DIAS.includes(dia))
+      throw new BadRequestException(`Día no válido: ${dia}`);
+    const nuevas = new Map<string, number>();
+    for (const l of lineas) {
+      if (nuevas.has(l.productId))
+        throw new BadRequestException(
+          'Un producto está repetido en tu favorito',
+        );
+      if (
+        !Number.isInteger(l.cantidad) ||
+        l.cantidad < 0 ||
+        l.cantidad > MAX_CANTIDAD
+      ) {
+        throw new BadRequestException(
+          'Las cantidades deben ser enteros de 0 a 9999',
+        );
+      }
+      nuevas.set(l.productId, l.cantidad);
+    }
+    for (const [id, cant] of [...nuevas]) if (cant === 0) nuevas.delete(id);
+    if (nuevas.size === 0)
+      throw new BadRequestException(
+        'Agrega al menos un producto con cantidad a tu favorito',
+      );
+
+    // Nombre del catálogo vivo; productos del negocio y disponibles.
+    const productos = await this.prisma.product.findMany({
+      where: {
+        tenantId: sesion.tenant.id,
+        disponible: true,
+        id: { in: [...nuevas.keys()] },
+      },
+      select: { id: true, nombre: true },
+    });
+    const nombres = new Map(productos.map((p) => [p.id, p.nombre]));
+    if ([...nuevas.keys()].some((id) => !nombres.has(id))) {
+      throw new ConflictException('Uno de los productos ya no está disponible');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${c.id} AND "tenantId" = ${sesion.tenant.id} FOR UPDATE`;
+      const fila = await tx.cliente.findFirstOrThrow({
+        where: { id: c.id, tenantId: sesion.tenant.id },
+        select: { favoritoB2b: true },
+      });
+      const previo = (
+        (fila.favoritoB2b as { lineas?: LineaFavorito[] } | null)?.lineas ?? []
+      ).map((l) => ({ ...l, dias: { ...l.dias } }));
+      // Se quita el día de todas las líneas (conservando su orden) y se pone el nuevo; al final desaparecen las líneas
+      // que se quedaron sin ningún día.
+      const resto = previo.map((l) => {
+        const { [dia]: _quitado, ...dias } = l.dias;
+        return { ...l, dias };
+      });
+      for (const [productId, cantidad] of nuevas) {
+        const l = resto.find((x) => x.productId === productId);
+        if (l) {
+          l.dias[dia] = cantidad;
+          l.nombre = nombres.get(productId)!;
+        } else {
+          resto.push({
+            productId,
+            nombre: nombres.get(productId)!,
+            dias: { [dia]: cantidad },
+          });
+        }
+      }
+      const lineasFinal = resto.filter((l) => Object.keys(l.dias).length > 0);
+      await tx.cliente.update({
+        where: { id: c.id },
+        data: {
+          favoritoB2b: {
+            guardadoAt: new Date().toISOString(),
+            lineas: lineasFinal,
+          },
+        },
+      });
+    });
+    return this.obtener(sesion);
+  }
 }

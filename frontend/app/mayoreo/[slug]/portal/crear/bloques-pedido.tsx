@@ -49,9 +49,12 @@ export function DiaEntrega({
   fecha,
   lineas,
   estado,
+  onEditar,
 }: {
   fecha: string;
   lineas: LineaDia[];
+  /** Si se manda, junto a las piezas aparece «Editar» (el resumen de «Crear pedido» vuelve a ese día). */
+  onEditar?: () => void;
   /** Estado de la entrega (Pendiente, Entregada…) como píldora pequeña junto a la fecha. */
   estado?: { codigo: string; etiqueta: string };
 }) {
@@ -75,7 +78,19 @@ export function DiaEntrega({
             </span>
           )}
         </span>
-        <span className="text-sm text-mayoreo-ink-soft">{piezas} pzas</span>
+        <span className="flex items-baseline gap-3 text-sm text-mayoreo-ink-soft">
+          {piezas} pzas
+          {onEditar && (
+            <button
+              type="button"
+              className="font-semibold text-mayoreo-ink underline"
+              aria-label={`Editar ${etiquetaFechaCorta(fecha)}`}
+              onClick={onEditar}
+            >
+              Editar
+            </button>
+          )}
+        </span>
       </div>
       <ul className="flex flex-col gap-1">
         {lineas.map((l) => (

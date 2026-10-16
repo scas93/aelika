@@ -771,6 +771,182 @@ describe('Portal · crear pedido (4d)', () => {
       const det = await dueno().get(`/clientes-b2b/${c.id}`).expect(200);
       expect(JSON.stringify(det.body)).not.toContain('favoritoB2b');
     });
+
+    describe('favorito de un día (PUT /portal/favorito/dia)', () => {
+      const guardarDia = (cookie: string, dia: unknown, l: unknown) =>
+        http()
+          .put('/portal/favorito/dia')
+          .set(H)
+          .set('Cookie', cookie)
+          .send({ slug: slug(), dia, lineas: l });
+      const L = (...x: [string, number][]) =>
+        x.map(([productId, cantidad]) => ({ productId, cantidad }));
+
+      it('sin favorito lo crea con solo ese día y responde con la forma de GET /portal/favorito', async () => {
+        await alta();
+        const cookie = await entrar();
+        const r = await guardarDia(
+          cookie,
+          'LUNES',
+          L([A(), 6], [B(), 2]),
+        ).expect(200);
+        expect(Object.keys(r.body).sort()).toEqual([
+          'favorito',
+          'noDisponibles',
+        ]);
+        expect(r.body.noDisponibles).toEqual([]);
+        expect(typeof r.body.favorito.guardadoAt).toBe('string');
+        expect(r.body.favorito.lineas).toEqual([
+          { productId: A(), nombre: 'Café americano', dias: { LUNES: 6 } },
+          { productId: B(), nombre: 'Concha', dias: { LUNES: 2 } },
+        ]);
+        expect((await leer(cookie).expect(200)).body).toEqual(r.body);
+      });
+
+      it('reemplaza solo las cantidades de ese día y no toca los demás', async () => {
+        const c = await alta();
+        const cookie = await entrar();
+        await guardar(cookie).expect(200); // A: lun 6 / mié 6 · B: vie 4
+        const r = await guardarDia(cookie, 'LUNES', L([B(), 3])).expect(200);
+        // El lunes ahora es solo B×3; A conserva el miércoles y B conserva el viernes.
+        expect(r.body.favorito.lineas).toEqual([
+          { productId: A(), nombre: 'Café americano', dias: { MIERCOLES: 6 } },
+          { productId: B(), nombre: 'Concha', dias: { VIERNES: 4, LUNES: 3 } },
+        ]);
+        // Guardar el miércoles no altera el lunes.
+        const m = await guardarDia(cookie, 'MIERCOLES', L([A(), 9])).expect(
+          200,
+        );
+        expect(m.body.favorito.lineas).toEqual([
+          { productId: A(), nombre: 'Café americano', dias: { MIERCOLES: 9 } },
+          { productId: B(), nombre: 'Concha', dias: { VIERNES: 4, LUNES: 3 } },
+        ]);
+        // Un producto que se queda sin ningún día sale del favorito.
+        await guardarDia(cookie, 'VIERNES', L([A(), 1])).expect(200);
+        const fila = await s.h.prisma.cliente.findUniqueOrThrow({
+          where: { id: c.id },
+        });
+        expect((fila.favoritoB2b as any).lineas).toEqual([
+          {
+            productId: A(),
+            nombre: 'Café americano',
+            dias: { MIERCOLES: 9, VIERNES: 1 },
+          },
+          { productId: B(), nombre: 'Concha', dias: { LUNES: 3 } },
+        ]);
+      });
+
+      it('dos días guardados en paralelo (dos teléfonos del mismo cliente) conservan ambos', async () => {
+        const c = await alta();
+        await s.h.prisma.clienteTelefono.create({
+          data: {
+            tenantId: s.base.tenant.id,
+            clienteId: c.id,
+            telefono: '5544445555',
+          },
+        });
+        const uno = await entrar(TEL);
+        const dos = await entrar('5544445555');
+        const [r1, r2] = await Promise.all([
+          guardarDia(uno, 'LUNES', L([A(), 5])),
+          guardarDia(dos, 'MARTES', L([B(), 7])),
+        ]);
+        expect(r1.status).toBe(200);
+        expect(r2.status).toBe(200);
+        const f = (await leer(uno).expect(200)).body.favorito;
+        expect(f.lineas).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ productId: A(), dias: { LUNES: 5 } }),
+            expect.objectContaining({ productId: B(), dias: { MARTES: 7 } }),
+          ]),
+        );
+        expect(f.lineas).toHaveLength(2);
+      });
+
+      it('las cantidades 0 se descartan; sin ninguna cantidad > 0 → 400; repetido, día o cantidad inválidos → 400', async () => {
+        await alta();
+        const cookie = await entrar();
+        const ok = await guardarDia(
+          cookie,
+          'JUEVES',
+          L([A(), 4], [B(), 0]),
+        ).expect(200);
+        expect(ok.body.favorito.lineas).toEqual([
+          { productId: A(), nombre: 'Café americano', dias: { JUEVES: 4 } },
+        ]);
+        await guardarDia(cookie, 'JUEVES', L([A(), 0])).expect(400);
+        await guardarDia(cookie, 'JUEVES', []).expect(400);
+        await guardarDia(cookie, 'JUEVES', L([A(), 1], [A(), 2])).expect(400);
+        await guardarDia(cookie, 'FERIADO', L([A(), 1])).expect(400);
+        await guardarDia(cookie, 'JUEVES', L([A(), -1])).expect(400);
+        await guardarDia(cookie, 'JUEVES', L([A(), 1.5])).expect(400);
+        await guardarDia(cookie, 'JUEVES', L([A(), 10000])).expect(400);
+        await guardarDia(cookie, 'JUEVES', [
+          { productId: 'no-uuid', cantidad: 1 },
+        ]).expect(400);
+        // Los rechazos no tocaron lo guardado.
+        expect(
+          (await leer(cookie).expect(200)).body.favorito.lineas,
+        ).toHaveLength(1);
+      });
+
+      it('producto no disponible o de otro negocio → 409 sin guardar nada', async () => {
+        await alta();
+        const cookie = await entrar();
+        await guardarDia(cookie, 'LUNES', L([A(), 3])).expect(200);
+        await s.h.prisma.product.update({
+          where: { id: B() },
+          data: { disponible: false },
+        });
+        await guardarDia(cookie, 'MARTES', L([B(), 2])).expect(409);
+        await guardarDia(
+          cookie,
+          'MARTES',
+          L(['00000000-0000-4000-8000-000000000000', 2]),
+        ).expect(409);
+        const f = (await leer(cookie).expect(200)).body.favorito;
+        expect(f.lineas).toEqual([
+          { productId: A(), nombre: 'Café americano', dias: { LUNES: 3 } },
+        ]);
+      });
+
+      it('sin sesión → 401; sin encabezado → 400; la cookie de otro negocio no guarda', async () => {
+        await alta();
+        const cookie = await entrar();
+        await http()
+          .put('/portal/favorito/dia')
+          .set(H)
+          .send({ slug: slug(), dia: 'LUNES', lineas: L([A(), 1]) })
+          .expect(401);
+        await http()
+          .put('/portal/favorito/dia')
+          .set('Cookie', cookie)
+          .send({ slug: slug(), dia: 'LUNES', lineas: L([A(), 1]) })
+          .expect(400);
+      });
+
+      it('con varios clientes sin elegir → 409; el favorito de otro cliente no se toca', async () => {
+        const c1 = await alta(TEL, { negocioNombre: 'Sucursal Centro' });
+        const c2 = await alta('5511112222', {
+          negocioNombre: 'Sucursal Norte',
+        });
+        await s.h.prisma.clienteTelefono.create({
+          data: {
+            tenantId: s.base.tenant.id,
+            clienteId: c2.id,
+            telefono: TEL,
+          },
+        });
+        const sinElegir = await entrar(TEL);
+        await guardarDia(sinElegir, 'LUNES', L([A(), 1])).expect(409);
+        const cookie = await entrar(TEL, slug(), c1.id);
+        await guardarDia(cookie, 'LUNES', L([A(), 2])).expect(200);
+        const otro = await s.h.prisma.cliente.findUniqueOrThrow({
+          where: { id: c2.id },
+        });
+        expect(otro.favoritoB2b).toBeNull();
+      });
+    });
   });
 
   describe('catálogo público cerrado', () => {

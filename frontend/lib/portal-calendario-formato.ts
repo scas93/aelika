@@ -56,6 +56,12 @@ export function etiquetaFechaCorta(fechaISO: string): string {
   return `${dia.charAt(0).toUpperCase()}${dia.slice(1)} ${v("day")} ${v("month")}`;
 }
 
+/** "Lun 19" (día de la semana abreviado y número) para las pestañas por día. */
+export function etiquetaTabDia(fechaISO: string): string {
+  const [dia, num] = etiquetaFechaCorta(fechaISO).split(" ");
+  return `${dia} ${num}`;
+}
+
 /** "vie, 2 oct, 20:00" en hora de Ciudad de México. */
 export function etiquetaMomento(iso: string): string {
   return MOMENTO.format(new Date(iso));
@@ -86,11 +92,6 @@ function momento12(iso: string): string {
   const hora = Number(v("hour"));
   const sufijo = hora >= 12 ? "pm" : "am";
   return `${v("weekday").replace(/\./g, "")} ${v("day")}, ${hora % 12 || 12}:${v("minute")} ${sufijo}`;
-}
-
-/** "Pide antes del sáb 17, 8:00 pm". */
-export function textoPideAntes(iso: string): string {
-  return `Pide antes del ${momento12(iso)}`;
 }
 
 /** "Cambia antes del mié 14, 2:00 pm". */

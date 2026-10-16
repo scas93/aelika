@@ -11,69 +11,67 @@ import type {
 // Modelo del pedido que arma el cliente en el portal (4d): funciones PURAS. El servidor es la fuente de verdad (precios,
 // descuento, calendario y mínimo); aquí solo se calcula lo necesario para mostrar y para armar el envío.
 
-export type Carrito = Record<string, number>; // productId → cantidad total
-export type Distribucion = Record<string, Record<string, number>>; // productId → fecha → cantidad
-
-const DIAS_ORDEN: DiaSemanaPortal[] = [
-  "LUNES",
-  "MARTES",
-  "MIERCOLES",
-  "JUEVES",
-  "VIERNES",
-  "SABADO",
-  "DOMINGO",
-];
-
 export const round2 = (n: number) =>
   Math.round((n + Number.EPSILON) * 100) / 100;
 
-/** Total repartido en partes enteras lo más parejas posible; el resto va a las primeras fechas. */
-export function repartirParejo(
-  total: number,
-  fechas: string[],
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (fechas.length === 0) return out;
-  const base = Math.floor(total / fechas.length);
-  let resto = total - base * fechas.length;
-  for (const f of fechas) {
-    out[f] = base + (resto > 0 ? 1 : 0);
-    if (resto > 0) resto -= 1;
-  }
-  return out;
-}
+/** Lo que el cliente captura en cada día elegido: fecha → productId → cantidad. Es la única fuente de verdad del pedido. */
+export type PorDia = Record<string, Record<string, number>>;
 
-export const sumaDistribucion = (
-  d: Record<string, number> | undefined,
-  fechas: string[],
-) => fechas.reduce((s, f) => s + (d?.[f] ?? 0), 0);
+/** Piezas de un día (suma de sus cantidades > 0). */
+export const piezasDia = (lineas: Record<string, number> | undefined) =>
+  Object.values(lineas ?? {}).reduce((s, n) => s + (n > 0 ? n : 0), 0);
 
-/** Cada producto del carrito tiene repartida EXACTAMENTE su cantidad total entre las fechas elegidas. */
-export function todoDistribuido(
-  carrito: Carrito,
-  dist: Distribucion,
-  fechas: string[],
-): boolean {
-  const ids = Object.keys(carrito).filter((id) => carrito[id] > 0);
-  if (ids.length === 0 || fechas.length === 0) return false;
-  return ids.every((id) => sumaDistribucion(dist[id], fechas) === carrito[id]);
-}
-
-/** Entregas para el POST: una por fecha con productos de cantidad > 0. */
+/** Entregas para el POST: una por fecha elegida, ordenadas, solo con productos de cantidad > 0 (los días vacíos no se envían). */
 export function construirEntregas(
-  carrito: Carrito,
-  dist: Distribucion,
+  porDia: PorDia,
   fechas: string[],
 ): EntregaPedidoPortal[] {
   return [...fechas]
     .sort()
     .map((fecha) => ({
       fecha,
-      items: Object.keys(carrito)
-        .filter((id) => carrito[id] > 0 && (dist[id]?.[fecha] ?? 0) > 0)
-        .map((productId) => ({ productId, cantidad: dist[productId][fecha] })),
+      items: Object.entries(porDia[fecha] ?? {})
+        .filter(([, cantidad]) => cantidad > 0)
+        .map(([productId, cantidad]) => ({ productId, cantidad })),
     }))
     .filter((e) => e.items.length > 0);
+}
+
+/** Días elegidos que aún no tienen ningún producto, en orden cronológico. */
+export const diasVacios = (porDia: PorDia, fechas: string[]) =>
+  [...fechas].sort().filter((f) => piezasDia(porDia[f]) === 0);
+
+/** Copia las cantidades de `origen` a `destino` (reemplaza lo que hubiera en destino). */
+export function copiarDia(
+  porDia: PorDia,
+  origen: string,
+  destino: string,
+): PorDia {
+  const lineas: Record<string, number> = {};
+  for (const [id, n] of Object.entries(porDia[origen] ?? {}))
+    if (n > 0) lineas[id] = n;
+  return { ...porDia, [destino]: lineas };
+}
+
+/** Pone la cantidad de un producto en un día (0 quita la línea). */
+export function ponerCantidad(
+  porDia: PorDia,
+  fecha: string,
+  productId: string,
+  cantidad: number,
+): PorDia {
+  const lineas = { ...(porDia[fecha] ?? {}) };
+  if (cantidad > 0) lineas[productId] = cantidad;
+  else delete lineas[productId];
+  return { ...porDia, [fecha]: lineas };
+}
+
+/** Quita del borrador los días que ya no están elegidos; los que siguen conservan sus cantidades. */
+export function sinDiasQuitados(porDia: PorDia, fechas: string[]): PorDia {
+  const vigentes = new Set(fechas);
+  return Object.fromEntries(
+    Object.entries(porDia).filter(([f]) => vigentes.has(f)),
+  );
 }
 
 export interface TotalesSemana {
@@ -81,6 +79,8 @@ export interface TotalesSemana {
   semanaFin: string;
   fechas: string[];
   piezas: number;
+  /** Total de la semana por producto (suma de todos sus días), para que el cliente lo valide contra su necesidad. */
+  productos: { productId: string; cantidad: number }[];
   subtotal: number;
   descuento: number;
   total: number;
@@ -104,9 +104,14 @@ export function totalesPorSemana(
     if (delaSemana.length === 0) continue;
     let piezas = 0;
     let subtotal = 0;
+    const porProducto = new Map<string, number>();
     for (const e of delaSemana) {
       for (const it of e.items) {
         piezas += it.cantidad;
+        porProducto.set(
+          it.productId,
+          (porProducto.get(it.productId) ?? 0) + it.cantidad,
+        );
         subtotal = round2(
           subtotal + (precios[it.productId] ?? 0) * it.cantidad,
         );
@@ -121,6 +126,10 @@ export function totalesPorSemana(
       semanaFin: semana.semanaFin,
       fechas: delaSemana.map((e) => e.fecha),
       piezas,
+      productos: [...porProducto].map(([productId, cantidad]) => ({
+        productId,
+        cantidad,
+      })),
       subtotal,
       descuento,
       total: round2(subtotal - descuento),
@@ -129,122 +138,6 @@ export function totalesPorSemana(
     });
   }
   return out;
-}
-
-/** Días que el cliente puede elegir al CREAR un pedido (semanas sin pedido y día agregable). */
-export function fechasElegibles(calendario: CalendarioPortal): string[] {
-  return calendario.semanas
-    .filter((s) => !s.pedido)
-    .flatMap((s) =>
-      s.dias
-        .filter((d) => d.estado === "AGREGABLE" && d.accion === "CREAR_PEDIDO")
-        .map((d) => d.fecha),
-    );
-}
-
-export interface ResultadoFavorito {
-  fechas: string[];
-  carrito: Carrito;
-  dist: Distribucion;
-  avisos: string[];
-}
-
-/**
- * Aplica el favorito al PRIMER periodo sin pedido: cada día de la semana del favorito se lleva a la fecha de esa semana
- * con el mismo día. Los días que ya no cumplen el calendario y los productos que ya no están disponibles se quitan con aviso.
- * El cliente puede editar todo antes de enviar.
- */
-export function aplicarFavorito(
-  favorito: FavoritoPortal,
-  calendario: CalendarioPortal,
-  catalogo: ProductoCatalogoPortal[],
-): ResultadoFavorito | null {
-  if (!favorito.favorito) return null;
-  const semana = primerPeriodoSinPedido(calendario);
-  if (!semana) return null;
-  const vigentes = new Set(catalogo.map((p) => p.id));
-  const avisos: string[] = [];
-  for (const nombre of favorito.noDisponibles)
-    avisos.push(`${nombre} ya no está disponible y se quitó de tu favorito`);
-
-  const fechaDe = new Map(
-    semana.dias.map((d) => [d.diaSemana as DiaSemanaPortal, d]),
-  );
-  const quitados = new Set<string>();
-  const carrito: Carrito = {};
-  const dist: Distribucion = {};
-  for (const linea of favorito.favorito.lineas) {
-    if (!vigentes.has(linea.productId)) {
-      avisos.push(
-        `${linea.nombre} ya no está disponible y se quitó de tu favorito`,
-      );
-      continue;
-    }
-    for (const dia of DIAS_ORDEN) {
-      const cantidad = linea.dias[dia] ?? 0;
-      if (cantidad <= 0) continue;
-      const d = fechaDe.get(dia);
-      if (!d || d.estado !== "AGREGABLE") {
-        quitados.add(dia);
-        continue;
-      }
-      carrito[linea.productId] = (carrito[linea.productId] ?? 0) + cantidad;
-      dist[linea.productId] = {
-        ...(dist[linea.productId] ?? {}),
-        [d.fecha]: cantidad,
-      };
-    }
-  }
-  for (const dia of DIAS_ORDEN.filter((x) => quitados.has(x))) {
-    avisos.push(
-      `El ${NOMBRE_DIA[dia]} ya no cumple el tiempo para pedir y se quitó de tu favorito`,
-    );
-  }
-  const fechas = [
-    ...new Set(Object.values(dist).flatMap((m) => Object.keys(m))),
-  ].sort();
-  if (fechas.length === 0) return { fechas, carrito, dist, avisos };
-  return { fechas, carrito, dist, avisos };
-}
-
-const NOMBRE_DIA: Record<DiaSemanaPortal, string> = {
-  LUNES: "lunes",
-  MARTES: "martes",
-  MIERCOLES: "miércoles",
-  JUEVES: "jueves",
-  VIERNES: "viernes",
-  SABADO: "sábado",
-  DOMINGO: "domingo",
-};
-
-/** Plantilla por día de la semana a partir de la PRIMERA semana elegida (un favorito es de una semana tipo). */
-export function favoritoDesdeSeleccion(
-  carrito: Carrito,
-  dist: Distribucion,
-  fechas: string[],
-  calendario: CalendarioPortal,
-): { productId: string; dias: Partial<Record<DiaSemanaPortal, number>> }[] {
-  const ordenadas = [...fechas].sort();
-  const primera = calendario.semanas.find((s) =>
-    ordenadas.some((f) => s.dias.some((d) => d.fecha === f)),
-  );
-  if (!primera) return [];
-  const diaDeFecha = new Map(
-    primera.dias.map((d) => [d.fecha, d.diaSemana as DiaSemanaPortal]),
-  );
-  const lineas: {
-    productId: string;
-    dias: Partial<Record<DiaSemanaPortal, number>>;
-  }[] = [];
-  for (const id of Object.keys(carrito)) {
-    const dias: Partial<Record<DiaSemanaPortal, number>> = {};
-    for (const [fecha, cantidad] of Object.entries(dist[id] ?? {})) {
-      const dia = diaDeFecha.get(fecha);
-      if (dia && cantidad > 0) dias[dia] = cantidad;
-    }
-    if (Object.keys(dias).length > 0) lineas.push({ productId: id, dias });
-  }
-  return lineas;
 }
 
 /**
@@ -264,14 +157,94 @@ export function diasCerrados(
     );
 }
 
-/**
- * Primera semana donde se puede crear un pedido: sin pedido y con al menos un día disponible. Es donde se aplica el
- * favorito; sin ella (ambas semanas ya tienen pedido o están cerradas) «Usar mi favorito» no se ofrece.
- */
-export function primerPeriodoSinPedido(
-  calendario: CalendarioPortal,
-): SemanaCalendarioPortal | undefined {
-  return calendario.semanas.find(
-    (s) => !s.pedido && s.dias.some((d) => d.estado === "AGREGABLE"),
-  );
+// ---- Favorito por día de la semana («tu lunes favorito») ----
+
+const DIA_POR_NUMERO: DiaSemanaPortal[] = [
+  "DOMINGO",
+  "LUNES",
+  "MARTES",
+  "MIERCOLES",
+  "JUEVES",
+  "VIERNES",
+  "SABADO",
+];
+
+const NOMBRE_DIA: Record<DiaSemanaPortal, string> = {
+  LUNES: "lunes",
+  MARTES: "martes",
+  MIERCOLES: "miércoles",
+  JUEVES: "jueves",
+  VIERNES: "viernes",
+  SABADO: "sábado",
+  DOMINGO: "domingo",
+};
+
+/** Día de la semana de una fecha YYYY-MM-DD, sin desfase de zona. */
+export const diaSemanaDeFecha = (fechaISO: string): DiaSemanaPortal =>
+  DIA_POR_NUMERO[new Date(`${fechaISO}T00:00:00Z`).getUTCDay()];
+
+/** «lunes», «miércoles»… */
+export const nombreDiaSemana = (dia: DiaSemanaPortal) => NOMBRE_DIA[dia];
+
+/** «los lunes» (lunes a viernes no cambian al plural; sábado y domingo sí). */
+export const losDia = (dia: DiaSemanaPortal) => {
+  const n = NOMBRE_DIA[dia];
+  return `los ${n.endsWith("s") ? n : `${n}s`}`;
+};
+
+/** Cantidades del favorito para un día de la semana: productId → cantidad (> 0). Vacío si no hay favorito para ese día. */
+export function favoritoDelDia(
+  favorito: FavoritoPortal | null,
+  dia: DiaSemanaPortal,
+): Record<string, number> {
+  const r: Record<string, number> = {};
+  for (const l of favorito?.favorito?.lineas ?? []) {
+    const n = l.dias[dia] ?? 0;
+    if (n > 0) r[l.productId] = n;
+  }
+  return r;
 }
+
+/** Mismas líneas con las mismas cantidades (ignorando las de cantidad 0). */
+export function mismasCantidades(
+  a: Record<string, number> | undefined,
+  b: Record<string, number> | undefined,
+): boolean {
+  const ka = Object.keys(a ?? {}).filter((k) => (a?.[k] ?? 0) > 0);
+  const kb = Object.keys(b ?? {}).filter((k) => (b?.[k] ?? 0) > 0);
+  return ka.length === kb.length && ka.every((k) => a![k] === b?.[k]);
+}
+
+/**
+ * Lo que llena «Usar favorito» en un día: las cantidades del favorito de ese día de la semana sin los productos que ya no
+ * están en el catálogo, con un aviso por cada producto que ya no está disponible. El servidor ya quita de `lineas` los no
+ * disponibles y los nombra aparte (`noDisponibles`, de todo el favorito: no dice de qué día eran), así que esos nombres se
+ * avisan también.
+ */
+export function usarFavoritoDia(
+  favorito: FavoritoPortal,
+  dia: DiaSemanaPortal,
+  catalogo: ProductoCatalogoPortal[],
+): { lineas: Record<string, number>; avisos: string[] } {
+  const vigentes = new Set(catalogo.map((p) => p.id));
+  const lineas: Record<string, number> = {};
+  const fuera: string[] = [...favorito.noDisponibles];
+  for (const l of favorito.favorito?.lineas ?? []) {
+    const n = l.dias[dia] ?? 0;
+    if (n <= 0) continue;
+    if (vigentes.has(l.productId)) lineas[l.productId] = n;
+    else fuera.push(l.nombre);
+  }
+  return {
+    lineas,
+    avisos: [...new Set(fuera)].map((n) => `${n} ya no está disponible`),
+  };
+}
+
+/** Cuerpo de PUT /portal/favorito/dia a partir de las cantidades de un día. */
+export const lineasDeFavoritoDia = (
+  lineas: Record<string, number>,
+): { productId: string; cantidad: number }[] =>
+  Object.entries(lineas)
+    .filter(([, cantidad]) => cantidad > 0)
+    .map(([productId, cantidad]) => ({ productId, cantidad }));
