@@ -60,11 +60,12 @@ describe('B2B · estados por entrega', () => {
   });
 
   describe('cerrar una entrega: permisos y rechazos', () => {
-    it('un Operador puede cerrar entregas (los 3 roles); y también cancelar (pedido no pagado)', async () => {
+    // CAMBIO DELIBERADO: antes el Operador también podía cancelar; ahora cancelar es solo de Gerente/Dueño (cerrar entregas sigue en los 3 roles).
+    it('un Operador puede cerrar entregas (los 3 roles) pero no cancelar el pedido (403)', async () => {
       const p = await confirmado();
       const [e] = (await detalle(p.id)).entregas;
       await operador().patch(ruta(p.id, e.id)).send({ estado: 'NO_RECOGIDA' }).expect(200);
-      expect((await operador().patch(`/pedidos-b2b/${p.id}/cancelar`)).status).toBe(200);
+      expect((await operador().patch(`/pedidos-b2b/${p.id}/cancelar`)).status).toBe(403);
     });
 
     it('solo pedidos Confirmados o En proceso: Por confirmar y Cancelado dan 409', async () => {

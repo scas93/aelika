@@ -300,7 +300,8 @@ export default function DetallePanel({
   }
 
   // Por confirmar → Confirmado es lo único manual; En proceso / Completado salen de cerrar entregas.
-  const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION" && !pedido.cancelado;
+  // Confirmar y cancelar son de Gerente/Dueño (el servidor también responde 403 al Operador).
+  const puedeConfirmar = esAdmin && pedido?.estado === "PENDIENTE_CONFIRMACION" && !pedido.cancelado;
   // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende del rol).
   const puedeCerrar = pedido
     ? puedeCerrarEntregas(pedido.estado, pedido.cancelado)
@@ -383,9 +384,12 @@ export default function DetallePanel({
   const entregasVista = pedido ? entregasDesdePedido(pedido) : [];
   const resumen = resumenPorProducto(entregasVista);
   const pedidoOriginal = pedido ? pedido.items.reduce((s, i) => s + Number(i.precioUnitario) * i.cantidadTotal, 0) : 0;
-  // «Por confirmar»: se edita desde el encabezado de Entregas. Ya confirmado, «Editar pedido» no se ofrece.
-  const puedeEditarAhora = puedeConfirmar && puedeModificar && !pedido?.cancelado;
-  const puedeCancelar = !!pedido && puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado;
+  // «Editar pedido» (encabezado de Entregas): donde el servidor deja editar — cualquier estado no cancelado, incluido
+  // Completado; al Operador le queda bloqueado un pedido Pagado.
+  const puedeEditarAhora = puedeModificar && !pedido?.cancelado;
+  const puedeCancelar = !!pedido && esAdmin && pedido.estado !== "COMPLETADO" && !pedido.cancelado;
+  // En un cancelado solo se cobra lo entregado: «Marcar pagado» aparece únicamente si «A cobrar» es mayor que $0.
+  const puedeMarcarPagado = esAdmin && !pagado && !!pedido && (!pedido.cancelado || Number(pedido.total) > 0);
 
   // Pie fijo: Por confirmar → Confirmar (principal) + Cancelar; Confirmado / En proceso → solo Cancelar, discreto;
   // Completado / Cancelado → sin pie. Se oculta mientras se edita (el editor trae sus propios botones).
@@ -431,9 +435,12 @@ export default function DetallePanel({
         ) : undefined
       }
       subtitle={
-        pedido
-          ? `Semana del ${fechaCorta(pedido.semanaInicio, false)} · ${pedido.contactoNombre} · ${pedido.contactoTelefono}`
-          : undefined
+        pedido ? (
+          <>
+            <div>{`Semana del ${fechaCorta(pedido.semanaInicio, false)} · ${pedido.contactoNombre} · ${pedido.contactoTelefono}`}</div>
+            {pedido.contactoCorreo && <div>{pedido.contactoCorreo}</div>}
+          </>
+        ) : undefined
       }
       footer={pie}
     >
@@ -490,7 +497,7 @@ export default function DetallePanel({
                 · {pedido.modoCobro === "AL_INICIO" ? "Al inicio" : "Al final"}
               </span>
             </div>
-            {esAdmin && !pagado && (
+            {puedeMarcarPagado && (
               <Button variant="primary" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
                 Marcar pagado
               </Button>

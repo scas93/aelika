@@ -90,10 +90,32 @@ describe("DetallePanel (pedido B2B)", () => {
     expect(screen.getByRole("button", { name: "Marcar pagado" })).toBeTruthy();
   });
 
-  it("Operador no ve Marcar pagado", async () => {
+  it("Operador no ve Marcar pagado, Confirmar ni Cancelar, pero sí Editar pedido y cerrar entregas", async () => {
+    rol = "OPERADOR";
+    await abrir(pedido({ estado: "CONFIRMADO_SURTIENDO" }));
+    expect(screen.queryByRole("button", { name: "Marcar pagado" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar pedido" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Editar pedido" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Entregada" })).toHaveLength(1);
+  });
+
+  it("Operador en Por confirmar: sin pie (no confirma ni cancela)", async () => {
     rol = "OPERADOR";
     await abrir(pedido());
-    expect(screen.queryByRole("button", { name: "Marcar pagado" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar pedido" })).toBeNull();
+  });
+
+  it("Operador no ve Editar pedido si el pedido está Pagado", async () => {
+    rol = "OPERADOR";
+    await abrir(pedido({ estadoPago: "PAGADO", pagadoAt: "2026-10-20T18:00:00.000Z" }));
+    expect(screen.queryByRole("button", { name: "Editar pedido" })).toBeNull();
+  });
+
+  it("el correo del contacto va como segunda línea del encabezado, solo si existe", async () => {
+    await abrir(pedido({ contactoCorreo: "mariana@aurora.test" }));
+    expect(screen.getByText("mariana@aurora.test")).toBeTruthy();
   });
 
   it("ya pagado: el botón desaparece y el badge muestra Pagado con fecha", async () => {
@@ -125,18 +147,19 @@ describe("DetallePanel (pedido B2B)", () => {
     expect(screen.getByText("Atrasada")).toBeTruthy();
   });
 
-  it("Confirmado: sin «Editar pedido»; solo Cancelar discreto; acciones de entrega dentro de la abierta", async () => {
+  it("Confirmado: «Editar pedido» disponible; solo Cancelar discreto; acciones de entrega dentro de la abierta", async () => {
     await abrir(pedido({ estado: "CONFIRMADO_SURTIENDO" }));
-    expect(screen.queryByRole("button", { name: "Editar pedido" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Editar pedido" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
     expect(screen.getByRole("button", { name: "Cancelar pedido" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Entregada" })).toHaveLength(1);
   });
 
-  it("Completado: sin pie; todas cerradas → todas plegadas", async () => {
+  it("Completado: sin pie, con «Editar pedido» (Históricos); todas cerradas → todas plegadas", async () => {
     const p = pedido({ estado: "COMPLETADO" });
     p.entregas!.forEach((e) => (e.estado = "ENTREGADA"));
     await abrir(p);
+    expect(screen.getByRole("button", { name: "Editar pedido" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancelar pedido" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
     expect(screen.queryAllByRole("button", { expanded: true })).toHaveLength(0);
@@ -151,6 +174,15 @@ describe("DetallePanel (pedido B2B)", () => {
     expect(screen.getAllByText("Cancelada").length).toBe(1);
     expect(screen.queryByRole("button", { name: "Cancelar pedido" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Editar pedido" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Marcar pagado" })).toBeTruthy(); // A cobrar $90 > 0
+  });
+
+  it("Cancelado con A cobrar $0: sin «Marcar pagado»", async () => {
+    const p = pedido({ cancelado: true, canceladoAt: "2026-10-20T18:00:00.000Z", subtotal: "0", descuentoTotal: "0", total: "0" });
+    p.entregas!.forEach((e) => (e.estado = "CANCELADA"));
+    await abrir(p);
+    expect(screen.queryByRole("button", { name: "Marcar pagado" })).toBeNull();
   });
 
   it("al abrir una entrega se ven sus productos con el importe de la línea; resumen por producto plegado por defecto", async () => {
