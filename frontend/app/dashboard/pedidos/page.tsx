@@ -347,7 +347,7 @@ function OrderCard({
                 <Button variant="secondary" onClick={handleImprimirWebUsb} disabled={printing || !webUsbSupported}>
                   {printing ? "Imprimiendo..." : "Imprimir ticket"}
                 </Button>
-                {order.metodoPago === "TARJETA" && order.estadoPago === "PAGADO" && (
+                {user.rol !== "OPERADOR" && order.metodoPago === "TARJETA" && order.estadoPago === "PAGADO" && (
                   <Button variant="danger" onClick={() => setConfirmReembolsoOpen(true)}>
                     Reembolsar
                   </Button>
