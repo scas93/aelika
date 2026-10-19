@@ -18,6 +18,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsEnum,
   IsISO8601,
   IsInt,
   IsNotEmpty,
@@ -113,6 +114,25 @@ class LineaFavoritoDto {
   @IsObject() dias!: Partial<Record<DiaSemana, number>>;
 }
 
+class LineaFavoritoDiaDto {
+  @IsUUID() productId!: string;
+  @IsInt() @Min(0) @Max(9999) cantidad!: number;
+}
+
+class GuardarFavoritoDiaDto {
+  @IsString() @IsNotEmpty() @Matches(SLUG) slug!: string;
+
+  @IsEnum(DiaSemana) dia!: DiaSemana;
+
+  // Al menos un producto con cantidad > 0 (lo valida el servicio con un 400 de mensaje claro).
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => LineaFavoritoDiaDto)
+  lineas!: LineaFavoritoDiaDto[];
+}
+
 class GuardarFavoritoDto {
   @IsString() @IsNotEmpty() @Matches(SLUG) slug!: string;
 
@@ -178,6 +198,20 @@ export class PortalPedidosController {
     res.setHeader('Cache-Control', 'no-store');
     const sesion = await exigirSesionPortal(this.acceso, req, res, dto.slug);
     return this.favorito.guardar(sesion, dto.lineas);
+  }
+
+  // Favorito de UN día de la semana: reemplaza solo ese día, sin tocar los demás (atómico por cliente).
+  @Put('favorito/dia')
+  @HttpCode(200)
+  async guardarFavoritoDia(
+    @Body() dto: GuardarFavoritoDiaDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    this.exigirEncabezado(req);
+    res.setHeader('Cache-Control', 'no-store');
+    const sesion = await exigirSesionPortal(this.acceso, req, res, dto.slug);
+    return this.favorito.guardarDia(sesion, dto.dia, dto.lineas);
   }
 
   // ---- Ver mis pedidos (4e): solo lectura, siempre del cliente de la sesión ----

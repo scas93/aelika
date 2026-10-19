@@ -7,6 +7,7 @@ import {
   fetchCalendario,
   fetchCatalogo,
   fetchFavorito,
+  guardarFavoritoDia,
   problemasDeError,
   type CalendarioPortal,
   type CatalogoPortal,
@@ -15,42 +16,49 @@ import {
   type ProblemaFechaPortal,
   type ResultadoPedidoPortal,
 } from "@/lib/portal-api";
+import { etiquetaFechaLarga } from "@/lib/portal-calendario-formato";
 import {
-  aplicarFavorito,
   construirEntregas,
-  repartirParejo,
-  sumaDistribucion,
+  copiarDia,
+  diaSemanaDeFecha,
+  lineasDeFavoritoDia,
+  losDia,
+  nombreDiaSemana,
+  piezasDia,
+  ponerCantidad,
+  sinDiasQuitados,
   totalesPorSemana,
-  type Carrito,
-  type Distribucion,
+  usarFavoritoDia,
+  type PorDia,
 } from "@/lib/portal-pedido-modelo";
-import { AVISO, ERROR, WRAPPER } from "../estilos";
+import {
+  AVISO,
+  BTN_PRIMARIO,
+  BTN_SECUNDARIO,
+  ERROR,
+  WRAPPER,
+} from "../estilos";
 import EncabezadoPantalla from "../encabezado-pantalla";
 import AlertaFlotante from "../alerta-flotante";
-import PasoCatalogo from "./paso-catalogo";
+import ModalPortal from "../modal-portal";
 import PasoConfirmacion from "./paso-confirmacion";
+import PasoDia from "./paso-dia";
 import PasoDias from "./paso-dias";
-import PasoDistribucion from "./paso-distribucion";
 import PasoResumen from "./paso-resumen";
+import PasoSemana from "./paso-semana";
 
-type Paso = "dias" | "catalogo" | "distribucion" | "resumen" | "confirmacion";
+type Paso = "semana" | "dias" | "dia" | "resumen" | "confirmacion";
 const TITULO: Record<Paso, string | undefined> = {
+  semana: "Elige la semana de tu pedido",
   dias: "Elige tus días de entrega",
-  catalogo: "Elige tus productos",
-  distribucion: "¿Qué día quieres cada producto?",
+  dia: "¿Qué quieres cada día?",
   resumen: "Revisa tu pedido",
   confirmacion: undefined,
-};
-const ANTERIOR: Partial<Record<Paso, Paso>> = {
-  catalogo: "dias",
-  distribucion: "catalogo",
-  resumen: "distribucion",
 };
 
 interface Datos {
   calendario: CalendarioPortal;
   catalogo: CatalogoPortal;
-  favorito: FavoritoPortal;
 }
 
 interface Props {
@@ -60,16 +68,13 @@ interface Props {
   onSesionTerminada: () => void;
 }
 
-const MENSAJE_FAVORITO_NO_APLICADO =
-  "Tu favorito no se pudo aplicar: ya no hay días disponibles para sus entregas. Elige los días a mano.";
-
 const nuevaLlave = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `k-${Date.now()}-${Math.random()}`;
 
-// Crear pedido (4d): días → productos → reparto por día → resumen → confirmación. El servidor decide qué días se pueden
-// pedir, los precios, el descuento y el mínimo; aquí solo se arma el pedido y se muestra.
+// Crear pedido (un pedido = una semana): semana → días de esa semana → un paso por cada día elegido → resumen → confirmación. El cliente captura lo que recibe cada día; el
+// servidor deriva el total por producto y decide qué días se pueden pedir, los precios, el descuento y el mínimo.
 export default function CrearPedido({
   slug,
   sesion,
@@ -79,13 +84,28 @@ export default function CrearPedido({
   const clienteId = sesion.cliente?.id;
   const [datos, setDatos] = useState<Datos | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [paso, setPaso] = useState<Paso>("dias");
+  const [paso, setPaso] = useState<Paso>("semana");
+  // Semana (lunes, YYYY-MM-DD) del pedido que se está armando.
+  const [semanaInicio, setSemanaInicio] = useState<string | null>(null);
+  // Semana a la que se quiere cambiar habiendo ya capturado productos: espera la confirmación del cliente.
+  const [cambiarSemana, setCambiarSemana] = useState<string | null>(null);
   const [fechas, setFechas] = useState<string[]>([]);
-  const [carrito, setCarrito] = useState<Carrito>({});
-  const [dist, setDist] = useState<Distribucion>({});
+  // fecha → productId → cantidad: lo que se recibe cada día. Es lo único que se captura.
+  const [porDia, setPorDia] = useState<PorDia>({});
+  const [fechaActiva, setFechaActiva] = useState("");
+  // Se llegó a un día desde «Editar» del resumen: al terminar se regresa al resumen.
+  const [desdeResumen, setDesdeResumen] = useState(false);
+  // Día que se quiere quitar y ya tiene productos: espera la confirmación del cliente.
+  const [quitarFecha, setQuitarFecha] = useState<string | null>(null);
   const [nota, setNota] = useState("");
-  const [avisos, setAvisos] = useState<string[]>([]);
-  // Alerta flotante (desaparece sola a los 3 s): hoy solo «el favorito no se pudo aplicar».
+  // Favoritos por día de la semana. null = no han cargado o falló la carga: el flujo sigue sin acciones de favorito.
+  const [favorito, setFavorito] = useState<FavoritoPortal | null>(null);
+  const [guardandoFavorito, setGuardandoFavorito] = useState(false);
+  // Fecha cuyo favorito se quiere reemplazar (ya existía uno para ese día de la semana): espera la confirmación.
+  const [reemplazarFavorito, setReemplazarFavorito] = useState<string | null>(
+    null,
+  );
+  // Alerta flotante (desaparece sola a los 3 s): avisos de «Usar favorito» y errores al guardarlo.
   const [alerta, setAlerta] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,13 +125,9 @@ export default function CrearPedido({
 
   useEffect(() => {
     let activo = true;
-    void Promise.all([
-      fetchCalendario(slug),
-      fetchCatalogo(slug),
-      fetchFavorito(slug),
-    ])
-      .then(([calendario, catalogo, favorito]) => {
-        if (activo) setDatos({ calendario, catalogo, favorito });
+    void Promise.all([fetchCalendario(slug), fetchCatalogo(slug)])
+      .then(([calendario, catalogo]) => {
+        if (activo) setDatos({ calendario, catalogo });
       })
       .catch((e: unknown) => {
         if (!activo) return;
@@ -128,6 +144,21 @@ export default function CrearPedido({
     };
     // onSesionTerminada es estable en la práctica (setState del padre); se vuelve a cargar si cambia el cliente.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, clienteId]);
+
+  // El favorito se carga una vez al entrar al flujo, aparte del calendario y el catálogo: si falla, no estorba.
+  useEffect(() => {
+    let activo = true;
+    fetchFavorito(slug)
+      .then((f) => {
+        if (activo) setFavorito(f);
+      })
+      .catch(() => {
+        if (activo) setFavorito(null);
+      });
+    return () => {
+      activo = false;
+    };
   }, [slug, clienteId]);
 
   const precios = useMemo(() => {
@@ -159,77 +190,122 @@ export default function CrearPedido({
       </Contenedor>
     );
   }
-  const { calendario, catalogo, favorito } = datos;
+  const { calendario, catalogo } = datos;
 
-  const entregas = construirEntregas(carrito, dist, fechas);
-  const totales = totalesPorSemana(
+  const semana = calendario.semanas.find(
+    (x) => x.semanaInicio === semanaInicio,
+  );
+  const entregas = construirEntregas(porDia, fechas);
+  const totalSemana = totalesPorSemana(
     entregas,
-    calendario.semanas,
+    semana ? [semana] : [],
     precios,
     catalogo.descuentoPorcentaje,
     catalogo.minimoPiezas,
-  );
+  )[0];
+
+  function aplicarSemana(inicio: string) {
+    if (inicio !== semanaInicio) {
+      // Otra semana: se descarta lo capturado (los días elegidos eran de la anterior).
+      setFechas([]);
+      setPorDia({});
+      setFechaActiva("");
+      setSemanaInicio(inicio);
+    }
+    setProblemas([]);
+    setPaso("dias");
+  }
+
+  function elegirSemana(inicio: string) {
+    const hayProductos = Object.values(porDia).some((l) => piezasDia(l) > 0);
+    if (semanaInicio && inicio !== semanaInicio && hayProductos)
+      setCambiarSemana(inicio);
+    else aplicarSemana(inicio);
+  }
+
+  function quitarFechaYa(f: string) {
+    setFechas((prev) => prev.filter((x) => x !== f));
+    setPorDia((prev) =>
+      sinDiasQuitados(
+        prev,
+        fechas.filter((x) => x !== f),
+      ),
+    );
+  }
 
   function toggleFecha(f: string) {
     setProblemas([]);
-    setFechas((prev) =>
-      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f].sort(),
-    );
-  }
-
-  function usarFavorito() {
-    const r = aplicarFavorito(
-      favorito,
-      calendario,
-      Object.values(catalogo.categories).flatMap((c) => c.products),
-    );
-    if (!r || r.fechas.length === 0) {
-      setAvisos(r?.avisos ?? []);
-      setAlerta(MENSAJE_FAVORITO_NO_APLICADO);
+    if (!fechas.includes(f)) {
+      // Un día agregado entra vacío.
+      setFechas((prev) => [...prev, f].sort());
       return;
     }
-    setFechas(r.fechas);
-    setCarrito(r.carrito);
-    setDist(r.dist);
-    setAvisos(r.avisos);
+    // Quitar un día con productos pide confirmación antes de borrarlos.
+    if (piezasDia(porDia[f]) > 0) setQuitarFecha(f);
+    else quitarFechaYa(f);
+  }
+
+  function usarFavorito(fecha: string) {
+    if (!favorito) return;
+    const { lineas, avisos } = usarFavoritoDia(
+      favorito,
+      diaSemanaDeFecha(fecha),
+      Object.values(catalogo.categories).flatMap((c) => c.products),
+    );
+    if (Object.keys(lineas).length > 0)
+      setPorDia((prev) => ({ ...prev, [fecha]: lineas }));
+    if (avisos.length > 0) setAlerta(avisos.join(". "));
+  }
+
+  // Guardar el favorito del día de la semana de esta fecha. Si ya existía uno para ese día, antes se confirma.
+  function pedirGuardarFavorito(fecha: string) {
+    const dia = diaSemanaDeFecha(fecha);
+    const existe = (favorito?.favorito?.lineas ?? []).some(
+      (l) => (l.dias[dia] ?? 0) > 0,
+    );
+    if (existe) setReemplazarFavorito(fecha);
+    else void guardarFavorito(fecha);
+  }
+
+  async function guardarFavorito(fecha: string) {
+    setGuardandoFavorito(true);
+    try {
+      const r = await guardarFavoritoDia(
+        slug,
+        diaSemanaDeFecha(fecha),
+        lineasDeFavoritoDia(porDia[fecha] ?? {}),
+      );
+      setFavorito(r);
+    } catch (e) {
+      if (terminarSesion(e)) return;
+      setAlerta(
+        e instanceof Error
+          ? e.message
+          : "No pudimos guardar tu favorito. Intenta de nuevo",
+      );
+    } finally {
+      setGuardandoFavorito(false);
+    }
+  }
+
+  function irADia(f: string) {
+    setFechaActiva(f);
+    setPaso("dia");
+  }
+
+  function continuarDesdeDias() {
     setProblemas([]);
-    setPaso("catalogo");
-  }
-
-  function setCantidad(id: string, cantidad: number) {
-    setCarrito((prev) => {
-      const sig = { ...prev };
-      if (cantidad > 0) sig[id] = cantidad;
-      else delete sig[id];
-      return sig;
-    });
-  }
-
-  function irADistribucion() {
-    const ordenadas = [...fechas].sort();
-    setDist((prev) => {
-      const sig: Distribucion = {};
-      for (const [id, total] of Object.entries(carrito)) {
-        if (total <= 0) continue;
-        // Solo se conserva lo ya repartido si sigue sumando el total sobre las fechas actuales.
-        sig[id] =
-          sumaDistribucion(prev[id], ordenadas) === total
-            ? prev[id]
-            : repartirParejo(total, ordenadas);
-      }
-      return sig;
-    });
-    setPaso("distribucion");
+    setDesdeResumen(false);
+    irADia(fechas.includes(fechaActiva) ? fechaActiva : fechas[0]);
   }
 
   async function refrescar(): Promise<void> {
     try {
-      const [c, k, f] = await Promise.all([
+      const [c, k] = await Promise.all([
         fetchCalendario(slug),
         fetchCatalogo(slug),
-        fetchFavorito(slug),
       ]);
-      setDatos({ calendario: c, catalogo: k, favorito: f });
+      setDatos({ calendario: c, catalogo: k });
     } catch (e) {
       terminarSesion(e);
     }
@@ -255,9 +331,11 @@ export default function CrearPedido({
       if (terminarSesion(e)) return;
       const fallos = problemasDeError(e);
       if (fallos.length > 0) {
-        // El calendario cambió mientras armabas el pedido: se quitan esas fechas, se conserva el carrito y se vuelve a los días.
+        // El calendario cambió mientras armabas el pedido: se quitan esas fechas, los demás días conservan sus productos.
         const malas = new Set(fallos.map((p) => p.fecha));
-        setFechas((prev) => prev.filter((f) => !malas.has(f)));
+        const restantes = fechas.filter((f) => !malas.has(f));
+        setFechas(restantes);
+        setPorDia((prev) => sinDiasQuitados(prev, restantes));
         setProblemas(fallos);
         setPaso("dias");
         await refrescar();
@@ -276,25 +354,24 @@ export default function CrearPedido({
   }
 
   const nombreCliente = sesion.cliente?.nombre ?? "";
+  // «Atrás» de un día lleva a la pantalla de días (única forma de quitar o agregar días); el del resumen, al último día.
   const atras =
-    paso === "dias" || paso === "confirmacion"
+    paso === "semana" || paso === "confirmacion"
       ? onSalir
-      : () => setPaso(ANTERIOR[paso] ?? "dias");
+      : paso === "dias"
+        ? () => setPaso("semana")
+        : paso === "dia"
+          ? () => setPaso("dias")
+          : () => {
+              setDesdeResumen(false);
+              irADia(fechas[fechas.length - 1]);
+            };
 
   return (
     <Contenedor
       titulo={TITULO[paso]}
       onAtras={paso === "confirmacion" ? undefined : atras}
     >
-      {avisos.length > 0 && paso !== "confirmacion" && (
-        <div className="flex flex-col gap-1">
-          {avisos.map((a) => (
-            <p key={a} className={AVISO}>
-              {a}
-            </p>
-          ))}
-        </div>
-      )}
       {problemas.length > 0 && paso === "dias" && (
         <div className="flex flex-col gap-1">
           {problemas.map((p) => (
@@ -303,51 +380,57 @@ export default function CrearPedido({
             </p>
           ))}
           <p className={AVISO}>
-            Actualizamos tu calendario. Elige de nuevo tus días; tus productos
-            se conservan.
+            Actualizamos tu calendario. Elige de nuevo tus días; los demás días
+            conservan sus productos.
           </p>
         </div>
       )}
-      {paso === "dias" && (
+      {paso === "semana" && (
+        <PasoSemana
+          cliente={nombreCliente}
+          calendario={calendario}
+          onElegir={(x) => elegirSemana(x.semanaInicio)}
+        />
+      )}
+      {paso === "dias" && semana && (
         <PasoDias
           cliente={nombreCliente}
           calendario={calendario}
+          semana={semana}
           fechas={fechas}
-          favorito={favorito}
           onToggle={toggleFecha}
+          onContinuar={continuarDesdeDias}
+        />
+      )}
+      {paso === "dia" && fechaActiva && (
+        <PasoDia
+          catalogo={catalogo}
+          fechas={fechas}
+          fechaActiva={fechaActiva}
+          porDia={porDia}
+          desdeResumen={desdeResumen}
+          onCantidad={(f, id, n) =>
+            setPorDia((prev) => ponerCantidad(prev, f, id, n))
+          }
+          onCopiar={(origen, destino) =>
+            setPorDia((prev) => copiarDia(prev, origen, destino))
+          }
+          favorito={favorito}
+          guardandoFavorito={guardandoFavorito}
           onUsarFavorito={usarFavorito}
-          onContinuar={() => {
-            setProblemas([]);
-            setAvisos([]);
-            setPaso("catalogo");
+          onGuardarFavorito={pedirGuardarFavorito}
+          onIr={irADia}
+          onResumen={() => {
+            setDesdeResumen(false);
+            setPaso("resumen");
           }}
         />
       )}
-      {paso === "catalogo" && (
-        <PasoCatalogo
-          catalogo={catalogo}
-          carrito={carrito}
-          onCantidad={setCantidad}
-          onContinuar={irADistribucion}
-        />
-      )}
-      {paso === "distribucion" && (
-        <PasoDistribucion
-          catalogo={catalogo}
-          fechas={fechas}
-          carrito={carrito}
-          dist={dist}
-          onDist={(id, porFecha) =>
-            setDist((prev) => ({ ...prev, [id]: porFecha }))
-          }
-          onContinuar={() => setPaso("resumen")}
-        />
-      )}
-      {paso === "resumen" && (
+      {paso === "resumen" && totalSemana && (
         <PasoResumen
           entregas={entregas}
           nombres={nombres}
-          totales={totales}
+          semana={totalSemana}
           descuentoPorcentaje={catalogo.descuentoPorcentaje}
           minimoPiezas={catalogo.minimoPiezas}
           nota={nota}
@@ -355,7 +438,10 @@ export default function CrearPedido({
           enviando={enviando}
           error={error}
           problemas={problemas}
-          onAgregar={() => setPaso("catalogo")}
+          onEditarDia={(f) => {
+            setDesdeResumen(true);
+            irADia(f);
+          }}
           onEnviar={() => void enviar()}
         />
       )}
@@ -371,6 +457,91 @@ export default function CrearPedido({
       )}
       {alerta && (
         <AlertaFlotante mensaje={alerta} onCerrar={() => setAlerta(null)} />
+      )}
+      {reemplazarFavorito && (
+        <ModalPortal
+          titulo={`Reemplazar tu ${nombreDiaSemana(diaSemanaDeFecha(reemplazarFavorito))} favorito`}
+          onCerrar={() => setReemplazarFavorito(null)}
+        >
+          <p className="text-sm text-mayoreo-ink-soft">
+            Ya tienes un favorito para{" "}
+            {losDia(diaSemanaDeFecha(reemplazarFavorito))}. Se reemplazará por
+            lo que capturaste hoy.
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              className={BTN_PRIMARIO}
+              onClick={() => {
+                const f = reemplazarFavorito;
+                setReemplazarFavorito(null);
+                void guardarFavorito(f);
+              }}
+            >
+              Reemplazar favorito
+            </button>
+            <button
+              className={BTN_SECUNDARIO}
+              onClick={() => setReemplazarFavorito(null)}
+            >
+              Conservar el actual
+            </button>
+          </div>
+        </ModalPortal>
+      )}
+      {cambiarSemana && (
+        <ModalPortal
+          titulo="Cambiar de semana"
+          onCerrar={() => setCambiarSemana(null)}
+        >
+          <p className="text-sm text-mayoreo-ink-soft">
+            Se descartará lo que capturaste para la semana anterior.
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              className={BTN_PRIMARIO}
+              onClick={() => {
+                aplicarSemana(cambiarSemana);
+                setCambiarSemana(null);
+              }}
+            >
+              Cambiar de semana
+            </button>
+            <button
+              className={BTN_SECUNDARIO}
+              onClick={() => setCambiarSemana(null)}
+            >
+              Conservar mi pedido
+            </button>
+          </div>
+        </ModalPortal>
+      )}
+      {quitarFecha && (
+        <ModalPortal
+          titulo={`Se borrarán los productos del ${etiquetaFechaLarga(quitarFecha).split(" ")[0]}`}
+          onCerrar={() => setQuitarFecha(null)}
+        >
+          <p className="text-sm text-mayoreo-ink-soft">
+            Quitas el {etiquetaFechaLarga(quitarFecha)} y se pierde lo que
+            habías capturado en ese día.
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              className={BTN_PRIMARIO}
+              onClick={() => {
+                quitarFechaYa(quitarFecha);
+                setQuitarFecha(null);
+              }}
+            >
+              Quitar el día
+            </button>
+            <button
+              className={BTN_SECUNDARIO}
+              onClick={() => setQuitarFecha(null)}
+            >
+              Conservarlo
+            </button>
+          </div>
+        </ModalPortal>
       )}
     </Contenedor>
   );

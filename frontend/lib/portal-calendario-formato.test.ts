@@ -10,7 +10,6 @@ import {
   textoLimite,
   textoAgregaAntes,
   textoCambiaAntes,
-  textoPideAntes,
 } from "./portal-calendario-formato";
 import type { DiaCalendarioPortal } from "./portal-api";
 
@@ -99,14 +98,14 @@ describe("portal-calendario-formato", () => {
   });
 });
 
-describe("textoPideAntes y rangoSemanaCorto", () => {
+describe("hora límite y rangoSemanaCorto", () => {
   it("hora límite en 12 horas, hora de Ciudad de México", () => {
     // 2026-10-18 02:00Z = sáb 17 de oct, 20:00 en CDMX (UTC−6)
-    expect(textoPideAntes("2026-10-18T02:00:00.000Z")).toBe(
-      "Pide antes del sáb 17, 8:00 pm",
+    expect(textoCambiaAntes("2026-10-18T02:00:00.000Z")).toBe(
+      "Cambia antes del sáb 17, 8:00 pm",
     );
-    expect(textoPideAntes("2026-10-17T14:00:00.000Z")).toBe(
-      "Pide antes del sáb 17, 8:00 am",
+    expect(textoCambiaAntes("2026-10-17T14:00:00.000Z")).toBe(
+      "Cambia antes del sáb 17, 8:00 am",
     );
   });
 
@@ -133,7 +132,7 @@ describe("hora12", () => {
 });
 
 describe("textoCambiaAntes y textoAgregaAntes", () => {
-  it("mismo formato de 12 horas que «Pide antes»", () => {
+  it("mismo formato de 12 horas que «Cambia antes»", () => {
     // 2026-10-14 20:00Z = mié 14, 2:00 pm en CDMX
     expect(textoCambiaAntes("2026-10-14T20:00:00.000Z")).toBe(
       "Cambia antes del mié 14, 2:00 pm",

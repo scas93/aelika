@@ -261,16 +261,15 @@ export const fetchFavorito = (slug: string) =>
     base: BASE_PORTAL,
   });
 
-export const guardarFavorito = (
+/** Guarda el favorito de UN día de la semana («tu lunes favorito»); responde el favorito completo (como GET). */
+export const guardarFavoritoDia = (
   slug: string,
-  lineas: {
-    productId: string;
-    dias: Partial<Record<DiaSemanaPortal, number>>;
-  }[],
+  dia: DiaSemanaPortal,
+  lineas: { productId: string; cantidad: number }[],
 ) =>
-  llamar<FavoritoPortal>("/favorito", {
+  llamar<FavoritoPortal>("/favorito/dia", {
     method: "PUT",
-    body: { slug, lineas },
+    body: { slug, dia, lineas },
     base: BASE_PORTAL,
   });
 
@@ -287,7 +286,7 @@ export const crearPedido = (
     headers: { "Idempotency-Key": idempotencyKey },
   });
 
-// ---- Ver mis pedidos (4e). Solo lectura (más «usar como favorito»); el backend devuelve etiquetas ya en español. ----
+// ---- Ver mis pedidos (4e). Solo lectura; el backend devuelve etiquetas ya en español. ----
 
 export interface EstadoEtiquetadoPortal {
   codigo: string;
@@ -318,13 +317,14 @@ export interface ListaPedidosPortal {
   siguienteCursor: string | null;
 }
 
-export interface DetallePedidoPortal
-  extends Omit<ResumenPedidoPortal, "fechasEntrega"> {
+export interface DetallePedidoPortal extends Omit<
+  ResumenPedidoPortal,
+  "fechasEntrega"
+> {
   subtotal: number;
   descuentoPorcentaje: number;
   descuentoTotal: number;
   notaCliente: string | null;
-  esFavorito: boolean;
   /** `updatedAt` del pedido, para el control de concurrencia al modificar. */
   version: string;
   /** ¿Hay algo que el cliente pueda cambiar ahora? */
@@ -351,12 +351,6 @@ export const fetchPedido = (slug: string, folio: string) =>
   llamar<DetallePedidoPortal>(
     `/pedidos/${encodeURIComponent(folio)}?slug=${encodeURIComponent(slug)}`,
     { base: BASE_PORTAL },
-  );
-
-export const usarPedidoComoFavorito = (slug: string, folio: string) =>
-  llamar<{ favorito: FavoritoPortal["favorito"]; omitidos: string[] }>(
-    `/pedidos/${encodeURIComponent(folio)}/favorito`,
-    { method: "POST", body: { slug }, base: BASE_PORTAL },
   );
 
 // ---- Modificar pedido (4f). El servidor valida todo (calendario, pago, versión); aquí solo se tipa y se muestra. ----

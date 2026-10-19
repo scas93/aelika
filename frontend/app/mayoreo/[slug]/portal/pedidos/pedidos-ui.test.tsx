@@ -12,7 +12,7 @@ import type {
   ResumenPedidoPortal,
 } from "@/lib/portal-api";
 
-// Ver mis pedidos (4e): lista (activos/anteriores, marca «Modificado por el cliente», «Ver más»), detalle y favorito.
+// Ver mis pedidos (4e): lista (activos/anteriores, marca «Modificado por el cliente», «Ver más»), y detalle.
 
 const replace = vi.fn();
 // El router real de Next es estable entre renders; el mock también.
@@ -28,7 +28,6 @@ const fetchSesion = vi.fn();
 const fetchCalendario = vi.fn();
 const fetchPedidos = vi.fn();
 const fetchPedido = vi.fn();
-const usarPedidoComoFavorito = vi.fn();
 vi.mock("@/lib/portal-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/portal-api")>();
   return {
@@ -37,7 +36,6 @@ vi.mock("@/lib/portal-api", async (importOriginal) => {
     fetchCalendario: (...a: unknown[]) => fetchCalendario(...a),
     fetchPedidos: (...a: unknown[]) => fetchPedidos(...a),
     fetchPedido: (...a: unknown[]) => fetchPedido(...a),
-    usarPedidoComoFavorito: (...a: unknown[]) => usarPedidoComoFavorito(...a),
   };
 });
 
@@ -78,7 +76,6 @@ const detalle = (
   descuentoTotal: 25.55,
   total: 229.95,
   notaCliente: "Tocar el timbre",
-  esFavorito: false,
   version: "2026-09-30T16:00:00.000Z",
   modificable: false,
   entregas: [
@@ -246,9 +243,8 @@ describe("detalle del pedido", () => {
     expect(screen.getByText("Cancelada")).toBeInTheDocument();
     expect(screen.getByText(/10% de descuento/)).toBeInTheDocument();
     expect(screen.getByText(/Tocar el timbre/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Usar este pedido como favorito" }),
-    ).toBeInTheDocument();
+    // El favorito ya no se maneja desde el detalle de un pedido.
+    expect(screen.queryByText(/favorito/i)).toBeNull();
     // Sin acciones de modificar ni cancelar (4f).
     expect(screen.queryByText(/Modificar|Cancelar pedido/i)).toBeNull();
     const wa = screen.getByRole("link", { name: /Escribir por WhatsApp/ });
@@ -274,33 +270,5 @@ describe("detalle del pedido", () => {
     expect(
       await screen.findByText("No encontramos este pedido."),
     ).toBeInTheDocument();
-  });
-
-  it("usar como favorito: confirma el reemplazo, guarda y pasa a «Es tu pedido favorito»", async () => {
-    fetchPedido.mockResolvedValue(detalle());
-    usarPedidoComoFavorito.mockResolvedValue({ favorito: null, omitidos: [] });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<DetallePage />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Usar este pedido como favorito",
-      }),
-    );
-    expect(
-      await screen.findByText(/Es tu pedido favorito/),
-    ).toBeInTheDocument();
-    expect(usarPedidoComoFavorito).toHaveBeenCalledWith("banetto", "P-000001");
-  });
-
-  it("si el cliente no confirma el reemplazo no se guarda nada", async () => {
-    fetchPedido.mockResolvedValue(detalle());
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    render(<DetallePage />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Usar este pedido como favorito",
-      }),
-    );
-    expect(usarPedidoComoFavorito).not.toHaveBeenCalled();
   });
 });

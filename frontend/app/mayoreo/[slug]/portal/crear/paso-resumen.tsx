@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { rangoSemanaCorto } from "@/lib/portal-calendario-formato";
 import type { ProblemaFechaPortal } from "@/lib/portal-api";
 import type { EntregaPedidoPortal } from "@/lib/portal-api";
-import { round2, type TotalesSemana } from "@/lib/portal-pedido-modelo";
+import type { TotalesSemana } from "@/lib/portal-pedido-modelo";
 import { AVISO, BTN_PRIMARIO, CARD, ERROR, dinero } from "../estilos";
 import BarraAccionFija from "./barra-accion-fija";
 import { DiaEntrega, TarjetaTotal } from "./bloques-pedido";
@@ -12,7 +12,8 @@ import { DiaEntrega, TarjetaTotal } from "./bloques-pedido";
 interface Props {
   entregas: EntregaPedidoPortal[];
   nombres: Map<string, string>;
-  totales: TotalesSemana[];
+  /** Totales de la semana del pedido (un pedido = una semana). */
+  semana: TotalesSemana;
   descuentoPorcentaje: number;
   minimoPiezas: number;
   nota: string;
@@ -20,17 +21,17 @@ interface Props {
   enviando: boolean;
   error: string | null;
   problemas: ProblemaFechaPortal[];
-  /** Vuelve al paso de productos conservando todo lo armado. */
-  onAgregar: () => void;
+  /** Vuelve a capturar ese día conservando todo lo armado. */
+  onEditarDia: (fecha: string) => void;
   onEnviar: () => void;
 }
 
-// Paso 4: resumen. Total general arriba, una tarjeta por semana (un pedido por semana) con su avance contra el mínimo,
-// totales, nota opcional y envío. El detalle del mínimo vive en las tarjetas; la barra fija solo lleva el botón.
+// Paso final: resumen. Total general arriba, una tarjeta por semana (un pedido por semana) con su avance contra el mínimo,
+// lo que recibe cada día (editable), los totales de la semana por producto, nota opcional y envío. El detalle del mínimo vive en las tarjetas; la barra fija solo lleva el botón.
 export default function PasoResumen({
   entregas,
   nombres,
-  totales,
+  semana: t,
   descuentoPorcentaje,
   minimoPiezas,
   nota,
@@ -38,13 +39,11 @@ export default function PasoResumen({
   enviando,
   error,
   problemas,
-  onAgregar,
+  onEditarDia,
   onEnviar,
 }: Props) {
-  const total = round2(totales.reduce((s, t) => s + t.total, 0));
-  const subtotal = round2(totales.reduce((s, t) => s + t.subtotal, 0));
-  const descuento = round2(totales.reduce((s, t) => s + t.descuento, 0));
-  const bajoMinimo = totales.some((t) => t.faltanPiezas > 0);
+  const { total, subtotal, descuento } = t;
+  const bajoMinimo = t.faltanPiezas > 0;
   const hayMinimo = minimoPiezas > 0;
 
   // Errores del servidor / calendario: recuadro arriba; la pantalla se desplaza hasta él cuando aparece.
@@ -80,13 +79,13 @@ export default function PasoResumen({
         descuentoPorcentaje={descuentoPorcentaje}
       />
 
-      {totales.map((t) => {
+      {(() => {
         const cumple = t.faltanPiezas === 0;
         const avance = hayMinimo
           ? Math.min(100, (t.piezas / minimoPiezas) * 100)
           : 0;
         return (
-          <section key={t.semanaInicio} className={CARD + " gap-3"}>
+          <section className={CARD + " gap-3"}>
             <div className="flex items-baseline justify-between gap-2">
               <h3 className="text-sm font-semibold">
                 Semana {rangoSemanaCorto(t.semanaInicio, t.semanaFin)}
@@ -124,7 +123,7 @@ export default function PasoResumen({
                     <button
                       type="button"
                       className="shrink-0 font-semibold underline"
-                      onClick={onAgregar}
+                      onClick={() => onEditarDia(t.fechas[0])}
                     >
                       Agregar
                     </button>
@@ -139,6 +138,7 @@ export default function PasoResumen({
                   <DiaEntrega
                     key={e.fecha}
                     fecha={e.fecha}
+                    onEditar={() => onEditarDia(e.fecha)}
                     lineas={e.items.map((it) => ({
                       clave: it.productId,
                       nombre: nombres.get(it.productId) ?? "Producto",
@@ -147,9 +147,39 @@ export default function PasoResumen({
                   />
                 ))}
             </div>
+            <div className="flex flex-col gap-2 border-t border-mayoreo-border pt-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-bold">Total de la semana</span>
+                <span className="text-sm font-bold tabular-nums">
+                  {t.piezas} pzas
+                </span>
+              </div>
+              <ul className="flex flex-col gap-1">
+                {[...t.productos]
+                  .sort((a, b) =>
+                    (nombres.get(a.productId) ?? "").localeCompare(
+                      nombres.get(b.productId) ?? "",
+                      "es",
+                    ),
+                  )
+                  .map((p) => (
+                    <li
+                      key={p.productId}
+                      className="flex items-baseline justify-between gap-3 text-sm text-mayoreo-ink-soft"
+                    >
+                      <span className="min-w-0">
+                        {nombres.get(p.productId) ?? "Producto"}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {p.cantidad}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
           </section>
         );
-      })}
+      })()}
 
       <div className="flex flex-col gap-2 border-t border-mayoreo-border pt-3">
         <label
@@ -164,11 +194,6 @@ export default function PasoResumen({
             value={nota}
             onChange={(e) => onNota(e.target.value)}
           />
-          {totales.length > 1 && (
-            <span className="text-xs font-normal text-mayoreo-ink-soft">
-              La nota se guarda en los dos pedidos.
-            </span>
-          )}
         </label>
       </div>
 

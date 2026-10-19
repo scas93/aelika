@@ -4,7 +4,7 @@ import {
   cerrarSesion,
   crearPedido,
   fetchSesion,
-  guardarFavorito,
+  guardarFavoritoDia,
   pedirCodigo,
   problemasDeError,
   verificarCodigo,
@@ -103,22 +103,23 @@ describe("portal-api", () => {
     });
   });
 
-  it("guardar favorito: PUT con cuerpo y encabezado del portal", async () => {
+  it("guardar favorito de un día: PUT /favorito/dia con cuerpo y encabezado del portal", async () => {
     const f = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(() =>
         respuesta(200, { favorito: null, noDisponibles: [] }),
       );
-    await guardarFavorito("n", [{ productId: "p", dias: { LUNES: 2 } }]);
+    await guardarFavoritoDia("n", "LUNES", [{ productId: "p", cantidad: 2 }]);
     const [url, init] = f.mock.calls[0];
-    expect(url).toBe("/api-portal/portal/favorito");
+    expect(url).toBe("/api-portal/portal/favorito/dia");
     expect(init?.method).toBe("PUT");
     expect((init?.headers as Record<string, string>)["x-portal-request"]).toBe(
       "1",
     );
     expect(JSON.parse(init?.body as string)).toEqual({
       slug: "n",
-      lineas: [{ productId: "p", dias: { LUNES: 2 } }],
+      dia: "LUNES",
+      lineas: [{ productId: "p", cantidad: 2 }],
     });
   });
 

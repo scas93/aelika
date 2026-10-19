@@ -2190,3 +2190,16 @@ export function fetchPedidoB2bExistente(token: string, clienteId: string, semana
     headers: authHeaders(token),
   });
 }
+
+// Sube la foto de un producto a R2 y regresa su URL pública. Multipart: sin Content-Type manual (el navegador pone el boundary).
+export async function uploadProductImage(token: string, file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_URL}/products/imagen`, { method: "POST", headers: authHeaders(token), body: form });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = body?.message ?? "No se pudo subir la imagen";
+    throw new ApiError(Array.isArray(message) ? message[0] : message, res.status, body?.code);
+  }
+  return body as { url: string };
+}

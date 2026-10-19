@@ -8,7 +8,7 @@ import BotonWhatsApp from "../boton-whatsapp";
 import BarraAccionFija from "./barra-accion-fija";
 import { BloqueRecoge } from "./bloques-pedido";
 
-// Paso 5: confirmación. Responde «¿cuándo y dónde recojo?»: una fila por día del pedido con su hora, y la dirección del
+// Último paso: confirmación. Responde «¿cuándo y dónde recojo?»: una fila por día del pedido con su hora, y la dirección del
 // negocio. El detalle de productos y precios vive en «Ver mis pedidos».
 export default function PasoConfirmacion({
   resultado,
@@ -28,17 +28,14 @@ export default function PasoConfirmacion({
   ubicacion: string | null;
   onVolver: () => void;
 }) {
-  const varios = resultado.pedidos.length > 1;
-  // Todas las fechas juntas (también si son dos semanas), en orden cronológico.
-  const dias = resultado.pedidos
-    .flatMap((p) =>
-      p.entregas.map((e) => ({
-        fecha: e.fecha,
-        piezas: e.productos.reduce((s, x) => s + x.cantidad, 0),
-      })),
-    )
+  // «Crear pedido» envía una sola semana: el resultado trae un solo pedido (un folio).
+  const pedido = resultado.pedidos[0];
+  const dias = pedido.entregas
+    .map((e) => ({
+      fecha: e.fecha,
+      piezas: e.productos.reduce((s, x) => s + x.cantidad, 0),
+    }))
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
-  const folios = resultado.pedidos.map((p) => p.folio).join(", ");
   const direccion = ubicacion?.trim() || null;
 
   // La confirmación aparece al final de un flujo largo: siempre se abre arriba, también en el celular (donde el
@@ -67,11 +64,7 @@ export default function PasoConfirmacion({
             <path d="M5 12.5l4.5 4.5L19 7.5" />
           </svg>
         </span>
-        <h2 className="text-lg font-bold">
-          {varios
-            ? "¡Tus pedidos quedaron registrados!"
-            : "¡Tu pedido quedó registrado!"}
-        </h2>
+        <h2 className="text-lg font-bold">¡Tu pedido quedó registrado!</h2>
         <span className="self-start rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
           Por confirmar
         </span>
@@ -104,7 +97,7 @@ export default function PasoConfirmacion({
       </section>
 
       <p className="text-xs text-mayoreo-ink-soft">
-        Total {dinero(resultado.total)} · {varios ? "Folios" : "Folio"} {folios}
+        Total {dinero(resultado.total)} · Folio {pedido.folio}
       </p>
 
       <BarraAccionFija>
@@ -119,7 +112,7 @@ export default function PasoConfirmacion({
               contexto={{
                 tipo: "pedido",
                 cliente,
-                folios: resultado.pedidos.map((p) => p.folio),
+                folios: [pedido.folio],
               }}
             />
           )}

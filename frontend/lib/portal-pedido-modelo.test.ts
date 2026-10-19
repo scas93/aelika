@@ -1,16 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
-  aplicarFavorito,
   construirEntregas,
+  diaSemanaDeFecha,
+  favoritoDelDia,
+  lineasDeFavoritoDia,
+  losDia,
+  mismasCantidades,
+  nombreDiaSemana,
+  usarFavoritoDia,
+  copiarDia,
   diasCerrados,
-  fechasElegibles,
-  favoritoDesdeSeleccion,
-  repartirParejo,
-  todoDistribuido,
+  diasVacios,
+  piezasDia,
+  ponerCantidad,
+  sinDiasQuitados,
   totalesPorSemana,
 } from "./portal-pedido-modelo";
 import type {
   CalendarioPortal,
+  FavoritoPortal,
   DiaCalendarioPortal,
   SemanaCalendarioPortal,
 } from "./portal-api";
@@ -83,44 +91,66 @@ const calendario = (semanas: SemanaCalendarioPortal[]): CalendarioPortal => ({
   semanas,
 });
 
-describe("repartirParejo / todoDistribuido", () => {
-  it("reparte enteros lo más parejo posible, el resto a las primeras fechas", () => {
-    expect(repartirParejo(10, ["a", "b", "c"])).toEqual({ a: 4, b: 3, c: 3 });
-    expect(repartirParejo(2, ["a", "b", "c"])).toEqual({ a: 1, b: 1, c: 0 });
-    expect(repartirParejo(5, [])).toEqual({});
+describe("captura por día", () => {
+  const porDia = {
+    "2026-10-06": { p1: 6, p2: 4 },
+    "2026-10-02": { p1: 6, p2: 0 },
+    "2026-10-08": {},
+  };
+  const fechas = ["2026-10-06", "2026-10-02", "2026-10-08"];
+
+  it("piezasDia suma solo cantidades > 0", () => {
+    expect(piezasDia({ p1: 6, p2: 4 })).toBe(10);
+    expect(piezasDia({ p1: 0 })).toBe(0);
+    expect(piezasDia(undefined)).toBe(0);
   });
 
-  it("todoDistribuido exige que cada producto sume exactamente su total", () => {
-    const f = ["2026-10-05", "2026-10-06"];
-    expect(
-      todoDistribuido(
-        { p1: 10 },
-        { p1: { "2026-10-05": 5, "2026-10-06": 5 } },
-        f,
-      ),
-    ).toBe(true);
-    expect(
-      todoDistribuido(
-        { p1: 10 },
-        { p1: { "2026-10-05": 5, "2026-10-06": 4 } },
-        f,
-      ),
-    ).toBe(false);
-    expect(todoDistribuido({}, {}, f)).toBe(false);
+  it("ponerCantidad crea, cambia y con 0 quita la línea, sin tocar otros días", () => {
+    let d = ponerCantidad({}, "2026-10-02", "p1", 3);
+    expect(d).toEqual({ "2026-10-02": { p1: 3 } });
+    d = ponerCantidad(d, "2026-10-06", "p1", 5);
+    d = ponerCantidad(d, "2026-10-02", "p1", 0);
+    expect(d).toEqual({ "2026-10-02": {}, "2026-10-06": { p1: 5 } });
+  });
+
+  it("diasVacios lista, en orden, los días elegidos sin productos", () => {
+    expect(diasVacios(porDia, fechas)).toEqual(["2026-10-08"]);
+    expect(diasVacios({}, ["2026-10-06", "2026-10-02"])).toEqual([
+      "2026-10-02",
+      "2026-10-06",
+    ]);
+  });
+
+  it("copiarDia reemplaza el destino con las cantidades del origen (una copia, no la misma referencia)", () => {
+    const r = copiarDia(
+      { "2026-10-05": { p1: 4, p2: 0, p3: 2 }, "2026-10-06": {} },
+      "2026-10-05",
+      "2026-10-06",
+    );
+    expect(r["2026-10-06"]).toEqual({ p1: 4, p3: 2 });
+    r["2026-10-06"].p1 = 99;
+    expect(r["2026-10-05"].p1).toBe(4);
+  });
+
+  it("sinDiasQuitados conserva los días que siguen elegidos", () => {
+    expect(sinDiasQuitados(porDia, ["2026-10-06", "2026-10-08"])).toEqual({
+      "2026-10-06": { p1: 6, p2: 4 },
+      "2026-10-08": {},
+    });
   });
 });
 
 describe("construirEntregas y totales", () => {
   const entregas = construirEntregas(
-    { p1: 12, p2: 4 },
     {
-      p1: { "2026-10-02": 6, "2026-10-06": 6 },
-      p2: { "2026-10-06": 4, "2026-10-02": 0 },
+      "2026-10-02": { p1: 6 },
+      "2026-10-06": { p1: 6, p2: 4, p3: 0 },
+      "2026-10-08": {},
     },
-    ["2026-10-06", "2026-10-02"],
+    ["2026-10-06", "2026-10-02", "2026-10-08"],
   );
 
-  it("una entrega por fecha, ordenadas, sin cantidades 0", () => {
+  it("una entrega por fecha, ordenadas, sin cantidades 0 y sin días vacíos (forma exacta del POST)", () => {
     expect(entregas).toEqual([
       { fecha: "2026-10-02", items: [{ productId: "p1", cantidad: 6 }] },
       {
@@ -150,6 +180,7 @@ describe("construirEntregas y totales", () => {
       descuento: 30,
       total: 270,
       faltanPiezas: 4,
+      productos: [{ productId: "p1", cantidad: 6 }],
     });
     // 6 × 50 + 4 × 30.5 = 422; 10 % = 42.2
     expect(t[1]).toMatchObject({
@@ -159,6 +190,11 @@ describe("construirEntregas y totales", () => {
       descuento: 42.2,
       total: 379.8,
       faltanPiezas: 0,
+      // Total de la semana por producto (suma de todos sus días).
+      productos: [
+        { productId: "p1", cantidad: 6 },
+        { productId: "p2", cantidad: 4 },
+      ],
     });
   });
 
@@ -175,89 +211,87 @@ describe("construirEntregas y totales", () => {
   });
 });
 
-describe("fechasElegibles", () => {
-  it("solo días agregables de semanas sin pedido", () => {
-    const cal = calendario([
-      semana("2026-09-28", { pedido: true }),
-      semana("2026-10-05", { noDisponibles: [0, 1] }),
-    ]);
-    expect(fechasElegibles(cal)).toEqual([
-      "2026-10-07",
-      "2026-10-08",
-      "2026-10-09",
-      "2026-10-10",
-      "2026-10-11",
-    ]);
-  });
-});
-
-describe("favorito", () => {
+describe("favorito por día de la semana", () => {
   const catalogo = [
     { id: "p1", nombre: "Café", descripcion: null, precio: 50, fotoUrl: null },
     {
       id: "p2",
       nombre: "Concha",
       descripcion: null,
-      precio: 30.5,
+      precio: 20,
       fotoUrl: null,
     },
   ];
-  const favorito = {
-    favorito: {
-      guardadoAt: null,
-      lineas: [
-        { productId: "p1", nombre: "Café", dias: { LUNES: 6, MIERCOLES: 6 } },
-        { productId: "p2", nombre: "Concha", dias: { VIERNES: 4 } },
-        { productId: "p9", nombre: "Pan viejo", dias: { LUNES: 2 } },
-      ],
-    },
-    noDisponibles: [],
-  };
+  const fav = (
+    lineas: {
+      productId: string;
+      nombre: string;
+      dias: Record<string, number>;
+    }[],
+    noDisponibles: string[] = [],
+  ): FavoritoPortal => ({
+    favorito: { guardadoAt: null, lineas },
+    noDisponibles,
+  });
+  const base = fav([
+    { productId: "p1", nombre: "Café", dias: { LUNES: 6, MIERCOLES: 2 } },
+    { productId: "p2", nombre: "Concha", dias: { LUNES: 3 } },
+  ]);
 
-  it("se aplica a la primera semana sin pedido; quita días que ya no cumplen y productos ya no disponibles, con aviso", () => {
-    // La semana en curso ya tiene pedido; la siguiente tiene el lunes cerrado.
-    const cal = calendario([
-      semana("2026-09-28", { pedido: true }),
-      semana("2026-10-05", { noDisponibles: [0] }),
-    ]);
-    const r = aplicarFavorito(favorito, cal, catalogo)!;
-    expect(r.fechas).toEqual(["2026-10-07", "2026-10-09"]);
-    expect(r.carrito).toEqual({ p1: 6, p2: 4 });
-    expect(r.dist).toEqual({
-      p1: { "2026-10-07": 6 },
-      p2: { "2026-10-09": 4 },
-    });
-    expect(r.avisos.join(" | ")).toMatch(/Pan viejo ya no está disponible/);
-    expect(r.avisos.join(" | ")).toMatch(/lunes ya no cumple/);
+  it("diaSemanaDeFecha y los nombres en español", () => {
+    expect(diaSemanaDeFecha("2026-10-05")).toBe("LUNES");
+    expect(diaSemanaDeFecha("2026-10-07")).toBe("MIERCOLES");
+    expect(diaSemanaDeFecha("2026-10-11")).toBe("DOMINGO");
+    expect(nombreDiaSemana("MIERCOLES")).toBe("miércoles");
+    expect(losDia("LUNES")).toBe("los lunes");
+    expect(losDia("MIERCOLES")).toBe("los miércoles");
+    expect(losDia("SABADO")).toBe("los sábados");
+    expect(losDia("DOMINGO")).toBe("los domingos");
   });
 
-  it("sin favorito o sin semana disponible → null", () => {
+  it("favoritoDelDia: solo las cantidades de ese día de la semana; vacío sin favorito", () => {
+    expect(favoritoDelDia(base, "LUNES")).toEqual({ p1: 6, p2: 3 });
+    expect(favoritoDelDia(base, "MIERCOLES")).toEqual({ p1: 2 });
+    expect(favoritoDelDia(base, "MARTES")).toEqual({});
+    expect(favoritoDelDia(null, "LUNES")).toEqual({});
     expect(
-      aplicarFavorito(
-        { favorito: null, noDisponibles: [] },
-        calendario([semana("2026-10-05")]),
-        catalogo,
-      ),
-    ).toBeNull();
-    expect(
-      aplicarFavorito(
-        favorito,
-        calendario([semana("2026-10-05", { pedido: true })]),
-        catalogo,
-      ),
-    ).toBeNull();
+      favoritoDelDia({ favorito: null, noDisponibles: [] }, "LUNES"),
+    ).toEqual({});
   });
 
-  it("guardar: plantilla por día de la semana de la PRIMERA semana elegida", () => {
-    const cal = calendario([semana("2026-09-28"), semana("2026-10-05")]);
-    const lineas = favoritoDesdeSeleccion(
-      { p1: 12 },
-      { p1: { "2026-10-02": 4, "2026-10-04": 2, "2026-10-06": 6 } },
-      ["2026-10-02", "2026-10-04", "2026-10-06"],
-      cal,
+  it("mismasCantidades ignora las de cantidad 0 y distingue productos y cantidades", () => {
+    expect(mismasCantidades({ p1: 6, p2: 3 }, { p2: 3, p1: 6 })).toBe(true);
+    expect(mismasCantidades({ p1: 6, p2: 0 }, { p1: 6 })).toBe(true);
+    expect(mismasCantidades({ p1: 6 }, { p1: 5 })).toBe(false);
+    expect(mismasCantidades({ p1: 6 }, { p1: 6, p2: 1 })).toBe(false);
+    expect(mismasCantidades({}, undefined)).toBe(true);
+  });
+
+  it("usarFavoritoDia llena con las cantidades del día y avisa de los productos que ya no están", () => {
+    const r = usarFavoritoDia(base, "LUNES", catalogo);
+    expect(r.lineas).toEqual({ p1: 6, p2: 3 });
+    expect(r.avisos).toEqual([]);
+    // Producto fuera del catálogo vigente: se omite y se nombra.
+    const sinConcha = usarFavoritoDia(base, "LUNES", catalogo.slice(0, 1));
+    expect(sinConcha.lineas).toEqual({ p1: 6 });
+    expect(sinConcha.avisos).toEqual(["Concha ya no está disponible"]);
+    // Los que el servidor ya quitó (noDisponibles) también se avisan, sin duplicar.
+    const conBaja = usarFavoritoDia(
+      fav(
+        [{ productId: "p1", nombre: "Café", dias: { LUNES: 6 } }],
+        ["Espiral", "Espiral"],
+      ),
+      "LUNES",
+      catalogo,
     );
-    expect(lineas).toEqual([
-      { productId: "p1", dias: { VIERNES: 4, DOMINGO: 2 } },
+    expect(conBaja.lineas).toEqual({ p1: 6 });
+    expect(conBaja.avisos).toEqual(["Espiral ya no está disponible"]);
+  });
+
+  it("lineasDeFavoritoDia arma el cuerpo del PUT sin cantidades 0", () => {
+    expect(lineasDeFavoritoDia({ p1: 6, p2: 0, p3: 2 })).toEqual([
+      { productId: "p1", cantidad: 6 },
+      { productId: "p3", cantidad: 2 },
     ]);
   });
 });
