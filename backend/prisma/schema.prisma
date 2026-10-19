@@ -682,6 +682,9 @@ model DetalleB2B {
   // del corte CONFIRMADO_AT_DESDE y nunca se sobrescribe en reconfirmaciones. null = sin dato (pedidos anteriores al corte,
   // pedidos aún por confirmar o cancelados antes de confirmarse). Sin relleno retroactivo.
   confirmadoAt                DateTime?
+  // Quién capturó el pedido al crearlo (observabilidad del Dueño). null = sin dato (pedidos anteriores a este campo; sin
+  // relleno retroactivo). No sale en la API. Lo fija crearOrdenB2b, único lugar donde se crea una orden B2B.
+  origen                      OrigenPedidoB2b?
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -690,6 +693,12 @@ model DetalleB2B {
   @@index([tenantId, semanaInicio])
   @@index([codigoDescuentoId])
   @@map("detalles_b2b")
+}
+
+// Origen de un pedido B2B: lo creó el propio cliente en el portal o lo capturó el equipo en el panel.
+enum OrigenPedidoB2b {
+  PORTAL_CLIENTE
+  PANEL_EQUIPO
 }
 
 enum EstadoEntrega {

@@ -20,6 +20,7 @@ import {
   EstadoEntrega,
   EstadoPago,
   EstadoPedido,
+  OrigenPedidoB2b,
   PedidoB2bEstado,
   Prisma,
   Role,
@@ -741,6 +742,7 @@ export class PedidosB2bService {
         dto.clienteId,
       );
       const creado = await crearPedidoB2bDeCliente(tx, {
+        origen: OrigenPedidoB2b.PANEL_EQUIPO,
         tenantId,
         tenant,
         cliente,

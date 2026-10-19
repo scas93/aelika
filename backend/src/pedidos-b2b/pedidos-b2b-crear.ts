@@ -1,5 +1,9 @@
 import { ConflictException } from '@nestjs/common';
-import { Prisma, TipoOrden } from '../../generated/prisma/client';
+import {
+  OrigenPedidoB2b,
+  Prisma,
+  TipoOrden,
+} from '../../generated/prisma/client';
 import { round2 } from '../common/money';
 import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
 import { crearOrdenB2b } from './pedidos-b2b-orden';
@@ -40,6 +44,8 @@ export async function bloquearClienteB2b(
 }
 
 export interface ParamsCrearPedidoB2b {
+  /** Quién captura el pedido (portal del cliente o panel del equipo). */
+  origen: OrigenPedidoB2b;
   tenantId: string;
   tenant: {
     pedidoB2bModoCobro: Prisma.DetalleB2BUncheckedCreateInput['modoCobro'];
@@ -114,6 +120,7 @@ export async function crearPedidoB2bDeCliente(
       codigoDescuentoTexto: null,
       descuentoPorcentajeAplicado: descuentoPorcentaje,
       notaCliente: p.notaCliente?.trim() || null,
+      origen: p.origen,
     },
     p.resueltos,
   );

@@ -3,6 +3,7 @@ import {
   EstadoEntrega,
   EstadoPago,
   EstadoPedido,
+  OrigenPedidoB2b,
   Prisma,
   TipoOrden,
 } from '../../generated/prisma/client';
@@ -65,6 +66,8 @@ export function diaDeFecha(fecha: Date, semanaInicio: Date) {
 }
 
 export interface DatosOrdenB2b {
+  /** Quién captura el pedido; obligatorio para que ningún camino de creación lo olvide. */
+  origen: OrigenPedidoB2b;
   tenantId: string;
   folio: string;
   clienteId: string;
@@ -129,6 +132,7 @@ export async function crearOrdenB2b(
       codigoDescuentoTexto: d.codigoDescuentoTexto,
       descuentoPorcentajeAplicado: d.descuentoPorcentajeAplicado,
       notaCliente: d.notaCliente ?? null,
+      origen: d.origen,
     },
   });
 

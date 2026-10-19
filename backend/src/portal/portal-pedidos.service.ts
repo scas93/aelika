@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { DiaSemana } from '../../generated/prisma/enums';
+import { DiaSemana, OrigenPedidoB2b } from '../../generated/prisma/enums';
 import { CODIGOS_STORE } from './codigos-store';
 import type { CodigosStore } from './codigos-store';
 import type { SesionValida } from './portal-acceso.service';
@@ -303,6 +303,7 @@ export class PortalPedidosService {
         }
 
         const creado = await crearPedidoB2bDeCliente(tx, {
+          origen: OrigenPedidoB2b.PORTAL_CLIENTE,
           tenantId: t.id,
           tenant: {
             pedidoB2bModoCobro: t.pedidoB2bModoCobro,
