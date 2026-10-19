@@ -56,7 +56,7 @@ describe('B2C · punto de envío con pedidos', () => {
     const punto = await seedPuntoEnvio(s.h.prisma, s.base.tenant.id);
     const sinPermiso = 'No tienes permiso para realizar esta acción';
     expectError(await auth(s.h, tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR')).delete(`/puntos-envio/${punto.id}`), 403, sinPermiso);
-    expectError(await auth(s.h, tokenFor(s.h.jwt, s.base.dueno, s.base.tenant.id, 'GERENTE')).delete(`/puntos-envio/${punto.id}`), 403, sinPermiso);
+    expectError(await auth(s.h, tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'GERENTE')).delete(`/puntos-envio/${punto.id}`), 403, sinPermiso);
     expectError(await request(s.h.app.getHttpServer()).delete(`/puntos-envio/${punto.id}`), 401, 'Unauthorized');
     expect(await s.h.prisma.puntoEnvio.count()).toBe(1);
   });

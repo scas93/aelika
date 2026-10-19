@@ -135,7 +135,7 @@ describe('B2C · avanzar', () => {
   it('permisos: Operador, Gerente y Dueño pueden avanzar; sin token 401; id inexistente 404', async () => {
     const o = await crear();
     await auth(s.h, tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR')).patch(`/orders/${o.id}/avanzar`).expect(200);
-    await auth(s.h, tokenFor(s.h.jwt, s.base.dueno, s.base.tenant.id, 'GERENTE')).patch(`/orders/${o.id}/avanzar`).expect(200);
+    await auth(s.h, tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'GERENTE')).patch(`/orders/${o.id}/avanzar`).expect(200);
     await dueno().patch(`/orders/${o.id}/avanzar`).expect(200);
     expectError(await request(s.h.app.getHttpServer()).patch(`/orders/${o.id}/avanzar`), 401, 'Unauthorized');
     expectError(await dueno().patch('/orders/00000000-0000-4000-8000-000000000000/avanzar'), 404, 'Pedido no encontrado');
@@ -197,7 +197,7 @@ describe('B2C · reembolsar', () => {
 
   it('Gerente puede reembolsar', async () => {
     const { order } = await pedidoPagadoConTarjeta();
-    await auth(s.h, tokenFor(s.h.jwt, s.base.dueno, s.base.tenant.id, 'GERENTE')).post(`/orders/${order.id}/reembolsar`).expect(201);
+    await auth(s.h, tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'GERENTE')).post(`/orders/${order.id}/reembolsar`).expect(201);
     expect(s.h.fakes.refundsCreate).toHaveBeenCalledTimes(1);
   });
 

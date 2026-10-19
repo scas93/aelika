@@ -1,3 +1,5 @@
+import { avisarSesionInvalida } from "./session";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export type Role = "OPERADOR" | "GERENTE" | "DUENO";
@@ -737,6 +739,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => null);
 
   if (!res.ok) {
+    // 401 con sesión enviada = el token ya no vale (usuario desactivado/borrado o token vencido): al login con aviso.
+    // Un 401 sin sesión (ej. credenciales incorrectas en /auth/login) se queda como error normal del formulario.
+    if (res.status === 401 && new Headers(init?.headers).has("Authorization")) avisarSesionInvalida();
     const message = body?.message ?? "Ocurrió un error inesperado";
     throw new ApiError(Array.isArray(message) ? message[0] : message, res.status, body?.code);
   }
