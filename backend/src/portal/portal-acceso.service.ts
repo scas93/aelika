@@ -35,6 +35,14 @@ export interface ClienteResumen {
   nombre: string;
 }
 
+/** Cliente autorizado con el dato interno que usa el servicio; nunca sale en la API (se reduce a ClienteResumen). */
+interface ClienteAutorizado extends ClienteResumen {
+  ultimoAccesoAt: Date | null;
+}
+
+/** Granularidad máxima del «último acceso» al reanudar una sesión: a lo más una escritura por hora y cliente. */
+const REANUDAR_MIN_MS = 60 * 60 * 1000;
+
 export interface SesionValida {
   tenant: Tenant;
   sesionId: string;
@@ -101,7 +109,7 @@ export class PortalAccesoService {
   private async clientesAutorizados(
     tenantId: string,
     telefono: string,
-  ): Promise<ClienteResumen[]> {
+  ): Promise<ClienteAutorizado[]> {
     return this.prisma.cliente.findMany({
       where: {
         tenantId,
@@ -109,9 +117,47 @@ export class PortalAccesoService {
         bajaAt: null,
         telefonos: { some: { tenantId, telefono } },
       },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, ultimoAccesoAt: true },
       orderBy: { nombre: 'asc' },
     });
+  }
+
+  /**
+   * Marca `Cliente.ultimoAccesoAt` (observabilidad del Dueño). Con `soloSiPasoUnaHora` escribe a lo más una vez por hora
+   * y cliente: el `where` repite la condición, así que dos peticiones simultáneas no escriben dos veces. Nunca rompe el
+   * acceso: si falla, solo se registra.
+   */
+  private async registrarAcceso(
+    tenantId: string,
+    clienteId: string,
+    ahora: Date,
+    soloSiPasoUnaHora = false,
+  ): Promise<void> {
+    try {
+      await this.prisma.cliente.updateMany({
+        where: {
+          id: clienteId,
+          tenantId,
+          ...(soloSiPasoUnaHora
+            ? {
+                OR: [
+                  { ultimoAccesoAt: null },
+                  {
+                    ultimoAccesoAt: {
+                      lte: new Date(ahora.getTime() - REANUDAR_MIN_MS),
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        data: { ultimoAccesoAt: ahora },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo registrar el último acceso: ${String(error)}`,
+      );
+    }
   }
 
   // ---------------------------------------------------------------- pedir código
@@ -286,6 +332,9 @@ export class PortalAccesoService {
         venceAt: new Date(ahora.getTime() + SESION_MS),
       },
     });
+    // Solo si ya hay cliente activo; con varios clientes en el teléfono se registra al elegir (elegirCliente).
+    if (autorizados.length === 1)
+      await this.registrarAcceso(tenant.id, autorizados[0].id, ahora);
     return { token, requiereSeleccion: autorizados.length > 1 };
   }
 
@@ -332,12 +381,25 @@ export class PortalAccesoService {
         clienteId: activo?.id ?? null,
       },
     });
+    // Reanudar: el cliente activo se compara contra su propio campo (ya viene en la consulta de arriba, sin leer más) y
+    // solo se escribe si no tiene dato o pasó más de una hora.
+    if (
+      activo &&
+      (!activo.ultimoAccesoAt ||
+        ahora.getTime() - activo.ultimoAccesoAt.getTime() >= REANUDAR_MIN_MS)
+    ) {
+      await this.registrarAcceso(tenant.id, activo.id, ahora, true);
+    }
+    const resumen = (c: ClienteAutorizado): ClienteResumen => ({
+      id: c.id,
+      nombre: c.nombre,
+    });
     return {
       tenant,
       sesionId: sesion.id,
       telefono: sesion.telefono,
-      cliente: activo,
-      clientes,
+      cliente: activo ? resumen(activo) : null,
+      clientes: clientes.map(resumen),
     };
   }
 
@@ -349,6 +411,7 @@ export class PortalAccesoService {
       where: { id: sesion.sesionId },
       data: { clienteId: elegido.id },
     });
+    await this.registrarAcceso(sesion.tenant.id, elegido.id, new Date());
     return elegido;
   }
 

@@ -17,6 +17,33 @@ import { fechaMexicoYMD } from './pedidos-b2b-logica';
  *    que siga en DESPACHADO se lee como COMPLETADO (estadoB2bVisible) — así el orden de despliegue es indiferente.
  */
 
+/**
+ * Corte de `DetalleB2B.confirmadoAt`: instante (ISO) a partir del cual los pedidos CREADOS registran su primera confirmación.
+ * Se fija por entorno (`CONFIRMADO_AT_DESDE`) con el instante del despliegue. Los pedidos creados antes del corte nunca
+ * reciben la fecha (aunque el cliente los modifique y se reconfirmen), porque su primera confirmación pudo ser anterior y
+ * la fecha real no se puede recuperar. Sin variable (o inválida) no se registra nada: el valor seguro es "sin dato".
+ */
+export function corteConfirmadoAt(): Date | null {
+  const raw = process.env.CONFIRMADO_AT_DESDE;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Valor de `confirmadoAt` a guardar al confirmar un pedido B2B, o undefined si no se debe escribir: ya tiene fecha (la
+ * primera confirmación no se sobrescribe) o el pedido se creó antes del corte / no hay corte configurado.
+ */
+export function confirmadoAtAlConfirmar(
+  pedido: { createdAt: Date; confirmadoAt: Date | null },
+  ahora: Date,
+): Date | undefined {
+  if (pedido.confirmadoAt) return undefined;
+  const corte = corteConfirmadoAt();
+  if (!corte || pedido.createdAt < corte) return undefined;
+  return ahora;
+}
+
 /** Estados que la lectura trata como "pedido activo" (Pedidos activos): todo menos completado/cancelado. */
 export const ESTADOS_B2B_ACTIVOS: EstadoPedido[] = [
   EstadoPedido.PENDIENTE_CONFIRMACION,
