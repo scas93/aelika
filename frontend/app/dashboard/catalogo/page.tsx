@@ -16,6 +16,7 @@ import {
   type Category,
   type Product,
 } from "@/lib/api";
+import ImagenProductoInput from "./imagen-producto-input";
 import PromotionsSection from "./promotions-section";
 import ModifiersSection from "./modifiers-section";
 import Card from "../_components/Card";
@@ -584,6 +585,7 @@ function ProductForm({
   onSubmit: (payload: ProductFormValues) => Promise<void>;
   onCancel?: () => void;
 }) {
+  const { token } = useSession();
   const [nombre, setNombre] = useState(initial.nombre);
   const [descripcion, setDescripcion] = useState(initial.descripcion ?? "");
   const [precio, setPrecio] = useState<number | string>(initial.precio);
@@ -656,10 +658,7 @@ function ProductForm({
         Descripción (opcional)
         <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="admin-input" />
       </label>
-      <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-        Foto (URL, opcional)
-        <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} placeholder="https://..." className="admin-input" />
-      </label>
+      <ImagenProductoInput token={token} value={fotoUrl} onChange={setFotoUrl} />
       <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
         ID del ERP (opcional)
         <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
@@ -697,6 +696,7 @@ function NewProductPanel({
   onClose: () => void;
   onCreate: (payload: ProductFormValues) => Promise<void>;
 }) {
+  const { token } = useSession();
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [precio, setPrecio] = useState("");
@@ -811,15 +811,7 @@ function NewProductPanel({
           Descripción (opcional)
           <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="admin-input" />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Foto (URL, opcional)
-          <input
-            value={fotoUrl}
-            onChange={(e) => setFotoUrl(e.target.value)}
-            placeholder="https://..."
-            className="admin-input"
-          />
-        </label>
+        <ImagenProductoInput token={token} value={fotoUrl} onChange={setFotoUrl} onRemove={() => setFotoUrl("")} />
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           ID del ERP (opcional)
           <input value={erpId} onChange={(e) => setErpId(e.target.value)} placeholder="Ej. PAN-0042" className="admin-input" />
