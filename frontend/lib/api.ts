@@ -2143,7 +2143,8 @@ export interface ClienteB2bEntregaHistorial {
   estado: PedidoB2bEstadoEntrega;
   cerradaAt: string | null;
   atrasada: boolean;
-  productos: { nombreProducto: string; cantidad: number }[];
+  // precioUnitario: precio de lista del pedido (antes del descuento) para el importe de la línea.
+  productos: { nombreProducto: string; precioUnitario: string; cantidad: number }[];
 }
 
 export function fetchPedidosClienteB2b(token: string, clienteId: string, page: number, limit = 20) {

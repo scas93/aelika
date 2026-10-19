@@ -1,17 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { ApiError, type CorregirEntregaPedidoB2bPayload, type PedidoB2bDetalle, type PedidoB2bEntrega, type Product } from "@/lib/api";
-import { DIAS_SEMANA_PEDIDO_B2B } from "@/lib/api";
+import { useState, type ReactNode } from "react";
+import { formatMoney } from "@/lib/format";
+import { ApiError, type CorregirEntregaPedidoB2bPayload, type Product } from "@/lib/api";
 import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import Badge from "../_components/Badge";
 import Button from "../_components/Button";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT } from "./estado";
-
-// timeZone: "UTC" — `fecha` es un @db.Date (medianoche UTC); en la zona local del navegador puede caer un día antes.
-function formatFecha(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-}
+import { entregaAbiertaPorDefecto, fechaCorta, montoDeEntrega, piezasDeEntrega, type EntregaVista } from "./entregas-vista";
 
 function formatCierre(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -133,38 +129,48 @@ function CorregirEntregaForm({
   );
 }
 
-// Las entregas de un pedido con su estado. Con `onCerrar`, cada entrega pendiente muestra "Entregada" / "No recogida"
-// (una por una, nunca en bloque). Con `onCorregir` (solo admin), cada entrega YA cerrada ofrece "Corregir". Sin ninguno es
-// solo lectura.
+// Bloque de entregas del pedido, compartido por el panel del pedido y el historial del cliente. Una fila plegable por entrega
+// («Mié 21 oct · 30 piezas · $1,253» + estado); al abrirla, sus productos con el importe de la línea. El monto es ANTES del
+// descuento (el descuento se aplica una sola vez en los totales). Abierta por defecto: la atrasada, o si no la próxima pendiente.
+// Sin `onCerrar`/`onCorregir` es solo lectura. Con `onCerrar`, la entrega pendiente abierta ofrece "Entregada" / "No recogida"
+// (una por una, nunca en bloque); con `onCorregir` (solo admin), la ya cerrada ofrece "Corregir".
 export default function EntregasLista({
   entregas,
-  items,
   onCerrar,
   onCorregir,
   productos,
   cargarProductos,
+  encabezadoAccion,
 }: {
-  entregas: PedidoB2bEntrega[];
-  items?: PedidoB2bDetalle["items"];
+  entregas: EntregaVista[];
   onCerrar?: (entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") => Promise<void>;
   onCorregir?: (entregaId: string, payload: CorregirEntregaPedidoB2bPayload) => Promise<void>;
   productos?: Product[] | null;
   cargarProductos?: () => void;
+  /** Junto al título de la sección (p. ej. «Editar pedido»). */
+  encabezadoAccion?: ReactNode;
 }) {
   const [cerrando, setCerrando] = useState<string | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null = sin tocar: rige el default (que se recalcula si cambian las entregas, p. ej. al cerrar una).
+  const [manual, setManual] = useState<Set<string> | null>(null);
+  const abiertas = manual ?? new Set([entregaAbiertaPorDefecto(entregas)].filter((x): x is string => x !== null));
 
-  // Líneas de una entrega: los ítems del pedido que tienen cantidad ese día. Un ítem sin productId (el producto ya no existe
-  // en el catálogo) no se puede reenviar, así que bloquea la corrección de esa entrega.
-  function lineasDe(entrega: PedidoB2bEntrega): { lineas: LineaCorreccion[]; bloqueada: boolean } {
+  function alternar(id: string) {
+    const siguiente = new Set(abiertas);
+    if (siguiente.has(id)) siguiente.delete(id);
+    else siguiente.add(id);
+    setManual(siguiente);
+  }
+
+  // Un producto sin productId (ya no existe en el catálogo) no se puede reenviar: bloquea la corrección de esa entrega.
+  function lineasDe(entrega: EntregaVista): { lineas: LineaCorreccion[]; bloqueada: boolean } {
     const lineas: LineaCorreccion[] = [];
     let bloqueada = false;
-    for (const item of items ?? []) {
-      const d = item.distribucion.find((x) => x.dia === entrega.dia);
-      if (!d) continue;
-      if (!item.productId) bloqueada = true;
-      else lineas.push({ productId: item.productId, nombreProducto: item.nombreProducto, cantidad: d.cantidad as Cantidad });
+    for (const p of entrega.productos) {
+      if (!p.productId) bloqueada = true;
+      else lineas.push({ productId: p.productId, nombreProducto: p.nombreProducto, cantidad: p.cantidad as Cantidad });
     }
     return { lineas, bloqueada };
   }
@@ -184,64 +190,88 @@ export default function EntregasLista({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm font-bold text-admin-ink">Entregas</span>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-admin-ink">Entregas</span>
+        {encabezadoAccion}
+      </div>
+      {entregas.length === 0 && <p className="text-xs text-admin-ink-soft">Este pedido no tiene entregas.</p>}
       <ul className="flex flex-col gap-2">
         {entregas.map((entrega) => {
           const pendiente = entrega.estado === "PENDIENTE" || entrega.estado === "LISTA";
           const cerrada = entrega.estado === "ENTREGADA" || entrega.estado === "NO_RECOGIDA";
+          const cancelada = entrega.estado === "CANCELADA";
+          const abierta = abiertas.has(entrega.id);
+          const piezas = piezasDeEntrega(entrega);
           const { lineas, bloqueada } = lineasDe(entrega);
           return (
-            <li
-              key={entrega.id}
-              className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-admin-ink">
-                  {DIAS_SEMANA_PEDIDO_B2B.find((d) => d.value === entrega.dia)?.label ?? ""} · {formatFecha(entrega.fecha)}
+            <li key={entrega.id} className={`flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3 ${cancelada ? "bg-admin-bg" : ""}`}>
+              <button
+                type="button"
+                onClick={() => alternar(entrega.id)}
+                aria-expanded={abierta}
+                className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
+              >
+                <span className={`text-sm font-semibold ${cancelada ? "text-admin-ink-soft" : "text-admin-ink"}`}>
+                  <span className="mr-1.5 text-xs text-admin-ink-soft">{abierta ? "▼" : "▶"}</span>
+                  {fechaCorta(entrega.fecha)} · {piezas} pieza{piezas === 1 ? "" : "s"} · {formatMoney(montoDeEntrega(entrega))}
                 </span>
-                <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5">
                   {entrega.atrasada && <Badge variant="peligro">Atrasada</Badge>}
                   <Badge variant={ESTADO_ENTREGA_VARIANT[entrega.estado]}>{ESTADO_ENTREGA_LABEL[entrega.estado]}</Badge>
-                </div>
-              </div>
-              {entrega.cerradaAt && <span className="text-xs text-admin-ink-soft">Cerrada el {formatCierre(entrega.cerradaAt)}</span>}
-              {onCorregir && cerrada && corrigiendo !== entrega.id && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={bloqueada || corrigiendo !== null}
-                    onClick={() => {
-                      cargarProductos?.();
-                      setCorrigiendo(entrega.id);
-                    }}
-                  >
-                    Corregir
-                  </Button>
-                  {bloqueada && <span className="text-xs text-admin-ink-soft">Incluye un producto que ya no existe en el catálogo.</span>}
-                </div>
-              )}
-              {onCorregir && cerrada && corrigiendo === entrega.id && (
-                <CorregirEntregaForm
-                  estadoInicial={entrega.estado as "ENTREGADA" | "NO_RECOGIDA"}
-                  lineasIniciales={lineas}
-                  productos={productos ?? null}
-                  onCancelar={() => setCorrigiendo(null)}
-                  onGuardar={async (payload) => {
-                    await onCorregir(entrega.id, payload);
-                    setCorrigiendo(null);
-                  }}
-                />
-              )}
-              {onCerrar && pendiente && (
-                <div className="flex gap-2">
-                  <Button variant="primary" size="sm" onClick={() => cerrar(entrega.id, "ENTREGADA")} disabled={cerrando !== null}>
-                    {cerrando === entrega.id ? "Guardando..." : "Entregada"}
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => cerrar(entrega.id, "NO_RECOGIDA")} disabled={cerrando !== null}>
-                    No recogida
-                  </Button>
-                </div>
+                </span>
+              </button>
+              {abierta && (
+                <>
+                  <ul className={`flex flex-col gap-0.5 text-xs ${cancelada ? "text-admin-ink-soft" : "text-admin-ink"}`}>
+                    {entrega.productos.map((p, i) => (
+                      <li key={i} className="flex justify-between gap-2">
+                        <span>
+                          {p.nombreProducto} × {p.cantidad}
+                        </span>
+                        <span className="tabular-nums">{formatMoney(p.cantidad * p.precioUnitario)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {entrega.cerradaAt && <span className="text-xs text-admin-ink-soft">Cerrada el {formatCierre(entrega.cerradaAt)}</span>}
+                  {onCorregir && cerrada && corrigiendo !== entrega.id && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={bloqueada || corrigiendo !== null}
+                        onClick={() => {
+                          cargarProductos?.();
+                          setCorrigiendo(entrega.id);
+                        }}
+                      >
+                        Corregir
+                      </Button>
+                      {bloqueada && <span className="text-xs text-admin-ink-soft">Incluye un producto que ya no existe en el catálogo.</span>}
+                    </div>
+                  )}
+                  {onCorregir && cerrada && corrigiendo === entrega.id && (
+                    <CorregirEntregaForm
+                      estadoInicial={entrega.estado as "ENTREGADA" | "NO_RECOGIDA"}
+                      lineasIniciales={lineas}
+                      productos={productos ?? null}
+                      onCancelar={() => setCorrigiendo(null)}
+                      onGuardar={async (payload) => {
+                        await onCorregir(entrega.id, payload);
+                        setCorrigiendo(null);
+                      }}
+                    />
+                  )}
+                  {onCerrar && pendiente && (
+                    <div className="flex gap-2">
+                      <Button variant="primary" size="sm" onClick={() => cerrar(entrega.id, "ENTREGADA")} disabled={cerrando !== null}>
+                        {cerrando === entrega.id ? "Guardando..." : "Entregada"}
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => cerrar(entrega.id, "NO_RECOGIDA")} disabled={cerrando !== null}>
+                        No recogida
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </li>
           );

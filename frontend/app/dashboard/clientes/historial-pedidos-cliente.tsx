@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
-  DIAS_SEMANA_PEDIDO_B2B,
   fetchEntregasPedidoClienteB2b,
   fetchPedidosClienteB2b,
   type ClienteB2bEntregaHistorial,
@@ -13,9 +12,9 @@ import {
 import { formatearFolioB2b, formatMoney } from "@/lib/format";
 import Badge from "../_components/Badge";
 import Button from "../_components/Button";
+import EntregasLista from "../pedidos-b2b/entregas-lista";
+import { entregasDesdeHistorial } from "../pedidos-b2b/entregas-vista";
 import {
-  ESTADO_ENTREGA_LABEL,
-  ESTADO_ENTREGA_VARIANT,
   ESTADO_LABEL,
   ESTADO_PAGO_LABEL,
   ESTADO_PAGO_VARIANT,
@@ -48,33 +47,8 @@ function EntregasDelPedido({ clienteId, pedidoId }: { clienteId: string; pedidoI
 
   if (error) return <p className="text-xs text-red-600">{error}</p>;
   if (!entregas) return <p className="text-xs text-admin-ink-soft">Cargando entregas...</p>;
-  if (entregas.length === 0) return <p className="text-xs text-admin-ink-soft">Este pedido no tiene entregas.</p>;
-
-  return (
-    <div className="flex flex-col gap-2">
-      {entregas.map((e) => (
-        <div key={e.id} className="flex flex-col gap-1.5 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-bold text-admin-ink">
-              {DIAS_SEMANA_PEDIDO_B2B.find((d) => d.value === e.dia)?.label ?? ""} · {fechaUtc(e.fecha, { weekday: "short", day: "numeric", month: "short" })}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {e.atrasada && <Badge variant="peligro">Atrasada</Badge>}
-              <Badge variant={ESTADO_ENTREGA_VARIANT[e.estado]}>{ESTADO_ENTREGA_LABEL[e.estado]}</Badge>
-            </div>
-          </div>
-          <ul className="flex flex-col gap-0.5 text-xs text-admin-ink">
-            {e.productos.map((p, i) => (
-              <li key={i} className="flex justify-between gap-2">
-                <span>{p.nombreProducto}</span>
-                <span className="font-semibold tabular-nums">{p.cantidad}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
+  // Mismo bloque que el panel del pedido, sin acciones (ni «Editar pedido»).
+  return <EntregasLista entregas={entregasDesdeHistorial(entregas)} />;
 }
 
 /** Historial de solo lectura del cliente: todos sus pedidos (semana más reciente primero) y, al expandir uno, sus entregas. */

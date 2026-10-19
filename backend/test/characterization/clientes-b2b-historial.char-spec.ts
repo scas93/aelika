@@ -120,7 +120,7 @@ describe('Clientes B2B · historial de pedidos y entregas', () => {
   });
 
   describe('entregas de un pedido', () => {
-    it('día, fecha, estado, atrasada y productos con cantidad; sin precios ni acciones', async () => {
+    it('día, fecha, estado, atrasada y productos con cantidad y precio unitario', async () => {
       const c = await alta();
       const p = await pedir(c.id, SEMANA_ACTUAL, [['LUNES', 6], ['VIERNES', 4]]);
       const r = (await entregas(c.id, p.id).expect(200)).body;
@@ -132,10 +132,10 @@ describe('Clientes B2B · historial de pedidos y entregas', () => {
         estado: 'PENDIENTE',
         cerradaAt: null,
         atrasada: true, // lunes 28 < hoy (miércoles 30), sigue pendiente
-        productos: [{ nombreProducto: expect.any(String), cantidad: 6 }],
+        productos: [{ nombreProducto: expect.any(String), precioUnitario: '45', cantidad: 6 }],
       });
       expect(r.entregas[1]).toMatchObject({ dia: 'VIERNES', atrasada: false, productos: [{ cantidad: 4 }] });
-      expect(JSON.stringify(r)).not.toMatch(/precio/i);
+      expect(r.entregas[1].productos[0]).toMatchObject({ precioUnitario: '45', cantidad: 4 });
     });
 
     it('pedido cancelado: muestra el estado real (cerradas conservadas, pendientes canceladas)', async () => {

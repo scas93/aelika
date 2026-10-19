@@ -216,7 +216,7 @@ export class ClientesB2bService {
 
   /**
    * Entregas de UN pedido del cliente (solo lectura): fecha, día, estado, atrasada y productos con su cantidad en esa
-   * entrega, sin precios ni nota/hora/destino. 404 si el pedido no es de este cliente (o de otro negocio / no B2B).
+   * entrega, con el precio unitario del pedido (para el importe por línea), sin nota/hora/destino. 404 si el pedido no es de este cliente (o de otro negocio / no B2B).
    */
   async entregasDePedidoDelCliente(id: string, pedidoId: string) {
     await this.assertClienteB2b(id);
@@ -235,7 +235,7 @@ export class ClientesB2bService {
               orderBy: { orderItem: { orden: 'asc' } },
               select: {
                 cantidad: true,
-                orderItem: { select: { nombreProducto: true } },
+                orderItem: { select: { nombreProducto: true, precioUnitario: true } },
               },
             },
           },
@@ -260,6 +260,8 @@ export class ClientesB2bService {
         atrasada: entregaAtrasada(e.estado, e.fecha),
         productos: e.items.map((i) => ({
           nombreProducto: i.orderItem.nombreProducto,
+          // Precio de lista del pedido (snapshot) para mostrar el importe de la línea; el descuento va solo en los totales.
+          precioUnitario: i.orderItem.precioUnitario,
           cantidad: i.cantidad,
         })),
       })),

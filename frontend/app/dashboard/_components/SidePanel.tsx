@@ -8,6 +8,10 @@ interface SidePanelProps {
   title: string;
   children?: ReactNode;
   footer?: ReactNode;
+  /** Junto al título (p. ej. un badge de estado). */
+  headerRight?: ReactNode;
+  /** Línea debajo del título. */
+  subtitle?: ReactNode;
 }
 
 const TRANSITION_MS = 200;
@@ -16,7 +20,7 @@ const TRANSITION_MS = 200;
 // but for a full-height form panel instead of a small centered dialog.
 // Modal doesn't close on Escape today, so there was nothing to reuse for
 // that part; implemented fresh here only.
-export default function SidePanel({ open, onClose, title, children, footer }: SidePanelProps) {
+export default function SidePanel({ open, onClose, title, children, footer, headerRight, subtitle }: SidePanelProps) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
 
@@ -54,13 +58,17 @@ export default function SidePanel({ open, onClose, title, children, footer }: Si
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-admin-border p-6">
-          <h2 className="text-[22px] font-bold text-admin-ink">{title}</h2>
+        <div className="flex items-start justify-between gap-3 border-b border-admin-border p-6">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 className="text-[22px] font-bold text-admin-ink">{title}</h2>
+            {subtitle && <div className="text-sm text-admin-ink-soft">{subtitle}</div>}
+          </div>
+          {headerRight && <div className="ml-auto shrink-0 pt-1.5">{headerRight}</div>}
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="text-xl leading-none text-admin-ink-soft transition hover:text-admin-ink"
+            className="shrink-0 text-xl leading-none text-admin-ink-soft transition hover:text-admin-ink"
           >
             ✕
           </button>

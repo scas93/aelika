@@ -20,7 +20,7 @@ import {
   type PedidoB2bDetalle,
   type Product,
 } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatFechaHora } from "@/lib/format";
 import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import CuadriculaDias, {
   distribucionVacia,
@@ -40,6 +40,11 @@ import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import { formatearFolioB2b } from "@/lib/format";
+import {
+  entregasDesdePedido,
+  fechaCorta,
+  resumenPorProducto,
+} from "./entregas-vista";
 
 // Estado local de edición — una fila por producto, con un id propio
 // (independiente de productId) porque dos líneas del pedido podrían
@@ -120,6 +125,7 @@ export default function DetallePanel({
     null,
   );
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [resumenAbierto, setResumenAbierto] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -294,7 +300,7 @@ export default function DetallePanel({
   }
 
   // Por confirmar → Confirmado es lo único manual; En proceso / Completado salen de cerrar entregas.
-  const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION";
+  const puedeConfirmar = pedido?.estado === "PENDIENTE_CONFIRMACION" && !pedido.cancelado;
   // Cerrar entregas es operativo: lo pueden hacer los 3 roles (no depende del rol).
   const puedeCerrar = pedido
     ? puedeCerrarEntregas(pedido.estado, pedido.cancelado)
@@ -374,38 +380,75 @@ export default function DetallePanel({
       (p) => !editItems.some((item) => item.productId === p.id),
     ) ?? [];
 
+  const entregasVista = pedido ? entregasDesdePedido(pedido) : [];
+  const resumen = resumenPorProducto(entregasVista);
+  const pedidoOriginal = pedido ? pedido.items.reduce((s, i) => s + Number(i.precioUnitario) * i.cantidadTotal, 0) : 0;
+  // «Por confirmar»: se edita desde el encabezado de Entregas. Ya confirmado, «Editar pedido» no se ofrece.
+  const puedeEditarAhora = puedeConfirmar && puedeModificar && !pedido?.cancelado;
+  const puedeCancelar = !!pedido && puedeModificar && pedido.estado !== "COMPLETADO" && !pedido.cancelado;
+
+  // Pie fijo: Por confirmar → Confirmar (principal) + Cancelar; Confirmado / En proceso → solo Cancelar, discreto;
+  // Completado / Cancelado → sin pie. Se oculta mientras se edita (el editor trae sus propios botones).
+  const pie =
+    pedido && !editMode && (puedeConfirmar || puedeCancelar) ? (
+      <div className="flex w-full flex-col gap-2">
+        {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+        <div className="flex items-center justify-end gap-3">
+          {puedeCancelar && puedeConfirmar && (
+            <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando || avanzando}>
+              Cancelar pedido
+            </Button>
+          )}
+          {puedeCancelar && !puedeConfirmar && (
+            <button
+              type="button"
+              onClick={() => setConfirmCancelOpen(true)}
+              disabled={cancelando}
+              className="text-sm font-semibold text-red-600 hover:underline disabled:opacity-50"
+            >
+              Cancelar pedido
+            </button>
+          )}
+          {puedeConfirmar && (
+            <Button variant="primary" onClick={handleAvanzar} disabled={avanzando || cancelando}>
+              {avanzando ? "Confirmando..." : "Confirmar pedido"}
+            </Button>
+          )}
+        </div>
+      </div>
+    ) : undefined;
+
   return (
     <SidePanel
       open={pedidoId !== null}
       onClose={onClose}
-      title={pedido ? `Pedido ${formatearFolioB2b(pedido.folio)}` : "Pedido"}
+      title={pedido ? pedido.negocioNombre : "Pedido"}
+      headerRight={
+        pedido ? (
+          <Badge variant={pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]}>
+            {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
+          </Badge>
+        ) : undefined
+      }
+      subtitle={
+        pedido
+          ? `Semana del ${fechaCorta(pedido.semanaInicio, false)} · ${pedido.contactoNombre} · ${pedido.contactoTelefono}`
+          : undefined
+      }
+      footer={pie}
     >
       {loadError && <p className="text-sm text-red-600">{loadError}</p>}
 
-      {!pedido && !loadError && (
-        <p className="text-sm text-admin-ink-soft">Cargando...</p>
-      )}
+      {!pedido && !loadError && <p className="text-sm text-admin-ink-soft">Cargando...</p>}
 
       {pedido && (
         <div className="flex flex-col gap-5">
-          <div className="flex items-center justify-between">
-            <Badge
-              variant={
-                pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]
-              }
-            >
-              {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
-            </Badge>
-            <span className="text-sm text-admin-ink-soft">
-              {/* timeZone: "UTC" — ver comentario en pedidos-b2b/page.tsx (formatFecha) */}
-              Semana del{" "}
-              {new Date(pedido.semanaInicio).toLocaleDateString("es-MX", {
-                day: "numeric",
-                month: "long",
-                timeZone: "UTC",
-              })}
-            </span>
-          </div>
+          {pedido.cancelado && (
+            <div role="status" className="rounded-[var(--radius-admin-control)] border border-red-200 bg-red-50 p-3 text-sm text-admin-ink">
+              Cancelado{pedido.canceladoAt ? ` el ${formatFechaHora(pedido.canceladoAt)}` : ""} · Pedido original{" "}
+              {formatMoney(pedidoOriginal)} · A cobrar {formatMoney(pedido.total)}
+            </div>
+          )}
 
           {!pedido.cancelado && pedido.modificadoPorClienteAt && (
             <div
@@ -434,22 +477,33 @@ export default function DetallePanel({
             </div>
           )}
 
-          <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
-            <span className="text-sm font-bold text-admin-ink">
-              {pedido.negocioNombre}
-            </span>
-            {pedido.clienteCodigo && (
-              <span className="text-xs font-semibold text-admin-ink-soft">
-                Cliente · {pedido.clienteCodigo}
+          {/* Franja de resumen: total en grande, estado de pago y modo de cobro. Marcar pagado (Gerente/Dueño) vive aquí y pide
+              confirmación (modal con folio y total). */}
+          <div className="flex items-end justify-between gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-admin-ink-soft">Total</span>
+              <span className="text-3xl font-bold leading-none text-admin-ink">{formatMoney(pedido.total)}</span>
+              <span className="flex flex-wrap items-center gap-1.5 text-xs text-admin-ink-soft">
+                Pago:
+                <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
+                {pagado && <span>{pedido.pagadoAt ? formatFechaHora(pedido.pagadoAt) : "Fecha no registrada"}</span>}
+                · {pedido.modoCobro === "AL_INICIO" ? "Al inicio" : "Al final"}
               </span>
+            </div>
+            {esAdmin && !pagado && (
+              <Button variant="primary" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
+                Marcar pagado
+              </Button>
             )}
-            <span className="text-sm text-admin-ink-soft">
-              {pedido.contactoNombre} · {pedido.contactoTelefono}
-            </span>
-            {pedido.contactoCorreo && (
-              <span className="text-sm text-admin-ink-soft">
-                {pedido.contactoCorreo}
-              </span>
+            {esAdmin && pagado && (
+              <button
+                type="button"
+                onClick={() => setConfirmPago("desmarcar")}
+                disabled={pagando || editMode}
+                className="text-xs font-semibold text-admin-ink-soft hover:underline disabled:opacity-50"
+              >
+                Desmarcar pago
+              </button>
             )}
           </div>
 
@@ -464,99 +518,21 @@ export default function DetallePanel({
             </div>
           )}
 
-          {/* Pago: tarjeta propia con su botón a todo lo ancho — antes era un botón más en la fila de acciones y se perdía junto a
-              Confirmar y Cancelar. Marcar/Desmarcar piden confirmación (modal con folio y total). */}
-          <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-bold text-admin-ink">Pago</span>
-              <div className="flex items-center gap-2">
-                <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>
-                  {ESTADO_PAGO_LABEL[pedido.estadoPago]}
-                </Badge>
-                {pagado && (
-                  <span className="text-xs text-admin-ink-soft">
-                    {pedido.pagadoAt
-                      ? new Date(pedido.pagadoAt).toLocaleString("es-MX", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "Fecha no registrada"}
-                  </span>
-                )}
-              </div>
-            </div>
-            {esAdmin && (
-              <Button
-                variant={pagado ? "secondary" : "primary"}
-                onClick={() => setConfirmPago(pagado ? "desmarcar" : "marcar")}
-                disabled={pagando || editMode}
-                className="w-full"
-              >
-                {pagado ? "Desmarcar pagado" : "Marcar pagado"}
-              </Button>
-            )}
-          </div>
-
-          {!editMode && pedido.entregas && pedido.entregas.length > 0 && (
+          {!editMode ? (
             <EntregasLista
-              entregas={pedido.entregas}
-              items={pedido.items}
+              entregas={entregasVista}
               onCerrar={puedeCerrar ? handleCerrarEntrega : undefined}
               onCorregir={esAdmin ? handleCorregirEntrega : undefined}
               productos={products}
               cargarProductos={cargarProductos}
-            />
-          )}
-
-          {!editMode ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-admin-ink">
-                  Productos
-                </span>
-                {puedeModificar && !pedido.cancelado && (
-                  <button
-                    type="button"
-                    onClick={startEdit}
-                    className="text-sm font-semibold text-mayoreo-accent hover:underline"
-                  >
-                    Editar
+              encabezadoAccion={
+                puedeEditarAhora ? (
+                  <button type="button" onClick={startEdit} className="text-sm font-semibold text-mayoreo-accent hover:underline">
+                    Editar pedido
                   </button>
-                )}
-              </div>
-              <ul className="flex flex-col gap-2">
-                {pedido.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex flex-col gap-0.5 border-b border-admin-border pb-2 last:border-0"
-                  >
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-admin-ink">
-                        {item.nombreProducto} × {item.cantidadTotal}
-                      </span>
-                      <span className="text-admin-ink-soft">
-                        {formatMoney(
-                          Number(item.precioUnitario) * item.cantidadTotal,
-                        )}
-                      </span>
-                    </div>
-                    <span className="text-xs text-admin-ink-soft">
-                      {DIAS_SEMANA_PEDIDO_B2B.filter(({ value }) =>
-                        item.distribucion.some((d) => d.dia === value),
-                      )
-                        .map(
-                          ({ value, label }) =>
-                            `${label} ${item.distribucion.find((d) => d.dia === value)?.cantidad}`,
-                        )
-                        .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                ) : undefined
+              }
+            />
           ) : (
             <div className="flex flex-col gap-3">
               <span className="text-sm font-bold text-admin-ink">
@@ -669,67 +645,65 @@ export default function DetallePanel({
             </div>
           )}
 
-          <div className="flex flex-col gap-1 border-t border-admin-border pt-3">
-            <div className="flex justify-between text-sm text-admin-ink-soft">
-              <span>Subtotal</span>
-              <span>{formatMoney(pedido.subtotal)}</span>
-            </div>
-            {Number(pedido.descuentoTotal) > 0 && (
-              <div className="flex justify-between text-sm text-admin-green-dark">
-                <span>
-                  Descuento
-                  {pedido.codigoDescuentoTexto
-                    ? ` (${pedido.codigoDescuentoTexto})`
-                    : pedido.descuentoPorcentajeAplicado
-                      ? ` (${Number(pedido.descuentoPorcentajeAplicado)}%)`
-                      : ""}
+          {!editMode && (
+            <div className="flex flex-col gap-1 border-t border-admin-border pt-3">
+              <div className="flex justify-between text-sm text-admin-ink-soft">
+                <span>Subtotal</span>
+                <span>{formatMoney(pedido.subtotal)}</span>
+              </div>
+              {Number(pedido.descuentoTotal) > 0 && (
+                <div className="flex justify-between text-sm text-admin-green-dark">
+                  <span>
+                    Descuento
+                    {pedido.codigoDescuentoTexto
+                      ? ` (${pedido.codigoDescuentoTexto})`
+                      : pedido.descuentoPorcentajeAplicado
+                        ? ` (${Number(pedido.descuentoPorcentajeAplicado)}%)`
+                        : ""}
+                  </span>
+                  <span>-{formatMoney(pedido.descuentoTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold text-admin-ink">
+                <span>Total</span>
+                <span>{formatMoney(pedido.total)}</span>
+              </div>
+              {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
+              {pedido.minimoPiezasAplicado > 0 && (
+                <span className="text-xs text-admin-ink-soft">
+                  {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
                 </span>
-                <span>-{formatMoney(pedido.descuentoTotal)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold text-admin-ink">
-              <span>Total</span>
-              <span>{formatMoney(pedido.total)}</span>
+              )}
             </div>
-            {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
-            {pedido.minimoPiezasAplicado > 0 && (
-              <span className="text-xs text-admin-ink-soft">
-                {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas
-                mínimas
-              </span>
-            )}
-          </div>
+          )}
 
-          {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+          {!editMode && resumen.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setResumenAbierto((v) => !v)}
+                aria-expanded={resumenAbierto}
+                className="flex items-center gap-1.5 text-left text-sm font-bold text-admin-ink"
+              >
+                <span className="text-xs text-admin-ink-soft">{resumenAbierto ? "▼" : "▶"}</span>
+                Resumen por producto
+              </button>
+              {resumenAbierto && (
+                <ul className="flex flex-col gap-1 text-sm text-admin-ink">
+                  {resumen.map((r) => (
+                    <li key={r.nombreProducto} className="flex justify-between gap-2">
+                      <span>
+                        {r.nombreProducto} × {r.cantidad}
+                      </span>
+                      <span className="tabular-nums text-admin-ink-soft">{formatMoney(r.monto)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
-          {!editMode &&
-            (puedeConfirmar ||
-              (puedeModificar &&
-                pedido.estado !== "COMPLETADO" &&
-                !pedido.cancelado)) && (
-              <div className="flex flex-wrap gap-2 border-t border-admin-border pt-3">
-                {puedeConfirmar && (
-                  <Button
-                    variant="primary"
-                    onClick={handleAvanzar}
-                    disabled={avanzando}
-                  >
-                    {avanzando ? "Confirmando..." : "Confirmar pedido"}
-                  </Button>
-                )}
-                {puedeModificar &&
-                  pedido.estado !== "COMPLETADO" &&
-                  !pedido.cancelado && (
-                    <Button
-                      variant="danger"
-                      onClick={() => setConfirmCancelOpen(true)}
-                      disabled={cancelando}
-                    >
-                      Cancelar pedido
-                    </Button>
-                  )}
-              </div>
-            )}
+          {editMode && actionError && <p className="text-sm text-red-600">{actionError}</p>}
         </div>
       )}
 
