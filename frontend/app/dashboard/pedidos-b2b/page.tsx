@@ -54,7 +54,10 @@ export default function PedidosB2bPage() {
   const [anteriores, setAnteriores] = useState<PedidoB2bReportable[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("pedido"),
+  );
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);

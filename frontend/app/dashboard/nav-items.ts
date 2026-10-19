@@ -2,6 +2,7 @@ import type { Role, TipoStorefront } from "@/lib/api";
 import {
   IconBell,
   IconBuildingStore,
+  IconChartBar,
   IconClipboardList,
   IconClock,
   IconCreditCard,
@@ -61,6 +62,8 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/pedidos-b2b/historico", label: "Históricos", icon: IconHistory },
   { href: "/dashboard/catalogo", label: "Catálogo", icon: IconClipboardList },
   { href: "/dashboard/clientes", label: "Clientes", icon: IconUsers },
+  // Solo Dueño y solo mayoreo (ver getNavItems).
+  { href: "/dashboard/adopcion", label: "Adopción", icon: IconChartBar },
   // Sin caso especial en getNavItems: a diferencia de /dashboard/clientes
   // (solo Gerente/Dueño), esta operación es del día a día físico del
   // negocio y queda abierta a los 3 roles por default — mismo criterio que
@@ -169,6 +172,7 @@ export function getNavItems(rol: Role, tipoStorefront: TipoStorefront, modulosDe
     if (item.href === "/dashboard") return tipoStorefront === "RETAIL_B2B" || rol !== "OPERADOR";
     if (item.href === "/dashboard/lealtad") return moduloActivo(modulosDesactivados, "LEALTAD");
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
+    if (item.href === "/dashboard/adopcion") return rol === "DUENO" && tipoStorefront === "RETAIL_B2B";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
     if (item.href === "/dashboard/ajustes") return rol === "DUENO";
     if (item.href === "/dashboard/notificaciones") return puedeVerNotificaciones(rol, tipoStorefront);

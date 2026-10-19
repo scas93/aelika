@@ -132,7 +132,10 @@ export default function PedidosB2bHistoricoPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("pedido"),
+  );
 
   function filtrosActuales() {
     const { desde, hasta } = resolverFiltroFecha(fecha);
