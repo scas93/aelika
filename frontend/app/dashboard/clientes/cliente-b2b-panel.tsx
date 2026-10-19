@@ -20,6 +20,7 @@ import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import HistorialPedidosCliente from "./historial-pedidos-cliente";
 
 const textoDescuento = (d: number | null) => (d === null ? "" : String(d));
 
@@ -326,6 +327,8 @@ export default function ClienteB2bPanel({
             </div>
             {telefonoError && <p className="text-sm text-red-600">{telefonoError}</p>}
           </div>
+
+          <HistorialPedidosCliente clienteId={cliente.id} />
 
           {/* Baja / reactivación */}
           <div className="flex flex-col gap-2 border-t border-admin-border pt-4">

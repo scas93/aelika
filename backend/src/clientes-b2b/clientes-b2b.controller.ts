@@ -13,6 +13,7 @@ import { ClientesB2bService } from './clientes-b2b.service';
 import { CreateClienteB2bDto } from './dto/create-cliente-b2b.dto';
 import { UpdateClienteB2bDto } from './dto/update-cliente-b2b.dto';
 import { ListClientesB2bQueryDto } from './dto/list-clientes-b2b-query.dto';
+import { ListPedidosClienteB2bQueryDto } from './dto/list-pedidos-cliente-b2b-query.dto';
 import {
   TelefonoClienteB2bDto,
   UpdateTelefonoClienteB2bDto,
@@ -51,6 +52,23 @@ export class ClientesB2bController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientesB2bService.findOne(id);
+  }
+
+  // Historial de solo lectura del cliente (Gerente/Dueño, como el resto del controlador).
+  @Get(':id/pedidos')
+  pedidos(
+    @Param('id') id: string,
+    @Query() query: ListPedidosClienteB2bQueryDto,
+  ) {
+    return this.clientesB2bService.pedidosDelCliente(id, query);
+  }
+
+  @Get(':id/pedidos/:pedidoId/entregas')
+  entregasDePedido(
+    @Param('id') id: string,
+    @Param('pedidoId') pedidoId: string,
+  ) {
+    return this.clientesB2bService.entregasDePedidoDelCliente(id, pedidoId);
   }
 
   @Patch(':id')
