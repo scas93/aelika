@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { capturar } from "@/lib/analitica";
 import {
   PortalError,
   crearPedido,
@@ -114,6 +115,23 @@ export default function CrearPedido({
     null,
   );
   const llave = useRef<{ firma: string; key: string } | null>(null);
+  // Analítica: `producto_agregado` solo la primera vez que se agrega un producto en esta sesión de armado.
+  const productoAgregadoEnviado = useRef(false);
+  const catalogoVistoEnviado = useRef(false);
+  useEffect(() => {
+    if (paso !== "resumen") return;
+    const piezas = Object.entries(porDia)
+      .filter(([f]) => fechas.includes(f))
+      .reduce((s, [, l]) => s + piezasDia(l), 0);
+    capturar("resumen_visto", {
+      slug,
+      semana: semanaInicio ?? undefined,
+      dias: fechas.length,
+      piezas,
+    });
+    // Solo al entrar al resumen, no en cada cambio de cantidades.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paso]);
 
   const terminarSesion = (e: unknown) => {
     if (e instanceof PortalError && e.status === 401) {
@@ -127,7 +145,12 @@ export default function CrearPedido({
     let activo = true;
     void Promise.all([fetchCalendario(slug), fetchCatalogo(slug)])
       .then(([calendario, catalogo]) => {
-        if (activo) setDatos({ calendario, catalogo });
+        if (!activo) return;
+        setDatos({ calendario, catalogo });
+        if (!catalogoVistoEnviado.current) {
+          catalogoVistoEnviado.current = true;
+          capturar("catalogo_visto", { slug });
+        }
       })
       .catch((e: unknown) => {
         if (!activo) return;
@@ -327,6 +350,15 @@ export default function CrearPedido({
       );
       setResultado(r);
       setPaso("confirmacion");
+      capturar("pedido_confirmado", {
+        slug,
+        semana: semanaInicio ?? undefined,
+        dias: entregas.length,
+        piezas: entregas.reduce(
+          (s, e) => s + e.items.reduce((t, i) => t + i.cantidad, 0),
+          0,
+        ),
+      });
     } catch (e) {
       if (terminarSesion(e)) return;
       const fallos = problemasDeError(e);
@@ -409,9 +441,17 @@ export default function CrearPedido({
           fechaActiva={fechaActiva}
           porDia={porDia}
           desdeResumen={desdeResumen}
-          onCantidad={(f, id, n) =>
-            setPorDia((prev) => ponerCantidad(prev, f, id, n))
-          }
+          onCantidad={(f, id, n) => {
+            if (n > 0 && !productoAgregadoEnviado.current) {
+              productoAgregadoEnviado.current = true;
+              capturar("producto_agregado", {
+                slug,
+                semana: semanaInicio ?? undefined,
+                dias: fechas.length,
+              });
+            }
+            setPorDia((prev) => ponerCantidad(prev, f, id, n));
+          }}
           onCopiar={(origen, destino) =>
             setPorDia((prev) => copiarDia(prev, origen, destino))
           }

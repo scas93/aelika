@@ -217,6 +217,7 @@ export const OMITIR_CAMPOS_B2B = {
   modalidadPago: true,
   bajaAt: true,
   favoritoB2b: true,
+  ultimoAccesoAt: true,
 } as const;
 
 /**

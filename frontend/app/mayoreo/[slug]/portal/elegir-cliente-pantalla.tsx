@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { capturar } from "@/lib/analitica";
 import {
   PortalError,
   elegirCliente,
@@ -30,6 +31,7 @@ export default function ElegirClientePantalla({
     setEligiendo(id);
     try {
       await elegirCliente(slug, id);
+      capturar("cliente_elegido", { slug });
       onElegido();
     } catch (e) {
       if (e instanceof PortalError && e.status === 401)

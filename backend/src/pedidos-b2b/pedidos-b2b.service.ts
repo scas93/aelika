@@ -20,6 +20,7 @@ import {
   EstadoEntrega,
   EstadoPago,
   EstadoPedido,
+  OrigenPedidoB2b,
   PedidoB2bEstado,
   Prisma,
   Role,
@@ -71,6 +72,7 @@ import {
   recalcularTotalesB2b,
   type EstadoB2bFiltro,
   type EstadoPagoB2bFiltro,
+  confirmadoAtAlConfirmar,
 } from './pedidos-b2b-estados';
 
 // Etapa 2: un pedido B2B ES una Order (tipo B2B) + DetalleB2B + OrderItem + Entrega/EntregaItem. Este servicio conserva
@@ -740,6 +742,7 @@ export class PedidosB2bService {
         dto.clienteId,
       );
       const creado = await crearPedidoB2bDeCliente(tx, {
+        origen: OrigenPedidoB2b.PANEL_EQUIPO,
         tenantId,
         tenant,
         cliente,
@@ -869,12 +872,26 @@ export class PedidosB2bService {
     }
 
     const siguiente = EstadoPedido.CONFIRMADO_SURTIENDO;
+    const ahora = new Date();
+    const confirmadoAt = confirmadoAtAlConfirmar(
+      { createdAt: pedido.createdAt, confirmadoAt: detalle.confirmadoAt },
+      ahora,
+    );
     const actualizado = aRespuestaPedidoB2b(
-      await this.tenantPrisma.client.order.update({
-        where: { id },
-        // Al confirmar (o reconfirmar tras una modificación del cliente) se apaga la marca «Modificado por el cliente».
-        data: { estadoPedido: siguiente, modificadoPorClienteAt: null },
-        include: INCLUDE_PEDIDO,
+      await this.tenantPrisma.client.$transaction(async (tx) => {
+        // Primera confirmación (solo pedidos posteriores al corte): updateMany con `confirmadoAt: null` nunca sobrescribe.
+        if (confirmadoAt) {
+          await tx.detalleB2B.updateMany({
+            where: { orderId: id, confirmadoAt: null },
+            data: { confirmadoAt },
+          });
+        }
+        return tx.order.update({
+          where: { id },
+          // Al confirmar (o reconfirmar tras una modificación del cliente) se apaga la marca «Modificado por el cliente».
+          data: { estadoPedido: siguiente, modificadoPorClienteAt: null },
+          include: INCLUDE_PEDIDO,
+        });
       }),
     );
 
@@ -981,9 +998,20 @@ export class PedidosB2bService {
           data.modificadoPorClienteAt = null;
         }
         await tx.order.update({ where: { id }, data });
+        const ahora = new Date();
+        // Al confirmar por pago (AL_INICIO) también es la primera confirmación; ver confirmadoAtAlConfirmar.
+        const confirmadoAt = confirma
+          ? confirmadoAtAlConfirmar(
+              {
+                createdAt: orden.createdAt,
+                confirmadoAt: detalle.confirmadoAt,
+              },
+              ahora,
+            )
+          : undefined;
         await tx.detalleB2B.update({
           where: { orderId: id },
-          data: { pagadoAt: new Date() },
+          data: { pagadoAt: ahora, ...(confirmadoAt ? { confirmadoAt } : {}) },
         });
         return {
           actualizado: aRespuestaPedidoB2b(

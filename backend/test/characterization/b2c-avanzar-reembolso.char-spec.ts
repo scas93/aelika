@@ -135,7 +135,7 @@ describe('B2C · avanzar', () => {
   it('permisos: Operador, Gerente y Dueño pueden avanzar; sin token 401; id inexistente 404', async () => {
     const o = await crear();
     await auth(s.h, tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR')).patch(`/orders/${o.id}/avanzar`).expect(200);
-    await auth(s.h, tokenFor(s.h.jwt, s.base.dueno, s.base.tenant.id, 'GERENTE')).patch(`/orders/${o.id}/avanzar`).expect(200);
+    await auth(s.h, tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'GERENTE')).patch(`/orders/${o.id}/avanzar`).expect(200);
     await dueno().patch(`/orders/${o.id}/avanzar`).expect(200);
     expectError(await request(s.h.app.getHttpServer()).patch(`/orders/${o.id}/avanzar`), 401, 'Unauthorized');
     expectError(await dueno().patch('/orders/00000000-0000-4000-8000-000000000000/avanzar'), 404, 'Pedido no encontrado');
@@ -181,9 +181,24 @@ describe('B2C · reembolsar', () => {
     expect(s.h.fakes.refundsCreate).toHaveBeenCalledWith({ payment_intent: piId, reverse_transfer: true });
   });
 
-  it('Operador también puede reembolsar (sin @Roles)', async () => {
+  // CAMBIO DELIBERADO: antes el Operador podía reembolsar (sin @Roles); ahora reembolsar es solo Gerente/Dueño.
+  it('Operador no puede reembolsar: 403, sin tocar Stripe ni el pedido; sin token 401', async () => {
     const { order } = await pedidoPagadoConTarjeta();
-    await auth(s.h, tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR')).post(`/orders/${order.id}/reembolsar`).expect(201);
+    const antes = s.h.fakes.refundsCreate.mock.calls.length;
+    expectError(
+      await auth(s.h, tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR')).post(`/orders/${order.id}/reembolsar`),
+      403,
+      'No tienes permiso para realizar esta acción',
+    );
+    expect(s.h.fakes.refundsCreate.mock.calls.length).toBe(antes);
+    const despues = await s.h.prisma.order.findUnique({ where: { id: order.id } });
+    expect(despues?.estadoPago).toBe('PAGADO');
+  });
+
+  it('Gerente puede reembolsar', async () => {
+    const { order } = await pedidoPagadoConTarjeta();
+    await auth(s.h, tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'GERENTE')).post(`/orders/${order.id}/reembolsar`).expect(201);
+    expect(s.h.fakes.refundsCreate).toHaveBeenCalledTimes(1);
   });
 
   it('rechaza pedidos que no son TARJETA + PAGADO (409) sin llamar a Stripe', async () => {

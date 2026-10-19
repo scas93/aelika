@@ -7,13 +7,15 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../../generated/prisma/enums';
 import { OrdersService } from './orders.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { SummaryQueryDto } from './dto/summary-query.dto';
 import { ListOrdersHistoricoQueryDto } from './dto/list-orders-historico-query.dto';
 import { ExportOrdersHistoricoQueryDto } from './dto/export-orders-historico-query.dto';
 
-// No @Roles() anywhere in this controller — unlike Catálogo (escritura solo
+// No @Roles() en este controller salvo reembolsar — unlike Catálogo (escritura solo
 // gerente/dueno), Operador SÍ puede ver y avanzar pedidos (CLAUDE.md 1.4).
 // Any authenticated role is allowed by default when no roles are declared.
 @Controller('orders')
@@ -68,8 +70,8 @@ export class OrdersController {
     return this.ordersService.avanzar(id);
   }
 
-  // No @Roles() — same "any authenticated role" convention as the rest of
-  // this controller (see product decision in the implementation prompt).
+  // Reembolsar es solo Gerente/Dueño (el Operador ve y avanza pedidos, pero no devuelve dinero).
+  @Roles(Role.GERENTE, Role.DUENO)
   @Post(':id/reembolsar')
   reembolsar(@Param('id') id: string) {
     return this.ordersService.reembolsar(id);

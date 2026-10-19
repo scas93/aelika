@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, fetchCurrentUser, login } from "@/lib/api";
-import { saveSession } from "@/lib/session";
+import { consumirAvisoLogin, saveSession } from "@/lib/session";
 import Button from "@/app/dashboard/_components/Button";
 
 export default function LoginPage() {
@@ -13,6 +13,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lee una vez el aviso que dejó una sesión invalidada
+    setAviso(consumirAvisoLogin());
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +59,12 @@ export default function LoginPage() {
               <h1 className="text-[32px] font-bold text-admin-ink">Inicia sesión</h1>
               <p className="mt-1 text-[15px] text-admin-ink-soft">Entra al panel de tu negocio en Aelika.</p>
             </div>
+
+            {aviso && (
+              <p role="alert" className="rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3 text-sm text-admin-ink">
+                {aviso}
+              </p>
+            )}
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">

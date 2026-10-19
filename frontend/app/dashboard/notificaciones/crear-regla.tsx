@@ -17,7 +17,7 @@ export default function CrearRegla({ categoria, basePath }: CrearReglaProps) {
   const { user, token } = useSession();
   const router = useRouter();
 
-  if (!puedeVerNotificaciones(user.rol, user.tenant.tipoStorefront)) {
+  if (!puedeVerNotificaciones(user.rol)) {
     return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
   }
 

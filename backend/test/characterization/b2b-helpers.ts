@@ -67,7 +67,7 @@ export function apiRol(
   base: BaseSeed,
   rol: 'DUENO' | 'GERENTE' | 'OPERADOR',
 ) {
-  const user = rol === 'OPERADOR' ? base.operador : base.dueno;
+  const user = rol === 'OPERADOR' ? base.operador : rol === 'GERENTE' ? base.gerente : base.dueno;
   return auth(h, tokenFor(h.jwt, user, base.tenant.id, rol));
 }
 

@@ -1,3 +1,5 @@
+import { avisarSesionInvalida } from "./session";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export type Role = "OPERADOR" | "GERENTE" | "DUENO";
@@ -94,7 +96,8 @@ export interface CurrentUser {
   rol: Role;
   tenantId: string;
   // modulosDesactivados: módulos opcionales apagados para el negocio ("LEALTAD", "CODIGOS_DESCUENTO"); vacío = todo encendido.
-  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[] };
+  // ubicacion: dirección pública del negocio (para la comanda); viene de /auth/me, que sí pueden leer los 3 roles.
+  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[]; ubicacion: string | null };
 }
 
 export interface Category {
@@ -736,6 +739,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => null);
 
   if (!res.ok) {
+    // 401 con sesión enviada = el token ya no vale (usuario desactivado/borrado o token vencido): al login con aviso.
+    // Un 401 sin sesión (ej. credenciales incorrectas en /auth/login) se queda como error normal del formulario.
+    if (res.status === 401 && new Headers(init?.headers).has("Authorization")) avisarSesionInvalida();
     const message = body?.message ?? "Ocurrió un error inesperado";
     throw new ApiError(Array.isArray(message) ? message[0] : message, res.status, body?.code);
   }
@@ -2202,4 +2208,99 @@ export async function uploadProductImage(token: string, file: File): Promise<{ u
     throw new ApiError(Array.isArray(message) ? message[0] : message, res.status, body?.code);
   }
   return body as { url: string };
+}
+
+
+// ---------------------------------------------------------------------------
+// Adopción (solo Dueño, solo mayoreo). Solo lectura.
+// ---------------------------------------------------------------------------
+
+export type AdopcionEstadoSemana = "PIDIO" | "SIN_CONFIRMAR" | "CANCELADO" | "NO_HA_PEDIDO_HABITUAL" | "NO_HA_PEDIDO";
+export type AdopcionEtapa = "SIN_ACTIVIDAD" | "ACCEDIO" | "HIZO_PEDIDO" | "PIDE_CON_REGULARIDAD";
+
+export interface AdopcionOrigen {
+  casos: number;
+  portal: number;
+  panel: number;
+  porcentajePortal: number | null;
+  porcentajePanel: number | null;
+}
+
+export interface AdopcionClienteFila {
+  id: string;
+  nombre: string;
+  codigo: string | null;
+  estado: AdopcionEstadoSemana;
+  etapa: AdopcionEtapa;
+  ultimoAccesoAt: string | null;
+  primerPedidoAt: string | null;
+  pedidosUltimas4Semanas: number;
+  modificadoSinReconfirmar: boolean;
+  pedidoId: string | null;
+  folio: string | null;
+  origen: AdopcionOrigen;
+}
+
+export interface AdopcionClientes {
+  semana: { inicio: string; fin: string; esActual: boolean; esProxima: boolean; enCurso: string; proxima: string };
+  avisos: { confirmadoAtDesde: string | null };
+  resumen: {
+    totalClientes: number;
+    pidieron: number;
+    sinConfirmar: number;
+    habitualesSinPedir: number;
+    cancelaron: number;
+    porEstado: Record<AdopcionEstadoSemana, number>;
+  };
+  clientes: AdopcionClienteFila[];
+  canceladosDespuesDeConfirmar: {
+    pedidoId: string;
+    folio: string;
+    cliente: string;
+    confirmadoAt: string;
+    canceladoAt: string | null;
+  }[];
+  origen: AdopcionOrigen;
+}
+
+export interface AdopcionInterno {
+  hoy: string;
+  semanaEnCurso: string;
+  avisos: { confirmadoAtDesde: string | null };
+  sinConfirmar: {
+    total: number;
+    items: {
+      pedidoId: string;
+      folio: string;
+      cliente: string;
+      semana: string;
+      recibidoAt: string;
+      horasEspera: number;
+      deSemanaPasada: boolean;
+    }[];
+  };
+  entregasAtrasadas: {
+    total: number;
+    items: { entregaId: string; pedidoId: string; folio: string; cliente: string; fecha: string; diasAtraso: number }[];
+  };
+  semanasPasadasSinCompletar: {
+    total: number;
+    items: { pedidoId: string; folio: string; cliente: string; semana: string; estado: string }[];
+  };
+  tiempos: {
+    ventanaDias: number;
+    pedidosEnVentana: number;
+    recibidoAConfirmado: { casos: number; medianaHoras: number | null; maximoHoras: number | null };
+    puntualidad: { casos: number; aTiempo: number; despues: number; sinDato: number; porcentajeATiempo: number | null };
+    noRecogidas: number;
+  };
+}
+
+export function fetchAdopcionClientes(token: string, semana?: string) {
+  const q = semana ? `?semana=${encodeURIComponent(semana)}` : "";
+  return request<AdopcionClientes>(`/adopcion/clientes${q}`, { headers: authHeaders(token) });
+}
+
+export function fetchAdopcionInterno(token: string) {
+  return request<AdopcionInterno>("/adopcion/interno", { headers: authHeaders(token) });
 }

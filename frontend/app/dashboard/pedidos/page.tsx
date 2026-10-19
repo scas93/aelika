@@ -8,7 +8,6 @@ import {
   avanzarOrder,
   fetchOrders,
   fetchPuntosEnvio,
-  fetchTenantSettings,
   reembolsarOrder,
   METODO_PAGO_LABEL,
   type Order,
@@ -44,15 +43,15 @@ type Tab = "activos" | "entregados";
 type VistaActivos = "lista" | "kanban";
 
 export default function PedidosPage() {
-  const { token } = useSession();
+  const { token, user } = useSession();
+  const nombreNegocio = user.tenant.nombre;
+  const ubicacionNegocio = user.tenant.ubicacion;
   const [activos, setActivos] = useState<Order[] | null>(null);
   const [entregadosHoy, setEntregadosHoy] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("activos");
   const [vistaActivos, setVistaActivos] = useState<VistaActivos>("lista");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [nombreNegocio, setNombreNegocio] = useState("");
-  const [ubicacionNegocio, setUbicacionNegocio] = useState<string | null>(null);
   const [puntosEnvioMap, setPuntosEnvioMap] = useState<Record<string, string>>({});
 
   async function load() {
@@ -79,16 +78,6 @@ export default function PedidosPage() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    // Needed to print the business name and address on the comanda.
-    fetchTenantSettings(token)
-      .then((settings) => {
-        setNombreNegocio(settings.nombre);
-        setUbicacionNegocio(settings.ubicacion);
-      })
-      .catch(() => {});
-  }, [token]);
 
   useEffect(() => {
     // Order only stores puntoEnvioId (no name snapshot — see CLAUDE.md), so
@@ -358,7 +347,7 @@ function OrderCard({
                 <Button variant="secondary" onClick={handleImprimirWebUsb} disabled={printing || !webUsbSupported}>
                   {printing ? "Imprimiendo..." : "Imprimir ticket"}
                 </Button>
-                {order.metodoPago === "TARJETA" && order.estadoPago === "PAGADO" && (
+                {user.rol !== "OPERADOR" && order.metodoPago === "TARJETA" && order.estadoPago === "PAGADO" && (
                   <Button variant="danger" onClick={() => setConfirmReembolsoOpen(true)}>
                     Reembolsar
                   </Button>

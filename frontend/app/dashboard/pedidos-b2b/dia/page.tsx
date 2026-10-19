@@ -7,7 +7,6 @@ import {
   cerrarEntregaPedidoB2b,
   exportPedidosB2bDiaXlsx,
   fetchPedidosB2bDia,
-  fetchTenantSettings,
   type PedidoB2bEntregaDia,
 } from "@/lib/api";
 import { hoyYYYYMMDD } from "@/lib/fecha";
@@ -44,7 +43,6 @@ export default function PedidosB2bDiaPage() {
   const [fecha, setFecha] = useState(() => hoyYYYYMMDD());
   const [entregas, setEntregas] = useState<PedidoB2bEntregaDia[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [nombreNegocio, setNombreNegocio] = useState("");
   const [webUsbSupported, setWebUsbSupported] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -57,12 +55,6 @@ export default function PedidosB2bDiaPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
     setWebUsbSupported(isWebUsbSupported());
   }, []);
-
-  useEffect(() => {
-    fetchTenantSettings(token)
-      .then((settings) => setNombreNegocio(settings.nombre))
-      .catch(() => {});
-  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +112,7 @@ export default function PedidosB2bDiaPage() {
     setPrintError(null);
     try {
       await printComandaB2bDiaWebUsb(entrega, {
-        nombreNegocioTenant: nombreNegocio,
+        nombreNegocioTenant: user.tenant.nombre,
         fechaLabel: formatFechaLarga(fecha),
         impresoPor: { nombre: user.nombre, rol: user.rol },
       });

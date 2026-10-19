@@ -25,6 +25,7 @@ import { NotificacionesReglasModule } from './notificaciones-reglas/notificacion
 import { AelikaScanLiteModule } from './aelika-scan/lite/aelika-scan-lite.module';
 import { LealtadModule } from './lealtad/lealtad.module';
 import { PortalModule } from './portal/portal.module';
+import { AdopcionModule } from './adopcion/adopcion.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PortalModule } from './portal/portal.module';
     AelikaScanLiteModule,
     LealtadModule,
     PortalModule,
+    AdopcionModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

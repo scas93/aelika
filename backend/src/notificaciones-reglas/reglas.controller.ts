@@ -1,14 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ReglasService } from './reglas.service';
 import { CreateReglaDto } from './dto/create-regla.dto';
 import { UpdateReglaDto } from './dto/update-regla.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ReglasAccesoGuard } from './reglas-acceso.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../../generated/prisma/enums';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 
-// Dueño siempre; Gerente solo en tenants RETAIL_B2B (ReglasAccesoGuard); Operador nunca — ni siquiera el GET. En
-// RETAIL_B2C sigue siendo solo Dueño.
-@UseGuards(ReglasAccesoGuard)
+// Solo Dueño, en cualquier tipo de tenant (Gerente y Operador 403, ni siquiera el GET). Los canales y eventos de
+// notificación (Ajustes) también son solo Dueño.
+@Roles(Role.DUENO)
 @Controller('reglas')
 export class ReglasController {
   constructor(private readonly reglasService: ReglasService) {}

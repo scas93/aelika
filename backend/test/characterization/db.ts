@@ -20,6 +20,7 @@ export function horarioAbierto(apertura = '08:00', cierre = '22:00') {
 export interface BaseSeed {
   tenant: { id: string; slug: string };
   dueno: { id: string; email: string };
+  gerente: { id: string; email: string };
   operador: { id: string; email: string };
   categoria: { id: string };
   productoA: { id: string; nombre: string; precio: string };
@@ -54,17 +55,17 @@ export async function seedBase(
       ...(opts.tipoStorefront === 'RETAIL_B2B' || opts.b2b ? datosConfigB2b({ modoCobro: 'AL_FINAL', minimoPiezas: 10, ...opts.b2b }) : {}),
     },
   });
-  const mkUser = (rol: 'DUENO' | 'OPERADOR') =>
+  const mkUser = (rol: 'DUENO' | 'GERENTE' | 'OPERADOR') =>
     prisma.user.create({
       data: {
         tenantId: tenant.id,
-        nombre: rol === 'DUENO' ? 'Dueño Test' : 'Operador Test',
+        nombre: `${rol} Test`,
         email: `${rol.toLowerCase()}@${slug}.test`,
         passwordHash: 'no-se-usa-en-tests',
         rol,
       },
     });
-  const [dueno, operador] = await Promise.all([mkUser('DUENO'), mkUser('OPERADOR')]);
+  const [dueno, gerente, operador] = await Promise.all([mkUser('DUENO'), mkUser('GERENTE'), mkUser('OPERADOR')]);
   const categoria = await prisma.category.create({ data: { tenantId: tenant.id, nombre: 'Bebidas' } });
   const productoA = await prisma.product.create({
     data: { tenantId: tenant.id, categoryId: categoria.id, nombre: 'Café americano', precio: '45.00' },
@@ -75,6 +76,7 @@ export async function seedBase(
   return {
     tenant: { id: tenant.id, slug },
     dueno: { id: dueno.id, email: dueno.email },
+    gerente: { id: gerente.id, email: gerente.email },
     operador: { id: operador.id, email: operador.email },
     categoria: { id: categoria.id },
     productoA: { id: productoA.id, nombre: productoA.nombre, precio: '45.00' },

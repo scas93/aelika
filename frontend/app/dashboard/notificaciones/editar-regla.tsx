@@ -33,7 +33,7 @@ export default function EditarRegla({ id, categoria, basePath }: EditarReglaProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (!puedeVerNotificaciones(user.rol, user.tenant.tipoStorefront)) {
+  if (!puedeVerNotificaciones(user.rol)) {
     return <p className="text-sm text-admin-ink-soft">No tienes permiso para ver esta sección.</p>;
   }
 

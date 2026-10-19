@@ -16,7 +16,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../../generated/prisma/enums';
 
 // GET abierto a los 3 roles (se necesita para armar un PedidoB2b), escritura
-// solo Gerente/Dueño — mismo criterio que Promociones.
+// solo Dueño (el Gerente ya no escribe: es configuración del negocio, como Ajustes).
 @UseGuards(ModuloActivoGuard)
 @RequiereModulo('CODIGOS_DESCUENTO')
 @Controller('codigos-descuento-b2b')
@@ -30,19 +30,19 @@ export class CodigosDescuentoB2bController {
     return this.codigosDescuentoB2bService.findAll();
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
+  @Roles(Role.DUENO)
   @Post()
   create(@Body() dto: CreateCodigoDescuentoB2bDto) {
     return this.codigosDescuentoB2bService.create(dto);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
+  @Roles(Role.DUENO)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCodigoDescuentoB2bDto) {
     return this.codigosDescuentoB2bService.update(id, dto);
   }
 
-  @Roles(Role.GERENTE, Role.DUENO)
+  @Roles(Role.DUENO)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.codigosDescuentoB2bService.remove(id);

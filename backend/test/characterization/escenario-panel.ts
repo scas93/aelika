@@ -26,7 +26,7 @@ export async function crearEscenarioPanel(s: Suite): Promise<Escenario> {
   const slug = base.tenant.slug;
   const tokenDueno = tokenFor(h.jwt, base.dueno, base.tenant.id, 'DUENO');
   const tokenOperador = tokenFor(h.jwt, base.operador, base.tenant.id, 'OPERADOR');
-  const tokenGerente = tokenFor(h.jwt, base.dueno, base.tenant.id, 'GERENTE');
+  const tokenGerente = tokenFor(h.jwt, base.gerente, base.tenant.id, 'GERENTE');
   const api = auth(h, tokenDueno);
 
   const crear = async (iso: string, body: Record<string, unknown>) => {

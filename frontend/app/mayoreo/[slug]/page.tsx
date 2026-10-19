@@ -7,6 +7,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { identificarCliente, reiniciarIdentidad } from "@/lib/analitica";
 import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 import { fetchPublicPedidoB2bTenant } from "@/lib/api";
 import { PortalError, fetchSesion, type PortalSesion } from "@/lib/portal-api";
@@ -93,6 +94,20 @@ export default function PortalPage() {
       activo = false;
     };
   }, [slug, quiereCrear]);
+
+  // Identidad de analítica: el id interno del Cliente activo (nunca teléfono ni nombre). Sin sesión, o mientras se
+  // elige/cambia de cliente, vuelve a anónimo para no mezclar sesiones.
+  const idClienteActivo =
+    estado.tipo === "sesion" &&
+    !estado.sesion.requiereSeleccion &&
+    !estado.cambiando
+      ? (estado.sesion.cliente?.id ?? null)
+      : null;
+  const hayEstadoFinal = estado.tipo === "sesion" || estado.tipo === "sin-sesion";
+  useEffect(() => {
+    if (idClienteActivo) identificarCliente(idClienteActivo, slug);
+    else if (hayEstadoFinal) reiniciarIdentidad();
+  }, [idClienteActivo, hayEstadoFinal, slug]);
 
   const nombreNegocio =
     estado.tipo === "sesion" ? estado.sesion.negocio.nombre : nombrePublico;

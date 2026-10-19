@@ -41,6 +41,7 @@ import {
   dinero,
   WRAPPER,
 } from "../../../estilos";
+import { capturar } from "@/lib/analitica";
 import { useSesionPortal } from "../../usar-sesion-portal";
 
 interface ProductoCatalogo {
@@ -300,6 +301,13 @@ export default function ModificarPedidoPage() {
         ...(notaCambio ? { notaCliente: nota.trim() || null } : {}),
       });
       const estadoNuevo = r.pedido.estado.codigo;
+      if (r.cambio)
+        capturar("pedido_modificado", {
+          slug,
+          semana: estado.semanaInicio,
+          dias: entregasVigentes(borrador),
+          piezas: totales.piezas,
+        });
       setGuardado(
         !r.cambio
           ? "No había nada que cambiar."

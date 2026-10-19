@@ -3,7 +3,7 @@ import { expectError } from './exacto';
 import { usarSuite } from './helpers';
 import { apiRol } from './b2b-helpers';
 
-// Notificaciones (reglas) en un tenant RETAIL_B2C: se queda como siempre, solo Dueño. (En B2B el Gerente también: transversal-reglas.)
+// Notificaciones (reglas) en un tenant RETAIL_B2C: solo Dueño. Desde el cambio del rol Gerente también lo es en B2B (transversal-reglas).
 describe('B2C · reglas de notificación: solo Dueño', () => {
   const s = usarSuite({ reglasReales: true });
   const msg = 'No tienes permiso para realizar esta acción';

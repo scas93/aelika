@@ -678,6 +678,13 @@ model DetalleB2B {
   pagadoAt                    DateTime?
   // Nota libre del cliente (opcional). Se ve en el panel lateral del pedido y sale en el Excel.
   notaCliente                 String?
+  // Primera confirmación del pedido (observabilidad del Dueño). Solo la escribe el código para pedidos creados a partir
+  // del corte CONFIRMADO_AT_DESDE y nunca se sobrescribe en reconfirmaciones. null = sin dato (pedidos anteriores al corte,
+  // pedidos aún por confirmar o cancelados antes de confirmarse). Sin relleno retroactivo.
+  confirmadoAt                DateTime?
+  // Quién capturó el pedido al crearlo (observabilidad del Dueño). null = sin dato (pedidos anteriores a este campo; sin
+  // relleno retroactivo). No sale en la API. Lo fija crearOrdenB2b, único lugar donde se crea una orden B2B.
+  origen                      OrigenPedidoB2b?
 
   tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -686,6 +693,12 @@ model DetalleB2B {
   @@index([tenantId, semanaInicio])
   @@index([codigoDescuentoId])
   @@map("detalles_b2b")
+}
+
+// Origen de un pedido B2B: lo creó el propio cliente en el portal o lo capturó el equipo en el panel.
+enum OrigenPedidoB2b {
+  PORTAL_CLIENTE
+  PANEL_EQUIPO
 }
 
 enum EstadoEntrega {
@@ -1154,6 +1167,9 @@ model Cliente {
   // Pedido favorito del cliente en el portal (Fase 4, 4d): UNO por cliente. Plantilla por día de la semana, sin precios:
   // { guardadoAt, lineas: [{ productId, nombre, dias: { LUNES: 3, ... } }] }. Lo comparten todos los teléfonos autorizados.
   favoritoB2b         Json?
+  // Último acceso al portal como cliente activo (OTP verificado, cambio de cliente o sesión reanudada, máx. 1 vez por hora).
+  // null = sin dato; sin relleno retroactivo. Observabilidad del Dueño: no se expone en la API.
+  ultimoAccesoAt      DateTime?
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   telefonos      ClienteTelefono[]

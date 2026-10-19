@@ -60,7 +60,8 @@ describe('B2B · códigos de descuento (CRUD)', () => {
     });
 
     it('completo: usosMaximos, fecha límite (medianoche UTC) y activo=false', async () => {
-      const res = await api('GERENTE').post('/codigos-descuento-b2b', {
+      // Cambio deliberado: la escritura es solo Dueño (antes Gerente/Dueño); la lectura sigue abierta a los 3 roles.
+      const res = await api('DUENO').post('/codigos-descuento-b2b', {
         codigo: 'Especial',
         descuentoPorcentaje: 20,
         usosMaximos: 5,
