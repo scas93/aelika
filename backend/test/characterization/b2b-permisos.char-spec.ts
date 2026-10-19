@@ -10,7 +10,7 @@ import {
 } from './b2b-helpers';
 
 // 0b-1 · Área 9 · Permisos por rol en todos los endpoints B2B del panel.
-// Lecturas: los 3 roles. Crear, marcar-pagado, corregir y códigos POST/PATCH/DELETE: Gerente y Dueño.
+// Lecturas: los 3 roles. Crear, marcar-pagado y corregir: Gerente y Dueño. Códigos POST/PATCH/DELETE: solo Dueño.
 // Editar (items), confirmar (avanzar) y cancelar: los 3 roles (el Operador no puede sobre un pedido Pagado: ver b2b-pagos-correccion).
 describe('B2B · permisos por rol', () => {
   const s = usarSuite({ seed: { tipoStorefront: 'RETAIL_B2B' } });
@@ -166,8 +166,10 @@ describe('B2B · permisos por rol', () => {
     });
   });
 
-  describe('códigos de descuento: escritura solo Gerente/Dueño (ver también b2b-codigos)', () => {
-    it('POST/PATCH/DELETE: Operador 403 y sin token 401; Gerente y Dueño permitidos', async () => {
+  // CAMBIO DELIBERADO (Gerente = Dueño salvo Adopción, Notificaciones y Ajustes): la escritura de códigos de descuento
+  // pasó de Gerente/Dueño a solo Dueño (es configuración, como su página en Ajustes). La lectura sigue en los 3 roles.
+  describe('códigos de descuento: escritura solo Dueño (ver también b2b-codigos)', () => {
+    it('POST/PATCH/DELETE: Operador y Gerente 403 y sin token 401; Dueño permitido', async () => {
       const c = await seedCodigoDescuento(s.h.prisma, s.base.tenant.id, {
         codigo: 'UNO',
       });
@@ -199,21 +201,18 @@ describe('B2B · permisos por rol', () => {
         'Unauthorized',
       );
 
-      expect(
-        (
-          await apiRol(s.h, s.base, 'GERENTE').post('/codigos-descuento-b2b', {
-            codigo: 'GER',
-            descuentoPorcentaje: 5,
-          })
-        ).status,
-      ).toBe(201);
-      expect(
-        (
-          await apiRol(s.h, s.base, 'GERENTE')
-            .patch(`/codigos-descuento-b2b/${c.id}`)
-            .send({ activo: false })
-        ).status,
-      ).toBe(200);
+      expectError(
+        await apiRol(s.h, s.base, 'GERENTE').post('/codigos-descuento-b2b', { codigo: 'GER', descuentoPorcentaje: 5 }),
+        403,
+        SIN_PERMISO,
+      );
+      expectError(
+        await apiRol(s.h, s.base, 'GERENTE').patch(`/codigos-descuento-b2b/${c.id}`).send({ activo: false }),
+        403,
+        SIN_PERMISO,
+      );
+      expectError(await apiRol(s.h, s.base, 'GERENTE').delete(`/codigos-descuento-b2b/${c.id}`), 403, SIN_PERMISO);
+      await apiRol(s.h, s.base, 'GERENTE').get('/codigos-descuento-b2b').expect(200);
       expect(
         (
           await apiRol(s.h, s.base, 'DUENO').post('/codigos-descuento-b2b', {

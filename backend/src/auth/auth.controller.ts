@@ -52,7 +52,8 @@ export class AuthController {
         email: true,
         rol: true,
         tenantId: true,
-        tenant: { select: { nombre: true, tipoStorefront: true, slug: true, modulosDesactivados: true } },
+        // ubicacion: dato público del storefront; permite imprimir el negocio en comandas sin GET /tenant/me (solo Dueño).
+        tenant: { select: { nombre: true, tipoStorefront: true, slug: true, modulosDesactivados: true, ubicacion: true } },
       },
     });
     return record;

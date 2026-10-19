@@ -367,12 +367,21 @@ describe('Transversal · Reglas de notificación', () => {
       );
     });
 
-    it('tenant B2B: Dueño y Gerente sí (lectura y escritura); Operador 403, sin token 401', async () => {
+    // CAMBIO DELIBERADO (Gerente = Dueño salvo Adopción, Notificaciones y Ajustes): antes el Gerente de un tenant B2B podía leer
+    // y escribir reglas (ReglasAccesoGuard); ahora Notificaciones es solo Dueño en cualquier tipo de tenant.
+    it('tenant B2B: solo Dueño (lectura y escritura); Gerente y Operador 403, sin token 401', async () => {
       const msg = 'No tienes permiso para realizar esta acción';
-      await apiRol(s.h, s.base, 'GERENTE').get('/reglas').expect(200);
-      await apiRol(s.h, s.base, 'GERENTE')
+      await apiRol(s.h, s.base, 'DUENO').get('/reglas').expect(200);
+      await apiRol(s.h, s.base, 'DUENO')
         .post('/reglas', reglaBody())
         .expect(201);
+      const regla = (await apiRol(s.h, s.base, 'DUENO').get('/reglas').expect(200)).body[0];
+      expectError(await apiRol(s.h, s.base, 'GERENTE').get('/reglas'), 403, msg);
+      expectError(await apiRol(s.h, s.base, 'GERENTE').get('/reglas/catalogo-variables'), 403, msg);
+      expectError(await apiRol(s.h, s.base, 'GERENTE').get(`/reglas/${regla.id}`), 403, msg);
+      expectError(await apiRol(s.h, s.base, 'GERENTE').post('/reglas', reglaBody()), 403, msg);
+      expectError(await apiRol(s.h, s.base, 'GERENTE').patch(`/reglas/${regla.id}`).send({ activa: false }), 403, msg);
+      expectError(await apiRol(s.h, s.base, 'GERENTE').post(`/reglas/${regla.id}/disparar`, {}), 403, msg);
       expectError(
         await apiRol(s.h, s.base, 'OPERADOR').get('/reglas'),
         403,

@@ -94,7 +94,8 @@ export interface CurrentUser {
   rol: Role;
   tenantId: string;
   // modulosDesactivados: módulos opcionales apagados para el negocio ("LEALTAD", "CODIGOS_DESCUENTO"); vacío = todo encendido.
-  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[] };
+  // ubicacion: dirección pública del negocio (para la comanda); viene de /auth/me, que sí pueden leer los 3 roles.
+  tenant: { nombre: string; tipoStorefront: TipoStorefront; slug: string; modulosDesactivados: string[]; ubicacion: string | null };
 }
 
 export interface Category {

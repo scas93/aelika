@@ -546,9 +546,10 @@ describe('Clientes B2B · notificaciones (2d)', () => {
         })
         .expect(201)
     ).body;
+  // Cambio deliberado: crear reglas (Notificaciones) es solo Dueño; el resto de este archivo sigue con el Gerente.
   const regla = async (extra: Record<string, unknown>) =>
     (
-      await admin()
+      await apiRol(s.h, s.base, 'DUENO')
         .post('/reglas')
         .send({
           nombre: 'Aviso',
@@ -579,7 +580,7 @@ describe('Clientes B2B · notificaciones (2d)', () => {
       },
     });
     const r = await regla({ trigger: 'MANUAL' });
-    await admin().post(`/reglas/${r.id}/disparar`).expect(201);
+    await apiRol(s.h, s.base, 'DUENO').post(`/reglas/${r.id}/disparar`).expect(201);
     await waitForCalls(s.h.fakes.reglaEnvio, 1);
     expect(s.h.fakes.reglaEnvio.mock.calls.map((c) => c[1].id)).toStrictEqual([
       activo.id,
