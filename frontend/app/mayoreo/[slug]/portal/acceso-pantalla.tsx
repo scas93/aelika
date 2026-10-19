@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { capturar } from "@/lib/analitica";
 import { PortalError, pedirCodigo, verificarCodigo } from "@/lib/portal-api";
 import { BTN_ENLACE, BTN_PRIMARIO, CARD, ERROR, WRAPPER } from "./estilos";
 
@@ -61,6 +62,7 @@ export default function AccesoPantalla({
     try {
       const r = await pedirCodigo(slug, telefono);
       guardarTelefono(slug, telefono);
+      capturar("codigo_solicitado", { slug });
       setMensaje(r.mensaje);
       setCodigo("");
       setPaso("codigo");
@@ -81,8 +83,10 @@ export default function AccesoPantalla({
     setCargando(true);
     try {
       await verificarCodigo(slug, telefono, codigo);
+      capturar("otp_verificado", { slug });
       onEntro();
     } catch (e) {
+      capturar("otp_fallido", { slug });
       setError(
         e instanceof PortalError
           ? e.message

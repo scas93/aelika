@@ -7,6 +7,7 @@ import {
   fetchSesion,
   type PortalSesion,
 } from "@/lib/portal-api";
+import { identificarCliente } from "@/lib/analitica";
 import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 
 /**
@@ -29,7 +30,10 @@ export function useSesionPortal(slug: string) {
       .then((s) => {
         if (!activo) return;
         if (!s.cliente || s.requiereSeleccion) router.replace(base);
-        else setSesion(s);
+        else {
+          identificarCliente(s.cliente.id, slug);
+          setSesion(s);
+        }
       })
       .catch(() => {
         if (activo) router.replace(base);
