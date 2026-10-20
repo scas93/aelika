@@ -122,7 +122,7 @@ export default function NuevoPedidoPanel({
     if (!clientes) return [];
     const q = busqueda.trim().toLowerCase();
     const lista = q
-      ? clientes.filter((c) => c.nombre.toLowerCase().includes(q) || (c.codigo ?? "").toLowerCase().includes(q))
+      ? clientes.filter((c) => c.nombre.toLowerCase().includes(q))
       : clientes;
     return lista.slice(0, 6);
   }, [clientes, busqueda]);
@@ -202,10 +202,7 @@ export default function NuevoPedidoPanel({
             <div className="flex items-center justify-between gap-3 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-admin-ink">{cliente.nombre}</span>
-                <span className="text-xs text-admin-ink-soft">
-                  {cliente.codigo}
-                  {cliente.descuentoPorcentaje ? ` · ${cliente.descuentoPorcentaje}% de descuento` : ""}
-                </span>
+                {cliente.descuentoPorcentaje ? <span className="text-xs text-admin-ink-soft">{cliente.descuentoPorcentaje}% de descuento</span> : null}
               </div>
               <button
                 type="button"
@@ -220,7 +217,7 @@ export default function NuevoPedidoPanel({
               <input
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar cliente por nombre o código..."
+                placeholder="Buscar cliente por nombre..."
                 className="admin-input w-full"
                 aria-label="Buscar cliente"
               />
@@ -240,10 +237,7 @@ export default function NuevoPedidoPanel({
                         className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-admin-control)] border border-admin-border px-3 py-2 text-left transition hover:border-mayoreo-accent"
                       >
                         <span className="text-sm font-semibold text-admin-ink">{c.nombre}</span>
-                        <span className="text-xs text-admin-ink-soft">
-                          {c.codigo}
-                          {c.descuentoPorcentaje ? ` · ${c.descuentoPorcentaje}%` : ""}
-                        </span>
+                        {c.descuentoPorcentaje ? <span className="text-xs text-admin-ink-soft">{c.descuentoPorcentaje}%</span> : null}
                       </button>
                     </li>
                   ))}

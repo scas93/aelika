@@ -29,8 +29,11 @@ export interface TelefonoB2bInput {
 export interface CrearClienteB2bInput {
   tenantId: string;
   tenantSlug: string;
-  /** Slug del cliente, sin el prefijo del negocio (ej. "matriz"). */
-  sufijo: string;
+  /**
+   * Slug del cliente, sin el prefijo del negocio (ej. "matriz"). Opcional: sin él, el código se genera solo a partir del
+   * nombre comercial y, si ya existe, se le agrega -2, -3… (el usuario nunca lo escribe ni lo ve en el panel).
+   */
+  sufijo?: string;
   nombre: string;
   direccion: string;
   descuentoPorcentaje?: number | null;
@@ -95,12 +98,43 @@ export function normalizarTelefonosB2b(telefonos: TelefonoB2bInput[]) {
   return normalizados;
 }
 
+/**
+ * Código del cliente nuevo. Con `sufijo` explícito (seeds, scripts) se respeta y 409 si ya existe; sin él se deriva del nombre
+ * comercial y se busca el primero libre del negocio (`base`, `base-2`, `base-3`…).
+ */
+async function resolverCodigoNuevo(
+  db: ClienteB2bDb,
+  input: CrearClienteB2bInput,
+): Promise<string> {
+  const existe = async (codigo: string) =>
+    !!(await db.cliente.findFirst({
+      where: { tenantId: input.tenantId, codigo },
+      select: { id: true },
+    }));
+  if (input.sufijo) {
+    const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo);
+    if (await existe(codigo)) {
+      throw new ConflictException(`Ya existe un cliente con el código ${codigo}`);
+    }
+    return codigo;
+  }
+  const base = slugificar(input.nombre) || 'cliente';
+  for (let n = 1; n < 1000; n++) {
+    const codigo = construirCodigoCliente(
+      input.tenantSlug,
+      n === 1 ? base : `${base}-${n}`,
+    );
+    if (!(await existe(codigo))) return codigo;
+  }
+  throw new ConflictException('No se pudo generar un código para el cliente');
+}
+
 /** Alta de un cliente B2B con sus teléfonos. 409 si el código ya existe en el negocio. */
 export async function crearClienteB2b(
   db: ClienteB2bDb,
   input: CrearClienteB2bInput,
 ): Promise<Cliente> {
-  const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo);
+  const codigo = await resolverCodigoNuevo(db, input);
   const telefonos = normalizarTelefonosB2b(input.telefonos);
   const nombre = input.nombre.trim();
   const direccion = input.direccion.trim();
@@ -112,13 +146,6 @@ export async function crearClienteB2b(
   const descuento = input.descuentoPorcentaje ?? null;
   if (descuento !== null && (descuento < 0 || descuento > 100)) {
     throw new BadRequestException('El descuento debe estar entre 0 y 100');
-  }
-
-  const existente = await db.cliente.findFirst({
-    where: { tenantId: input.tenantId, codigo },
-  });
-  if (existente) {
-    throw new ConflictException(`Ya existe un cliente con el código ${codigo}`);
   }
 
   // Un B2B nunca tiene Cliente.telefono: sus números viven en ClienteTelefono. Los contadores nacen en 0 y
@@ -176,7 +203,7 @@ export async function sembrarClienteB2b(
   db: ClienteB2bDb,
   input: CrearClienteB2bInput,
 ): Promise<Cliente> {
-  const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo);
+  const codigo = construirCodigoCliente(input.tenantSlug, input.sufijo ?? '');
   const existente = await db.cliente.findFirst({
     where: { tenantId: input.tenantId, codigo },
   });

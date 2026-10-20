@@ -39,6 +39,12 @@ export class ClientesB2bController {
     return this.clientesB2bService.selector();
   }
 
+  // Lo que el formulario de alta necesita saber del negocio: su modalidad de cobro por defecto («Igual que el negocio (Al final)»).
+  @Get('config')
+  config(@CurrentUser() user: JwtPayload) {
+    return this.clientesB2bService.config(user.tenantId);
+  }
+
   @Get()
   findAll(@Query() query: ListClientesB2bQueryDto) {
     return this.clientesB2bService.findAll(query);

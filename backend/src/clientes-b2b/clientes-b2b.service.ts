@@ -79,7 +79,6 @@ export class ClientesB2bService {
         ? {
             OR: [
               { nombre: { contains: q, mode: 'insensitive' } },
-              { codigo: { contains: q, mode: 'insensitive' } },
               ...(digits
                 ? [{ telefonos: { some: { telefono: { contains: digits } } } }]
                 : []),
@@ -295,6 +294,14 @@ export class ClientesB2bService {
 
   // ---- Alta y edición ----------------------------------------------------------------------------------
 
+  async config(tenantId: string) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { pedidoB2bModoCobro: true },
+    });
+    return { modalidadCobroNegocio: t.pedidoB2bModoCobro };
+  }
+
   async create(tenantId: string, dto: CreateClienteB2bDto) {
     // Tenant no es un modelo tenant-owned: se lee con PrismaService (el id viene de la sesión).
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
@@ -319,7 +326,9 @@ export class ClientesB2bService {
       // Carrera de dos altas con el mismo código: el unique [tenantId, codigo] rechaza la segunda.
       if ((error as { code?: string })?.code === 'P2002') {
         throw new ConflictException(
-          `Ya existe un cliente con el código ${tenant.slug}-${dto.sufijo}`,
+          dto.sufijo
+            ? `Ya existe un cliente con el código ${tenant.slug}-${dto.sufijo}`
+            : 'Se estaba creando otro cliente con el mismo nombre; intenta de nuevo',
         );
       }
       throw error;

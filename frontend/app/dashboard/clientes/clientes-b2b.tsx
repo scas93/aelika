@@ -15,22 +15,22 @@ import ClienteB2bPanel from "./cliente-b2b-panel";
 const LIMIT = 25;
 
 const COLUMNS: TableColumn<ClienteB2bFila>[] = [
-  { key: "codigo", header: "Código", render: (c) => <span className="text-admin-ink-soft">{c.codigo ?? "—"}</span> },
   {
     key: "nombre",
     header: "Nombre",
     movil: true,
+    truncate: true,
     render: (c) => (
-      <span className="flex flex-wrap items-center gap-2">
-        <span className="font-bold">{c.nombre}</span>
-        {c.incompleto && <Badge variant="advertencia">Incompleto</Badge>}
-        {!c.activo && <Badge variant="neutro">De baja</Badge>}
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate font-bold">{c.nombre}</span>
+        {c.incompleto && <span className="shrink-0"><Badge variant="advertencia">Incompleto</Badge></span>}
+        {!c.activo && <span className="shrink-0"><Badge variant="neutro">De baja</Badge></span>}
       </span>
     ),
   },
-  { key: "telefono", header: "Teléfono principal", render: (c) => (c.telefonoPrincipal ? formatTelefono(c.telefonoPrincipal) : "—") },
-  { key: "descuento", header: "Descuento", align: "right", render: (c) => (c.descuentoPorcentaje ? `${c.descuentoPorcentaje}%` : "—") },
-  { key: "pedidos", header: "Pedidos activos", align: "right", movil: true, render: (c) => c.pedidosActivos },
+  { key: "telefono", header: "Teléfono", compact: true, render: (c) => <span className="whitespace-nowrap">{c.telefonoPrincipal ? formatTelefono(c.telefonoPrincipal) : "—"}</span> },
+  { key: "descuento", header: "Descuento", align: "right", compact: true, render: (c) => (c.descuentoPorcentaje ? `${c.descuentoPorcentaje}%` : "—") },
+  { key: "pedidos", header: "Pedidos activos", align: "right", compact: true, movil: true, render: (c) => c.pedidosActivos },
 ];
 
 /** Módulo Clientes de un negocio de mayoreo (Gerente/Dueño): lista, alta, detalle/edición, teléfonos, baja y reactivación. */
@@ -78,7 +78,7 @@ export default function ClientesB2b() {
     <div className="flex flex-col gap-3">
       {/* Orden fijo: alfabético por nombre (un directorio de clientes dados de alta; no hay una fecha que ordenar). */}
       <BarraBusqueda
-        placeholder="Buscar por nombre, código o teléfono…"
+        placeholder="Buscar por nombre o teléfono…"
         onBuscar={setQ}
         crear={{ label: "Nuevo cliente", onClick: () => setAltaAbierta(true) }}
         filtros={[

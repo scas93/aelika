@@ -8,6 +8,7 @@ import {
   bajaClienteB2b,
   cambiarPrincipalClienteB2b,
   fetchClienteB2b,
+  fetchClientesB2bConfig,
   quitarTelefonoClienteB2b,
   reactivarClienteB2b,
   updateClienteB2b,
@@ -15,7 +16,7 @@ import {
   type ModalidadPagoB2b,
 } from "@/lib/api";
 import { formatTelefono } from "@/lib/format";
-import { descuentoValido, MODALIDAD_LABEL, parseDescuento } from "./cliente-b2b-form";
+import { descuentoValido, etiquetaModalidadNegocio, MODALIDAD_LABEL, parseDescuento } from "./cliente-b2b-form";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
@@ -44,9 +45,20 @@ export default function ClienteB2bPanel({
   const [direccion, setDireccion] = useState("");
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
+  const [modalidadNegocio, setModalidadNegocio] = useState<ModalidadPagoB2b | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchClientesB2bConfig(token)
+      .then((c) => !cancelled && setModalidadNegocio(c.modalidadCobroNegocio))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [nuevoContacto, setNuevoContacto] = useState("");
@@ -209,12 +221,6 @@ export default function ClienteB2bPanel({
           )}
 
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-admin-ink">Código del cliente</span>
-              <span className="rounded-[var(--radius-admin-control)] bg-admin-bg px-3 py-2 text-sm text-admin-ink">{cliente.codigo ?? "—"}</span>
-              <span className="text-xs text-admin-ink-soft">El código no se puede cambiar.</span>
-            </div>
-
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
               Nombre comercial
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="admin-input" />
@@ -232,7 +238,7 @@ export default function ClienteB2bPanel({
               <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
                 Modalidad de pago
                 <select value={modalidad} onChange={(e) => setModalidad(e.target.value as "" | ModalidadPagoB2b)} className="admin-input">
-                  <option value="">La del negocio</option>
+                  <option value="">{etiquetaModalidadNegocio(modalidadNegocio)}</option>
                   <option value="AL_INICIO">{MODALIDAD_LABEL.AL_INICIO}</option>
                   <option value="AL_FINAL">{MODALIDAD_LABEL.AL_FINAL}</option>
                 </select>

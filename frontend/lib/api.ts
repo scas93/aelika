@@ -2080,7 +2080,6 @@ export interface TelefonoClienteB2bInput {
 
 export interface CreateClienteB2bPayload {
   nombre: string;
-  sufijo: string;
   direccion: string;
   descuentoPorcentaje?: number;
   modalidadPago?: ModalidadPagoB2b;
@@ -2159,6 +2158,11 @@ export function fetchEntregasPedidoClienteB2b(token: string, clienteId: string, 
   return request<{ entregas: ClienteB2bEntregaHistorial[] }>(`/clientes-b2b/${clienteId}/pedidos/${pedidoId}/entregas`, {
     headers: authHeaders(token),
   });
+}
+
+/** Lo que el formulario de alta necesita del negocio: su modalidad de cobro por defecto. */
+export function fetchClientesB2bConfig(token: string) {
+  return request<{ modalidadCobroNegocio: PedidoB2bModoCobro }>("/clientes-b2b/config", { headers: authHeaders(token) });
 }
 
 export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {

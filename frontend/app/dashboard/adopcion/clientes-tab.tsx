@@ -66,7 +66,6 @@ export default function ClientesTab({ token }: { token: string }) {
       render: (f) => (
         <div className="flex flex-col gap-1">
           <span className="font-semibold">{f.nombre}</span>
-          {f.codigo && <span className="text-xs text-admin-ink-soft">{f.codigo}</span>}
           {f.modificadoSinReconfirmar && <Badge variant="advertencia">Modificó, sin reconfirmar</Badge>}
         </div>
       ),
