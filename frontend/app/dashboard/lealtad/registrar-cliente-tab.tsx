@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ApiError, altaClienteLealtad, type LealtadRespuesta } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Aviso from "../_components/Aviso";
 
 // Sección fija (link + QR de /lealtad/[slug]) — siempre visible, independiente
 // de si el formulario de abajo está en su estado inicial o mostrando el
@@ -36,10 +37,10 @@ function LinkAutoRegistroSection({ slug }: { slug: string }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg px-3 py-2 text-xs text-admin-ink">
+        <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg px-3 h-barra items-center text-xs text-admin-ink">
           {link}
         </code>
-        <Button variant="secondary" size="sm" onClick={handleCopiar} className="shrink-0">
+        <Button variant="secondary" size="barra" onClick={handleCopiar} className="shrink-0">
           {copiado ? "¡Copiado!" : "Copiar"}
         </Button>
       </div>
@@ -97,12 +98,12 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
             <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg p-3">
               <p className="text-sm font-semibold text-admin-ink">Link para agregar la tarjeta al wallet</p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-2 text-xs text-admin-ink">
+                <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 h-barra items-center text-xs text-admin-ink">
                   {resultado.pase.shareUrl}
                 </code>
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="barra"
                   onClick={() => navigator.clipboard.writeText(resultado.pase!.shareUrl)}
                   className="shrink-0"
                 >
@@ -115,12 +116,9 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
               </p>
             </div>
           ) : (
-            <div className="rounded-[var(--radius-admin-control)] border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm text-amber-800">
-                El cliente y su tarjeta ya quedaron registrados, pero no se pudo generar el link del wallet en este
-                momento. Intenta registrarlo de nuevo con el mismo teléfono en unos minutos para conseguir el link.
-              </p>
-            </div>
+            <Aviso tono="ambar">
+              El cliente y su tarjeta ya quedaron registrados, pero no se pudo generar el link del wallet en este momento. Intenta registrarlo de nuevo con el mismo teléfono en unos minutos para conseguir el link.
+            </Aviso>
           )}
 
           <Button variant="secondary" onClick={handleNuevoRegistro} className="self-start">

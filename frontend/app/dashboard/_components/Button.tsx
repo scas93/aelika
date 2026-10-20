@@ -1,7 +1,9 @@
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
 type Variant = "primary" | "secondary" | "danger";
-type Size = "sm" | "md" | "lg";
+// Dos tamaños: `barra` (fila de controles de la página, 40 px) y `tabla` (dentro de tablas y paneles, 32 px; 40 px en teléfono).
+// Los nombres anteriores siguen aceptándose como alias: xs/sm → tabla, md/lg → barra.
+type Size = "barra" | "tabla" | "xs" | "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -13,15 +15,21 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   // Acento interactivo — ya no admin-green (ver globals.css: admin-green
   // pasó a significar exclusivamente "éxito").
   primary: "bg-admin-accent text-white hover:bg-admin-accent-dark",
-  secondary: "border border-admin-border bg-white text-admin-ink-soft hover:bg-admin-bg",
+  // Rectangular (mismo radio que primary), borde neutro, fondo blanco y texto oscuro; con size="xs" es la versión compacta con ícono.
+  secondary: "border border-admin-border bg-white text-admin-ink hover:bg-admin-bg",
   danger:
     "border border-admin-red-soft bg-white text-admin-red hover:bg-admin-red-soft disabled:border-admin-border disabled:text-admin-ink-soft disabled:hover:bg-transparent",
 };
 
+const BARRA = "inline-flex h-barra items-center justify-center gap-1.5 px-4 text-sm";
+const TABLA = "inline-flex h-tabla items-center justify-center gap-1.5 px-3 text-xs";
 const SIZE_CLASSES: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-4 py-2 text-sm",
-  lg: "px-5 py-2.5 text-sm",
+  barra: BARRA,
+  tabla: TABLA,
+  xs: TABLA,
+  sm: TABLA,
+  md: BARRA,
+  lg: BARRA,
 };
 
 // Replaces the BTN_PRIMARY/BTN_SECONDARY/BTN_DANGER string constants

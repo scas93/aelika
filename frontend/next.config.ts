@@ -4,6 +4,9 @@ import type { NextConfig } from "next";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 const nextConfig: NextConfig = {
+  // Solo desarrollo: el indicador de Next (esquina inferior izquierda por defecto) tapaba el bloque del usuario al fondo de la barra
+  // lateral, y en otra esquina tapa el pie del panel del pedido. Los errores de compilación/ejecución siguen mostrándose.
+  devIndicators: false,
   // Portal del cliente (Fase 4): el navegador llama a /api-portal/* en el MISMO dominio del storefront y Next lo
   // reenvía a la API. Así la cookie de sesión es de primera parte (sin DNS ni CORS). proxy.ts deja pasar esta ruta.
   async rewrites() {

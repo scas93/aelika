@@ -289,24 +289,27 @@ describe('B2B · pago y corrección del admin (Fase 1b)', () => {
       expect(await detalle(p.id)).toMatchObject({ estadoPago: 'PAGADO', total: '752' }); // 14 × 45 + 4 × 30.5
     });
 
-    it('un Operador no puede editar ni cancelar un pedido Pagado (403 sin efectos); sí confirmarlo si aplica; Gerente sí', async () => {
+    // CAMBIO DELIBERADO: cancelar ya no es del Operador en ningún caso (403 por rol, no por «ya está pagado»).
+    it('un Operador no puede editar un pedido Pagado ni cancelar (403 sin efectos); Gerente sí edita', async () => {
       const p = await confirmado();
       await dueno().patch(`/pedidos-b2b/${p.id}/marcar-pagado`).expect(200);
       const antes = await detalle(p.id);
       const body = { items: [{ productId: A(), distribucion: [{ dia: 'LUNES', cantidad: 6 }] }] };
       expectError(await operador().patch(`/pedidos-b2b/${p.id}/items`).send(body), 403, 'Este pedido ya está pagado — solo un administrador puede editarlo');
-      expectError(await operador().patch(`/pedidos-b2b/${p.id}/cancelar`), 403, 'Este pedido ya está pagado — solo un administrador puede cancelarlo');
+      expectError(await operador().patch(`/pedidos-b2b/${p.id}/cancelar`), 403, 'No tienes permiso para realizar esta acción');
       expect(await detalle(p.id)).toStrictEqual(antes);
       await gerente().patch(`/pedidos-b2b/${p.id}/items`).send(body).expect(200);
     });
 
-    it('un Operador sí edita y cancela un pedido no pagado', async () => {
+    // CAMBIO DELIBERADO: antes también cancelaba; ahora cancelar es de Gerente/Dueño.
+    it('un Operador sí edita un pedido no pagado, pero no lo cancela (403)', async () => {
       const p = await confirmado();
       await operador()
         .patch(`/pedidos-b2b/${p.id}/items`)
         .send({ items: [{ productId: A(), distribucion: [{ dia: 'LUNES', cantidad: 6 }] }] })
         .expect(200);
-      expect((await operador().patch(`/pedidos-b2b/${p.id}/cancelar`).expect(200)).body.cancelado).toBe(true);
+      expect((await operador().patch(`/pedidos-b2b/${p.id}/cancelar`)).status).toBe(403);
+      expect((await detalle(p.id)).cancelado).toBe(false);
     });
 
     it('la regla del Operador: un pedido Pagado le está bloqueado, a Gerente/Dueño no', () => {

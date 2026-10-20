@@ -16,6 +16,8 @@ interface TabsProps {
 // pedidos/page.tsx — underline style instead. Not wired into either screen
 // yet (see CLAUDE.md phase notes).
 export default function Tabs({ items, active, onChange }: TabsProps) {
+  // Con una sola pestaña no hay nada que elegir: no se muestra la barra (en ningún módulo).
+  if (items.length < 2) return null;
   return (
     <div className="flex gap-6 overflow-x-auto border-b border-admin-border">
       {items.map((item) => {

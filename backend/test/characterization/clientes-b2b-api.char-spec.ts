@@ -25,6 +25,35 @@ describe('Clientes B2B · API', () => {
     (await admin().post('/clientes-b2b').send(body(extra)).expect(201)).body;
 
   describe('alta', () => {
+    it('sin sufijo, el código se genera del nombre comercial y es único por negocio (-2, -3…)', async () => {
+      const sinSufijo = async (nombre: string, tel: string) =>
+        (
+          await admin()
+            .post('/clientes-b2b')
+            .send({
+              nombre,
+              direccion: 'Calle 1',
+              telefonos: [{ telefono: tel }],
+            })
+            .expect(201)
+        ).body;
+      expect((await sinSufijo('Café Aurora Matriz', '5500000001')).codigo).toBe(
+        'cafe-test-cafe-aurora-matriz',
+      );
+      expect((await sinSufijo('Cafe Aurora  Matriz', '5500000002')).codigo).toBe(
+        'cafe-test-cafe-aurora-matriz-2',
+      );
+      expect((await sinSufijo('Café Aurora Matriz', '5500000003')).codigo).toBe(
+        'cafe-test-cafe-aurora-matriz-3',
+      );
+    });
+
+    it('GET /clientes-b2b/config da la modalidad de cobro del negocio (Gerente)', async () => {
+      const r = await admin().get('/clientes-b2b/config').expect(200);
+      expect(['AL_INICIO', 'AL_FINAL']).toContain(r.body.modalidadCobroNegocio);
+      await operador().get('/clientes-b2b/config').expect(403);
+    });
+
     it('crea con código {slug}-{sufijo}, dos teléfonos normalizados y uno principal', async () => {
       const c = await alta({
         descuentoPorcentaje: 10,
@@ -414,9 +443,8 @@ describe('Clientes B2B · API', () => {
       expect((await q('aurora')).map((x: any) => x.codigo)).toEqual([
         'cafe-test-matriz',
       ]);
-      expect((await q('CAFE-TEST-NORTE')).map((x: any) => x.codigo)).toEqual([
-        'cafe-test-norte',
-      ]);
+      // El código es interno: ya no se busca por él (solo por nombre o teléfono).
+      expect(await q('CAFE-TEST-NORTE')).toEqual([]);
       expect((await q('55-0000')).map((x: any) => x.codigo)).toEqual([
         'cafe-test-norte',
       ]);

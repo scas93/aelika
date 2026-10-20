@@ -69,7 +69,7 @@ export default function Popover({ open, onClose, trigger, children }: PopoverPro
       {open && (
         <div
           ref={panelRef}
-          className={`absolute top-full z-50 mt-2 w-72 rounded-[var(--radius-admin-card)] border border-admin-border bg-white p-4 shadow-lg ${
+          className={`absolute top-full z-50 mt-2 w-max min-w-[10rem] max-w-[20rem] rounded-[var(--radius-admin-card)] border border-admin-border bg-white p-4 shadow-lg ${
             align === "left" ? "left-0" : "right-0"
           }`}
         >

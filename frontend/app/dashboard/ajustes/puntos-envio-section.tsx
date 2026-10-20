@@ -115,10 +115,10 @@ export default function PuntosEnvioSection({ token }: { token: string }) {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <Button variant="secondary" size="sm" onClick={() => setEditingId(punto.id)}>
+                  <Button variant="secondary" size="tabla" onClick={() => setEditingId(punto.id)}>
                     Editar
                   </Button>
-                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(punto)}>
+                  <Button variant="danger" size="tabla" onClick={() => setDeleteTarget(punto)}>
                     Eliminar
                   </Button>
                   <ToggleSwitch

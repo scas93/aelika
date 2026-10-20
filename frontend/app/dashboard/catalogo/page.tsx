@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { IconClipboardList, IconPuzzle, IconTag } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -31,7 +32,7 @@ type Tab = "catalogo" | "promociones" | "modificadores";
 
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 const LINK_BTN_SECONDARY =
-  "rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-1.5 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
+  "inline-flex h-tabla items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
 
 export default function CatalogoPage() {
   const { user, token } = useSession();
@@ -126,9 +127,9 @@ export default function CatalogoPage() {
       {!esB2b && (
         <Tabs
           items={[
-            { key: "catalogo", label: "Categorías y productos", icon: "📋" },
-            { key: "promociones", label: "Promociones", icon: "🏷️" },
-            { key: "modificadores", label: "Modificadores", icon: "🧩" },
+            { key: "catalogo", label: "Categorías y productos", icon: <IconClipboardList size={16} /> },
+            { key: "promociones", label: "Promociones", icon: <IconTag size={16} /> },
+            { key: "modificadores", label: "Modificadores", icon: <IconPuzzle size={16} /> },
           ]}
           active={tab}
           onChange={(key) => setTab(key as Tab)}
@@ -145,7 +146,7 @@ export default function CatalogoPage() {
             <div className="flex items-center justify-between">
               <h2 className={SECTION_HEADER}>Categorías</h2>
               {canWrite && (
-                <Button variant="primary" size="sm" onClick={() => setCategoryPanelOpen(true)}>
+                <Button variant="primary" size="barra" onClick={() => setCategoryPanelOpen(true)}>
                   + Nueva categoría
                 </Button>
               )}
@@ -201,12 +202,12 @@ export default function CatalogoPage() {
                               >
                                 ↓
                               </IconButton>
-                              <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(category)}>
+                              <Button variant="secondary" size="tabla" onClick={() => handleToggleActiva(category)}>
                                 {category.activa ? "Desactivar" : "Activar"}
                               </Button>
                               <Button
                                 variant="danger"
-                                size="sm"
+                                size="tabla"
                                 onClick={() => setDeleteTarget(category)}
                                 disabled={category._count.products > 0}
                                 title={category._count.products > 0 ? "Tiene productos" : undefined}
@@ -295,7 +296,7 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-bg text-sm text-admin-ink-soft transition hover:bg-admin-border disabled:cursor-not-allowed disabled:opacity-30"
+      className="flex h-tabla w-tabla items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-bg text-sm text-admin-ink-soft transition hover:bg-admin-border disabled:cursor-not-allowed disabled:opacity-30"
     >
       {children}
     </button>
@@ -447,7 +448,7 @@ function ProductsSection({
       <div className="flex items-center justify-between">
         <h2 className={SECTION_HEADER}>Productos</h2>
         {canWrite && (
-          <Button variant="primary" size="sm" onClick={() => setProductPanelOpen(true)}>
+          <Button variant="primary" size="barra" onClick={() => setProductPanelOpen(true)}>
             + Agregar producto
           </Button>
         )}
@@ -500,7 +501,7 @@ function ProductsSection({
                     </Link>
                     {canWrite && (
                       <>
-                        <Button variant="secondary" size="sm" onClick={() => setEditingId(product.id)}>
+                        <Button variant="secondary" size="tabla" onClick={() => setEditingId(product.id)}>
                           Editar
                         </Button>
                         <ToggleSwitch
@@ -508,7 +509,7 @@ function ProductsSection({
                           onChange={() => handleToggleDisponible(product)}
                           label={product.disponible ? "Marcar no disponible" : "Marcar disponible"}
                         />
-                        <Button variant="danger" size="sm" onClick={() => setDeleteTarget(product)}>
+                        <Button variant="danger" size="tabla" onClick={() => setDeleteTarget(product)}>
                           Eliminar
                         </Button>
                       </>

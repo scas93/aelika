@@ -102,7 +102,7 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
       <div className="flex items-center justify-between">
         <h2 className={SECTION_HEADER}>Promociones</h2>
         {canWrite && (
-          <Button variant="primary" size="sm" onClick={() => setPanelOpen(true)}>
+          <Button variant="primary" size="barra" onClick={() => setPanelOpen(true)}>
             + Nueva promoción
           </Button>
         )}
@@ -131,10 +131,10 @@ export default function PromotionsSection({ token, canWrite }: { token: string; 
                 </div>
                 {canWrite && (
                   <div className="flex items-center gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => handleToggleActiva(promo)}>
+                    <Button variant="secondary" size="tabla" onClick={() => handleToggleActiva(promo)}>
                       {promo.activa ? "Desactivar" : "Activar"}
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => handleDelete(promo.id)}>
+                    <Button variant="secondary" size="tabla" onClick={() => handleDelete(promo.id)}>
                       Eliminar
                     </Button>
                   </div>

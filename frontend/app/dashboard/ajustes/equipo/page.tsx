@@ -120,7 +120,7 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
                     </select>
                     <Button
                       variant="secondary"
-                      size="sm"
+                      size="tabla"
                       disabled={isSelf}
                       onClick={() => handleUpdate(teamUser.id, { activo: !teamUser.activo })}
                     >
@@ -237,9 +237,9 @@ function TemporaryPasswordBody({ email, password }: { email: string; password: s
         Comparte esta contraseña temporal con <span className="font-bold text-admin-ink">{email}</span>. No se
         volverá a mostrar — cuando el usuario entre por primera vez debe cambiarla.
       </p>
-      <div className="flex items-center justify-between gap-2 rounded-[var(--radius-admin-control)] border border-admin-border px-3 py-2.5 font-mono text-sm text-admin-ink">
+      <div className="flex items-center justify-between gap-2 rounded-[var(--radius-admin-control)] border border-admin-border px-3 h-barra font-mono text-sm text-admin-ink">
         {password}
-        <Button variant="secondary" size="sm" onClick={handleCopy}>
+        <Button variant="secondary" size="barra" onClick={handleCopy}>
           {copied ? "Copiado" : "Copiar"}
         </Button>
       </div>

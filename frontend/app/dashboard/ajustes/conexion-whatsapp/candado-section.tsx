@@ -69,7 +69,7 @@ export default function CandadoSection({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <Button variant="secondary" size="sm" onClick={handleSave} disabled={saving} className="self-start">
+      <Button variant="secondary" size="barra" onClick={handleSave} disabled={saving} className="self-start">
         {saving ? "Guardando..." : saved ? "Guardado" : "Guardar"}
       </Button>
     </Card>

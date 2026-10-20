@@ -1562,6 +1562,8 @@ export interface PedidoB2bEntrega {
 }
 
 export interface PedidoB2bDetalle extends PublicPedidoB2b {
+  // Cliente (Cliente.id) dueño del pedido: lo usa «Ver cliente» en el panel.
+  clienteId?: string;
   cancelado: boolean;
   canceladoAt: string | null;
   // Marca «Modificado por el cliente»: la enciende el portal y se apaga al reconfirmar o con «Marcar como revisado».
@@ -2078,7 +2080,6 @@ export interface TelefonoClienteB2bInput {
 
 export interface CreateClienteB2bPayload {
   nombre: string;
-  sufijo: string;
   direccion: string;
   descuentoPorcentaje?: number;
   modalidadPago?: ModalidadPagoB2b;
@@ -2112,6 +2113,56 @@ export function fetchClientesB2bSelector(token: string) {
 
 export function fetchClienteB2b(token: string, id: string) {
   return request<ClienteB2bDetalle>(`/clientes-b2b/${id}`, { headers: authHeaders(token) });
+}
+
+// Historial de solo lectura del cliente B2B (Gerente/Dueño): lista ligera de pedidos y, aparte, las entregas de UN pedido.
+export interface ClienteB2bPedidoFila {
+  id: string;
+  folio: string;
+  semanaInicio: string | null;
+  estado: PedidoB2bEstado;
+  estadoPago: PedidoB2bEstadoPago;
+  cancelado: boolean;
+  canceladoAt: string | null;
+  totalPiezas: number;
+  total: string;
+  createdAt: string;
+}
+
+export interface PaginatedClienteB2bPedidos {
+  data: ClienteB2bPedidoFila[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ClienteB2bEntregaHistorial {
+  id: string;
+  fecha: string;
+  dia: DiaSemanaPedidoB2b;
+  estado: PedidoB2bEstadoEntrega;
+  cerradaAt: string | null;
+  atrasada: boolean;
+  // precioUnitario: precio de lista del pedido (antes del descuento) para el importe de la línea.
+  productos: { nombreProducto: string; precioUnitario: string; cantidad: number }[];
+}
+
+export function fetchPedidosClienteB2b(token: string, clienteId: string, page: number, limit = 20) {
+  return request<PaginatedClienteB2bPedidos>(`/clientes-b2b/${clienteId}/pedidos?page=${page}&limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function fetchEntregasPedidoClienteB2b(token: string, clienteId: string, pedidoId: string) {
+  return request<{ entregas: ClienteB2bEntregaHistorial[] }>(`/clientes-b2b/${clienteId}/pedidos/${pedidoId}/entregas`, {
+    headers: authHeaders(token),
+  });
+}
+
+/** Lo que el formulario de alta necesita del negocio: su modalidad de cobro por defecto. */
+export function fetchClientesB2bConfig(token: string) {
+  return request<{ modalidadCobroNegocio: PedidoB2bModoCobro }>("/clientes-b2b/config", { headers: authHeaders(token) });
 }
 
 export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {

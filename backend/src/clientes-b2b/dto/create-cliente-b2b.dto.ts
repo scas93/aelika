@@ -22,7 +22,9 @@ export class CreateClienteB2bDto {
   @MaxLength(200)
   nombre: string;
 
-  // Solo el sufijo: el backend arma `{slug del negocio}-{sufijo}`. Minúsculas, letras, números y guiones.
+  // Opcional y ya no lo captura el panel: sin él, el código se genera solo a partir del nombre comercial. Si viene, el backend
+  // arma `{slug del negocio}-{sufijo}` (minúsculas, letras, números y guiones).
+  @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
@@ -32,7 +34,7 @@ export class CreateClienteB2bDto {
     message:
       'El código solo puede tener letras, números y guiones (sin espacios ni acentos)',
   })
-  sufijo: string;
+  sufijo?: string;
 
   @IsString()
   @MinLength(3)

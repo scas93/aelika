@@ -8,6 +8,7 @@ import {
   bajaClienteB2b,
   cambiarPrincipalClienteB2b,
   fetchClienteB2b,
+  fetchClientesB2bConfig,
   quitarTelefonoClienteB2b,
   reactivarClienteB2b,
   updateClienteB2b,
@@ -15,11 +16,13 @@ import {
   type ModalidadPagoB2b,
 } from "@/lib/api";
 import { formatTelefono } from "@/lib/format";
-import { descuentoValido, MODALIDAD_LABEL, parseDescuento } from "./cliente-b2b-form";
+import { descuentoValido, etiquetaModalidadNegocio, MODALIDAD_LABEL, parseDescuento } from "./cliente-b2b-form";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import Aviso from "../_components/Aviso";
+import HistorialPedidosCliente from "./historial-pedidos-cliente";
 
 const textoDescuento = (d: number | null) => (d === null ? "" : String(d));
 
@@ -42,9 +45,20 @@ export default function ClienteB2bPanel({
   const [direccion, setDireccion] = useState("");
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
+  const [modalidadNegocio, setModalidadNegocio] = useState<ModalidadPagoB2b | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchClientesB2bConfig(token)
+      .then((c) => !cancelled && setModalidadNegocio(c.modalidadCobroNegocio))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [nuevoContacto, setNuevoContacto] = useState("");
@@ -195,7 +209,7 @@ export default function ClienteB2bPanel({
       {cliente && (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={cliente.activo ? "exito" : "neutro"}>{cliente.activo ? "Activo" : "De baja"}</Badge>
+            <Badge variant="neutro">{cliente.activo ? "Activo" : "De baja"}</Badge>
             {cliente.incompleto && <Badge variant="advertencia">Incompleto</Badge>}
             <span className="text-sm text-admin-ink-soft">
               {cliente.pedidosActivos} pedido{cliente.pedidosActivos === 1 ? "" : "s"} activo{cliente.pedidosActivos === 1 ? "" : "s"}
@@ -203,18 +217,10 @@ export default function ClienteB2bPanel({
           </div>
 
           {cliente.incompleto && (
-            <p className="rounded-[var(--radius-admin-control)] bg-amber-50 p-2 text-xs text-amber-800">
-              A este cliente le falta la dirección. Agrégala abajo para completar su ficha.
-            </p>
+            <Aviso tono="ambar">A este cliente le falta la dirección. Agrégala abajo para completar su ficha.</Aviso>
           )}
 
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-admin-ink">Código del cliente</span>
-              <span className="rounded-[var(--radius-admin-control)] bg-admin-bg px-3 py-2 text-sm text-admin-ink">{cliente.codigo ?? "—"}</span>
-              <span className="text-xs text-admin-ink-soft">El código no se puede cambiar.</span>
-            </div>
-
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
               Nombre comercial
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="admin-input" />
@@ -232,7 +238,7 @@ export default function ClienteB2bPanel({
               <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
                 Modalidad de pago
                 <select value={modalidad} onChange={(e) => setModalidad(e.target.value as "" | ModalidadPagoB2b)} className="admin-input">
-                  <option value="">La del negocio</option>
+                  <option value="">{etiquetaModalidadNegocio(modalidadNegocio)}</option>
                   <option value="AL_INICIO">{MODALIDAD_LABEL.AL_INICIO}</option>
                   <option value="AL_FINAL">{MODALIDAD_LABEL.AL_FINAL}</option>
                 </select>
@@ -265,7 +271,7 @@ export default function ClienteB2bPanel({
                     </div>
                     <div className="flex items-center gap-2">
                       {t.principal ? (
-                        <Badge variant="acento">Principal</Badge>
+                        <Badge variant="neutro">Principal</Badge>
                       ) : (
                         <button
                           type="button"
@@ -319,13 +325,15 @@ export default function ClienteB2bPanel({
                 Marcar como principal
               </label>
               <div>
-                <Button variant="secondary" size="sm" onClick={handleAgregarTelefono} disabled={trabajando || nuevoTelefono.replace(/\D/g, "").length < 10}>
+                <Button variant="secondary" size="barra" onClick={handleAgregarTelefono} disabled={trabajando || nuevoTelefono.replace(/\D/g, "").length < 10}>
                   Agregar
                 </Button>
               </div>
             </div>
             {telefonoError && <p className="text-sm text-red-600">{telefonoError}</p>}
           </div>
+
+          <HistorialPedidosCliente clienteId={cliente.id} />
 
           {/* Baja / reactivación */}
           <div className="flex flex-col gap-2 border-t border-admin-border pt-4">

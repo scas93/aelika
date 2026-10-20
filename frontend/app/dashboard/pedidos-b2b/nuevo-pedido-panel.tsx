@@ -17,6 +17,7 @@ import { formatMoney } from "@/lib/format";
 import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import CuadriculaDias, { distribucionVacia, totalDistribucion, type DistribucionDias } from "./cuadricula-dias";
 import SidePanel from "../_components/SidePanel";
+import Aviso from "../_components/Aviso";
 import Button from "../_components/Button";
 
 interface LineaNueva {
@@ -121,7 +122,7 @@ export default function NuevoPedidoPanel({
     if (!clientes) return [];
     const q = busqueda.trim().toLowerCase();
     const lista = q
-      ? clientes.filter((c) => c.nombre.toLowerCase().includes(q) || (c.codigo ?? "").toLowerCase().includes(q))
+      ? clientes.filter((c) => c.nombre.toLowerCase().includes(q))
       : clientes;
     return lista.slice(0, 6);
   }, [clientes, busqueda]);
@@ -201,10 +202,7 @@ export default function NuevoPedidoPanel({
             <div className="flex items-center justify-between gap-3 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-admin-ink">{cliente.nombre}</span>
-                <span className="text-xs text-admin-ink-soft">
-                  {cliente.codigo}
-                  {cliente.descuentoPorcentaje ? ` · ${cliente.descuentoPorcentaje}% de descuento` : ""}
-                </span>
+                {cliente.descuentoPorcentaje ? <span className="text-xs text-admin-ink-soft">{cliente.descuentoPorcentaje}% de descuento</span> : null}
               </div>
               <button
                 type="button"
@@ -219,7 +217,7 @@ export default function NuevoPedidoPanel({
               <input
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar cliente por nombre o código..."
+                placeholder="Buscar cliente por nombre..."
                 className="admin-input w-full"
                 aria-label="Buscar cliente"
               />
@@ -239,10 +237,7 @@ export default function NuevoPedidoPanel({
                         className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-admin-control)] border border-admin-border px-3 py-2 text-left transition hover:border-mayoreo-accent"
                       >
                         <span className="text-sm font-semibold text-admin-ink">{c.nombre}</span>
-                        <span className="text-xs text-admin-ink-soft">
-                          {c.codigo}
-                          {c.descuentoPorcentaje ? ` · ${c.descuentoPorcentaje}%` : ""}
-                        </span>
+                        {c.descuentoPorcentaje ? <span className="text-xs text-admin-ink-soft">{c.descuentoPorcentaje}%</span> : null}
                       </button>
                     </li>
                   ))}
@@ -257,13 +252,13 @@ export default function NuevoPedidoPanel({
           <div className="flex flex-col gap-2">
             <span className="text-sm font-bold text-admin-ink">Semana</span>
             <div className="flex items-center gap-3">
-              <Button variant="secondary" size="sm" onClick={() => setSemana(sumarDias(semana, -7))} aria-label="Semana anterior">
+              <Button variant="secondary" size="tabla" onClick={() => setSemana(sumarDias(semana, -7))} aria-label="Semana anterior">
                 ←
               </Button>
               <span className="min-w-[170px] text-center text-sm font-bold text-admin-ink">
                 {fechaCorta(semana)} – {fechaCorta(sumarDias(semana, 6))}
               </span>
-              <Button variant="secondary" size="sm" onClick={() => setSemana(sumarDias(semana, 7))} aria-label="Semana siguiente">
+              <Button variant="secondary" size="tabla" onClick={() => setSemana(sumarDias(semana, 7))} aria-label="Semana siguiente">
                 →
               </Button>
               {semana !== semanaInicial && semanaInicial && (
@@ -281,16 +276,9 @@ export default function NuevoPedidoPanel({
 
         {/* Aviso: el cliente ya tiene pedido esa semana (no se puede capturar otro; se edita ese) */}
         {existente && (
-          <div role="alert" className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3">
-            <p className="text-sm text-admin-ink">
-              Este cliente ya tiene el pedido <span className="font-bold">{existente.folio}</span> esta semana. Para agregar o cambiar entregas, edita ese pedido.
-            </p>
-            <div>
-              <Button variant="secondary" size="sm" onClick={() => onAbrirPedido(existente.id)}>
-                Abrir {existente.folio}
-              </Button>
-            </div>
-          </div>
+          <Aviso tono="ambar" accion={{ label: `Abrir ${existente.folio}`, onClick: () => onAbrirPedido(existente.id) }}>
+            Este cliente ya tiene el pedido <span className="font-bold">{existente.folio}</span> esta semana. Para agregar o cambiar entregas, edita ese pedido.
+          </Aviso>
         )}
 
         {/* 3 · Productos y cantidades por día */}

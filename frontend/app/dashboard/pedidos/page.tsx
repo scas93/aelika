@@ -109,10 +109,10 @@ export default function PedidosPage() {
       {/* Solo dentro de "Activos" — "Entregados hoy" siempre se ve en lista */}
       {tab === "activos" && (
         <div className="flex gap-2">
-          <Button size="sm" variant={vistaActivos === "lista" ? "primary" : "secondary"} onClick={() => setVistaActivos("lista")}>
+          <Button size="barra" variant={vistaActivos === "lista" ? "primary" : "secondary"} onClick={() => setVistaActivos("lista")}>
             Lista
           </Button>
-          <Button size="sm" variant={vistaActivos === "kanban" ? "primary" : "secondary"} onClick={() => setVistaActivos("kanban")}>
+          <Button size="barra" variant={vistaActivos === "kanban" ? "primary" : "secondary"} onClick={() => setVistaActivos("kanban")}>
             Kanban
           </Button>
         </div>
@@ -258,7 +258,7 @@ function OrderCard({
           </div>
           <div className="flex items-center gap-2">
             {order.estadoPago === "REEMBOLSADO" && (
-              <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+              <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
             )}
             <Badge variant={ESTADO_VARIANT[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
           </div>

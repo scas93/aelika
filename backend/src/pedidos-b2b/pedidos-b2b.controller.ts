@@ -121,8 +121,8 @@ export class PedidosB2bController {
     return this.pedidosB2bService.create(user.tenantId, dto);
   }
 
-  // Editar, confirmar (avanzar) y cancelar están abiertos a los 3 roles; el servicio niega con 403 al Operador editar o
-  // cancelar un pedido Pagado. Pagos y correcciones siguen siendo de admin.
+  // Editar está abierto a los 3 roles (el servicio niega con 403 al Operador editar un pedido Pagado). Confirmar (avanzar) y
+  // cancelar son de Gerente/Dueño: el Operador captura, edita y cierra entregas, pero no confirma ni cancela pedidos.
   @Patch(':id/items')
   updateItems(
     @Param('id') id: string,
@@ -138,6 +138,7 @@ export class PedidosB2bController {
     return this.pedidosB2bService.marcarRevisado(id);
   }
 
+  @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/avanzar')
   avanzar(@Param('id') id: string) {
     return this.pedidosB2bService.avanzar(id);
@@ -177,6 +178,7 @@ export class PedidosB2bController {
     return this.pedidosB2bService.desmarcarPagado(id);
   }
 
+  @Roles(Role.GERENTE, Role.DUENO)
   @Patch(':id/cancelar')
   cancelar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.pedidosB2bService.cancelar(id, user.rol);

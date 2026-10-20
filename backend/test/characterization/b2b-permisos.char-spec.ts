@@ -126,10 +126,13 @@ describe('B2B · permisos por rol', () => {
     });
   });
 
-  describe('editar, confirmar y cancelar: abiertas a los 3 roles (sin token 401)', () => {
+  // CAMBIO DELIBERADO (el Operador no confirma ni cancela pedidos B2B): confirmar (avanzar) y cancelar pasaron de los 3 roles
+  // a solo Gerente/Dueño. Editar sigue abierto a los 3 roles (el servicio niega al Operador editar un pedido Pagado).
+  describe('editar: abierto a los 3 roles; confirmar y cancelar: solo Gerente/Dueño (sin token 401)', () => {
     const operaciones: [
       string,
       (id: string, productId: string) => { url: string; body?: object },
+      Rol[],
     ][] = [
       [
         'items',
@@ -141,11 +144,12 @@ describe('B2B · permisos por rol', () => {
             ],
           },
         }),
+        ['OPERADOR', 'GERENTE', 'DUENO'],
       ],
-      ['avanzar', (id) => ({ url: `/pedidos-b2b/${id}/avanzar` })],
-      ['cancelar', (id) => ({ url: `/pedidos-b2b/${id}/cancelar` })],
+      ['avanzar', (id) => ({ url: `/pedidos-b2b/${id}/avanzar` }), ['GERENTE', 'DUENO']],
+      ['cancelar', (id) => ({ url: `/pedidos-b2b/${id}/cancelar` }), ['GERENTE', 'DUENO']],
     ];
-    it.each(operaciones)('PATCH /pedidos-b2b/:id/%s', async (_nombre, ruta) => {
+    it.each(operaciones)('PATCH /pedidos-b2b/:id/%s', async (_nombre, ruta, permitidos) => {
       const anonimo = ruta('x', s.base.productoA.id);
       expectError(
         anonimo.body
@@ -161,7 +165,14 @@ describe('B2B · permisos por rol', () => {
         const r = ruta(p.id, s.base.productoA.id);
         const llamada = apiRol(s.h, s.base, rol).patch(r.url);
         const res = r.body ? await llamada.send(r.body) : await llamada;
-        expect([rol, res.status]).toStrictEqual([rol, 200]);
+        if (permitidos.includes(rol)) {
+          expect([rol, res.status]).toStrictEqual([rol, 200]);
+        } else {
+          expectError(res, 403, SIN_PERMISO);
+          // Sin efectos: el pedido sigue Por confirmar y sin cancelar.
+          const intacto = (await apiRol(s.h, s.base, 'DUENO').get(`/pedidos-b2b/${p.id}`)).body;
+          expect([intacto.estado, intacto.cancelado]).toStrictEqual(['PENDIENTE_CONFIRMACION', false]);
+        }
       }
     });
   });

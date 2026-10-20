@@ -240,3 +240,37 @@ body {
   size: 80mm auto;
   margin: 0;
 }
+
+
+/* Dos alturas de control para TODO el panel, definidas una sola vez:
+   - barra: la fila de controles de la página (selector de periodo, buscador, Filtros, exportar, Imprimir todo, Nuevo pedido,
+     Hoy/Esta semana) y los campos de formulario: 40px.
+   - tabla: dentro de tablas y paneles (Entregada, Confirmar pedido, ⋯, Editar, Ver cliente, Marcar pagado): 32px; en teléfono
+     sube a 40px para tocar bien. Los botones de solo ícono son cuadrados (w-barra / w-tabla). */
+:root {
+  --control-barra: 40px;
+  --control-tabla: 32px;
+}
+@media (max-width: 767px) {
+  :root {
+    --control-tabla: 40px;
+  }
+}
+@utility h-barra {
+  height: var(--control-barra);
+}
+@utility w-barra {
+  width: var(--control-barra);
+}
+@utility h-tabla {
+  height: var(--control-tabla);
+}
+@utility w-tabla {
+  width: var(--control-tabla);
+}
+input.admin-input,
+select.admin-input {
+  height: var(--control-barra);
+  padding-top: 0;
+  padding-bottom: 0;
+}

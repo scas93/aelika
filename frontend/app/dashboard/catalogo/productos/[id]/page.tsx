@@ -21,7 +21,7 @@ import Button from "../../../_components/Button";
 
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 const LINK_BTN_SECONDARY =
-  "rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-1.5 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
+  "inline-flex h-tabla items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-xs font-bold text-admin-ink-soft transition hover:bg-admin-bg";
 
 export default function ProductoDetallePage() {
   const params = useParams<{ id: string }>();

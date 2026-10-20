@@ -259,7 +259,7 @@ function InicioB2C() {
             <ul className="flex flex-col gap-2">
               {porEstatusOrdenado.map((p) => (
                 <li key={p.estadoPedido} className="flex items-center justify-between gap-3 text-sm">
-                  <Badge variant={ESTADO_VARIANT[p.estadoPedido]}>{ESTADO_LABEL[p.estadoPedido]}</Badge>
+                  <Badge variant={ESTADO_VARIANT[p.estadoPedido]} ancho="pedidoB2c">{ESTADO_LABEL[p.estadoPedido]}</Badge>
                   <span className="font-semibold text-admin-ink">{p.conteo}</span>
                 </li>
               ))}

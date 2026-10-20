@@ -1,14 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Button from "./Button";
-
-// Contenido de popover genérico para un filtro de selección única —
-// compartido por Estado (3 módulos, 3 enums/labels distintos cada uno) y
-// Método de pago (pedidos/historico, pagos) en vez de reimplementar
-// "select + Aplicar" por cada caso. El enum/las opciones y las etiquetas
-// siguen siendo dueñas de cada módulo (se pasan por prop), este componente
-// no sabe nada de dominio.
+// Contenido de popover genérico para un filtro de elección única: al tocar el chip se abre directo la lista de opciones y
+// elegir una aplica el filtro al instante (sin select intermedio ni botón «Aplicar»). Compartido por Estado, Método de pago y
+// Estado de pago; el enum y las etiquetas siguen siendo de cada módulo (se pasan por prop). Para quitar el filtro está la ✕ del chip.
 export function FiltroSelectPopover<T extends string>({
   opciones,
   valorAplicado,
@@ -20,26 +14,30 @@ export function FiltroSelectPopover<T extends string>({
   onAplicar: (value: T | null) => void;
   close: () => void;
 }) {
-  const [valor, setValor] = useState<T | "">(valorAplicado ?? "");
-
-  function handleAplicar() {
-    onAplicar(valor === "" ? null : valor);
-    close();
-  }
-
   return (
-    <div className="flex flex-col gap-3">
-      <select value={valor} onChange={(e) => setValor(e.target.value as T)} className="admin-input">
-        <option value="">Todos</option>
-        {opciones.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Button variant="primary" size="sm" onClick={handleAplicar} className="self-start">
-        Aplicar
-      </Button>
-    </div>
+    <ul role="listbox" className="flex flex-col">
+      {opciones.map((o) => {
+        const activa = o.value === valorAplicado;
+        return (
+          <li key={o.value} role="presentation">
+            <button
+              type="button"
+              role="option"
+              aria-selected={activa}
+              onClick={() => {
+                onAplicar(o.value);
+                close();
+              }}
+              className={`flex w-full items-center justify-between gap-2 rounded-[var(--radius-admin-control)] px-3 py-1.5 text-left text-sm transition hover:bg-admin-bg ${
+                activa ? "font-bold text-admin-accent-dark" : "text-admin-ink"
+              }`}
+            >
+              {o.label}
+              {activa && <span aria-hidden="true">✓</span>}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -1,5 +1,6 @@
 import type { PedidoB2bEstado, PedidoB2bEstadoEntrega, PedidoB2bEstadoPago } from "@/lib/api";
 import type { BadgeVariant } from "../_components/Badge";
+import { ESTADO_PAGO_VARIANT as ESTADO_PAGO_VARIANT_COMUN } from "../pedidos/estado";
 
 export const ESTADO_LABEL: Record<PedidoB2bEstado, string> = {
   PENDIENTE_CONFIRMACION: "Por confirmar",
@@ -10,15 +11,14 @@ export const ESTADO_LABEL: Record<PedidoB2bEstado, string> = {
   DESPACHADO: "Completado",
 };
 
-// Mismo mapeo semántico que pedidos/estado.ts (ESTADO_VARIANT), como Record propio tipado por PedidoB2bEstado — así
-// TypeScript obliga a mapear cualquier estado nuevo. El color real vive una sola vez en Badge. "Cancelado" no es un valor
-// del estado: se resuelve con `cancelado` (variante "peligro") donde corresponde.
+// Significado de los colores (ver Badge.tsx): Por confirmar = ámbar (alguien debe confirmarlo); Confirmado y En proceso = azul (en
+// curso); Completado = verde. "Cancelado" no es un valor del estado: se resuelve con `cancelado` (variante "peligro", rojo).
 export const ESTADO_VARIANT: Record<PedidoB2bEstado, BadgeVariant> = {
-  PENDIENTE_CONFIRMACION: "neutro",
-  CONFIRMADO_SURTIENDO: "advertencia",
-  EN_PROCESO: "acento",
-  COMPLETADO: "oscuro",
-  DESPACHADO: "oscuro",
+  PENDIENTE_CONFIRMACION: "advertencia",
+  CONFIRMADO_SURTIENDO: "info",
+  EN_PROCESO: "info",
+  COMPLETADO: "exito",
+  DESPACHADO: "exito",
 };
 
 // "Pedidos activos" = Por confirmar, Confirmado y En proceso (y no cancelado). Completado y Cancelado van a Históricos.
@@ -41,7 +41,11 @@ export function puedeCerrarEntregas(estado: PedidoB2bEstado, cancelado: boolean)
 
 // Estado de pago del pedido B2B: solo Pendiente y Pagado, independiente del estado operativo.
 export const ESTADO_PAGO_LABEL: Record<PedidoB2bEstadoPago, string> = { PENDIENTE: "Pendiente", PAGADO: "Pagado" };
-export const ESTADO_PAGO_VARIANT: Record<PedidoB2bEstadoPago, BadgeVariant> = { PENDIENTE: "neutro", PAGADO: "exito" };
+// Mismo mapeo que el resto del panel para el mismo EstadoPago (ver pedidos/estado.ts).
+export const ESTADO_PAGO_VARIANT: Record<PedidoB2bEstadoPago, BadgeVariant> = {
+  PENDIENTE: ESTADO_PAGO_VARIANT_COMUN.PENDIENTE,
+  PAGADO: ESTADO_PAGO_VARIANT_COMUN.PAGADO,
+};
 export const ESTADOS_PAGO_FILTRO: PedidoB2bEstadoPago[] = ["PENDIENTE", "PAGADO"];
 
 export const ESTADO_ENTREGA_LABEL: Record<PedidoB2bEstadoEntrega, string> = {
@@ -54,8 +58,8 @@ export const ESTADO_ENTREGA_LABEL: Record<PedidoB2bEstadoEntrega, string> = {
 
 export const ESTADO_ENTREGA_VARIANT: Record<PedidoB2bEstadoEntrega, BadgeVariant> = {
   PENDIENTE: "neutro",
-  LISTA: "advertencia",
+  LISTA: "info",
   ENTREGADA: "exito",
-  NO_RECOGIDA: "oscuro",
+  NO_RECOGIDA: "peligro",
   CANCELADA: "peligro",
 };

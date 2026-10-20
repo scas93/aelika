@@ -45,7 +45,7 @@ export interface NavItem {
 // Single source of truth for both the sidebar (role-filtered) and the
 // topbar (unfiltered — it only needs a title for whatever route is
 // current, not to gate access). Los hijos de un item con `children` viven
-// anidados aquí (no aplanados) — topbar.tsx busca recursivo para resolver
+// anidados aquí (no aplanados) — PageHeader.tsx busca recursivo para resolver
 // título, ver buscarPorHref. El ícono de las subrutas de /ajustes y
 // /notificaciones/*/nueva nunca se pinta en ningún lado hoy (topbar solo usa
 // `label`, y estas rutas están ocultas del sidebar, ver
@@ -88,12 +88,12 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes", label: "Ajustes", icon: IconSettings },
   // Ya no es un ítem de sidebar (ver HREFS_OCULTOS_DEL_SIDEBAR abajo) — solo
   // se accede desde el menú de usuario al fondo del sidebar (UserMenu.tsx).
-  // La entrada se conserva aquí para que topbar.tsx siga resolviendo su
+  // La entrada se conserva aquí para que PageHeader.tsx siga resolviendo su
   // título.
   { href: "/dashboard/cambiar-password", label: "Contraseña", icon: IconKey },
 
   // Subrutas de /dashboard/ajustes — nunca se muestran en el sidebar (ver
-  // HREFS_OCULTOS_DEL_SIDEBAR abajo), solo existen aquí para que topbar.tsx
+  // HREFS_OCULTOS_DEL_SIDEBAR abajo), solo existen aquí para que PageHeader.tsx
   // resuelva su título por match exacto de pathname.
   { href: "/dashboard/ajustes/negocio", label: "Información del negocio", icon: IconBuildingStore },
   { href: "/dashboard/ajustes/equipo", label: "Equipo", icon: IconUsers },
@@ -182,7 +182,7 @@ export function getNavItems(rol: Role, tipoStorefront: TipoStorefront, modulosDe
   });
 }
 
-// Búsqueda recursiva (padre + hijos) — usada por topbar.tsx para resolver el
+// Búsqueda recursiva (padre + hijos) — usada por PageHeader.tsx para resolver el
 // título de cualquier ruta, incluyendo las anidadas bajo "Notificaciones".
 export function buscarPorHref(items: NavItem[], href: string): NavItem | undefined {
   for (const item of items) {

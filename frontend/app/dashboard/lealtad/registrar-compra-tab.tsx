@@ -11,6 +11,7 @@ import {
 import { useSession } from "@/lib/session-context";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Aviso from "../_components/Aviso";
 import QrScanner from "./qr-scanner";
 
 // Códigos estructurados que el backend manda en ApiError.code (ver
@@ -109,11 +110,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
             Escanea el QR personal del cliente — vive dentro de la tarjeta ya agregada a su wallet.
           </p>
         </div>
-        {paso.errorCamara && (
-          <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
-            <p className="text-sm text-admin-red-dark">{paso.errorCamara}</p>
-          </div>
-        )}
+        {paso.errorCamara && <Aviso tono="rojo">{paso.errorCamara}</Aviso>}
         <Button onClick={() => setPaso({ tipo: "escaneando" })} className="self-start">
           {paso.errorCamara ? "Reintentar" : "Escanear tarjeta"}
         </Button>
@@ -149,12 +146,9 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
     if (loyaltyCard.estado === "PREMIO_DISPONIBLE") {
       return (
         <Card className="flex flex-col gap-4">
-          <div className="rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-4">
-            <p className="text-base font-extrabold text-amber-900">🎉 ¡Premio disponible! 10/10</p>
-            <p className="text-sm text-amber-800">
-              Este cliente completó su tarjeta. Entrégale la recompensa que decidas y confirma abajo.
-            </p>
-          </div>
+          <Aviso tono="ambar">
+            <span className="font-bold">¡Premio disponible! 10/10</span> · Este cliente completó su tarjeta. Entrégale la recompensa que decidas y confirma abajo.
+          </Aviso>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => handleRedimir(loyaltyCard.token)} disabled={redimiendo}>
               {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
@@ -189,10 +183,9 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
   if (paso.tipo === "premio_pendiente") {
     return (
       <Card className="flex flex-col gap-4">
-        <div className="rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-4">
-          <p className="text-base font-extrabold text-amber-900">Esta tarjeta ya tiene un premio pendiente</p>
-          <p className="text-sm text-amber-800">Hay que redimirlo antes de poder registrar otro sello.</p>
-        </div>
+        <Aviso tono="ambar">
+          <span className="font-bold">Esta tarjeta ya tiene un premio pendiente</span> · Hay que redimirlo antes de poder registrar otro sello.
+        </Aviso>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => handleRedimir(paso.qrToken)} disabled={redimiendo}>
             {redimiendo ? "Confirmando..." : "Marcar premio entregado"}
@@ -224,11 +217,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
   if (paso.tipo === "ya_sello_hoy") {
     return (
       <Card className="flex flex-col gap-4">
-        <div className="rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm text-amber-800">
-            Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.
-          </p>
-        </div>
+        <Aviso tono="ambar">Esta tarjeta ya registró un sello el día de hoy — máximo 1 sello por día.</Aviso>
         <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
@@ -239,9 +228,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
   if (paso.tipo === "no_encontrado") {
     return (
       <Card className="flex flex-col gap-4">
-        <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
-          <p className="text-sm text-admin-red-dark">No se encontró ninguna tarjeta con ese código.</p>
-        </div>
+        <Aviso tono="rojo">No se encontró ninguna tarjeta con ese código.</Aviso>
         <Button onClick={volverAlInicio} className="self-start">
           Escanear otro
         </Button>
@@ -252,9 +239,7 @@ export default function RegistrarCompraTab({ token }: { token: string }) {
   // error_generico
   return (
     <Card className="flex flex-col gap-4">
-      <div className="rounded-[var(--radius-admin-control)] border border-admin-red-soft bg-admin-red-soft p-4">
-        <p className="text-sm text-admin-red-dark">{paso.mensaje}</p>
-      </div>
+      <Aviso tono="rojo">{paso.mensaje}</Aviso>
       <Button onClick={volverAlInicio} className="self-start">
         Volver al inicio
       </Button>

@@ -4,15 +4,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ClienteCanal, Prisma, TipoOrden } from '../../generated/prisma/client';
+import { ClienteCanal, EstadoEntrega, Prisma, TipoOrden } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
 import { crearClienteB2b, type ClienteB2bDb } from '../clientes/cliente-b2b';
-import { ESTADOS_B2B_ACTIVOS } from '../pedidos-b2b/pedidos-b2b-estados';
+import {
+  entregaAtrasada,
+  ESTADOS_B2B_ACTIVOS,
+  estadoB2bVisible,
+} from '../pedidos-b2b/pedidos-b2b-estados';
+import { diaDeFecha } from '../pedidos-b2b/pedidos-b2b-orden';
 import { CreateClienteB2bDto } from './dto/create-cliente-b2b.dto';
 import { UpdateClienteB2bDto } from './dto/update-cliente-b2b.dto';
 import { ListClientesB2bQueryDto } from './dto/list-clientes-b2b-query.dto';
+import { ListPedidosClienteB2bQueryDto } from './dto/list-pedidos-cliente-b2b-query.dto';
 import {
   TelefonoClienteB2bDto,
   UpdateTelefonoClienteB2bDto,
@@ -73,7 +79,6 @@ export class ClientesB2bService {
         ? {
             OR: [
               { nombre: { contains: q, mode: 'insensitive' } },
-              { codigo: { contains: q, mode: 'insensitive' } },
               ...(digits
                 ? [{ telefonos: { some: { telefono: { contains: digits } } } }]
                 : []),
@@ -151,6 +156,126 @@ export class ClientesB2bService {
     };
   }
 
+  /**
+   * Historial de pedidos del cliente (solo lectura, panel lateral del cliente): TODOS sus pedidos B2B, cancelados y
+   * completados incluidos, en cualquier estado de pago. Lista ligera: sin ítems ni entregas (se piden aparte por
+   * pedido). Semana más reciente primero; createdAt e id desempatan para que la paginación sea estable. Un cliente de
+   * baja se consulta igual. No usa la relación legada Cliente.pedidosB2b.
+   */
+  async pedidosDelCliente(id: string, query: ListPedidosClienteB2bQueryDto) {
+    await this.assertClienteB2b(id);
+    const where: Prisma.OrderWhereInput = {
+      clienteId: id,
+      tipo: TipoOrden.B2B,
+    };
+    const [pedidos, total] = await Promise.all([
+      this.db.order.findMany({
+        where,
+        orderBy: [
+          { detalleB2b: { semanaInicio: 'desc' } },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        select: {
+          id: true,
+          folio: true,
+          estadoPedido: true,
+          estadoPago: true,
+          cancelado: true,
+          canceladoAt: true,
+          total: true,
+          createdAt: true,
+          detalleB2b: { select: { semanaInicio: true, totalPiezas: true } },
+        },
+      }),
+      this.db.order.count({ where }),
+    ]);
+    return {
+      data: pedidos.map((p) => ({
+        id: p.id,
+        folio: p.folio,
+        semanaInicio: p.detalleB2b?.semanaInicio ?? null,
+        // DESPACHADO heredado se ve como COMPLETADO; "Cancelado" lo da `cancelado`, no este campo.
+        estado: estadoB2bVisible(p.estadoPedido),
+        estadoPago: p.estadoPago,
+        cancelado: p.cancelado,
+        canceladoAt: p.canceladoAt,
+        totalPiezas: p.detalleB2b?.totalPiezas ?? 0,
+        total: p.total,
+        createdAt: p.createdAt,
+      })),
+      total,
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
+    };
+  }
+
+  /**
+   * Entregas de UN pedido del cliente (solo lectura): fecha, día, estado, atrasada y productos con su cantidad en esa
+   * entrega, con el precio unitario del pedido (para el importe por línea), sin nota/hora/destino. 404 si el pedido no es de este cliente (o de otro negocio / no B2B).
+   */
+  async entregasDePedidoDelCliente(id: string, pedidoId: string) {
+    await this.assertClienteB2b(id);
+    const pedido = await this.db.order.findFirst({
+      where: { id: pedidoId, clienteId: id, tipo: TipoOrden.B2B },
+      select: {
+        detalleB2b: { select: { semanaInicio: true } },
+        entregas: {
+          orderBy: { fecha: 'asc' },
+          select: {
+            id: true,
+            fecha: true,
+            estado: true,
+            estadoCambiadoAt: true,
+            items: {
+              orderBy: { orderItem: { orden: 'asc' } },
+              select: {
+                cantidad: true,
+                orderItem: { select: { nombreProducto: true, precioUnitario: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!pedido || !pedido.detalleB2b) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+    const semanaInicio = pedido.detalleB2b.semanaInicio;
+    return {
+      entregas: pedido.entregas.map((e) => ({
+        id: e.id,
+        fecha: e.fecha,
+        dia: diaDeFecha(e.fecha, semanaInicio),
+        estado: e.estado,
+        cerradaAt:
+          e.estado === EstadoEntrega.ENTREGADA ||
+          e.estado === EstadoEntrega.NO_RECOGIDA
+            ? e.estadoCambiadoAt
+            : null,
+        atrasada: entregaAtrasada(e.estado, e.fecha),
+        productos: e.items.map((i) => ({
+          nombreProducto: i.orderItem.nombreProducto,
+          // Precio de lista del pedido (snapshot) para mostrar el importe de la línea; el descuento va solo en los totales.
+          precioUnitario: i.orderItem.precioUnitario,
+          cantidad: i.cantidad,
+        })),
+      })),
+    };
+  }
+
+  /** 404 si el cliente no existe, es de otro negocio o no es B2B (igual que findOne). */
+  private async assertClienteB2b(id: string) {
+    const c = await this.db.cliente.findFirst({
+      where: { id, canal: ClienteCanal.B2B },
+      select: { id: true },
+    });
+    if (!c) throw new NotFoundException('Cliente no encontrado');
+  }
+
   /** Pedidos B2B no cancelados en Por confirmar / Confirmado / En proceso, por cliente. */
   private async pedidosActivosPorCliente(ids: string[]) {
     if (ids.length === 0) return new Map<string, number>();
@@ -168,6 +293,14 @@ export class ClientesB2bService {
   }
 
   // ---- Alta y edición ----------------------------------------------------------------------------------
+
+  async config(tenantId: string) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { pedidoB2bModoCobro: true },
+    });
+    return { modalidadCobroNegocio: t.pedidoB2bModoCobro };
+  }
 
   async create(tenantId: string, dto: CreateClienteB2bDto) {
     // Tenant no es un modelo tenant-owned: se lee con PrismaService (el id viene de la sesión).
@@ -193,7 +326,9 @@ export class ClientesB2bService {
       // Carrera de dos altas con el mismo código: el unique [tenantId, codigo] rechaza la segunda.
       if ((error as { code?: string })?.code === 'P2002') {
         throw new ConflictException(
-          `Ya existe un cliente con el código ${tenant.slug}-${dto.sufijo}`,
+          dto.sufijo
+            ? `Ya existe un cliente con el código ${tenant.slug}-${dto.sufijo}`
+            : 'Se estaba creando otro cliente con el mismo nombre; intenta de nuevo',
         );
       }
       throw error;

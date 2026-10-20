@@ -11,10 +11,11 @@ import Table, { type TableColumn } from "../_components/Table";
 const SELLOS_PARA_PREMIO = 10;
 
 const COLUMNS: TableColumn<ClienteInscritoLealtad>[] = [
-  { key: "nombre", header: "Nombre", render: (c) => <span className="font-bold">{c.nombre}</span> },
+  { key: "nombre", header: "Nombre", movil: true, render: (c) => <span className="font-bold">{c.nombre}</span> },
   { key: "telefono", header: "Teléfono", render: (c) => formatTelefono(c.telefono) },
   {
     key: "sellos",
+    movil: true,
     header: "Sellos",
     render: (c) => (
       <span className="inline-flex flex-wrap items-center gap-2">

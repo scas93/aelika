@@ -7,13 +7,25 @@ import {
   exportPedidosB2bXlsx,
   fetchPedidosB2b,
   fetchPedidosB2bResumen,
+  type PedidoB2bEstado,
+  type PedidoB2bEstadoPago,
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS_ACTIVOS } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS_ACTIVOS, ESTADOS_PAGO_FILTRO, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT } from "./estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Modal from "../_components/Modal";
 import Badge from "../_components/Badge";
+import Table, { type TableColumn } from "../_components/Table";
+import { IconDownload } from "@tabler/icons-react";
+import { FiltroSelectPopover } from "../_components/FiltroSelect";
+import { FiltroTextoPopover } from "../_components/FiltroTexto";
+import Aviso from "../_components/Aviso";
+import SelectorPeriodo, { accionPeriodo } from "../_components/SelectorPeriodo";
+import { lunesDe } from "../_components/Calendario";
+import { hoyYYYYMMDD } from "@/lib/fecha";
+import BarraBusqueda from "../_components/BarraFiltros";
 import DetallePanel from "./detalle-panel";
 import NuevoPedidoPanel from "./nuevo-pedido-panel";
 
@@ -30,6 +42,56 @@ const LIMIT = 100;
 function formatFecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
+
+// Mismas columnas que Históricos (Negocio, Estado, Pago, Total); el modal de semanas anteriores suma la Semana. La marca «Modificado por
+// el cliente» va como badge junto al nombre del negocio. (El borde rojo que tenían las tarjetas era solo el resaltado al pasar el
+// mouse, no un dato: en la tabla ese papel lo cumple el hover de la fila.)
+function columnas(conSemana: boolean): TableColumn<PedidoB2bReportable>[] {
+  return [
+    {
+      key: "negocio",
+      header: "Negocio",
+      truncate: true,
+      movil: true,
+      render: (p) => (
+        <span className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+          <span className="min-w-[6rem] truncate font-bold">{p.negocioNombre}</span>
+          {!p.cancelado && p.modificadoPorClienteAt && (
+            <span className="min-w-0 overflow-hidden rounded-[var(--radius-admin-pill)]">
+              <Badge variant="advertencia">Modificado por el cliente</Badge>
+            </span>
+          )}
+        </span>
+      ),
+    },
+    ...(conSemana
+      ? [{ key: "semana", header: "Semana", movil: true, render: (p: PedidoB2bReportable) => <span className="whitespace-nowrap">{formatFecha(p.semanaInicio)}</span> }]
+      : []),
+    {
+      key: "estado",
+      header: "Estado",
+      movil: !conSemana,
+      render: (p) => (
+        <Badge variant={ESTADO_VARIANT[p.estado]} ancho="pedidoB2b">
+          {ESTADO_LABEL[p.estado]}
+        </Badge>
+      ),
+    },
+    {
+      key: "pago",
+      header: "Pago",
+      render: (p) => (
+        <Badge variant={ESTADO_PAGO_VARIANT[p.estadoPago]} ancho="pagoB2b">
+          {ESTADO_PAGO_LABEL[p.estadoPago]}
+        </Badge>
+      ),
+    },
+    { key: "total", header: "Total", align: "right", render: (p) => <span className="whitespace-nowrap">{formatMoney(p.total)}</span> },
+  ];
+}
+
+const COLUMNAS_ACTIVOS = columnas(false);
+const COLUMNAS_ANTERIORES = columnas(true);
 
 interface SemanaInfo {
   inicio: string;
@@ -52,8 +114,12 @@ export default function PedidosB2bPage() {
   // Pedidos aún activos (Por confirmar, Confirmado, En proceso) de semanas ANTERIORES a la semana en curso: nunca deben quedar
   // sin un lugar donde verse. Se muestran aparte de la vista semanal, sin importar qué semana esté seleccionada.
   const [anteriores, setAnteriores] = useState<PedidoB2bReportable[] | null>(null);
+  const [anterioresAbierto, setAnterioresAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busqueda, setBusqueda] = useState("");
+  // Filtros sobre la semana elegida (en el cliente: ya se trajeron todos los activos de esa semana).
+  const [fEstado, setFEstado] = useState<PedidoB2bEstado | null>(null);
+  const [fPago, setFPago] = useState<PedidoB2bEstadoPago | null>(null);
+  const [fNegocio, setFNegocio] = useState<string | null>(null);
   // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("pedido"),
@@ -146,16 +212,14 @@ export default function PedidosB2bPage() {
 
   const filtrados = useMemo(() => {
     if (!pedidos) return null;
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return pedidos;
-    return pedidos.filter((p) => p.negocioNombre.toLowerCase().includes(q));
-  }, [pedidos, busqueda]);
-
-  const anterioresFiltrados = useMemo(() => {
-    if (!anteriores) return [];
-    const q = busqueda.trim().toLowerCase();
-    return q ? anteriores.filter((p) => p.negocioNombre.toLowerCase().includes(q)) : anteriores;
-  }, [anteriores, busqueda]);
+    const q = (fNegocio ?? "").toLowerCase();
+    return pedidos.filter(
+      (p) => (!fEstado || p.estado === fEstado) && (!fPago || p.estadoPago === fPago) && (!q || p.negocioNombre.toLowerCase().includes(q)),
+    );
+  }, [pedidos, fEstado, fPago, fNegocio]);
+  const cambiarSemana = (v: string) => setSemanaKey(semanas && v >= semanas.siguiente.inicio.slice(0, 10) ? "siguiente" : "actual");
+  const accionActual = accionPeriodo("semana", semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD()), cambiarSemana, !semanas);
+  const hayFiltros = !!(fEstado || fPago || fNegocio);
 
   async function handleExport() {
     if (!semanaSeleccionada) return;
@@ -183,100 +247,71 @@ export default function PedidosB2bPage() {
     }
   }
 
-  // Fila de un pedido; las de "semanas anteriores" llevan una marca visible para no confundirlas con la semana seleccionada.
-  function renderPedido(pedido: PedidoB2bReportable, anterior: boolean) {
-    return (
-      <li key={pedido.id}>
-        <button type="button" onClick={() => setSelectedId(pedido.id)} className="block w-full text-left">
-          <Card padding={20} className="transition hover:border-mayoreo-accent">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-admin-ink">{pedido.negocioNombre}</span>
-                </div>
-                <span className="text-sm text-admin-ink-soft">
-                  {pedido.totalPiezas} piezas · Semana del {formatFecha(pedido.semanaInicio)}
-                </span>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5">
-                  {anterior && <Badge variant="advertencia">Semana anterior</Badge>}
-                  {!pedido.cancelado && pedido.modificadoPorClienteAt && (
-                    <Badge variant="advertencia">Modificado por el cliente</Badge>
-                  )}
-                  <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
-                </div>
-                <span className="text-sm font-bold text-admin-ink">{formatMoney(pedido.total)}</span>
-              </div>
-            </div>
-          </Card>
-        </button>
-      </li>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3">
+      {/* Aviso compacto (una línea) en vez de la lista completa: «Ver» abre el modal con los pedidos de semanas anteriores. */}
       {anteriores && anteriores.length > 0 && (
-        <section
-          aria-label="Pedidos activos de semanas anteriores"
-          className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-4"
-        >
-          <div className="flex flex-col gap-0.5">
-            <h2 className="text-base font-bold text-admin-ink">De semanas anteriores ({anteriores.length})</h2>
-            <p className="text-sm text-admin-ink-soft">
-              Pedidos que siguen activos de semanas pasadas. Confírmalos, ciérralos o cancélalos para que no se queden pendientes.
-            </p>
-          </div>
-          {anterioresFiltrados.length === 0 ? (
-            <p className="text-sm text-admin-ink-soft">Ninguno coincide con la búsqueda.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">{anterioresFiltrados.map((pedido) => renderPedido(pedido, true))}</ul>
-          )}
-        </section>
+        <Aviso tono="ambar" ariaLabel="Pedidos activos de semanas anteriores" accion={{ label: "Ver", onClick: () => setAnterioresAbierto(true) }}>
+          Tienes {anteriores.length} {anteriores.length === 1 ? "pedido" : "pedidos"} de semanas anteriores sin cerrar
+        </Aviso>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSemanaKey("actual")}
-            disabled={!semanas || semanaKey === "actual"}
-            aria-label="Semana actual"
-          >
-            ←
-          </Button>
-          <span className="min-w-[160px] text-center text-base font-bold text-admin-ink">
-            {semanaKey === "actual" ? "Semana en curso" : "Próxima semana"}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSemanaKey("siguiente")}
-            disabled={!semanas || semanaKey === "siguiente"}
-            aria-label="Semana siguiente"
-          >
-            →
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleExport} disabled={exporting || !pedidos}>
-            {exporting ? "Exportando..." : "📥 Exportar Excel"}
-          </Button>
-          {/* Captura por teléfono: los 3 roles. */}
-          <Button variant="primary" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
-            Nuevo pedido
-          </Button>
-        </div>
-      </div>
-
-      <input
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        placeholder="Buscar por negocio..."
-        className="admin-input w-full"
+      <BarraBusqueda
+        izquierda={({ corto }) => (
+          <SelectorPeriodo
+            modo="semana"
+            corto={corto}
+            valor={semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD())}
+            deshabilitado={!semanas}
+            // La navegación es solo entre la semana en curso y la próxima; las anteriores están en el aviso de arriba.
+            min={semanas?.actual.inicio.slice(0, 10)}
+            max={semanas?.siguiente.inicio.slice(0, 10)}
+            tooltipMin="Las semanas anteriores están en el aviso de arriba"
+            onChange={cambiarSemana}
+          />
+        )}
+        acciones={[
+          ...(accionActual ? [accionActual] : []),
+          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !pedidos, cargando: exporting },
+        ]}
+        crear={{ label: "Nuevo pedido", onClick: () => setNuevoAbierto(true), disabled: !semanas }}
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            valueLabel: fEstado ? ESTADO_LABEL[fEstado] : null,
+            onClear: () => setFEstado(null),
+            render: ({ cerrar }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_ACTIVOS.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
+                valorAplicado={fEstado}
+                onAplicar={setFEstado}
+                close={cerrar}
+              />
+            ),
+          },
+          {
+            key: "pago",
+            label: "Pago",
+            valueLabel: fPago ? ESTADO_PAGO_LABEL[fPago] : null,
+            onClear: () => setFPago(null),
+            render: ({ cerrar }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
+                valorAplicado={fPago}
+                onAplicar={setFPago}
+                close={cerrar}
+              />
+            ),
+          },
+          {
+            key: "negocio",
+            label: "Negocio",
+            valueLabel: fNegocio,
+            onClear: () => setFNegocio(null),
+            render: () => <FiltroTextoPopover valorAplicado={fNegocio} onAplicar={setFNegocio} placeholder="Buscar negocio…" />,
+          },
+        ]}
       />
 
       {semanaError && <p className="text-sm text-red-600">{semanaError}</p>}
@@ -287,11 +322,38 @@ export default function PedidosB2bPage() {
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : filtrados.length === 0 ? (
         <Card className="text-sm text-admin-ink-soft">
-          {busqueda ? "No hay pedidos activos que coincidan con esa búsqueda." : "No hay pedidos activos para esta semana."}
+          {hayFiltros ? "No hay pedidos activos que coincidan con estos filtros." : "No hay pedidos activos para esta semana."}
         </Card>
       ) : (
-        <ul className="flex flex-col gap-2">{filtrados.map((pedido) => renderPedido(pedido, false))}</ul>
+        <Table columns={COLUMNAS_ACTIVOS} data={filtrados} rowKey={(p) => p.id} onRowClick={(p) => setSelectedId(p.id)} />
       )}
+
+      <Modal
+        open={anterioresAbierto && !!anteriores && anteriores.length > 0}
+        onClose={() => setAnterioresAbierto(false)}
+        title="Pedidos de semanas anteriores"
+        wide="xl"
+        footer={
+          <Button variant="secondary" onClick={() => setAnterioresAbierto(false)}>
+            Cerrar
+          </Button>
+        }
+      >
+        <p className="text-sm text-admin-ink-soft">
+          Pedidos que siguen activos de semanas pasadas. Confírmalos, ciérralos o cancélalos para que no se queden pendientes.
+        </p>
+        <div className="max-h-[55vh] overflow-y-auto">
+          <Table
+            columns={COLUMNAS_ANTERIORES}
+            data={anteriores ?? []}
+            rowKey={(p) => p.id}
+            onRowClick={(p) => {
+              setAnterioresAbierto(false);
+              setSelectedId(p.id);
+            }}
+          />
+        </div>
+      </Modal>
 
       <NuevoPedidoPanel
         open={nuevoAbierto}
