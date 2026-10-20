@@ -27,12 +27,18 @@ export default function BarraBusqueda({
   onBuscar,
   filtros = [],
   exportar,
+  izquierda,
+  derecha,
 }: {
   /** Sin placeholder/onBuscar la pantalla no tiene buscador (solo «Filtros»). */
   placeholder?: string;
   onBuscar?: (texto: string) => void;
   filtros?: FiltroDef[];
   /** Exportar: botón cuadrado de solo ícono a la derecha de «Filtros». En teléfono va en el menú «⋯» del título, no aquí. */
+  /** Contenido propio a la izquierda de la fila (en lugar del buscador), p. ej. un selector de semana. */
+  izquierda?: ReactNode;
+  /** Acciones al final de la fila (después de exportar), solo en computadora; p. ej. «Nuevo pedido». */
+  derecha?: ReactNode;
   exportar?: { label: "Exportar Excel" | "Exportar CSV"; onClick: () => void; disabled?: boolean; cargando?: boolean };
 }) {
   const movil = useEsMovil();
@@ -57,6 +63,7 @@ export default function BarraBusqueda({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
+        {izquierda && <div className="min-w-0 flex-1">{izquierda}</div>}
         {onBuscar && (
           <div className="relative min-w-0 flex-1">
             <IconSearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-admin-ink-soft" />
@@ -82,10 +89,11 @@ export default function BarraBusqueda({
                 onClick={() => setPanelAbierto((v) => !v)}
                 aria-haspopup="dialog"
                 aria-expanded={panelAbierto}
+                aria-label="Filtros"
                 className="inline-flex h-11 items-center gap-1.5 rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-sm font-semibold text-admin-ink transition hover:bg-admin-bg"
               >
                 <IconFilter size={16} className="shrink-0" />
-                Filtros
+                {!(movil && izquierda) && "Filtros"}
                 {activos.length > 0 && (
                   <span className="rounded-full bg-admin-accent px-1.5 text-xs font-bold leading-4 text-white">{activos.length}</span>
                 )}
@@ -117,6 +125,7 @@ export default function BarraBusqueda({
           </Popover>
         )}
         {exportar && !movil && <BotonExportar grande {...exportar} />}
+        {derecha && !movil && derecha}
       </div>
 
       {activos.length > 0 && (

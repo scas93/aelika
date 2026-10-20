@@ -73,6 +73,21 @@ describe("Pedidos activos B2B (tabla)", () => {
     expect(screen.getAllByText("Modificado por el cliente")).toHaveLength(1);
   });
 
+  it("filtros Estado, Pago y Negocio aplican sobre la semana; chips y «Limpiar filtros»", async () => {
+    datos([pedido("1"), pedido("2", { estado: "CONFIRMADO_SURTIENDO", estadoPago: "PAGADO" })]);
+    render(<PedidosB2bPage />);
+    await screen.findByText("Negocio 1");
+    expect(screen.queryByPlaceholderText("Buscar por negocio…")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Negocio/ }));
+    fireEvent.change(screen.getByPlaceholderText("Buscar negocio…"), { target: { value: "2" } });
+    expect(screen.queryByText("Negocio 1")).toBeNull();
+    expect(screen.getByText("Negocio 2")).toBeTruthy();
+    expect(screen.getByText("Negocio: 2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(screen.getByText("Negocio 1")).toBeTruthy();
+  });
+
   it("sin pedidos en la semana: mensaje vacío claro", async () => {
     datos([]);
     render(<PedidosB2bPage />);

@@ -7,16 +7,21 @@ import {
   exportPedidosB2bXlsx,
   fetchPedidosB2b,
   fetchPedidosB2bResumen,
+  type PedidoB2bEstado,
+  type PedidoB2bEstadoPago,
   type PedidoB2bReportable,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS_ACTIVOS, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT } from "./estado";
+import { ESTADO_VARIANT, ESTADO_LABEL, ESTADOS_ACTIVOS, ESTADOS_PAGO_FILTRO, ESTADO_PAGO_LABEL, ESTADO_PAGO_VARIANT } from "./estado";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
 import { IconDownload, IconPlus } from "@tabler/icons-react";
+import { useEsMovil } from "@/lib/use-es-movil";
+import { FiltroSelectPopover } from "../_components/FiltroSelect";
+import { FiltroTextoPopover } from "../_components/FiltroTexto";
 import { PageActions } from "../_components/PageHeader";
 import Aviso from "../_components/Aviso";
 import BarraBusqueda from "../_components/BarraFiltros";
@@ -110,7 +115,11 @@ export default function PedidosB2bPage() {
   const [anteriores, setAnteriores] = useState<PedidoB2bReportable[] | null>(null);
   const [anterioresAbierto, setAnterioresAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busqueda, setBusqueda] = useState("");
+  // Filtros sobre la semana elegida (en el cliente: ya se trajeron todos los activos de esa semana).
+  const [fEstado, setFEstado] = useState<PedidoB2bEstado | null>(null);
+  const [fPago, setFPago] = useState<PedidoB2bEstadoPago | null>(null);
+  const [fNegocio, setFNegocio] = useState<string | null>(null);
+  const movil = useEsMovil();
   // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("pedido"),
@@ -203,10 +212,12 @@ export default function PedidosB2bPage() {
 
   const filtrados = useMemo(() => {
     if (!pedidos) return null;
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return pedidos;
-    return pedidos.filter((p) => p.negocioNombre.toLowerCase().includes(q));
-  }, [pedidos, busqueda]);
+    const q = (fNegocio ?? "").toLowerCase();
+    return pedidos.filter(
+      (p) => (!fEstado || p.estado === fEstado) && (!fPago || p.estadoPago === fPago) && (!q || p.negocioNombre.toLowerCase().includes(q)),
+    );
+  }, [pedidos, fEstado, fPago, fNegocio]);
+  const hayFiltros = !!(fEstado || fPago || fNegocio);
 
   async function handleExport() {
     if (!semanaSeleccionada) return;
@@ -243,44 +254,87 @@ export default function PedidosB2bPage() {
         </Aviso>
       )}
 
-      <PageActions
-        acciones={[
-          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !pedidos, cargando: exporting },
-          { key: "nuevo", label: "Nuevo pedido", icon: <IconPlus size={16} />, tipo: "crear", onClick: () => setNuevoAbierto(true), disabled: !semanas },
-        ]}
-      />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full items-center gap-3 md:w-auto">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSemanaKey("actual")}
-            disabled={!semanas || semanaKey === "actual"}
-            aria-label="Semana actual"
-          >
-            ←
-          </Button>
-          <span className="min-w-0 flex-1 text-center text-base font-bold text-admin-ink md:min-w-[160px] md:flex-none">
-            {semanaKey === "actual" ? "Semana en curso" : "Próxima semana"}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSemanaKey("siguiente")}
-            disabled={!semanas || semanaKey === "siguiente"}
-            aria-label="Semana siguiente"
-          >
-            →
-          </Button>
-        </div>
-
-      </div>
+      {/* En teléfono: «+» y «⋯» (con exportar) en el título; en computadora esas acciones viven en la fila de controles. */}
+      {movil && (
+        <PageActions
+          acciones={[
+            { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !pedidos, cargando: exporting },
+            { key: "nuevo", label: "Nuevo pedido", icon: <IconPlus size={16} />, tipo: "crear", onClick: () => setNuevoAbierto(true), disabled: !semanas },
+          ]}
+        />
+      )}
 
       <BarraBusqueda
-        placeholder="Buscar por negocio…"
-        onBuscar={setBusqueda}
+        izquierda={
+          <div className="flex w-full items-center gap-3 md:w-auto">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-11 w-11"
+              onClick={() => setSemanaKey("actual")}
+              disabled={!semanas || semanaKey === "actual"}
+              aria-label="Semana actual"
+            >
+              ‹
+            </Button>
+            <span className="min-w-0 flex-1 text-center text-base font-bold text-admin-ink md:min-w-[160px] md:flex-none">
+              {semanaKey === "actual" ? "Semana en curso" : "Próxima semana"}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-11 w-11"
+              onClick={() => setSemanaKey("siguiente")}
+              disabled={!semanas || semanaKey === "siguiente"}
+              aria-label="Semana siguiente"
+            >
+              ›
+            </Button>
+          </div>
+        }
         exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !pedidos, cargando: exporting }}
+        derecha={
+          <Button variant="primary" className="h-11" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
+            Nuevo pedido
+          </Button>
+        }
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            valueLabel: fEstado ? ESTADO_LABEL[fEstado] : null,
+            onClear: () => setFEstado(null),
+            render: ({ cerrar }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_ACTIVOS.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
+                valorAplicado={fEstado}
+                onAplicar={setFEstado}
+                close={cerrar}
+              />
+            ),
+          },
+          {
+            key: "pago",
+            label: "Pago",
+            valueLabel: fPago ? ESTADO_PAGO_LABEL[fPago] : null,
+            onClear: () => setFPago(null),
+            render: ({ cerrar }) => (
+              <FiltroSelectPopover
+                opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
+                valorAplicado={fPago}
+                onAplicar={setFPago}
+                close={cerrar}
+              />
+            ),
+          },
+          {
+            key: "negocio",
+            label: "Negocio",
+            valueLabel: fNegocio,
+            onClear: () => setFNegocio(null),
+            render: () => <FiltroTextoPopover valorAplicado={fNegocio} onAplicar={setFNegocio} placeholder="Buscar negocio…" />,
+          },
+        ]}
       />
 
       {semanaError && <p className="text-sm text-red-600">{semanaError}</p>}
@@ -291,7 +345,7 @@ export default function PedidosB2bPage() {
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
       ) : filtrados.length === 0 ? (
         <Card className="text-sm text-admin-ink-soft">
-          {busqueda ? "No hay pedidos activos que coincidan con esa búsqueda." : "No hay pedidos activos para esta semana."}
+          {hayFiltros ? "No hay pedidos activos que coincidan con estos filtros." : "No hay pedidos activos para esta semana."}
         </Card>
       ) : (
         <Table columns={COLUMNAS_ACTIVOS} data={filtrados} rowKey={(p) => p.id} onRowClick={(p) => setSelectedId(p.id)} />
