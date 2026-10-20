@@ -21,7 +21,6 @@ import MenuAcciones from "../../_components/MenuAcciones";
 import BarraBusqueda from "../../_components/BarraFiltros";
 import SelectorPeriodo, { accionPeriodo } from "../../_components/SelectorPeriodo";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
-import DetallePanel from "../detalle-panel";
 
 // timeZone: "UTC": `fecha` es un string "YYYY-MM-DD" parseado como medianoche UTC; formatear en la zona local del navegador puede correr un día.
 function formatFechaLarga(fecha: string): string {
@@ -65,7 +64,6 @@ export default function PedidosB2bDiaPage() {
   const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const [cerrarError, setCerrarError] = useState<string | null>(null);
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
@@ -194,17 +192,7 @@ export default function PedidosB2bDiaPage() {
             ) : (
               <IconChevronRight size={14} className="shrink-0 text-admin-ink-soft" />
             )}
-            {/* El nombre abre el panel del pedido; el resto de la fila despliega sus productos. */}
-            <button
-              type="button"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                setSelectedId(e.id);
-              }}
-              className="min-w-0 truncate text-left font-bold text-admin-ink hover:underline"
-            >
-              {e.negocioNombre}
-            </button>
+            <span className="min-w-0 truncate font-bold text-admin-ink">{e.negocioNombre}</span>
           </span>
         </div>
       ),
@@ -348,8 +336,6 @@ export default function PedidosB2bDiaPage() {
         </>
       )}
 
-      {/* Tras cerrar o corregir una entrega desde el panel, el día se vuelve a consultar. */}
-      <DetallePanel pedidoId={selectedId} onClose={() => setSelectedId(null)} onChanged={() => void recargar()} />
     </div>
   );
 }

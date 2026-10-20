@@ -58,7 +58,7 @@ describe("Entregas del día (B2B)", () => {
     await screen.findByText("Café A");
     expect(screen.queryByText(/Total por producto/)).toBeNull();
     expect(screen.queryByText(/entregas ·/)).toBeNull();
-    const nombres = screen.getAllByRole("button", { name: /^Café/ }).map((b) => b.textContent);
+    const nombres = screen.getAllByText(/^Café [A-D]$/).map((b) => b.textContent);
     expect(nombres).toStrictEqual(["Café B", "Café D", "Café A", "Café C"]);
   });
 
@@ -75,11 +75,20 @@ describe("Entregas del día (B2B)", () => {
     expect(await screen.findByText(/^[a-záéíóúñ]+ \d+ [a-z]+$/i)).toBeTruthy();
   });
 
-  it("clic en el nombre abre el panel del pedido (sin desplegar la fila)", async () => {
+  it("clic en cualquier parte de la fila despliega/pliega; el nombre no es enlace; los botones no despliegan", async () => {
+    cerrarEntregaPedidoB2b.mockResolvedValue({});
     render(<DiaPage />);
-    fireEvent.click(await screen.findByText("Café B"));
-    expect(await screen.findByText("panel 2")).toBeTruthy();
-    expect(screen.queryByText("20")).toBeNull(); // la fila no se desplegó
+    await screen.findByText("Café B");
+    expect(screen.queryByRole("button", { name: "Café B" })).toBeNull(); // el nombre ya no es un botón/enlace
+    const fila = screen.getByText("Café B").closest("tr")!;
+    fireEvent.click(screen.getByText("Café B"));
+    expect(screen.getByText("Cuerno")).toBeTruthy();
+    fireEvent.click(within(fila).getAllByRole("cell")[1]); // piezas
+    expect(screen.queryByText("Cuerno")).toBeNull();
+    fireEvent.click(within(fila).getByRole("button", { name: "No recogida" }));
+    await waitFor(() => expect(cerrarEntregaPedidoB2b).toHaveBeenCalled());
+    expect(screen.queryByText("Cuerno")).toBeNull(); // presionar un botón no despliega
+    expect(screen.queryByText(/^panel /)).toBeNull();
   });
 
   it("«Entregada» a la vista solo en entregas abiertas; cerrar llama al mismo endpoint y recarga", async () => {
