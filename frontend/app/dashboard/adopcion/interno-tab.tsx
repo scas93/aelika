@@ -62,7 +62,7 @@ export default function InternoTab({ token }: { token: string }) {
               <span className="text-admin-ink-soft">
                 recibido {formatoFechaHora(p.recibidoAt)} · espera {formatoHoras(p.horasEspera)}
               </span>
-              {p.deSemanaPasada && <Badge variant="peligro">Semana pasada</Badge>}
+              {p.deSemanaPasada && <Badge variant="advertencia">Semana anterior</Badge>}
             </li>
           ))}
         </ul>

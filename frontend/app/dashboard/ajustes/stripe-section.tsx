@@ -141,7 +141,7 @@ export default function StripeSection({
         </Button>
       </form>
 
-      {conectado && <Badge variant="exito">Conectado ✅</Badge>}
+      {conectado && <Badge variant="exito">Conectado</Badge>}
 
       {verificacionPendiente && (
         <p className="text-sm font-medium text-admin-ink-soft">

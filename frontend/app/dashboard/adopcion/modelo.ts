@@ -13,7 +13,7 @@ export const ESTADO_VARIANT: Record<AdopcionEstadoSemana, BadgeVariant> = {
   PIDIO: "exito",
   SIN_CONFIRMAR: "advertencia",
   CANCELADO: "peligro",
-  NO_HA_PEDIDO_HABITUAL: "peligro",
+  NO_HA_PEDIDO_HABITUAL: "advertencia",
   NO_HA_PEDIDO: "neutro",
 };
 
@@ -26,8 +26,8 @@ export const ETAPA_LABEL: Record<AdopcionEtapa, string> = {
 
 export const ETAPA_VARIANT: Record<AdopcionEtapa, BadgeVariant> = {
   SIN_ACTIVIDAD: "neutro",
-  ACCEDIO: "acento",
-  HIZO_PEDIDO: "advertencia",
+  ACCEDIO: "info",
+  HIZO_PEDIDO: "info",
   PIDE_CON_REGULARIDAD: "exito",
 };
 

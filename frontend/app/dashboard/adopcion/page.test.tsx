@@ -102,7 +102,7 @@ describe("AdopcionPage", () => {
     (await screen.findByText("Interno")).click();
     const enlace = await screen.findByText("P-000007");
     expect(enlace.getAttribute("href")).toBe("/dashboard/pedidos-b2b?pedido=p1");
-    expect(screen.getByText("Semana pasada")).toBeTruthy();
+    expect(screen.getByText("Semana anterior")).toBeTruthy();
     expect(screen.getByText(/Medido en 0 de 5 pedidos recibidos/)).toBeTruthy();
   });
 });

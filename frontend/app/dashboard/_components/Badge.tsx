@@ -1,51 +1,64 @@
 import { ReactNode } from "react";
 
-// 6 variantes semánticas fijas — pill suave (fondo tenue + texto en el tono
-// oscuro del mismo color), mismo patrón que ya usaban los tokens
-// admin-green-soft/admin-green-dark y que ya usan los badges categóricos del
-// escape hatch `color` (ver abajo) — con este cambio ambos grupos quedan
-// visualmente consistentes entre sí. exito/peligro/acento usan sus propios
-// tokens *-soft/*-dark (ya existían o se agregaron para esto, se reusan
-// también en botones/foco de inputs). advertencia/neutro/oscuro no se
-// comparten fuera de Badge, así que van con Tailwind crudo local en vez de
-// agregar tokens de un solo consumidor — mismo criterio que el resto del
-// proyecto usa para decidir cuándo algo se vuelve token.
-//
-// "oscuro" es deliberadamente genérico ("énfasis fuerte", no "completado"/
-// "despachado") — Badge es un componente de sistema, el vocabulario
-// específico de cada dominio vive en el mapeo estado→variante de cada
-// módulo (ver pedidos/estado.ts), no aquí. En tinte suave, "oscuro" necesita
-// más peso que "neutro" para seguir distinguiéndose (mismo criterio del
-// prompt de esta corrección): tinte slate más saturado + borde, en vez del
-// mismo gris claro sin borde de "neutro".
-export type BadgeVariant = "exito" | "advertencia" | "peligro" | "neutro" | "oscuro" | "acento";
+// Variantes semánticas FIJAS: el color de un badge de estado significa lo mismo en todo el panel.
+//   advertencia (ámbar) — requiere que alguien haga algo
+//   info (azul)         — en curso
+//   exito (verde)       — terminado bien
+//   peligro (rojo)      — terminado mal
+//   neutro (gris)       — normal, sin alerta
+//   oscuro (gris oscuro)— solo «Reembolsado»
+// Pill suave (fondo tenue + texto en el tono oscuro del mismo color), sin borde. El teal (admin-accent) NO se usa en badges:
+// queda para acciones (botones, nav activo, foco). El vocabulario de cada dominio (qué estado es qué variante) vive en el
+// mapeo estado→variante de cada módulo (ver pedidos/estado.ts, pedidos-b2b/estado.ts), no aquí.
+export type BadgeVariant = "advertencia" | "info" | "exito" | "peligro" | "neutro" | "oscuro" | "acento";
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
-  exito: "bg-admin-green-soft text-admin-green-dark",
   advertencia: "bg-amber-100 text-amber-800",
+  info: "bg-blue-100 text-blue-800",
+  exito: "bg-admin-green-soft text-admin-green-dark",
   peligro: "bg-admin-red-soft text-admin-red-dark",
   neutro: "bg-gray-100 text-gray-600",
-  oscuro: "bg-slate-300 text-slate-800 border border-slate-400",
-  acento: "bg-admin-accent-soft text-admin-accent-dark",
+  oscuro: "bg-slate-300 text-slate-800",
+  acento: "bg-admin-accent-soft text-admin-accent-dark", // transitorio: se retira en el commit de estilo general
+};
+
+// Ancho mínimo por TIPO de estado, SOLO para columnas de tabla (y la lista de estados del Dashboard): fuera de ahí (tarjetas,
+// paneles, encabezados) el badge mide lo que su texto. Marcado por su texto más largo (en `ch`, + el padding horizontal px-2.5 = 1.25rem) para que
+// en una columna de tabla todos los badges de ese tipo midan igual. Los `ch` están calibrados contra el texto real en text-xs
+// font-bold (incluyen el punto de 6px y su separación; ~0.75ch por carácter con font-medium): si cambia el texto más largo de un tipo, hay que recalibrarlo aquí.
+//   pedidoB2c  «Confirmado y surtiendo» (22)      pedidoB2b «Por confirmar» (13)
+//   pago       «Pago no completado» (18)          pagoB2b   «Pendiente» (9; B2B solo tiene Pendiente y Pagado)
+//   entrega    «No recogida» (11)
+export type AnchoBadge = "pedidoB2c" | "pedidoB2b" | "pago" | "pagoB2b" | "entrega";
+
+const ANCHO_CLASSES: Record<AnchoBadge, string> = {
+  pedidoB2c: "max-md:min-w-0 min-w-[calc(19.3ch_+_1.25rem)]",
+  pedidoB2b: "max-md:min-w-0 min-w-[calc(11.9ch_+_1.25rem)]",
+  pago: "max-md:min-w-0 min-w-[calc(17ch_+_1.25rem)]",
+  pagoB2b: "max-md:min-w-0 min-w-[calc(9.5ch_+_1.25rem)]",
+  entrega: "max-md:min-w-0 min-w-[calc(10.8ch_+_1.25rem)]",
 };
 
 interface BadgeProps {
   children: ReactNode;
   variant?: BadgeVariant;
-  // Escape hatch para badges categóricos (no de estatus) que necesitan más
-  // matices que las 6 variantes semánticas de arriba — ej. tipo de
-  // modificador (Única/Múltiple), tipo de promoción (%/monto fijo/combo),
-  // trigger de una regla de notificación. Esos casos distinguen categorías
-  // sin orden/jerarquía entre sí (no "mejor o peor"), así que forzarlos a
-  // "acento" perdería la distinción visual que hoy tienen entre 3-4 tipos.
-  // Mutuamente excluyente con `variant` — pasar ambos usa `variant`.
+  // Escape hatch para badges categóricos (no de estado) que necesitan más matices que las variantes semánticas — ej. tipo de
+  // modificador (Única/Múltiple), tipo de promoción (%/monto fijo/combo), trigger de una regla de notificación. Mutuamente
+  // excluyente con `variant` — pasar ambos usa `variant`.
   color?: string;
+  // Ancho mínimo fijo del tipo de estado (ver arriba). Sin él, el ancho es el del contenido.
+  ancho?: AnchoBadge;
 }
 
-export default function Badge({ children, variant, color }: BadgeProps) {
+// Todos los badges: misma altura (h-5), texto de 12px de peso medio, centrado y sin salto de línea. Los de estado (`variant`) llevan
+// un punto de 6px del color del texto antes del texto; los categóricos (`color`) no.
+export default function Badge({ children, variant, color, ancho }: BadgeProps) {
   const classes = variant ? VARIANT_CLASSES[variant] : (color ?? VARIANT_CLASSES.neutro);
   return (
-    <span className={`inline-flex items-center rounded-[var(--radius-admin-pill)] px-2.5 py-1 text-xs font-bold ${classes}`}>
+    <span
+      className={`inline-flex h-5 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-admin-pill)] px-2.5 text-xs font-medium ${ancho ? ANCHO_CLASSES[ancho] : ""} ${classes}`}
+    >
+      {variant && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />}
       {children}
     </span>
   );
