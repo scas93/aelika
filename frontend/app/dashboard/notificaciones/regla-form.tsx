@@ -439,13 +439,13 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                       onChange={(e) => updateCondicion(index, { valor: Number(e.target.value) })}
                       className="admin-input w-24"
                     />
-                    <Button type="button" variant="danger" size="sm" onClick={() => removeCondicion(index)}>
+                    <Button type="button" variant="danger" size="barra" onClick={() => removeCondicion(index)}>
                       Quitar
                     </Button>
                   </div>
                 </div>
               ))}
-              <Button type="button" variant="secondary" size="sm" onClick={addCondicion}>
+              <Button type="button" variant="secondary" size="tabla" onClick={addCondicion}>
                 + Agregar condición
               </Button>
             </div>
@@ -559,7 +559,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                         className="admin-input flex-1 opacity-60"
                       />
                     )}
-                    <Button type="button" variant="danger" size="sm" onClick={() => removeVariable(index)}>
+                    <Button type="button" variant="danger" size="barra" onClick={() => removeVariable(index)}>
                       Quitar
                     </Button>
                     {!estado.ok && (
@@ -570,7 +570,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                   </div>
                 );
               })}
-              <Button type="button" variant="secondary" size="sm" onClick={addVariable}>
+              <Button type="button" variant="secondary" size="tabla" onClick={addVariable}>
                 + Agregar variable
               </Button>
             </div>

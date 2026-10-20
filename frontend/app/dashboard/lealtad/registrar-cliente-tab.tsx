@@ -37,10 +37,10 @@ function LinkAutoRegistroSection({ slug }: { slug: string }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg px-3 py-2 text-xs text-admin-ink">
+        <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg px-3 h-barra items-center text-xs text-admin-ink">
           {link}
         </code>
-        <Button variant="secondary" size="sm" onClick={handleCopiar} className="shrink-0">
+        <Button variant="secondary" size="barra" onClick={handleCopiar} className="shrink-0">
           {copiado ? "¡Copiado!" : "Copiar"}
         </Button>
       </div>
@@ -98,12 +98,12 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
             <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg p-3">
               <p className="text-sm font-semibold text-admin-ink">Link para agregar la tarjeta al wallet</p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-2 text-xs text-admin-ink">
+                <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 h-barra items-center text-xs text-admin-ink">
                   {resultado.pase.shareUrl}
                 </code>
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="barra"
                   onClick={() => navigator.clipboard.writeText(resultado.pase!.shareUrl)}
                   className="shrink-0"
                 >

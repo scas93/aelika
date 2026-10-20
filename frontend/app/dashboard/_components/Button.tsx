@@ -1,7 +1,9 @@
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
 type Variant = "primary" | "secondary" | "danger";
-type Size = "xs" | "sm" | "md" | "lg";
+// Dos tamaños: `barra` (fila de controles de la página, 40 px) y `tabla` (dentro de tablas y paneles, 32 px; 40 px en teléfono).
+// Los nombres anteriores siguen aceptándose como alias: xs/sm → tabla, md/lg → barra.
+type Size = "barra" | "tabla" | "xs" | "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -19,12 +21,15 @@ const VARIANT_CLASSES: Record<Variant, string> = {
     "border border-admin-red-soft bg-white text-admin-red hover:bg-admin-red-soft disabled:border-admin-border disabled:text-admin-ink-soft disabled:hover:bg-transparent",
 };
 
+const BARRA = "inline-flex h-barra items-center justify-center gap-1.5 px-4 text-sm";
+const TABLA = "inline-flex h-tabla items-center justify-center gap-1.5 px-3 text-xs";
 const SIZE_CLASSES: Record<Size, string> = {
-  // Alto de 20px: no supera la línea de un título de sección (text-sm). Con ícono: gap entre ícono y texto.
-  xs: "inline-flex h-5 items-center gap-1 px-2 text-xs",
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-4 py-2 text-sm",
-  lg: "px-5 py-2.5 text-sm",
+  barra: BARRA,
+  tabla: TABLA,
+  xs: TABLA,
+  sm: TABLA,
+  md: BARRA,
+  lg: BARRA,
 };
 
 // Replaces the BTN_PRIMARY/BTN_SECONDARY/BTN_DANGER string constants
@@ -44,7 +49,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   return (
     <button
       ref={ref}
-      className={`max-md:min-h-10 rounded-[var(--radius-admin-control)] font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${variantClasses} ${SIZE_CLASSES[size]} ${fullWidth ? "w-full" : ""} ${className}`}
+      className={`rounded-[var(--radius-admin-control)] font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${variantClasses} ${SIZE_CLASSES[size]} ${fullWidth ? "w-full" : ""} ${className}`}
       {...props}
     />
   );

@@ -48,17 +48,17 @@ export default function BotApiKeySection({
       </div>
 
       <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border px-3 py-2.5 font-mono text-sm text-admin-ink">
+        <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border px-3 h-barra items-center font-mono text-sm text-admin-ink">
           {botApiKey}
         </code>
-        <Button variant="secondary" size="sm" onClick={handleCopy} className="shrink-0">
+        <Button variant="secondary" size="barra" onClick={handleCopy} className="shrink-0">
           {copied ? "Copiado" : "Copiar"}
         </Button>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <Button variant="secondary" size="sm" onClick={() => setConfirming(true)} className="self-start">
+      <Button variant="secondary" size="tabla" onClick={() => setConfirming(true)} className="self-start">
         Regenerar
       </Button>
 

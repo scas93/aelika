@@ -14,7 +14,7 @@ export interface AccionMenu {
 // Menú «⋯» de acciones de una fila. El panel se pinta en un portal con posición fija: una tabla vive dentro de un contenedor con
 // overflow (Card) y un menú absoluto se recortaría en las últimas filas. Se cierra al hacer clic afuera, con Escape o al hacer
 // scroll/redimensionar (para no quedar flotando en un sitio viejo).
-export default function MenuAcciones({ acciones, label = "Más acciones", icono }: { acciones: AccionMenu[]; label?: string; icono?: ReactNode }) {
+export default function MenuAcciones({ acciones, label = "Más acciones", icono, tamano = "tabla" }: { acciones: AccionMenu[]; label?: string; icono?: ReactNode; tamano?: "barra" | "tabla" }) {
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const botonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -58,7 +58,7 @@ export default function MenuAcciones({ acciones, label = "Más acciones", icono 
         aria-haspopup="menu"
         aria-expanded={abierto}
         onClick={alternar}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg max-md:h-10 max-md:w-10"
+        className={`inline-flex ${tamano === "barra" ? "h-barra w-barra" : "h-tabla w-tabla"} shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg`}
       >
         {icono ?? <IconDots size={16} />}
       </button>

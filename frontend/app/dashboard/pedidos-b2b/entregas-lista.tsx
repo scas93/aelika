@@ -67,10 +67,10 @@ function CorregirEntregaForm({
     <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] bg-admin-bg p-3">
       <span className="text-xs font-bold text-admin-ink">Corregir entrega</span>
       <div className="flex gap-2">
-        <Button variant={estado === "ENTREGADA" ? "primary" : "secondary"} size="sm" onClick={() => setEstado("ENTREGADA")} disabled={guardando}>
+        <Button variant={estado === "ENTREGADA" ? "primary" : "secondary"} size="tabla" onClick={() => setEstado("ENTREGADA")} disabled={guardando}>
           Entregada
         </Button>
-        <Button variant={estado === "NO_RECOGIDA" ? "primary" : "secondary"} size="sm" onClick={() => setEstado("NO_RECOGIDA")} disabled={guardando}>
+        <Button variant={estado === "NO_RECOGIDA" ? "primary" : "secondary"} size="tabla" onClick={() => setEstado("NO_RECOGIDA")} disabled={guardando}>
           No recogida
         </Button>
       </div>
@@ -84,7 +84,7 @@ function CorregirEntregaForm({
               onChange={(v) => setLineas((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, cantidad: v } : x)))}
               disabled={guardando}
               aria-label={`Cantidad de ${l.nombreProducto}`}
-              className="admin-input w-20 px-0! py-1.5! text-center font-semibold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:font-normal placeholder:text-admin-ink-soft/40"
+              className="admin-input w-20 h-tabla! px-0! py-0! text-center font-semibold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:font-normal placeholder:text-admin-ink-soft/40"
             />
             <button
               type="button"
@@ -106,7 +106,7 @@ function CorregirEntregaForm({
             </option>
           ))}
         </select>
-        <Button variant="secondary" size="sm" onClick={agregar} disabled={!agregando || guardando}>
+        <Button variant="secondary" size="barra" onClick={agregar} disabled={!agregando || guardando}>
           Agregar
         </Button>
       </div>
@@ -118,10 +118,10 @@ function CorregirEntregaForm({
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-2">
-        <Button variant="secondary" size="sm" onClick={onCancelar} disabled={guardando}>
+        <Button variant="secondary" size="tabla" onClick={onCancelar} disabled={guardando}>
           Cancelar
         </Button>
-        <Button variant="primary" size="sm" onClick={guardar} disabled={guardando || invalido}>
+        <Button variant="primary" size="tabla" onClick={guardar} disabled={guardando || invalido}>
           {guardando ? "Guardando..." : "Guardar corrección"}
         </Button>
       </div>
@@ -236,7 +236,7 @@ export default function EntregasLista({
                     <div className="flex items-center gap-2">
                       <Button
                         variant="secondary"
-                        size="sm"
+                        size="tabla"
                         disabled={bloqueada || corrigiendo !== null}
                         onClick={() => {
                           cargarProductos?.();
@@ -262,10 +262,10 @@ export default function EntregasLista({
                   )}
                   {onCerrar && pendiente && (
                     <div className="flex gap-2">
-                      <Button variant="primary" size="sm" onClick={() => cerrar(entrega.id, "ENTREGADA")} disabled={cerrando !== null}>
+                      <Button variant="primary" size="tabla" onClick={() => cerrar(entrega.id, "ENTREGADA")} disabled={cerrando !== null}>
                         {cerrando === entrega.id ? "Guardando..." : "Entregada"}
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => cerrar(entrega.id, "NO_RECOGIDA")} disabled={cerrando !== null}>
+                      <Button variant="secondary" size="tabla" onClick={() => cerrar(entrega.id, "NO_RECOGIDA")} disabled={cerrando !== null}>
                         No recogida
                       </Button>
                     </div>

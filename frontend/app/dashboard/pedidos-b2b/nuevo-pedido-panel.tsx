@@ -258,13 +258,13 @@ export default function NuevoPedidoPanel({
           <div className="flex flex-col gap-2">
             <span className="text-sm font-bold text-admin-ink">Semana</span>
             <div className="flex items-center gap-3">
-              <Button variant="secondary" size="sm" onClick={() => setSemana(sumarDias(semana, -7))} aria-label="Semana anterior">
+              <Button variant="secondary" size="tabla" onClick={() => setSemana(sumarDias(semana, -7))} aria-label="Semana anterior">
                 ←
               </Button>
               <span className="min-w-[170px] text-center text-sm font-bold text-admin-ink">
                 {fechaCorta(semana)} – {fechaCorta(sumarDias(semana, 6))}
               </span>
-              <Button variant="secondary" size="sm" onClick={() => setSemana(sumarDias(semana, 7))} aria-label="Semana siguiente">
+              <Button variant="secondary" size="tabla" onClick={() => setSemana(sumarDias(semana, 7))} aria-label="Semana siguiente">
                 →
               </Button>
               {semana !== semanaInicial && semanaInicial && (

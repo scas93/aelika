@@ -24,7 +24,7 @@ export default function BotonExportar({
       aria-label={label}
       onClick={onClick}
       disabled={disabled || cargando}
-      className={`inline-flex ${grande ? "h-11 w-11" : "h-8 w-8 max-md:h-10 max-md:w-10"} shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40`}
+      className={`inline-flex ${grande ? "h-barra w-barra" : "h-tabla w-tabla"} shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40`}
     >
       <IconDownload size={grande ? 18 : 16} className={cargando ? "animate-pulse" : ""} />
     </button>

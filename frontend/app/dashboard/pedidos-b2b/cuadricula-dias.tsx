@@ -49,7 +49,7 @@ export default function CuadriculaDias({
               disabled={cerrado !== undefined}
               aria-label={`${nombreProducto}, ${label}`}
               title={cerrado ? `Entrega ${cerrado === "ENTREGADA" ? "entregada" : "no recogida"}: se cambia con «Corregir»` : undefined}
-              className={`admin-input w-full min-w-0 px-0! py-1.5! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-admin-ink-soft/40 ${
+              className={`admin-input w-full min-w-0 h-tabla! px-0! py-0! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-admin-ink-soft/40 ${
                 cerrado ? "cursor-not-allowed opacity-60" : ""
               } ${cantidadNumero(cantidad) > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"}`}
             />

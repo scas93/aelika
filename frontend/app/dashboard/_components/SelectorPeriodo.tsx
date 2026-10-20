@@ -74,11 +74,11 @@ export default function SelectorPeriodo({
   const sinAnterior = deshabilitado || (min !== undefined && anterior < min);
   const sinSiguiente = deshabilitado || (max !== undefined && siguiente > max);
 
-  const flecha = "inline-flex h-full w-11 shrink-0 items-center justify-center text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  const flecha = "inline-flex h-full w-barra shrink-0 items-center justify-center text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
     <div className="flex min-w-0 items-center gap-2 max-md:w-full">
-      <div className="flex h-11 items-stretch overflow-hidden rounded-[var(--radius-admin-control)] border border-admin-border bg-white max-md:min-w-0 max-md:flex-1">
+      <div className="flex h-barra items-stretch overflow-hidden rounded-[var(--radius-admin-control)] border border-admin-border bg-white max-md:min-w-0 max-md:flex-1">
         <span title={sinAnterior ? tooltipMin : undefined} className="flex">
           <button type="button" className={flecha} onClick={() => onChange(anterior)} disabled={sinAnterior} aria-label={modo === "semana" ? "Semana anterior" : "Día anterior"}>
             <IconChevronLeft size={18} />
@@ -119,7 +119,7 @@ export default function SelectorPeriodo({
         </span>
       </div>
       {valor !== actual && (
-        <Button variant="secondary" className="h-11 shrink-0" onClick={() => onChange(actual)} disabled={deshabilitado}>
+        <Button variant="secondary" size="barra" className="shrink-0" onClick={() => onChange(actual)} disabled={deshabilitado}>
           {modo === "semana" ? "Esta semana" : "Hoy"}
         </Button>
       )}

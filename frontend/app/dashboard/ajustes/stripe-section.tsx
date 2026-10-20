@@ -136,7 +136,7 @@ export default function StripeSection({
         {correoError && <p className="text-sm text-red-600">{correoError}</p>}
         {correoSaved && !correoError && <p className="text-sm text-admin-green-dark">Guardado.</p>}
 
-        <Button type="submit" variant="secondary" size="sm" disabled={savingCorreo} className="mt-1 self-start">
+        <Button type="submit" variant="secondary" size="barra" disabled={savingCorreo} className="mt-1 self-start">
           {savingCorreo ? "Guardando..." : "Guardar correo"}
         </Button>
       </form>

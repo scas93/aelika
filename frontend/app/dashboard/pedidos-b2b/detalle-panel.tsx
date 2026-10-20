@@ -502,7 +502,7 @@ export default function DetallePanel({
                 <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
               </span>
               {puedeMarcarPagado && (
-                <Button variant="secondary" size="xs" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
+                <Button variant="secondary" size="tabla" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
                   <IconCheck size={12} className="shrink-0" />
                   Marcar pagado
                 </Button>
@@ -536,7 +536,7 @@ export default function DetallePanel({
               cargarProductos={cargarProductos}
               encabezadoAccion={
                 puedeEditarAhora ? (
-                  <Button variant="secondary" size="xs" onClick={startEdit}>
+                  <Button variant="secondary" size="tabla" onClick={startEdit}>
                     <IconPencil size={12} className="shrink-0" />
                     Editar
                   </Button>
@@ -662,7 +662,7 @@ export default function DetallePanel({
                 <span className="text-sm font-bold text-admin-ink">Cliente</span>
                 {/* «Ver cliente» solo para Gerente/Dueño: son los roles con acceso al módulo de Clientes. */}
                 {esAdmin && pedido.clienteId && (
-                  <Button variant="secondary" size="xs" onClick={() => router.push(`/dashboard/clientes?cliente=${pedido.clienteId}`)}>
+                  <Button variant="secondary" size="tabla" onClick={() => router.push(`/dashboard/clientes?cliente=${pedido.clienteId}`)}>
                     Ver cliente
                     <IconArrowRight size={12} className="shrink-0" />
                   </Button>

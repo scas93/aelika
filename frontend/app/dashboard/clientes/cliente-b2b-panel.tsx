@@ -319,7 +319,7 @@ export default function ClienteB2bPanel({
                 Marcar como principal
               </label>
               <div>
-                <Button variant="secondary" size="sm" onClick={handleAgregarTelefono} disabled={trabajando || nuevoTelefono.replace(/\D/g, "").length < 10}>
+                <Button variant="secondary" size="barra" onClick={handleAgregarTelefono} disabled={trabajando || nuevoTelefono.replace(/\D/g, "").length < 10}>
                   Agregar
                 </Button>
               </div>

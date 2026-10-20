@@ -106,17 +106,17 @@ export default function ClientesTab({ token }: { token: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={() => setSemana(desplazarSemana(sem.inicio, -1))} aria-label="Semana anterior">
+        <Button variant="secondary" size="barra" onClick={() => setSemana(desplazarSemana(sem.inicio, -1))} aria-label="Semana anterior">
           ←
         </Button>
         <span className="min-w-[14rem] text-center text-sm font-semibold capitalize">{rangoSemanaTexto(sem.inicio, sem.fin)}</span>
-        <Button variant="secondary" size="sm" onClick={() => setSemana(desplazarSemana(sem.inicio, 1))} aria-label="Semana siguiente">
+        <Button variant="secondary" size="barra" onClick={() => setSemana(desplazarSemana(sem.inicio, 1))} aria-label="Semana siguiente">
           →
         </Button>
-        <Button variant={sem.esActual ? "primary" : "secondary"} size="sm" onClick={() => setSemana(sem.enCurso)}>
+        <Button variant={sem.esActual ? "primary" : "secondary"} size="barra" onClick={() => setSemana(sem.enCurso)}>
           Esta semana
         </Button>
-        <Button variant={sem.esProxima ? "primary" : "secondary"} size="sm" onClick={() => setSemana(undefined)}>
+        <Button variant={sem.esProxima ? "primary" : "secondary"} size="barra" onClick={() => setSemana(undefined)}>
           Próxima
         </Button>
       </div>

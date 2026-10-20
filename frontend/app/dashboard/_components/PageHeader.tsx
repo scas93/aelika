@@ -55,11 +55,11 @@ function Acciones({ acciones }: { acciones: AccionPagina[] }) {
         {/* «exportar» ya no va en el título: en computadora vive en la barra del buscador (BarraBusqueda `exportar`). */}
         {acciones.filter((a) => a.tipo !== "exportar").map((a) =>
           a.tipo === "crear" ? (
-            <Button key={a.key} variant="primary" onClick={a.onClick} disabled={a.disabled}>
+            <Button key={a.key} variant="primary" size="barra" onClick={a.onClick} disabled={a.disabled}>
               {a.label}
             </Button>
           ) : (
-            <Button key={a.key} variant="secondary" className="inline-flex items-center gap-1.5" onClick={a.onClick} disabled={a.disabled || a.cargando}>
+            <Button key={a.key} variant="secondary" size="barra" onClick={a.onClick} disabled={a.disabled || a.cargando}>
               {a.icon}
               {a.label}
             </Button>
@@ -77,6 +77,7 @@ function Acciones({ acciones }: { acciones: AccionPagina[] }) {
       {resto.length > 0 && (
         <MenuAcciones
           label="Más acciones"
+          tamano="barra"
           icono={<IconDots size={20} />}
           acciones={resto.map((a) => ({ label: a.label, icon: a.icon, onClick: a.onClick, disabled: a.disabled || a.cargando }))}
         />
@@ -88,7 +89,7 @@ function Acciones({ acciones }: { acciones: AccionPagina[] }) {
           disabled={crear.disabled}
           aria-label={crear.label}
           title={crear.label}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-accent text-white transition hover:bg-admin-accent-dark disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-barra w-barra items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-accent text-white transition hover:bg-admin-accent-dark disabled:cursor-not-allowed disabled:opacity-40"
         >
           <IconPlus size={20} />
         </button>

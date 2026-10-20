@@ -121,7 +121,7 @@ export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRo
               onClick={pagination.onPrevious}
               disabled={!!pagination.disabled || pagination.page <= 1}
               aria-label="Página anterior"
-              className="inline-flex h-8 w-8 max-md:h-10 max-md:w-10 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-tabla w-tabla items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
             >
               <IconChevronLeft size={16} />
             </button>
@@ -130,7 +130,7 @@ export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRo
               onClick={pagination.onNext}
               disabled={!!pagination.disabled || pagination.page >= pagination.totalPages}
               aria-label="Página siguiente"
-              className="inline-flex h-8 w-8 max-md:h-10 max-md:w-10 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-tabla w-tabla items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
             >
               <IconChevronRight size={16} />
             </button>

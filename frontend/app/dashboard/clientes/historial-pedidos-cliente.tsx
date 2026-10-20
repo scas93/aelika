@@ -130,7 +130,7 @@ export default function HistorialPedidosCliente({ clienteId }: { clienteId: stri
 
       {pedidos && page < totalPages && (
         <div>
-          <Button variant="secondary" size="sm" onClick={() => cargar(page + 1)} disabled={cargando}>
+          <Button variant="secondary" size="tabla" onClick={() => cargar(page + 1)} disabled={cargando}>
             {cargando ? "Cargando..." : "Cargar más"}
           </Button>
         </div>

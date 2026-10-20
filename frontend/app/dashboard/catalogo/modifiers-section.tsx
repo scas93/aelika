@@ -87,7 +87,7 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
       <div className="flex items-center justify-between">
         <h2 className={SECTION_HEADER}>Modificadores</h2>
         {canWrite && (
-          <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+          <Button variant="primary" size="barra" onClick={() => setCreating(true)}>
             + Nuevo grupo de modificador
           </Button>
         )}
@@ -137,10 +137,10 @@ export default function ModifiersSection({ token, canWrite }: { token: string; c
                   </div>
                   {canWrite && (
                     <div className="flex items-center gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => setEditingId(group.id)}>
+                      <Button variant="secondary" size="tabla" onClick={() => setEditingId(group.id)}>
                         Editar
                       </Button>
-                      <Button variant="danger" size="sm" onClick={() => setDeleteTarget(group)}>
+                      <Button variant="danger" size="tabla" onClick={() => setDeleteTarget(group)}>
                         Eliminar
                       </Button>
                     </div>
@@ -396,13 +396,13 @@ function NewModifierGroupForm({
                   className="admin-input"
                 />
               </label>
-              <Button type="button" variant="secondary" size="sm" onClick={() => borrarFila(index)} disabled={opciones.length <= 1}>
+              <Button type="button" variant="secondary" size="barra" onClick={() => borrarFila(index)} disabled={opciones.length <= 1}>
                 Quitar
               </Button>
             </div>
           ))}
         </div>
-        <Button type="button" variant="secondary" size="sm" onClick={agregarFila} className="self-start">
+        <Button type="button" variant="secondary" size="tabla" onClick={agregarFila} className="self-start">
           + Agregar opción
         </Button>
       </div>

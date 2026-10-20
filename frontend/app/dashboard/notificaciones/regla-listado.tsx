@@ -116,7 +116,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
           {regla.trigger === "MANUAL" && (
             <Button
               variant="secondary"
-              size="sm"
+              size="tabla"
               onClick={() => handleDisparar(regla)}
               disabled={disparando === regla.id || !regla.activa}
             >
@@ -124,7 +124,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
             </Button>
           )}
           <Link href={`${basePath}/${regla.id}`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary" size="tabla">
               Editar
             </Button>
           </Link>

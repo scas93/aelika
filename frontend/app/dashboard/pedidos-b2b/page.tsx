@@ -282,7 +282,7 @@ export default function PedidosB2bPage() {
         }
         exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !pedidos, cargando: exporting }}
         derecha={
-          <Button variant="primary" className="h-11" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
+          <Button variant="primary" size="barra" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
             Nuevo pedido
           </Button>
         }

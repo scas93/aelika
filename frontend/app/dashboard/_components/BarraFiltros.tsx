@@ -72,7 +72,7 @@ export default function BarraBusqueda({
               onChange={(e) => setTexto(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder ?? "Buscar"}
-              className="admin-input h-11 w-full py-0! pl-9!"
+              className="admin-input w-full pl-9!"
             />
           </div>
         )}
@@ -90,7 +90,7 @@ export default function BarraBusqueda({
                 aria-haspopup="dialog"
                 aria-expanded={panelAbierto}
                 aria-label="Filtros"
-                className="inline-flex h-11 items-center gap-1.5 rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-sm font-semibold text-admin-ink transition hover:bg-admin-bg"
+                className="inline-flex h-barra items-center gap-1.5 rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-sm font-semibold text-admin-ink transition hover:bg-admin-bg"
               >
                 <IconFilter size={16} className="shrink-0" />
                 {!(movil && izquierda) && "Filtros"}

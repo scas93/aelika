@@ -127,10 +127,10 @@ export default function CodigosDescuentoB2bSection({ token }: { token: string })
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Button variant="secondary" size="sm" onClick={() => setEditingId(codigo.id)}>
+                  <Button variant="secondary" size="tabla" onClick={() => setEditingId(codigo.id)}>
                     Editar
                   </Button>
-                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(codigo)}>
+                  <Button variant="danger" size="tabla" onClick={() => setDeleteTarget(codigo)}>
                     Eliminar
                   </Button>
                   <ToggleSwitch

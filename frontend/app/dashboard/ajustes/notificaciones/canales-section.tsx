@@ -129,15 +129,15 @@ function TelegramCard({
 
       {conectado ? (
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handleConectar} disabled={connecting}>
+          <Button variant="secondary" size="barra" onClick={handleConectar} disabled={connecting}>
             {connecting ? "Generando link..." : "Reconectar"}
           </Button>
-          <Button variant="danger" size="sm" onClick={() => setConfirmingDisconnect(true)}>
+          <Button variant="danger" size="barra" onClick={() => setConfirmingDisconnect(true)}>
             Desconectar
           </Button>
         </div>
       ) : (
-        <Button variant="primary" size="sm" onClick={handleConectar} disabled={connecting} className="self-start">
+        <Button variant="primary" size="barra" onClick={handleConectar} disabled={connecting} className="self-start">
           {connecting ? "Generando link..." : "Conectar con Telegram"}
         </Button>
       )}
@@ -254,7 +254,7 @@ function CorreoCard({
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <Button type="submit" size="sm" disabled={submitting || !dirty || !nombreRemitente.trim()} className="self-start">
+        <Button type="submit" size="barra" disabled={submitting || !dirty || !nombreRemitente.trim()} className="self-start">
           {submitting ? "Guardando..." : "Guardar"}
         </Button>
       </form>

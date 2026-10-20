@@ -256,15 +256,14 @@ export default function PedidosB2bDiaPage() {
         // Una sola línea: «Entregada» a la vista y el resto en el menú «⋯». Los botones no despliegan la fila.
         <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
           {!movil && esAdmin && sinConfirmar(e) && (
-            <Button variant="secondary" size="sm" onClick={() => handleConfirmar(e)} disabled={cerrandoId !== null}>
+            <Button variant="secondary" size="tabla" onClick={() => handleConfirmar(e)} disabled={cerrandoId !== null}>
               {cerrandoId === e.entregaId ? "Guardando..." : "Confirmar pedido"}
             </Button>
           )}
           {!movil && puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e) && (
             <Button
               variant="secondary"
-              size="sm"
-              className="inline-flex items-center gap-1.5"
+              size="tabla"
               onClick={() => handleCerrar(e, "ENTREGADA")}
               disabled={cerrandoId !== null}
             >
@@ -309,6 +308,7 @@ export default function PedidosB2bDiaPage() {
           {movil && (
             <MenuAcciones
               label="Más acciones"
+              tamano="barra"
               icono={<IconDots size={20} />}
               acciones={[
                 { label: accionImprimirTodo, icon: <IconPrinter size={14} />, onClick: handleImprimirTodo, disabled: sinImprimir },
@@ -319,11 +319,11 @@ export default function PedidosB2bDiaPage() {
         </div>
         {!movil && (
           <div className="flex items-center gap-2">
-            <Button variant="secondary" className="inline-flex items-center gap-1.5" onClick={handleImprimirTodo} disabled={sinImprimir}>
+            <Button variant="secondary" size="barra" onClick={handleImprimirTodo} disabled={sinImprimir}>
               <IconPrinter size={16} />
               {accionImprimirTodo}
             </Button>
-            <BotonExportar label="Exportar Excel" onClick={handleExport} disabled={!entregas || entregas.length === 0} cargando={exporting} />
+            <BotonExportar grande label="Exportar Excel" onClick={handleExport} disabled={!entregas || entregas.length === 0} cargando={exporting} />
           </div>
         )}
       </div>
