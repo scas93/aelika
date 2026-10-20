@@ -10,7 +10,7 @@ import { ReactNode } from "react";
 // Pill suave (fondo tenue + texto en el tono oscuro del mismo color), sin borde. El teal (admin-accent) NO se usa en badges:
 // queda para acciones (botones, nav activo, foco). El vocabulario de cada dominio (qué estado es qué variante) vive en el
 // mapeo estado→variante de cada módulo (ver pedidos/estado.ts, pedidos-b2b/estado.ts), no aquí.
-export type BadgeVariant = "advertencia" | "info" | "exito" | "peligro" | "neutro" | "oscuro" | "acento";
+export type BadgeVariant = "advertencia" | "info" | "exito" | "peligro" | "neutro" | "oscuro";
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   advertencia: "bg-amber-100 text-amber-800",
@@ -19,7 +19,6 @@ const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   peligro: "bg-admin-red-soft text-admin-red-dark",
   neutro: "bg-gray-100 text-gray-600",
   oscuro: "bg-slate-300 text-slate-800",
-  acento: "bg-admin-accent-soft text-admin-accent-dark", // transitorio: se retira en el commit de estilo general
 };
 
 // Ancho mínimo por TIPO de estado, SOLO para columnas de tabla (y la lista de estados del Dashboard): fuera de ahí (tarjetas,

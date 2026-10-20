@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -23,15 +23,15 @@ import {
   type EstadoFiltroHistorico,
 } from "../estado";
 import Card from "../../_components/Card";
-import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
-import { FilterBar, FilterPill } from "../../_components/FilterBar";
+import { PageActions } from "../../_components/PageHeader";
+import BarraBusqueda from "../../_components/BarraFiltros";
+import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../../_components/FiltroSelect";
-import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
+import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroSemana, type FiltroFechaValue } from "../../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
 import HistoricoDetallePanel from "./historico-detalle-panel";
-import { formatearFolioB2b } from "@/lib/format";
 import { hoyYYYYMMDD } from "@/lib/fecha";
 
 const LIMIT = 25;
@@ -46,61 +46,32 @@ function formatSemana(iso: string): string {
 // estado real cuando aplica — no hay variante "cancelado" en ESTADO_VARIANT,
 // se resuelve aquí igual que ahí (peligro).
 const COLUMNS: TableColumn<PedidoB2bReportable>[] = [
-  { key: "folio", header: "Folio", render: (pedido) => <span className="font-bold">{formatearFolioB2b(pedido.folio)}</span> },
-  { key: "negocio", header: "Negocio", render: (pedido) => pedido.negocioNombre },
-  { key: "semana", header: "Semana", render: (pedido) => formatSemana(pedido.semanaInicio) },
+  { key: "negocio", header: "Negocio", truncate: true, movil: true, render: (pedido) => <span className="block truncate font-bold">{pedido.negocioNombre}</span> },
+  // nowrap: la semana nunca se parte en dos líneas.
+  { key: "semana", header: "Semana", render: (pedido) => <span className="whitespace-nowrap">{formatSemana(pedido.semanaInicio)}</span> },
   {
-    key: "estatus",
-    header: "Estatus",
+    key: "estado",
+    header: "Estado",
     render: (pedido) =>
       pedido.cancelado ? (
-        <Badge variant="peligro">Cancelado</Badge>
+        <Badge variant="peligro" ancho="pedidoB2b">Cancelado</Badge>
       ) : (
-        <Badge variant={ESTADO_VARIANT[pedido.estado]}>{ESTADO_LABEL[pedido.estado]}</Badge>
+        <Badge variant={ESTADO_VARIANT[pedido.estado]} ancho="pedidoB2b">{ESTADO_LABEL[pedido.estado]}</Badge>
       ),
   },
   {
     key: "pago",
     header: "Pago",
-    render: (pedido) => <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>,
+    // Un cancelado sin nada por cobrar no tiene pago que mostrar.
+    render: (pedido) =>
+      pedido.cancelado && Number(pedido.total) === 0 ? (
+        <span className="text-admin-ink-soft">—</span>
+      ) : (
+        <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]} ancho="pagoB2b">{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
+      ),
   },
-  { key: "total", header: "Total", align: "right", render: (pedido) => formatMoney(pedido.total) },
+  { key: "total", header: "Total", align: "right", movil: true, render: (pedido) => <span className="whitespace-nowrap">{formatMoney(pedido.total)}</span> },
 ];
-
-// Solo un consumidor (este módulo) — a diferencia de FiltroSelectPopover/
-// FiltroFechaPopover/FiltroImportePopover, que sí viven en _components/
-// porque las 3 tablas migradas los comparten tal cual, esto no se
-// extrajo ahí.
-function FiltroNegocioPopover({
-  valorAplicado,
-  onAplicar,
-  close,
-}: {
-  valorAplicado: string | null;
-  onAplicar: (value: string | null) => void;
-  close: () => void;
-}) {
-  const [valor, setValor] = useState(valorAplicado ?? "");
-
-  function handleAplicar() {
-    onAplicar(valor.trim() || null);
-    close();
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <input
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        placeholder="Buscar por negocio..."
-        className="admin-input"
-      />
-      <Button variant="primary" size="sm" onClick={handleAplicar} className="self-start">
-        Aplicar
-      </Button>
-    </div>
-  );
-}
 
 export default function PedidosB2bHistoricoPage() {
   const { token } = useSession();
@@ -108,23 +79,13 @@ export default function PedidosB2bHistoricoPage() {
   const [fecha, setFecha] = useState<FiltroFechaValue | null>(null);
   const [estado, setEstado] = useState<EstadoFiltroHistorico | null>(null);
   const [estadoPago, setEstadoPago] = useState<PedidoB2bEstadoPago | null>(null);
+  // Buscador de texto (la barra espera un momento al teclear antes de avisar).
   const [negocioNombre, setNegocioNombre] = useState<string | null>(null);
   const [importe, setImporte] = useState<FiltroImporte | null>(null);
 
-  // Sin autofetch en cambios de filtro a propósito — no se muestra nada
-  // hasta que se presiona "Buscar" (ver CLAUDE.md). `searched` es lo que
-  // distingue "todavía no se buscó" de "se buscó y no hay resultados".
-  //
-  // A diferencia de pedidos/historico y pagos (donde "Aplicar" en el pill
-  // ya dispara la consulta al backend, mismo criterio "autoaplica" que
-  // tenían antes de migrar a FilterBar), aquí "Aplicar" solo actualiza el
-  // valor mostrado en el pill — la consulta real sigue esperando al botón
-  // "Buscar" de abajo, igual que hoy. Decisión explícita: se preserva el
-  // comportamiento existente en vez de unificarlo con los otros dos, ya que
-  // nada en el prompt pedía cambiarlo y esta pantalla ya distingue
-  // "todavía no se buscó" de "se buscó y no hay resultados" (`searched`),
-  // algo que dejaría de tener sentido si autoaplicara como las otras dos.
-  const [searched, setSearched] = useState(false);
+  // El histórico se carga solo al abrir la página (sin filtros: todos los Completados y Cancelados, semana más reciente primero) y
+  // cada cambio de filtro vuelve a consultar desde la página 1 — los filtros refinan esa lista, no son requisito para verla. El
+  // filtrado lo hace el servidor porque la lista es paginada. Quitar todos los filtros devuelve la lista inicial.
   const [result, setResult] = useState<PaginatedPedidosB2b | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +99,7 @@ export default function PedidosB2bHistoricoPage() {
   );
 
   function filtrosActuales() {
-    const { desde, hasta } = resolverFiltroFecha(fecha);
+    const { desde, hasta } = resolverFiltroSemana(fecha);
     return {
       desde,
       hasta,
@@ -155,19 +116,30 @@ export default function PedidosB2bHistoricoPage() {
     };
   }
 
+  // Solo cuenta la respuesta de la consulta más reciente (cambiar de filtro rápido no deja que una respuesta vieja pise a la nueva).
+  const ultimaConsulta = useRef(0);
+
   async function ejecutarBusqueda(pagina: number) {
+    const consulta = ++ultimaConsulta.current;
     setLoading(true);
     setError(null);
     try {
       const res = await fetchPedidosB2b(token, { ...filtrosActuales(), page: pagina, limit: LIMIT });
-      setResult(res);
-      setSearched(true);
+      if (consulta === ultimaConsulta.current) setResult(res);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo buscar el histórico de pedidos");
+      if (consulta === ultimaConsulta.current) setError(err instanceof ApiError ? err.message : "No se pudo cargar el histórico de pedidos");
     } finally {
-      setLoading(false);
+      if (consulta === ultimaConsulta.current) setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial y recarga al cambiar un filtro
+    void ejecutarBusqueda(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fecha, estado, estadoPago, negocioNombre, importe]);
+
+  const hayFiltros = !!(fecha || estado || estadoPago || negocioNombre || importe);
 
   async function handleExport() {
     setExporting(true);
@@ -190,93 +162,91 @@ export default function PedidosB2bHistoricoPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card className="flex flex-wrap items-center gap-3">
-        <FilterBar>
-          <FilterPill
-            filterKey="estado"
-            label="Estado"
-            valueLabel={estado ? ESTADO_FILTRO_LABEL[estado] : null}
-            onClear={() => setEstado(null)}
-          >
-            {({ close }) => (
+    <div className="flex flex-col gap-3">
+      <PageActions
+        acciones={[
+          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !result || result.total === 0, cargando: exporting },
+        ]}
+      />
+
+      {/* Una sola barra: buscador + «Filtros» (Estado, Pago, Semana, Total). Los filtros aplican al elegir. */}
+      <BarraBusqueda
+        placeholder="Buscar negocio…"
+        onBuscar={(texto) => setNegocioNombre(texto || null)}
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            valueLabel: estado ? ESTADO_FILTRO_LABEL[estado] : null,
+            onClear: () => setEstado(null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
                 opciones={ESTADOS_FILTRO_HISTORICO.map((e) => ({ value: e, label: ESTADO_FILTRO_LABEL[e] }))}
                 valorAplicado={estado}
                 onAplicar={setEstado}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="estadoPago"
-            label="Pago"
-            valueLabel={estadoPago ? ESTADO_PAGO_LABEL[estadoPago] : null}
-            onClear={() => setEstadoPago(null)}
-          >
-            {({ close }) => (
+            ),
+          },
+          {
+            key: "estadoPago",
+            label: "Pago",
+            valueLabel: estadoPago ? ESTADO_PAGO_LABEL[estadoPago] : null,
+            onClear: () => setEstadoPago(null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
                 opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
                 valorAplicado={estadoPago}
                 onAplicar={setEstadoPago}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill filterKey="fecha" label="Semana" valueLabel={labelFiltroFecha(fecha)} onClear={() => setFecha(null)}>
-            {({ close }) => <FiltroFechaPopover valorAplicado={fecha} onAplicar={setFecha} close={close} />}
-          </FilterPill>
-
-          <FilterPill filterKey="importe" label="Total" valueLabel={labelFiltroImporte(importe)} onClear={() => setImporte(null)}>
-            {({ close }) => <FiltroImportePopover valorAplicado={importe} onAplicar={setImporte} close={close} />}
-          </FilterPill>
-
-          <FilterPill filterKey="negocio" label="Negocio" valueLabel={negocioNombre?.trim() || null} onClear={() => setNegocioNombre(null)}>
-            {({ close }) => <FiltroNegocioPopover valorAplicado={negocioNombre} onAplicar={setNegocioNombre} close={close} />}
-          </FilterPill>
-        </FilterBar>
-
-        <Button variant="primary" onClick={() => ejecutarBusqueda(1)} disabled={loading}>
-          {loading ? "Buscando..." : "Buscar"}
-        </Button>
-      </Card>
+            ),
+          },
+          {
+            key: "fecha",
+            label: "Semana",
+            valueLabel: labelFiltroFecha(fecha),
+            onClear: () => setFecha(null),
+            render: ({ cerrar }) => <FiltroFechaPopover modo="semana" valorAplicado={fecha} onAplicar={setFecha} close={cerrar} />,
+          },
+          {
+            key: "importe",
+            label: "Total",
+            valueLabel: labelFiltroImporte(importe),
+            onClear: () => setImporte(null),
+            render: ({ cerrar }) => <FiltroImportePopover valorAplicado={importe} onAplicar={setImporte} close={cerrar} />,
+          },
+        ]}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {searched && (
+      {result === null && !error && <p className="text-sm text-admin-ink-soft">Cargando...</p>}
+
+      {result && (
         <>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-admin-ink-soft">{result?.total ?? 0} pedidos encontrados</span>
-            <Button
-              variant="secondary"
-              onClick={handleExport}
-              disabled={exporting || !result || result.total === 0}
-            >
-              {exporting ? "Exportando..." : "📥 Exportar Excel"}
-            </Button>
-          </div>
           {exportError && <p className="text-sm text-red-600">{exportError}</p>}
 
-          {result && result.data.length === 0 ? (
-            <Card className="text-sm text-admin-ink-soft">No hay pedidos que coincidan con estos filtros.</Card>
+          {result.data.length === 0 ? (
+            <Card className="text-sm text-admin-ink-soft">
+              {hayFiltros ? "No hay pedidos que coincidan con estos filtros." : "Aún no hay pedidos completados ni cancelados en el histórico."}
+            </Card>
           ) : (
-            result && (
-              <Table
-                columns={COLUMNS}
-                data={result.data}
-                rowKey={(pedido) => pedido.id}
-                onRowClick={(pedido) => setSelectedId(pedido.id)}
-                pagination={{
-                  page: result.page,
-                  totalPages: result.totalPages,
-                  onPrevious: () => ejecutarBusqueda(result.page - 1),
-                  onNext: () => ejecutarBusqueda(result.page + 1),
-                  disabled: loading,
-                }}
-              />
-            )
+            <Table
+              columns={COLUMNS}
+              data={result.data}
+              rowKey={(pedido) => pedido.id}
+              onRowClick={(pedido) => setSelectedId(pedido.id)}
+              pagination={{
+                page: result.page,
+                totalPages: result.totalPages,
+                total: result.total,
+                limit: LIMIT,
+                onPrevious: () => ejecutarBusqueda(result.page - 1),
+                onNext: () => ejecutarBusqueda(result.page + 1),
+                disabled: loading,
+              }}
+            />
           )}
         </>
       )}
@@ -287,7 +257,7 @@ export default function PedidosB2bHistoricoPage() {
         pedidoId={selectedId}
         onClose={() => setSelectedId(null)}
         onChanged={() => {
-          if (searched) void ejecutarBusqueda(result?.page ?? 1);
+          void ejecutarBusqueda(result?.page ?? 1);
         }}
       />
     </div>

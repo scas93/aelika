@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageActions } from "../../_components/PageHeader";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -14,7 +15,7 @@ import {
   type Order,
   type PaginatedOrders,
 } from "@/lib/api";
-import { formatFechaHora, formatMoney } from "@/lib/format";
+import { formatFechaSola, formatMoney } from "@/lib/format";
 import {
   rangoHoyISO,
   rangoMesActualISO,
@@ -37,7 +38,8 @@ import Modal from "../../_components/Modal";
 import Tabs from "../../_components/Tabs";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
-import { FilterBar, FilterPill } from "../../_components/FilterBar";
+import BarraBusqueda from "../../_components/BarraFiltros";
+import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
@@ -58,24 +60,27 @@ const RANGO_EXPORT_OPTIONS: { value: RangoExport; label: string }[] = [
 ];
 
 const COLUMNS: TableColumn<Order>[] = [
-  { key: "folio", header: "Folio", render: (order) => <span className="font-bold">#{order.folio}</span> },
-  { key: "cliente", header: "Cliente", render: (order) => order.clienteNombre },
-  { key: "fecha", header: "Fecha", render: (order) => formatFechaHora(order.createdAt) },
+  { key: "folio", header: "Folio", compact: true, render: (order) => <span className="font-bold">#{order.folio}</span> },
+  { key: "cliente", header: "Cliente", truncate: true, movil: true, render: (order) => <span className="block truncate">{order.clienteNombre}</span> },
+  // Solo la fecha (sin hora), en una sola línea.
+  { key: "fecha", header: "Fecha", compact: true, render: (order) => <span className="whitespace-nowrap">{formatFechaSola(order.createdAt)}</span> },
   {
     key: "estado",
     header: "Estado",
-    render: (order) => <Badge variant={ESTADO_VARIANT[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>,
+    compact: true,
+    render: (order) => <Badge variant={ESTADO_VARIANT[order.estadoPedido]} ancho="pedidoB2c">{ESTADO_LABEL[order.estadoPedido]}</Badge>,
   },
-  { key: "metodoPago", header: "Método de pago", render: (order) => METODO_PAGO_LABEL[order.metodoPago] },
+  { key: "metodoPago", header: "Método", compact: true, render: (order) => METODO_PAGO_LABEL[order.metodoPago] },
   {
     key: "estadoPago",
     header: "Estado de pago",
+    compact: true,
     render: (order) => {
       const grupo = grupoDeEstadoPago(order.estadoPago);
-      return <Badge variant={GRUPO_ESTADO_PAGO_VARIANT[grupo]}>{GRUPO_ESTADO_PAGO_LABEL[grupo]}</Badge>;
+      return <Badge variant={GRUPO_ESTADO_PAGO_VARIANT[grupo]} ancho="pago">{GRUPO_ESTADO_PAGO_LABEL[grupo]}</Badge>;
     },
   },
-  { key: "total", header: "Total", align: "right", render: (order) => formatMoney(order.total) },
+  { key: "total", header: "Total", align: "right", compact: true, movil: true, render: (order) => formatMoney(order.total) },
 ];
 
 export default function PedidosHistoricoPage() {
@@ -189,86 +194,76 @@ export default function PedidosHistoricoPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3">
       <Tabs items={[{ key: "historial", label: "Historial" }]} active="historial" onChange={() => {}} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FilterBar>
-          <FilterPill
-            filterKey="estado"
-            label="Estado"
-            valueLabel={estadoPedido ? ESTADO_LABEL[estadoPedido] : null}
-            onClear={() => handleFilterChange(setEstadoPedido, null)}
-          >
-            {({ close }) => (
+      <PageActions acciones={[{ key: "exportar", label: "Exportar CSV", icon: <IconDownload size={16} />, tipo: "exportar", onClick: () => setExportOpen(true) }]} />
+
+      {/* Sin buscador (el listado no tiene búsqueda por texto): solo «Filtros». Orden fijo: el pedido más reciente primero. */}
+      <BarraBusqueda
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            valueLabel: estadoPedido ? ESTADO_LABEL[estadoPedido] : null,
+            onClear: () => handleFilterChange(setEstadoPedido, null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
                 opciones={ESTADOS.map((estado) => ({ value: estado, label: ESTADO_LABEL[estado] }))}
                 valorAplicado={estadoPedido}
                 onAplicar={(value) => handleFilterChange(setEstadoPedido, value)}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="metodoPago"
-            label="Método de pago"
-            valueLabel={metodoPago ? METODO_PAGO_LABEL[metodoPago] : null}
-            onClear={() => handleFilterChange(setMetodoPago, null)}
-          >
-            {({ close }) => (
+            ),
+          },
+          {
+            key: "metodoPago",
+            label: "Método de pago",
+            valueLabel: metodoPago ? METODO_PAGO_LABEL[metodoPago] : null,
+            onClear: () => handleFilterChange(setMetodoPago, null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
                 opciones={METODOS_PAGO.map((metodo) => ({ value: metodo, label: METODO_PAGO_LABEL[metodo] }))}
                 valorAplicado={metodoPago}
                 onAplicar={(value) => handleFilterChange(setMetodoPago, value)}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="estadoPago"
-            label="Estado de pago"
-            valueLabel={estadoPago ? GRUPO_ESTADO_PAGO_LABEL[estadoPago] : null}
-            onClear={() => handleFilterChange(setEstadoPago, null)}
-          >
-            {({ close }) => (
+            ),
+          },
+          {
+            key: "estadoPago",
+            label: "Estado de pago",
+            valueLabel: estadoPago ? GRUPO_ESTADO_PAGO_LABEL[estadoPago] : null,
+            onClear: () => handleFilterChange(setEstadoPago, null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
                 opciones={GRUPOS_ESTADO_PAGO.map((grupo) => ({ value: grupo, label: GRUPO_ESTADO_PAGO_LABEL[grupo] }))}
                 valorAplicado={estadoPago}
                 onAplicar={(value) => handleFilterChange(setEstadoPago, value)}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="fecha"
-            label="Fecha"
-            valueLabel={labelFiltroFecha(fecha)}
-            onClear={() => handleFilterChange(setFecha, null)}
-          >
-            {({ close }) => (
-              <FiltroFechaPopover valorAplicado={fecha} onAplicar={(value) => handleFilterChange(setFecha, value)} close={close} />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="importe"
-            label="Total"
-            valueLabel={labelFiltroImporte(importe)}
-            onClear={() => handleFilterChange(setImporte, null)}
-          >
-            {({ close }) => (
-              <FiltroImportePopover valorAplicado={importe} onAplicar={(value) => handleFilterChange(setImporte, value)} close={close} />
-            )}
-          </FilterPill>
-        </FilterBar>
-
-        <Button variant="secondary" onClick={() => setExportOpen(true)}>
-          📥 Exportar CSV
-        </Button>
-      </div>
+            ),
+          },
+          {
+            key: "fecha",
+            label: "Fecha",
+            valueLabel: labelFiltroFecha(fecha),
+            onClear: () => handleFilterChange(setFecha, null),
+            render: ({ cerrar }) => (
+              <FiltroFechaPopover valorAplicado={fecha} onAplicar={(value) => handleFilterChange(setFecha, value)} close={cerrar} />
+            ),
+          },
+          {
+            key: "importe",
+            label: "Total",
+            valueLabel: labelFiltroImporte(importe),
+            onClear: () => handleFilterChange(setImporte, null),
+            render: ({ cerrar }) => (
+              <FiltroImportePopover valorAplicado={importe} onAplicar={(value) => handleFilterChange(setImporte, value)} close={cerrar} />
+            ),
+          },
+        ]}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -286,6 +281,8 @@ export default function PedidosHistoricoPage() {
           pagination={{
             page: result.page,
             totalPages: result.totalPages,
+            total: result.total,
+            limit: LIMIT,
             onPrevious: () => setPage((p) => p - 1),
             onNext: () => setPage((p) => p + 1),
           }}

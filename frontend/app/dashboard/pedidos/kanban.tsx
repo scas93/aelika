@@ -165,7 +165,7 @@ function KanbanCard({ order, moving }: { order: Order; moving: boolean }) {
         <div className="mt-1 flex items-center justify-between gap-2">
           <span className="text-sm font-bold text-admin-ink">${Number(order.total).toFixed(2)}</span>
           {order.estadoPago === "REEMBOLSADO" && (
-            <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+            <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
           )}
         </div>
       </Card>

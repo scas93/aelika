@@ -86,7 +86,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
   // migra a variante semántica; "Trigger" sigue con el prop `color`
   // categórico de Badge (ya excluido de la migración a variantes).
   const columns: TableColumn<Regla>[] = [
-    { key: "nombre", header: "Nombre", render: (regla) => <span className="font-bold">{regla.nombre}</span> },
+    { key: "nombre", header: "Nombre", movil: true, truncate: true, render: (regla) => <span className="block truncate font-bold">{regla.nombre}</span> },
     {
       key: "trigger",
       header: "Trigger",
@@ -95,6 +95,8 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
     {
       key: "estado",
       header: "Estado",
+      movil: true,
+      compact: true,
       render: (regla) => (
         <ToggleSwitch
           checked={regla.activa}
@@ -107,6 +109,8 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
       key: "acciones",
       header: "Acciones",
       align: "right",
+      movil: true,
+      compact: true,
       render: (regla) => (
         <div className="flex justify-end gap-2">
           {regla.trigger === "MANUAL" && (

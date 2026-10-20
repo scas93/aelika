@@ -258,7 +258,7 @@ function OrderCard({
           </div>
           <div className="flex items-center gap-2">
             {order.estadoPago === "REEMBOLSADO" && (
-              <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO!}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
+              <Badge variant={ESTADO_PAGO_VARIANT.REEMBOLSADO}>{ESTADO_PAGO_LABEL.REEMBOLSADO}</Badge>
             )}
             <Badge variant={ESTADO_VARIANT[order.estadoPedido]}>{ESTADO_LABEL[order.estadoPedido]}</Badge>
           </div>

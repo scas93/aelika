@@ -20,6 +20,7 @@ import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
+import Aviso from "../_components/Aviso";
 import HistorialPedidosCliente from "./historial-pedidos-cliente";
 
 const textoDescuento = (d: number | null) => (d === null ? "" : String(d));
@@ -196,7 +197,7 @@ export default function ClienteB2bPanel({
       {cliente && (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={cliente.activo ? "exito" : "neutro"}>{cliente.activo ? "Activo" : "De baja"}</Badge>
+            <Badge variant="neutro">{cliente.activo ? "Activo" : "De baja"}</Badge>
             {cliente.incompleto && <Badge variant="advertencia">Incompleto</Badge>}
             <span className="text-sm text-admin-ink-soft">
               {cliente.pedidosActivos} pedido{cliente.pedidosActivos === 1 ? "" : "s"} activo{cliente.pedidosActivos === 1 ? "" : "s"}
@@ -204,9 +205,7 @@ export default function ClienteB2bPanel({
           </div>
 
           {cliente.incompleto && (
-            <p className="rounded-[var(--radius-admin-control)] bg-amber-50 p-2 text-xs text-amber-800">
-              A este cliente le falta la dirección. Agrégala abajo para completar su ficha.
-            </p>
+            <Aviso tono="ambar">A este cliente le falta la dirección. Agrégala abajo para completar su ficha.</Aviso>
           )}
 
           <div className="flex flex-col gap-3">
@@ -266,7 +265,7 @@ export default function ClienteB2bPanel({
                     </div>
                     <div className="flex items-center gap-2">
                       {t.principal ? (
-                        <Badge variant="acento">Principal</Badge>
+                        <Badge variant="neutro">Principal</Badge>
                       ) : (
                         <button
                           type="button"

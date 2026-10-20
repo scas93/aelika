@@ -6,6 +6,11 @@ export function formatMoney(value: string | number): string {
 
 // Same approach already used inline in pedidos/page.tsx for the order card's
 // date display.
+// Solo la fecha, sin hora («19 ago 2026»), en la zona del navegador.
+export function formatFechaSola(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }).replace(/\./g, "");
+}
+
 export function formatFechaHora(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", {
     day: "numeric",

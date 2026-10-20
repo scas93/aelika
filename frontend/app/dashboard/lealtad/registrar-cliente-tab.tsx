@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ApiError, altaClienteLealtad, type LealtadRespuesta } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
+import Aviso from "../_components/Aviso";
 
 // Sección fija (link + QR de /lealtad/[slug]) — siempre visible, independiente
 // de si el formulario de abajo está en su estado inicial o mostrando el
@@ -115,12 +116,9 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
               </p>
             </div>
           ) : (
-            <div className="rounded-[var(--radius-admin-control)] border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm text-amber-800">
-                El cliente y su tarjeta ya quedaron registrados, pero no se pudo generar el link del wallet en este
-                momento. Intenta registrarlo de nuevo con el mismo teléfono en unos minutos para conseguir el link.
-              </p>
-            </div>
+            <Aviso tono="ambar">
+              El cliente y su tarjeta ya quedaron registrados, pero no se pudo generar el link del wallet en este momento. Intenta registrarlo de nuevo con el mismo teléfono en unos minutos para conseguir el link.
+            </Aviso>
           )}
 
           <Button variant="secondary" onClick={handleNuevoRegistro} className="self-start">

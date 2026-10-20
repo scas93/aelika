@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageActions } from "../_components/PageHeader";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -11,7 +12,7 @@ import {
   type PaginatedPayments,
   type Payment,
 } from "@/lib/api";
-import { formatFechaHora, formatMoney } from "@/lib/format";
+import { formatFechaSola, formatMoney } from "@/lib/format";
 import {
   rangoHoyISO,
   rangoMesActualISO,
@@ -25,7 +26,8 @@ import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
-import { FilterBar, FilterPill } from "../_components/FilterBar";
+import BarraBusqueda from "../_components/BarraFiltros";
+import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../_components/FiltroImporteControl";
@@ -84,13 +86,14 @@ const METODOS_PAGO_FILTRABLES = ["card"];
 
 const COLUMNS: TableColumn<Payment>[] = [
   { key: "folio", header: "Folio", render: (payment) => <span className="font-bold">#{payment.folio}</span> },
-  { key: "monto", header: "Monto", align: "right", render: (payment) => formatMoney(payment.amount) },
+  { key: "monto", header: "Monto", align: "right", movil: true, render: (payment) => formatMoney(payment.amount) },
   { key: "moneda", header: "Moneda", render: (payment) => payment.currency.toUpperCase() },
   {
     key: "estado",
+    movil: true,
     header: "Estado",
     render: (payment) => (
-      <Badge variant={ESTADO_PAGO_VARIANT[payment.status]}>{ESTADO_PAGO_LABEL[payment.status]}</Badge>
+      <Badge variant={ESTADO_PAGO_VARIANT[payment.status]} ancho="pago">{ESTADO_PAGO_LABEL[payment.status]}</Badge>
     ),
   },
   {
@@ -104,7 +107,7 @@ const COLUMNS: TableColumn<Payment>[] = [
   {
     key: "fechaCaptura",
     header: "Fecha de captura",
-    render: (payment) => (payment.capturedAt ? formatFechaHora(payment.capturedAt) : "—"),
+    render: (payment) => (payment.capturedAt ? <span className="whitespace-nowrap">{formatFechaSola(payment.capturedAt)}</span> : "—"),
   },
 ];
 
@@ -221,74 +224,62 @@ export default function PagosPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FilterBar>
-          <FilterPill
-            filterKey="estado"
-            label="Estado"
-            valueLabel={status ? ESTADO_PAGO_LABEL[status] : null}
-            onClear={() => handleFilterChange(setStatus, null)}
-          >
-            {({ close }) => (
-              // Solo PAGADO/FALLIDO a propósito (ver ESTADOS_PAGO_FILTRABLES) —
-              // los otros 3 valores de EstadoPago nunca ocurren en una fila de
-              // Payment real, mostrarlos rompería el filtro en silencio.
+    <div className="flex flex-col gap-3">
+      <PageActions acciones={[{ key: "exportar", label: "Exportar CSV", icon: <IconDownload size={16} />, tipo: "exportar", onClick: () => setExportOpen(true) }]} />
+
+      {/* Sin buscador (el listado no tiene búsqueda por texto): solo «Filtros». Orden fijo: el cobro más reciente primero. */}
+      <BarraBusqueda
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            valueLabel: status ? ESTADO_PAGO_LABEL[status] : null,
+            onClear: () => handleFilterChange(setStatus, null),
+            render: ({ cerrar }) => (
+              // Solo PAGADO/FALLIDO a propósito (ver ESTADOS_PAGO_FILTRABLES) — los otros 3 valores de EstadoPago nunca ocurren en
+              // una fila de Payment real, mostrarlos rompería el filtro en silencio.
               <FiltroSelectPopover
                 opciones={ESTADOS_PAGO_FILTRABLES.map((estado) => ({ value: estado, label: ESTADO_PAGO_LABEL[estado] }))}
                 valorAplicado={status}
                 onAplicar={(value) => handleFilterChange(setStatus, value)}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="metodoPago"
-            label="Método de pago"
-            valueLabel={paymentMethodType ? paymentMethodType.charAt(0).toUpperCase() + paymentMethodType.slice(1) : null}
-            onClear={() => handleFilterChange(setPaymentMethodType, null)}
-          >
-            {({ close }) => (
+            ),
+          },
+          {
+            key: "metodoPago",
+            label: "Método de pago",
+            valueLabel: paymentMethodType ? paymentMethodType.charAt(0).toUpperCase() + paymentMethodType.slice(1) : null,
+            onClear: () => handleFilterChange(setPaymentMethodType, null),
+            render: ({ cerrar }) => (
               <FiltroSelectPopover
-                opciones={METODOS_PAGO_FILTRABLES.map((metodo) => ({
-                  value: metodo,
-                  label: metodo.charAt(0).toUpperCase() + metodo.slice(1),
-                }))}
+                opciones={METODOS_PAGO_FILTRABLES.map((metodo) => ({ value: metodo, label: metodo.charAt(0).toUpperCase() + metodo.slice(1) }))}
                 valorAplicado={paymentMethodType}
                 onAplicar={(value) => handleFilterChange(setPaymentMethodType, value)}
-                close={close}
+                close={cerrar}
               />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="fecha"
-            label="Fecha"
-            valueLabel={labelFiltroFecha(fecha)}
-            onClear={() => handleFilterChange(setFecha, null)}
-          >
-            {({ close }) => (
-              <FiltroFechaPopover valorAplicado={fecha} onAplicar={(value) => handleFilterChange(setFecha, value)} close={close} />
-            )}
-          </FilterPill>
-
-          <FilterPill
-            filterKey="importe"
-            label="Monto"
-            valueLabel={labelFiltroImporte(importe)}
-            onClear={() => handleFilterChange(setImporte, null)}
-          >
-            {({ close }) => (
-              <FiltroImportePopover valorAplicado={importe} onAplicar={(value) => handleFilterChange(setImporte, value)} close={close} />
-            )}
-          </FilterPill>
-        </FilterBar>
-
-        <Button variant="secondary" onClick={() => setExportOpen(true)}>
-          📥 Exportar CSV
-        </Button>
-      </div>
+            ),
+          },
+          {
+            key: "fecha",
+            label: "Fecha",
+            valueLabel: labelFiltroFecha(fecha),
+            onClear: () => handleFilterChange(setFecha, null),
+            render: ({ cerrar }) => (
+              <FiltroFechaPopover valorAplicado={fecha} onAplicar={(value) => handleFilterChange(setFecha, value)} close={cerrar} />
+            ),
+          },
+          {
+            key: "importe",
+            label: "Monto",
+            valueLabel: labelFiltroImporte(importe),
+            onClear: () => handleFilterChange(setImporte, null),
+            render: ({ cerrar }) => (
+              <FiltroImportePopover valorAplicado={importe} onAplicar={(value) => handleFilterChange(setImporte, value)} close={cerrar} />
+            ),
+          },
+        ]}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -308,6 +299,8 @@ export default function PagosPage() {
           pagination={{
             page: result.page,
             totalPages: result.totalPages,
+            total: result.total,
+            limit: LIMIT,
             onPrevious: () => setPage((p) => p - 1),
             onNext: () => setPage((p) => p + 1),
           }}

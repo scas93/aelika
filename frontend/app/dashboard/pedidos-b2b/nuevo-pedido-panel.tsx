@@ -17,6 +17,7 @@ import { formatMoney } from "@/lib/format";
 import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import CuadriculaDias, { distribucionVacia, totalDistribucion, type DistribucionDias } from "./cuadricula-dias";
 import SidePanel from "../_components/SidePanel";
+import Aviso from "../_components/Aviso";
 import Button from "../_components/Button";
 
 interface LineaNueva {
@@ -281,16 +282,9 @@ export default function NuevoPedidoPanel({
 
         {/* Aviso: el cliente ya tiene pedido esa semana (no se puede capturar otro; se edita ese) */}
         {existente && (
-          <div role="alert" className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3">
-            <p className="text-sm text-admin-ink">
-              Este cliente ya tiene el pedido <span className="font-bold">{existente.folio}</span> esta semana. Para agregar o cambiar entregas, edita ese pedido.
-            </p>
-            <div>
-              <Button variant="secondary" size="sm" onClick={() => onAbrirPedido(existente.id)}>
-                Abrir {existente.folio}
-              </Button>
-            </div>
-          </div>
+          <Aviso tono="ambar" accion={{ label: `Abrir ${existente.folio}`, onClick: () => onAbrirPedido(existente.id) }}>
+            Este cliente ya tiene el pedido <span className="font-bold">{existente.folio}</span> esta semana. Para agregar o cambiar entregas, edita ese pedido.
+          </Aviso>
         )}
 
         {/* 3 · Productos y cantidades por día */}

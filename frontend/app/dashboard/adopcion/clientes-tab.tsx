@@ -9,6 +9,7 @@ import Button from "../_components/Button";
 import Card from "../_components/Card";
 import SummaryCard, { SUMMARY_GRID } from "../_components/SummaryCard";
 import Table, { type TableColumn } from "../_components/Table";
+import BarraBusqueda from "../_components/BarraFiltros";
 import {
   ESTADO_LABEL,
   ESTADO_VARIANT,
@@ -19,20 +20,10 @@ import {
   formatoFecha,
   formatoFechaHora,
   ordenarClientes,
-  type ClaveOrden,
-  type Orden,
 } from "./modelo";
 
 type Fila = AdopcionClientes["clientes"][number];
 
-const CLAVES: { clave: ClaveOrden; label: string }[] = [
-  { clave: "nombre", label: "Nombre" },
-  { clave: "estado", label: "Estado en la semana" },
-  { clave: "etapa", label: "Etapa" },
-  { clave: "ultimoAcceso", label: "Último acceso" },
-  { clave: "primerPedido", label: "Primer pedido" },
-  { clave: "pedidos", label: "Pedidos (4 semanas)" },
-];
 
 export function textoOrigen(o: AdopcionOrigen): string {
   if (o.casos === 0) return "Sin dato";
@@ -44,7 +35,6 @@ export default function ClientesTab({ token }: { token: string }) {
   const [semana, setSemana] = useState<string | undefined>(undefined);
   const [resultado, setResultado] = useState<{ clave: string; data?: AdopcionClientes; error?: string } | null>(null);
   const [busqueda, setBusqueda] = useState("");
-  const [orden, setOrden] = useState<Orden | null>(null);
 
   const clave = semana ?? "default";
   useEffect(() => {
@@ -61,8 +51,8 @@ export default function ClientesTab({ token }: { token: string }) {
 
   const data = resultado?.clave === clave ? resultado.data : undefined;
   const filas = useMemo(
-    () => (data ? ordenarClientes(filtrarClientes(data.clientes, busqueda), orden) : []),
-    [data, busqueda, orden],
+    () => (data ? ordenarClientes(filtrarClientes(data.clientes, busqueda), null) : []),
+    [data, busqueda],
   );
 
   if (resultado?.clave === clave && resultado.error) return <p className="text-sm text-red-600">{resultado.error}</p>;
@@ -72,17 +62,19 @@ export default function ClientesTab({ token }: { token: string }) {
   const columnas: TableColumn<Fila>[] = [
     {
       key: "cliente",
+      movil: true,
       header: "Cliente",
       render: (f) => (
         <div className="flex flex-col gap-1">
           <span className="font-semibold">{f.nombre}</span>
           {f.codigo && <span className="text-xs text-admin-ink-soft">{f.codigo}</span>}
-          {f.modificadoSinReconfirmar && <Badge variant="acento">Modificó, sin reconfirmar</Badge>}
+          {f.modificadoSinReconfirmar && <Badge variant="advertencia">Modificó, sin reconfirmar</Badge>}
         </div>
       ),
     },
     {
       key: "estado",
+      movil: true,
       header: "Esta semana",
       render: (f) => (
         <div className="flex flex-col items-start gap-1">
@@ -141,34 +133,8 @@ export default function ClientesTab({ token }: { token: string }) {
         «Sin registro» no significa que nunca haya entrado.
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          className="input max-w-xs"
-          type="search"
-          placeholder="Buscar por nombre"
-          aria-label="Buscar por nombre"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        <select
-          className="input max-w-[14rem]"
-          aria-label="Ordenar por"
-          value={orden?.clave ?? ""}
-          onChange={(e) => setOrden(e.target.value ? { clave: e.target.value as ClaveOrden, dir: orden?.dir ?? "asc" } : null)}
-        >
-          <option value="">Orden: habituales primero</option>
-          {CLAVES.map((c) => (
-            <option key={c.clave} value={c.clave}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        {orden && (
-          <Button variant="secondary" size="sm" onClick={() => setOrden({ ...orden, dir: orden.dir === "asc" ? "desc" : "asc" })}>
-            {orden.dir === "asc" ? "Ascendente" : "Descendente"}
-          </Button>
-        )}
-      </div>
+      {/* Orden fijo: primero los habituales que no han pedido y los pedidos sin confirmar (lo que requiere acción); sin «Ordenar por». */}
+      <BarraBusqueda placeholder="Buscar por nombre…" onBuscar={setBusqueda} />
 
       {filas.length === 0 ? (
         <Card>

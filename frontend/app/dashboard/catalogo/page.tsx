@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { IconClipboardList, IconPuzzle, IconTag } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -126,9 +127,9 @@ export default function CatalogoPage() {
       {!esB2b && (
         <Tabs
           items={[
-            { key: "catalogo", label: "Categorías y productos", icon: "📋" },
-            { key: "promociones", label: "Promociones", icon: "🏷️" },
-            { key: "modificadores", label: "Modificadores", icon: "🧩" },
+            { key: "catalogo", label: "Categorías y productos", icon: <IconClipboardList size={16} /> },
+            { key: "promociones", label: "Promociones", icon: <IconTag size={16} /> },
+            { key: "modificadores", label: "Modificadores", icon: <IconPuzzle size={16} /> },
           ]}
           active={tab}
           onChange={(key) => setTab(key as Tab)}

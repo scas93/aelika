@@ -16,7 +16,6 @@ export default function DashboardNav({ open, onClose }: DashboardNavProps) {
   const { user } = useSession();
   const pathname = usePathname();
   const items = getNavItems(user.rol, user.tenant.tipoStorefront, user.tenant.modulosDesactivados);
-  const tenantInitial = user.tenant.nombre.trim().charAt(0).toUpperCase();
 
   // Below md this is a left-edge drawer (fixed, off-canvas via
   // -translate-x-full, slides in when open); at md+ it reverts to the
@@ -65,36 +64,26 @@ export default function DashboardNav({ open, onClose }: DashboardNavProps) {
           app. El drawer mobile es este mismo <aside>, así que hereda el
           estilo claro sin ningún cambio aparte. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[224px] shrink-0 flex-col border-r border-admin-border bg-white font-admin transition-transform duration-200 md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[85vw] max-w-[320px] shrink-0 flex-col md:w-[224px] border-r border-admin-border bg-white font-admin transition-transform duration-200 md:sticky md:top-0 md:h-dvh md:translate-x-0 md:self-start ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-3 border-b border-admin-border p-5">
-          {/* admin-green a propósito, no admin-accent — es la inicial del
-              negocio como marca/avatar estático, no un elemento interactivo,
-              así que queda fuera del alcance de la migración de acento.
-              Selector de negocio SIN flecha ni apariencia de clicable — no
-              hay multi-tenancy real que respalde un selector funcional
-              (User.tenantId es 1:1 hacia Tenant), decisión explícita de
-              este rediseño. */}
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] bg-admin-green text-sm font-bold text-white">
-            {tenantInitial}
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <p className="truncate text-[15px] font-semibold text-admin-ink">{user.tenant.nombre}</p>
-            <p className="truncate text-[13px] text-admin-ink-soft">Panel administrativo</p>
+        {/* Un solo bloque arriba: negocio + usuario (con su menú). Reemplaza al encabezado fijo y al bloque del usuario del fondo. */}
+        <div className="flex shrink-0 items-center gap-1 border-b border-admin-border p-3">
+          <div className="min-w-0 flex-1">
+            <UserMenu onCerrarDrawer={onClose} />
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar menú"
-            className="shrink-0 text-xl leading-none text-admin-ink-soft transition hover:text-admin-ink md:hidden"
+            className="shrink-0 p-1 text-xl leading-none text-admin-ink-soft transition hover:text-admin-ink md:hidden"
           >
             ✕
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
           {items.map((item) =>
             item.children ? (
               <NavGroup key={item.href} item={item} pathname={pathname} />
@@ -104,9 +93,6 @@ export default function DashboardNav({ open, onClose }: DashboardNavProps) {
           )}
         </nav>
 
-        <div className="border-t border-admin-border p-3">
-          <UserMenu />
-        </div>
       </aside>
     </>
   );

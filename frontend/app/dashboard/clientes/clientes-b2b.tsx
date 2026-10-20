@@ -5,9 +5,12 @@ import { useSession } from "@/lib/session-context";
 import { ApiError, fetchClientesB2b, type ClienteB2bEstadoFiltro, type ClienteB2bFila, type PaginatedClientesB2b } from "@/lib/api";
 import { formatTelefono } from "@/lib/format";
 import Card from "../_components/Card";
-import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
+import BarraBusqueda from "../_components/BarraFiltros";
+import { FiltroSelectPopover } from "../_components/FiltroSelect";
+import { IconPlus } from "@tabler/icons-react";
+import { PageActions } from "../_components/PageHeader";
 import ClienteB2bAltaModal from "./cliente-b2b-form";
 import ClienteB2bPanel from "./cliente-b2b-panel";
 
@@ -18,6 +21,7 @@ const COLUMNS: TableColumn<ClienteB2bFila>[] = [
   {
     key: "nombre",
     header: "Nombre",
+    movil: true,
     render: (c) => (
       <span className="flex flex-wrap items-center gap-2">
         <span className="font-bold">{c.nombre}</span>
@@ -28,7 +32,7 @@ const COLUMNS: TableColumn<ClienteB2bFila>[] = [
   },
   { key: "telefono", header: "Teléfono principal", render: (c) => (c.telefonoPrincipal ? formatTelefono(c.telefonoPrincipal) : "—") },
   { key: "descuento", header: "Descuento", align: "right", render: (c) => (c.descuentoPorcentaje ? `${c.descuentoPorcentaje}%` : "—") },
-  { key: "pedidos", header: "Pedidos activos", align: "right", render: (c) => c.pedidosActivos },
+  { key: "pedidos", header: "Pedidos activos", align: "right", movil: true, render: (c) => c.pedidosActivos },
 ];
 
 /** Módulo Clientes de un negocio de mayoreo (Gerente/Dueño): lista, alta, detalle/edición, teléfonos, baja y reactivación. */
@@ -58,55 +62,55 @@ export default function ClientesB2b() {
     [token],
   );
 
+  // Carga al abrir y cada vez que cambia la búsqueda o el filtro (la búsqueda ya espera un momento al teclear).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial al montar
-    cargar(1, { q: "", estado: "ACTIVOS" });
-  }, [cargar]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial y recarga al cambiar búsqueda/filtro
+    cargar(1, { q, estado });
+  }, [cargar, q, estado]);
+
+  // `?cliente=<id>` abre ese cliente directo («Ver cliente» desde el panel de un pedido). Se lee DESPUÉS de montar: en una
+  // navegación del cliente (router.push) la URL aún no cambió durante el primer render.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("cliente");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lee la URL una sola vez al montar
+    if (id) setSelectedId(id);
+  }, []);
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-[220px] flex-1 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Buscar
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && cargar(1, { q, estado })}
-            placeholder="Nombre, código o teléfono..."
-            className="admin-input"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-          Mostrar
-          <select
-            value={estado}
-            onChange={(e) => {
-              const nuevo = e.target.value as ClienteB2bEstadoFiltro;
-              setEstado(nuevo);
-              cargar(1, { q, estado: nuevo });
-            }}
-            className="admin-input"
-          >
-            <option value="ACTIVOS">Activos</option>
-            <option value="BAJA">De baja</option>
-            <option value="TODOS">Todos</option>
-          </select>
-        </label>
-        <Button variant="secondary" onClick={() => cargar(1, { q, estado })} disabled={loading}>
-          {loading ? "Buscando..." : "Buscar"}
-        </Button>
-        <Button variant="primary" onClick={() => setAltaAbierta(true)}>
-          Nuevo cliente
-        </Button>
-      </Card>
+    <div className="flex flex-col gap-3">
+      <PageActions acciones={[{ key: "nuevo", label: "Nuevo cliente", icon: <IconPlus size={16} />, tipo: "crear", onClick: () => setAltaAbierta(true) }]} />
+
+      {/* Orden fijo: alfabético por nombre (un directorio de clientes dados de alta; no hay una fecha que ordenar). */}
+      <BarraBusqueda
+        placeholder="Buscar por nombre, código o teléfono…"
+        onBuscar={setQ}
+        filtros={[
+          {
+            key: "estado",
+            label: "Estado",
+            // «Activos» es lo normal: solo se muestra chip cuando se cambia.
+            valueLabel: estado === "ACTIVOS" ? null : estado === "BAJA" ? "De baja" : "Todos",
+            onClear: () => setEstado("ACTIVOS"),
+            render: ({ cerrar }) => (
+              <FiltroSelectPopover<ClienteB2bEstadoFiltro>
+                opciones={[
+                  { value: "ACTIVOS", label: "Activos" },
+                  { value: "BAJA", label: "De baja" },
+                  { value: "TODOS", label: "Todos" },
+                ]}
+                valorAplicado={estado}
+                onAplicar={(v) => setEstado(v ?? "ACTIVOS")}
+                close={cerrar}
+              />
+            ),
+          },
+        ]}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {result && (
         <>
-          <span className="text-sm text-admin-ink-soft">
-            {result.total} cliente{result.total === 1 ? "" : "s"}
-          </span>
           {result.data.length === 0 ? (
             <Card className="text-sm text-admin-ink-soft">
               {q.trim()
@@ -124,6 +128,8 @@ export default function ClientesB2b() {
               pagination={{
                 page: result.page,
                 totalPages: result.totalPages,
+                total: result.total,
+                limit: LIMIT,
                 onPrevious: () => cargar(result.page - 1, { q, estado }),
                 onNext: () => cargar(result.page + 1, { q, estado }),
                 disabled: loading,
