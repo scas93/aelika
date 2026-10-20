@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { PedidoB2bEntregaDia } from "@/lib/api";
 
 let rol = "GERENTE";
@@ -9,9 +9,10 @@ vi.mock("../detalle-panel", () => ({ default: ({ pedidoId }: { pedidoId: string 
 
 const fetchPedidosB2bDia = vi.fn();
 const cerrarEntregaPedidoB2b = vi.fn();
+const avanzarPedidoB2b = vi.fn().mockResolvedValue({});
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, fetchPedidosB2bDia, cerrarEntregaPedidoB2b, exportPedidosB2bDiaXlsx: vi.fn() };
+  return { ...actual, fetchPedidosB2bDia, cerrarEntregaPedidoB2b, avanzarPedidoB2b, exportPedidosB2bDiaXlsx: vi.fn() };
 });
 const imprimir = vi.fn();
 vi.mock("@/lib/thermal-printer", () => ({ isWebUsbSupported: () => true, printComandaB2bDiaWebUsb: (...a: unknown[]) => imprimir(...a) }));
@@ -53,31 +54,26 @@ describe("Entregas del día (B2B)", () => {
   });
   afterEach(cleanup);
 
-  it("contador, total por producto (abierto por defecto, mayor primero) y tabla con pendientes/listas primero", async () => {
+  it("sin «Total por producto» ni contador; tabla con pendientes/listas primero", async () => {
     render(<DiaPage />);
     await screen.findByText("Café A");
-    expect(screen.getByText("4 entregas · 1 entregada · 2 pendientes")).toBeTruthy();
-    // Pan 16, Cuerno 23 → Cuerno primero
-    const prod = screen.getByRole("button", { name: /Total por producto/ }).closest("div")!;
-    const filas = within(prod).getAllByRole("listitem").map((li) => li.textContent);
-    expect(filas).toStrictEqual(["Cuerno23", "Pan16"]);
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toStrictEqual(["Negocio", "Piezas", "Estado", "Acciones"]);
-    const orden = screen.getAllByRole("row").slice(1).map((r) => r.querySelector("button")?.textContent);
-    expect(orden).toStrictEqual(["Café B", "Café D", "Café A", "Café C"]); // pendiente, lista, entregada, no recogida
+    expect(screen.queryByText(/Total por producto/)).toBeNull();
+    expect(screen.queryByText(/entregas ·/)).toBeNull();
+    const nombres = screen.getAllByRole("button", { name: /^Café/ }).map((b) => b.textContent);
+    expect(nombres).toStrictEqual(["Café B", "Café D", "Café A", "Café C"]);
   });
 
-  it("el total por producto se pliega; las filas arrancan plegadas y se despliegan con sus productos", async () => {
+  it("el selector de día usa referencia relativa", async () => {
     render(<DiaPage />);
-    await screen.findByText("Café B");
-    expect(screen.getByText("23")).toBeTruthy(); // abierto por defecto (Cuerno 23)
-    fireEvent.click(screen.getByRole("button", { name: /Total por producto/ }));
-    expect(screen.queryByText("23")).toBeNull(); // plegado
-    // fila plegada: sin productos de la entrega B
-    expect(screen.queryByText("20")).toBeNull();
-    fireEvent.click(screen.getByText("Café B").closest("tr")!);
-    expect(screen.getByText("20")).toBeTruthy();
-    expect(screen.getByText("Cuerno")).toBeTruthy();
-    expect(screen.getByText("5")).toBeTruthy();
+    await screen.findByText("Café A");
+    expect(screen.getByText(/^Hoy · /)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
+    expect(await screen.findByText(/^Mañana · /)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Día anterior" }));
+    expect(await screen.findByText(/^Ayer · /)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Día anterior" }));
+    expect(await screen.findByText(/^[a-záéíóúñ]+ \d+ [a-z]+$/i)).toBeTruthy();
   });
 
   it("clic en el nombre abre el panel del pedido (sin desplegar la fila)", async () => {
@@ -108,27 +104,28 @@ describe("Entregas del día (B2B)", () => {
     await waitFor(() => expect(cerrarEntregaPedidoB2b).toHaveBeenCalledWith("t", "2", "e2", "NO_RECOGIDA"));
   });
 
-  it("pedido Por confirmar: badge «Pedido sin confirmar», sin cierre (solo Imprimir) y la nota del total por producto", async () => {
+  it("pedido Por confirmar: badge «Sin confirmar» en Estado, una línea, sin cierre; Gerente/Dueño ven «Confirmar pedido»", async () => {
     fetchPedidosB2bDia.mockResolvedValue([
       entrega("5", "Café E", "PENDIENTE", [["Pan", 2]], { estado: "PENDIENTE_CONFIRMACION" }),
-      entrega("6", "Café F", "PENDIENTE", [["Pan", 5]], { estado: "PENDIENTE_CONFIRMACION" }),
       entrega("7", "Café G", "PENDIENTE", [["Pan", 9]]),
     ]);
     render(<DiaPage />);
     await screen.findByText("Café E");
-    expect(screen.getAllByText("Pedido sin confirmar")).toHaveLength(2);
+    expect(screen.getAllByText("Sin confirmar")).toHaveLength(1);
+    expect(screen.queryByText("Pedido sin confirmar")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Entregada" })).toHaveLength(1); // solo Café G
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar pedido" }));
+    await waitFor(() => expect(avanzarPedidoB2b).toHaveBeenCalledWith("t", "5"));
     fireEvent.click(screen.getAllByRole("button", { name: "Más acciones" })[0]);
     expect(screen.queryByRole("menuitem", { name: "No recogida" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Imprimir" })).toBeTruthy();
-    expect(screen.getByText("Incluye 7 piezas de pedidos sin confirmar")).toBeTruthy(); // 2 + 5
-    expect(screen.getByText("16")).toBeTruthy(); // el total por producto las cuenta (2+5+9)
   });
 
-  it("sin pedidos por confirmar no hay nota", async () => {
+  it("el Operador no ve «Confirmar pedido»", async () => {
+    rol = "OPERADOR";
+    fetchPedidosB2bDia.mockResolvedValue([entrega("5", "Café E", "PENDIENTE", [["Pan", 2]], { estado: "PENDIENTE_CONFIRMACION" })]);
     render(<DiaPage />);
-    await screen.findByText("Café B");
-    expect(screen.queryByText(/pedidos sin confirmar/)).toBeNull();
+    await screen.findByText("Café E");
+    expect(screen.queryByRole("button", { name: "Confirmar pedido" })).toBeNull();
   });
 
   it("«Imprimir todo» imprime cada entrega del día, una tras otra; «Imprimir» solo la suya", async () => {
@@ -142,15 +139,6 @@ describe("Entregas del día (B2B)", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Más acciones" })[0]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Imprimir" }));
     await waitFor(() => expect(imprimir).toHaveBeenCalledTimes(1));
-  });
-
-  it("el total por producto vuelve a abrirse al cambiar de día", async () => {
-    render(<DiaPage />);
-    await screen.findByText("Café B");
-    fireEvent.click(screen.getByRole("button", { name: /Total por producto/ })); // lo pliego
-    expect(screen.queryByText("23")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Día siguiente" }));
-    await waitFor(() => expect(screen.getByText("23")).toBeTruthy());
   });
 
   it("botón «Hoy» solo en otro día; sin entregas: mensaje vacío", async () => {

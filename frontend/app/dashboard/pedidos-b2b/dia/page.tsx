@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
+import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconDots, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
+  avanzarPedidoB2b,
   cerrarEntregaPedidoB2b,
   exportPedidosB2bDiaXlsx,
   fetchPedidosB2bDia,
@@ -18,7 +19,7 @@ import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
 import MenuAcciones from "../../_components/MenuAcciones";
-import { PageActions } from "../../_components/PageHeader";
+import BotonExportar from "../../_components/BotonExportar";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
 import DetallePanel from "../detalle-panel";
 
@@ -30,6 +31,18 @@ function sumarDias(fecha: string, dias: number): string {
   const d = new Date(`${fecha}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
+}
+
+// «Hoy · lunes 19 oct», «Mañana · …», «Ayer · …»; otros días solo «miércoles 21 oct».
+function formatFechaSelector(fecha: string, hoy: string): string {
+  const d = new Date(`${fecha}T00:00:00.000Z`);
+  const texto = d
+    .toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })
+    .replace(/\./g, "")
+    .replace(",", "")
+    .replace(" de ", " ");
+  const rel = fecha === hoy ? "Hoy" : fecha === sumarDias(hoy, 1) ? "Mañana" : fecha === sumarDias(hoy, -1) ? "Ayer" : null;
+  return rel ? `${rel} · ${texto}` : texto;
 }
 
 function formatFechaLarga(fecha: string): string {
@@ -60,6 +73,7 @@ const abierta = (e: PedidoB2bEntregaDia) => e.entregaEstado === "PENDIENTE" || e
 
 export default function PedidosB2bDiaPage() {
   const { token, user } = useSession();
+  const esAdmin = user.rol === "GERENTE" || user.rol === "DUENO";
   const movil = useEsMovil();
   const [fecha, setFecha] = useState(() => hoyYYYYMMDD());
   const [entregas, setEntregas] = useState<PedidoB2bEntregaDia[] | null>(null);
@@ -73,8 +87,6 @@ export default function PedidosB2bDiaPage() {
   const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const [cerrarError, setCerrarError] = useState<string | null>(null);
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
-  // Abierta por defecto al entrar y al cambiar de día.
-  const [produccionAbierta, setProduccionAbierta] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,7 +100,6 @@ export default function PedidosB2bDiaPage() {
     setError(null);
     setPrintError(null);
     setDesplegadas(new Set());
-    setProduccionAbierta(true);
     fetchPedidosB2bDia(token, fecha)
       .then((data) => {
         if (!cancelled) setEntregas(data);
@@ -111,24 +122,6 @@ export default function PedidosB2bDiaPage() {
     () => [...vigentes].sort((a, b) => ORDEN_ESTADO[a.entregaEstado] - ORDEN_ESTADO[b.entregaEstado]),
     [vigentes],
   );
-  const entregadas = vigentes.filter((e) => e.entregaEstado === "ENTREGADA").length;
-  const pendientes = vigentes.filter(abierta).length;
-  // El total por producto cuenta también las entregas de pedidos «Por confirmar»; se avisa cuántas piezas son.
-  const piezasSinConfirmar = vigentes.filter(sinConfirmar).reduce((s, e) => s + piezasDe(e), 0);
-
-  // Total por producto: cada producto con su cantidad total sumando todos los clientes; mayor cantidad primero.
-  const produccion = useMemo(() => {
-    const mapa = new Map<string, { nombre: string; cantidad: number }>();
-    for (const e of vigentes) {
-      for (const i of e.items) {
-        const clave = i.productId ?? i.nombreProducto;
-        const fila = mapa.get(clave) ?? { nombre: i.nombreProducto, cantidad: 0 };
-        fila.cantidad += i.cantidad;
-        mapa.set(clave, fila);
-      }
-    }
-    return [...mapa.values()].sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre));
-  }, [vigentes]);
 
   async function handleExport() {
     setExporting(true);
@@ -159,6 +152,20 @@ export default function PedidosB2bDiaPage() {
       await recargar();
     } catch (err) {
       setCerrarError(err instanceof ApiError ? err.message : "No se pudo cerrar la entrega");
+    } finally {
+      setCerrandoId(null);
+    }
+  }
+
+  // Confirmar el pedido desde la fila: mismo endpoint y permisos que el panel del pedido (solo Gerente/Dueño).
+  async function handleConfirmar(entrega: PedidoB2bEntregaDia) {
+    setCerrandoId(entrega.entregaId);
+    setCerrarError(null);
+    try {
+      await avanzarPedidoB2b(token, entrega.id);
+      await recargar();
+    } catch (err) {
+      setCerrarError(err instanceof ApiError ? err.message : "No se pudo confirmar el pedido");
     } finally {
       setCerrandoId(null);
     }
@@ -215,8 +222,8 @@ export default function PedidosB2bDiaPage() {
       truncate: true,
       movil: true,
       render: (e) => (
-        // El nombre siempre se ve (se recorta con «…» solo si de verdad no cabe); el badge va debajo, sin invadir otras columnas.
-        <div className="flex min-w-0 flex-col items-start gap-1">
+        // Una sola línea: el nombre se recorta con «…» solo si de verdad no cabe.
+        <div className="flex min-w-0 flex-col items-start">
           <span className="flex min-w-0 max-w-full items-center gap-2">
             {desplegadas.has(e.id) ? (
               <IconChevronDown size={14} className="shrink-0 text-admin-ink-soft" />
@@ -235,11 +242,6 @@ export default function PedidosB2bDiaPage() {
               {e.negocioNombre}
             </button>
           </span>
-          {sinConfirmar(e) && (
-            <span className="pl-[22px]">
-              <Badge variant="advertencia">{movil ? "Sin confirmar" : "Pedido sin confirmar"}</Badge>
-            </span>
-          )}
         </div>
       ),
     },
@@ -251,9 +253,15 @@ export default function PedidosB2bDiaPage() {
       movil: true,
       render: (e) => (
         <span className="flex items-center gap-1.5 whitespace-nowrap">
-          <Badge variant={ESTADO_ENTREGA_VARIANT[e.entregaEstado]} ancho="entrega">
-            {ESTADO_ENTREGA_LABEL[e.entregaEstado]}
-          </Badge>
+          {sinConfirmar(e) ? (
+            <Badge variant="advertencia" ancho="entrega">
+              Sin confirmar
+            </Badge>
+          ) : (
+            <Badge variant={ESTADO_ENTREGA_VARIANT[e.entregaEstado]} ancho="entrega">
+              {ESTADO_ENTREGA_LABEL[e.entregaEstado]}
+            </Badge>
+          )}
           {e.atrasada && <Badge variant="advertencia">Atrasada</Badge>}
         </span>
       ),
@@ -267,6 +275,11 @@ export default function PedidosB2bDiaPage() {
       render: (e) => (
         // Una sola línea: «Entregada» a la vista y el resto en el menú «⋯». Los botones no despliegan la fila.
         <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
+          {!movil && esAdmin && sinConfirmar(e) && (
+            <Button variant="secondary" size="sm" onClick={() => handleConfirmar(e)} disabled={cerrandoId !== null}>
+              {cerrandoId === e.entregaId ? "Guardando..." : "Confirmar pedido"}
+            </Button>
+          )}
           {!movil && puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e) && (
             <Button
               variant="secondary"
@@ -282,6 +295,9 @@ export default function PedidosB2bDiaPage() {
           <MenuAcciones
             acciones={[
               // En el teléfono «Entregada» también va en el menú «⋯» (la tabla muestra solo Negocio, Estado y el menú).
+              ...(movil && esAdmin && sinConfirmar(e)
+                ? [{ label: "Confirmar pedido", icon: <IconCheck size={14} />, onClick: () => handleConfirmar(e), disabled: cerrandoId !== null }]
+                : []),
               ...(movil && puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e)
                 ? [{ label: "Entregada", icon: <IconCheck size={14} />, onClick: () => handleCerrar(e, "ENTREGADA"), disabled: cerrandoId !== null }]
                 : []),
@@ -303,46 +319,46 @@ export default function PedidosB2bDiaPage() {
 
   const hoy = hoyYYYYMMDD();
   const sinEntregas = entregas !== null && vigentes.length === 0;
+  const accionImprimirTodo = imprimiendoTodo ? `Imprimiendo ${imprimiendoTodo.hechas}/${imprimiendoTodo.total}...` : "Imprimir todo";
+  const sinImprimir = sinEntregas || entregas === null || vigentes.length === 0 || imprimiendoTodo !== null || !webUsbSupported;
 
   return (
     <div className="flex flex-col gap-3">
-      <PageActions
-        acciones={[
-          {
-            key: "imprimir",
-            label: imprimiendoTodo ? `Imprimiendo ${imprimiendoTodo.hechas}/${imprimiendoTodo.total}...` : "Imprimir todo",
-            icon: <IconPrinter size={16} />,
-            onClick: handleImprimirTodo,
-            disabled: sinEntregas || entregas === null || vigentes.length === 0 || imprimiendoTodo !== null || !webUsbSupported,
-          },
-          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !entregas || entregas.length === 0, cargando: exporting },
-        ]}
-      />
-
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex w-full items-center gap-3 md:w-auto">
-            <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, -1))} aria-label="Día anterior">
-              <IconChevronLeft size={14} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex w-full items-center gap-3 md:w-auto">
+          <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, -1))} aria-label="Día anterior">
+            <IconChevronLeft size={14} />
+          </Button>
+          <span className="min-w-0 flex-1 text-center text-base font-bold first-letter:uppercase text-admin-ink md:min-w-[220px] md:flex-none">
+            {formatFechaSelector(fecha, hoy)}
+          </span>
+          <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, 1))} aria-label="Día siguiente">
+            <IconChevronRight size={14} />
+          </Button>
+          {fecha !== hoy && (
+            <Button variant="secondary" size="sm" onClick={() => setFecha(hoy)}>
+              Hoy
             </Button>
-            <span className="min-w-0 flex-1 text-center text-base font-bold text-admin-ink md:min-w-[220px] md:flex-none">{formatFechaLarga(fecha)}</span>
-            <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, 1))} aria-label="Día siguiente">
-              <IconChevronRight size={14} />
-            </Button>
-            {fecha !== hoy && (
-              <Button variant="secondary" size="sm" onClick={() => setFecha(hoy)}>
-                Hoy
-              </Button>
-            )}
-          </div>
-
+          )}
+          {movil && (
+            <MenuAcciones
+              label="Más acciones"
+              icono={<IconDots size={20} />}
+              acciones={[
+                { label: accionImprimirTodo, icon: <IconPrinter size={14} />, onClick: handleImprimirTodo, disabled: sinImprimir },
+                { label: "Exportar Excel", icon: <IconDownload size={14} />, onClick: handleExport, disabled: !entregas || entregas.length === 0 || exporting },
+              ]}
+            />
+          )}
         </div>
-
-        {entregas !== null && vigentes.length > 0 && (
-          <p className="text-sm text-admin-ink-soft">
-            {vigentes.length} {vigentes.length === 1 ? "entrega" : "entregas"} · {entregadas} {entregadas === 1 ? "entregada" : "entregadas"} ·{" "}
-            {pendientes} {pendientes === 1 ? "pendiente" : "pendientes"}
-          </p>
+        {!movil && (
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" className="inline-flex items-center gap-1.5" onClick={handleImprimirTodo} disabled={sinImprimir}>
+              <IconPrinter size={16} />
+              {accionImprimirTodo}
+            </Button>
+            <BotonExportar label="Exportar Excel" onClick={handleExport} disabled={!entregas || entregas.length === 0} cargando={exporting} />
+          </div>
         )}
       </div>
 
@@ -364,36 +380,6 @@ export default function PedidosB2bDiaPage() {
         </Card>
       ) : (
         <>
-          <Card padding={0}>
-            <button
-              type="button"
-              onClick={() => setProduccionAbierta((v) => !v)}
-              aria-expanded={produccionAbierta}
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-admin-ink"
-            >
-              {produccionAbierta ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-              Total por producto
-              <span className="font-normal text-admin-ink-soft">
-                · {produccion.length} {produccion.length === 1 ? "producto" : "productos"}
-              </span>
-            </button>
-            {produccionAbierta && piezasSinConfirmar > 0 && (
-              <p className="-mt-1 px-4 pb-2 pl-10 text-xs text-admin-ink-soft">
-                Incluye {piezasSinConfirmar} {piezasSinConfirmar === 1 ? "pieza" : "piezas"} de pedidos sin confirmar
-              </p>
-            )}
-            {produccionAbierta && (
-              <ul className="flex flex-col border-t border-admin-border px-4 py-2 text-sm text-admin-ink">
-                {produccion.map((p) => (
-                  <li key={p.nombre} className="flex items-center justify-between gap-4 py-1">
-                    <span>{p.nombre}</span>
-                    <span className="font-bold tabular-nums">{p.cantidad}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
           <Table
             columns={columnas}
             data={ordenadas}
