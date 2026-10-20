@@ -9,8 +9,6 @@ import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
 import BarraBusqueda from "../_components/BarraFiltros";
 import { FiltroSelectPopover } from "../_components/FiltroSelect";
-import { IconPlus } from "@tabler/icons-react";
-import { PageActions } from "../_components/PageHeader";
 import ClienteB2bAltaModal from "./cliente-b2b-form";
 import ClienteB2bPanel from "./cliente-b2b-panel";
 
@@ -78,12 +76,11 @@ export default function ClientesB2b() {
 
   return (
     <div className="flex flex-col gap-3">
-      <PageActions acciones={[{ key: "nuevo", label: "Nuevo cliente", icon: <IconPlus size={16} />, tipo: "crear", onClick: () => setAltaAbierta(true) }]} />
-
       {/* Orden fijo: alfabético por nombre (un directorio de clientes dados de alta; no hay una fecha que ordenar). */}
       <BarraBusqueda
         placeholder="Buscar por nombre, código o teléfono…"
         onBuscar={setQ}
+        crear={{ label: "Nuevo cliente", onClick: () => setAltaAbierta(true) }}
         filtros={[
           {
             key: "estado",

@@ -18,13 +18,11 @@ import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
-import { IconDownload, IconPlus } from "@tabler/icons-react";
-import { useEsMovil } from "@/lib/use-es-movil";
+import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../_components/FiltroSelect";
 import { FiltroTextoPopover } from "../_components/FiltroTexto";
-import { PageActions } from "../_components/PageHeader";
 import Aviso from "../_components/Aviso";
-import SelectorPeriodo from "../_components/SelectorPeriodo";
+import SelectorPeriodo, { accionPeriodo } from "../_components/SelectorPeriodo";
 import { lunesDe } from "../_components/Calendario";
 import { hoyYYYYMMDD } from "@/lib/fecha";
 import BarraBusqueda from "../_components/BarraFiltros";
@@ -122,7 +120,6 @@ export default function PedidosB2bPage() {
   const [fEstado, setFEstado] = useState<PedidoB2bEstado | null>(null);
   const [fPago, setFPago] = useState<PedidoB2bEstadoPago | null>(null);
   const [fNegocio, setFNegocio] = useState<string | null>(null);
-  const movil = useEsMovil();
   // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("pedido"),
@@ -220,6 +217,8 @@ export default function PedidosB2bPage() {
       (p) => (!fEstado || p.estado === fEstado) && (!fPago || p.estadoPago === fPago) && (!q || p.negocioNombre.toLowerCase().includes(q)),
     );
   }, [pedidos, fEstado, fPago, fNegocio]);
+  const cambiarSemana = (v: string) => setSemanaKey(semanas && v >= semanas.siguiente.inicio.slice(0, 10) ? "siguiente" : "actual");
+  const accionActual = accionPeriodo("semana", semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD()), cambiarSemana, !semanas);
   const hayFiltros = !!(fEstado || fPago || fNegocio);
 
   async function handleExport() {
@@ -257,35 +256,25 @@ export default function PedidosB2bPage() {
         </Aviso>
       )}
 
-      {/* En teléfono: «+» y «⋯» (con exportar) en el título; en computadora esas acciones viven en la fila de controles. */}
-      {movil && (
-        <PageActions
-          acciones={[
-            { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !pedidos, cargando: exporting },
-            { key: "nuevo", label: "Nuevo pedido", icon: <IconPlus size={16} />, tipo: "crear", onClick: () => setNuevoAbierto(true), disabled: !semanas },
-          ]}
-        />
-      )}
-
       <BarraBusqueda
-        izquierda={
+        izquierda={({ corto }) => (
           <SelectorPeriodo
             modo="semana"
+            corto={corto}
             valor={semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD())}
             deshabilitado={!semanas}
             // La navegación es solo entre la semana en curso y la próxima; las anteriores están en el aviso de arriba.
             min={semanas?.actual.inicio.slice(0, 10)}
             max={semanas?.siguiente.inicio.slice(0, 10)}
             tooltipMin="Las semanas anteriores están en el aviso de arriba"
-            onChange={(v) => setSemanaKey(semanas && v >= semanas.siguiente.inicio.slice(0, 10) ? "siguiente" : "actual")}
+            onChange={cambiarSemana}
           />
-        }
-        exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !pedidos, cargando: exporting }}
-        derecha={
-          <Button variant="primary" size="barra" onClick={() => setNuevoAbierto(true)} disabled={!semanas}>
-            Nuevo pedido
-          </Button>
-        }
+        )}
+        acciones={[
+          ...(accionActual ? [accionActual] : []),
+          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !pedidos, cargando: exporting },
+        ]}
+        crear={{ label: "Nuevo pedido", onClick: () => setNuevoAbierto(true), disabled: !semanas }}
         filtros={[
           {
             key: "estado",

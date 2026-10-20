@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { IconCheck, IconChevronDown, IconChevronRight, IconDots, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
+import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -19,8 +19,8 @@ import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
 import MenuAcciones from "../../_components/MenuAcciones";
-import SelectorPeriodo from "../../_components/SelectorPeriodo";
-import BotonExportar from "../../_components/BotonExportar";
+import BarraBusqueda from "../../_components/BarraFiltros";
+import SelectorPeriodo, { accionPeriodo } from "../../_components/SelectorPeriodo";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
 import DetallePanel from "../detalle-panel";
 
@@ -296,37 +296,21 @@ export default function PedidosB2bDiaPage() {
     },
   ];
 
+  const accionHoy = accionPeriodo("dia", fecha, setFecha);
   const sinEntregas = entregas !== null && vigentes.length === 0;
   const accionImprimirTodo = imprimiendoTodo ? `Imprimiendo ${imprimiendoTodo.hechas}/${imprimiendoTodo.total}...` : "Imprimir todo";
   const sinImprimir = sinEntregas || entregas === null || vigentes.length === 0 || imprimiendoTodo !== null || !webUsbSupported;
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full items-center gap-2 md:w-auto">
-          <SelectorPeriodo modo="dia" valor={fecha} onChange={setFecha} />
-          {movil && (
-            <MenuAcciones
-              label="Más acciones"
-              tamano="barra"
-              icono={<IconDots size={20} />}
-              acciones={[
-                { label: accionImprimirTodo, icon: <IconPrinter size={14} />, onClick: handleImprimirTodo, disabled: sinImprimir },
-                { label: "Exportar Excel", icon: <IconDownload size={14} />, onClick: handleExport, disabled: !entregas || entregas.length === 0 || exporting },
-              ]}
-            />
-          )}
-        </div>
-        {!movil && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="barra" onClick={handleImprimirTodo} disabled={sinImprimir}>
-              <IconPrinter size={16} />
-              {accionImprimirTodo}
-            </Button>
-            <BotonExportar grande label="Exportar Excel" onClick={handleExport} disabled={!entregas || entregas.length === 0} cargando={exporting} />
-          </div>
-        )}
-      </div>
+      <BarraBusqueda
+        izquierda={({ corto }) => <SelectorPeriodo modo="dia" corto={corto} valor={fecha} onChange={setFecha} />}
+        acciones={[
+          ...(accionHoy ? [accionHoy] : []),
+          { key: "imprimir", label: accionImprimirTodo, icon: <IconPrinter size={16} />, onClick: handleImprimirTodo, disabled: sinImprimir },
+          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !entregas || entregas.length === 0, cargando: exporting },
+        ]}
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}

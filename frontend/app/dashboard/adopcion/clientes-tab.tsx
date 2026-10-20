@@ -3,19 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ApiError, fetchAdopcionClientes, type AdopcionClientes, type AdopcionOrigen } from "@/lib/api";
-import { rangoSemanaTexto } from "@/lib/pedido-b2b-fechas";
 import Badge from "../_components/Badge";
-import Button from "../_components/Button";
 import Card from "../_components/Card";
 import SummaryCard, { SUMMARY_GRID } from "../_components/SummaryCard";
 import Table, { type TableColumn } from "../_components/Table";
 import BarraBusqueda from "../_components/BarraFiltros";
+import SelectorPeriodo, { accionPeriodo } from "../_components/SelectorPeriodo";
 import {
   ESTADO_LABEL,
   ESTADO_VARIANT,
   ETAPA_LABEL,
   ETAPA_VARIANT,
-  desplazarSemana,
   filtrarClientes,
   formatoFecha,
   formatoFechaHora,
@@ -59,6 +57,7 @@ export default function ClientesTab({ token }: { token: string }) {
   if (!data) return <p className="text-sm text-admin-ink-soft">Cargando...</p>;
 
   const { semana: sem, resumen, avisos } = data;
+  const accionSemana = accionPeriodo("semana", sem.inicio, (v) => setSemana(v));
   const columnas: TableColumn<Fila>[] = [
     {
       key: "cliente",
@@ -105,21 +104,13 @@ export default function ClientesTab({ token }: { token: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="barra" onClick={() => setSemana(desplazarSemana(sem.inicio, -1))} aria-label="Semana anterior">
-          ←
-        </Button>
-        <span className="min-w-[14rem] text-center text-sm font-semibold capitalize">{rangoSemanaTexto(sem.inicio, sem.fin)}</span>
-        <Button variant="secondary" size="barra" onClick={() => setSemana(desplazarSemana(sem.inicio, 1))} aria-label="Semana siguiente">
-          →
-        </Button>
-        <Button variant={sem.esActual ? "primary" : "secondary"} size="barra" onClick={() => setSemana(sem.enCurso)}>
-          Esta semana
-        </Button>
-        <Button variant={sem.esProxima ? "primary" : "secondary"} size="barra" onClick={() => setSemana(undefined)}>
-          Próxima
-        </Button>
-      </div>
+      {/* Una sola fila: selector de semana + buscador (la tabla de abajo se filtra con él). «Próxima» ya es la flecha derecha. */}
+      <BarraBusqueda
+        placeholder="Buscar por nombre…"
+        onBuscar={setBusqueda}
+        izquierda={({ corto }) => <SelectorPeriodo modo="semana" corto={corto} valor={sem.inicio} onChange={(v) => setSemana(v)} />}
+        acciones={accionSemana ? [accionSemana] : []}
+      />
 
       <div className={SUMMARY_GRID}>
         <SummaryCard label="Clientes que pidieron" value={resumen.pidieron} error={null} />
@@ -134,7 +125,6 @@ export default function ClientesTab({ token }: { token: string }) {
       </p>
 
       {/* Orden fijo: primero los habituales que no han pedido y los pedidos sin confirmar (lo que requiere acción); sin «Ordenar por». */}
-      <BarraBusqueda placeholder="Buscar por nombre…" onBuscar={setBusqueda} />
 
       {filas.length === 0 ? (
         <Card>

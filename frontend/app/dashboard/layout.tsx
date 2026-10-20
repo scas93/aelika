@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { SessionProvider, useSession } from "@/lib/session-context";
 import DashboardNav from "./nav";
-import { PageHeader, PageHeaderProvider } from "./_components/PageHeader";
+import { PageHeader } from "./_components/PageHeader";
 
 // Teléfono (< 768 px): la barra lateral se oculta y arriba queda una barra fija con ☰ y el nombre del negocio; ☰ abre el menú
 // completo encima del contenido.
@@ -29,7 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <SessionProvider>
-      <PageHeaderProvider>
+
         <div className="flex min-h-screen w-full bg-admin-bg font-admin">
           <DashboardNav open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           {/* min-w-0: sin él, el contenido más ancho (p. ej. una tabla) agranda esta columna más allá de la pantalla y la página gana scroll horizontal. */}
@@ -41,7 +41,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </main>
           </div>
         </div>
-      </PageHeaderProvider>
+
     </SessionProvider>
   );
 }

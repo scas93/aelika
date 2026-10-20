@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { hoyYYYYMMDD } from "@/lib/fecha";
-import Button from "./Button";
 import Calendario, { lunesDe } from "./Calendario";
 import Popover from "./Popover";
 
@@ -45,6 +44,21 @@ export function etiquetaSemana(lunes: string, hoy: string): string {
   return `Semana del ${rango}`;
 }
 
+// Etiqueta corta para cuando el espacio es poco: sin «Hoy/Esta semana…» en semanas y sin el día de la semana en días.
+export function etiquetaDiaCorta(valor: string, hoy: string): string {
+  const texto = `${dia(valor)} ${mes(valor)}`;
+  const rel = valor === hoy ? "Hoy" : valor === sumarDias(hoy, 1) ? "Mañana" : valor === sumarDias(hoy, -1) ? "Ayer" : null;
+  return rel ? `${rel} · ${texto}` : texto;
+}
+
+/** Acción «Hoy» / «Esta semana» para la barra de controles: solo existe cuando no estás en el periodo actual. */
+export function accionPeriodo(modo: "dia" | "semana", valor: string, onChange: (v: string) => void, deshabilitado = false) {
+  const hoy = hoyYYYYMMDD();
+  const actual = modo === "semana" ? lunesDe(hoy) : hoy;
+  if (valor === actual) return null;
+  return { key: "periodo-actual", label: modo === "semana" ? "Esta semana" : "Hoy", tipo: "periodo" as const, onClick: () => onChange(actual), disabled: deshabilitado };
+}
+
 export default function SelectorPeriodo({
   modo,
   valor,
@@ -54,6 +68,7 @@ export default function SelectorPeriodo({
   tooltipMin,
   tooltipMax,
   deshabilitado = false,
+  corto = false,
 }: {
   modo: "dia" | "semana";
   valor: string;
@@ -63,12 +78,16 @@ export default function SelectorPeriodo({
   tooltipMin?: string;
   tooltipMax?: string;
   deshabilitado?: boolean;
+  /** Etiqueta acortada (poco espacio): «19–25 oct», «Hoy · 19 oct». */
+  corto?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const hoy = hoyYYYYMMDD();
   const paso = modo === "semana" ? 7 : 1;
-  const actual = modo === "semana" ? lunesDe(hoy) : hoy;
-  const etiqueta = modo === "semana" ? etiquetaSemana(valor, hoy) : etiquetaDia(valor, hoy);
+  const etiquetaLarga = modo === "semana" ? etiquetaSemana(valor, hoy) : etiquetaDia(valor, hoy);
+  const etiqueta = !corto ? etiquetaLarga : modo === "semana" ? rangoSemana(valor) : etiquetaDiaCorta(valor, hoy);
+  // Ancho fijo (en ch, del texto más largo posible de cada variante): las flechas no se mueven y la etiqueta queda centrada.
+  const ancho = modo === "semana" ? (corto ? 15 : 32) : corto ? 18 : 22;
   const anterior = sumarDias(valor, -paso);
   const siguiente = sumarDias(valor, paso);
   const sinAnterior = deshabilitado || (min !== undefined && anterior < min);
@@ -77,8 +96,7 @@ export default function SelectorPeriodo({
   const flecha = "inline-flex h-full w-barra shrink-0 items-center justify-center text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
-    <div className="flex min-w-0 items-center gap-2 max-md:w-full">
-      <div className="flex h-barra items-stretch overflow-hidden rounded-[var(--radius-admin-control)] border border-admin-border bg-white max-md:min-w-0 max-md:flex-1">
+    <div className="flex h-barra shrink-0 items-stretch overflow-hidden rounded-[var(--radius-admin-control)] border border-admin-border bg-white">
         <span title={sinAnterior ? tooltipMin : undefined} className="flex">
           <button type="button" className={flecha} onClick={() => onChange(anterior)} disabled={sinAnterior} aria-label={modo === "semana" ? "Semana anterior" : "Día anterior"}>
             <IconChevronLeft size={18} />
@@ -94,7 +112,8 @@ export default function SelectorPeriodo({
               aria-haspopup="dialog"
               aria-expanded={abierto}
               aria-label="Elegir periodo"
-              className={`h-full truncate border-x border-admin-border px-2 text-center text-sm font-bold text-admin-ink hover:bg-admin-bg max-md:w-full ${modo === "semana" ? "md:w-60" : "md:w-48"}`}
+              style={{ width: `${ancho}ch` }}
+              className="h-full truncate border-x border-admin-border px-2 text-center text-sm font-bold text-admin-ink hover:bg-admin-bg"
             >
               {etiqueta}
             </button>
@@ -118,11 +137,5 @@ export default function SelectorPeriodo({
           </button>
         </span>
       </div>
-      {valor !== actual && (
-        <Button variant="secondary" size="barra" className="shrink-0" onClick={() => onChange(actual)} disabled={deshabilitado}>
-          {modo === "semana" ? "Esta semana" : "Hoy"}
-        </Button>
-      )}
-    </div>
   );
 }

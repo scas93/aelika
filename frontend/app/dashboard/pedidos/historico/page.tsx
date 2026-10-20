@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PageActions } from "../../_components/PageHeader";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -197,11 +196,9 @@ export default function PedidosHistoricoPage() {
     <div className="flex flex-col gap-3">
       <Tabs items={[{ key: "historial", label: "Historial" }]} active="historial" onChange={() => {}} />
 
-      <PageActions acciones={[{ key: "exportar", label: "Exportar CSV", icon: <IconDownload size={16} />, tipo: "exportar", onClick: () => setExportOpen(true) }]} />
-
       {/* Sin buscador (el listado no tiene búsqueda por texto): solo «Filtros». Orden fijo: el pedido más reciente primero. */}
       <BarraBusqueda
-        exportar={{ label: "Exportar CSV", onClick: () => setExportOpen(true) }}
+        acciones={[{ key: "exportar", label: "Exportar CSV", icon: <IconDownload size={16} />, tipo: "exportar", onClick: () => setExportOpen(true) }]}
         filtros={[
           {
             key: "estado",

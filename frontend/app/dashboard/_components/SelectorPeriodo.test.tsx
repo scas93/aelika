@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { etiquetaDia, etiquetaSemana } from "./SelectorPeriodo";
+import { accionPeriodo, etiquetaDia, etiquetaDiaCorta, etiquetaSemana } from "./SelectorPeriodo";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/x" }));
 vi.mock("@/lib/fecha", () => ({ hoyYYYYMMDD: () => "2026-10-19" }));
@@ -23,8 +23,27 @@ describe("etiquetas", () => {
   });
 });
 
+describe("etiquetas cortas y acción Hoy/Esta semana", () => {
+  it("día corto", () => {
+    expect(etiquetaDiaCorta("2026-10-19", "2026-10-19")).toBe("Hoy · 19 oct");
+    expect(etiquetaDiaCorta("2026-10-21", "2026-10-19")).toBe("21 oct");
+  });
+  it("accionPeriodo solo fuera del periodo actual", () => {
+    const f = vi.fn();
+    expect(accionPeriodo("dia", "2026-10-19", f)).toBeNull();
+    expect(accionPeriodo("semana", "2026-10-19", f)).toBeNull();
+    accionPeriodo("dia", "2026-10-21", f)!.onClick();
+    expect(f).toHaveBeenLastCalledWith("2026-10-19");
+    expect(accionPeriodo("semana", "2026-10-26", f)!.label).toBe("Esta semana");
+  });
+  it("modo semana corto muestra solo el rango", () => {
+    render(<SelectorPeriodo modo="semana" corto valor="2026-10-19" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Elegir periodo" }).textContent).toBe("19–25 oct");
+  });
+});
+
 describe("SelectorPeriodo", () => {
-  it("modo semana: flecha izquierda sin destino desactivada con tooltip; «Esta semana» solo fuera de la actual", () => {
+  it("modo semana: flecha izquierda sin destino desactivada con tooltip", () => {
     const onChange = vi.fn();
     const { rerender } = render(
       <SelectorPeriodo modo="semana" valor="2026-10-19" onChange={onChange} min="2026-10-19" max="2026-10-26" tooltipMin="Las semanas anteriores están en el aviso de arriba" />,
@@ -32,23 +51,18 @@ describe("SelectorPeriodo", () => {
     const izq = screen.getByRole("button", { name: "Semana anterior" });
     expect((izq as HTMLButtonElement).disabled).toBe(true);
     expect(izq.parentElement?.getAttribute("title")).toBe("Las semanas anteriores están en el aviso de arriba");
-    expect(screen.queryByRole("button", { name: "Esta semana" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Semana siguiente" }));
     expect(onChange).toHaveBeenCalledWith("2026-10-26");
     rerender(<SelectorPeriodo modo="semana" valor="2026-10-26" onChange={onChange} min="2026-10-19" max="2026-10-26" />);
     expect((screen.getByRole("button", { name: "Semana siguiente" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Esta semana" }));
-    expect(onChange).toHaveBeenLastCalledWith("2026-10-19");
   });
 
-  it("modo día: el calendario elige un día con un clic; «Hoy» fuera de hoy", () => {
+  it("modo día: el calendario elige un día con un clic", () => {
     const onChange = vi.fn();
     render(<SelectorPeriodo modo="dia" valor="2026-10-21" onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "Elegir periodo" }));
     fireEvent.click(screen.getByRole("button", { name: "2026-10-23" }));
     expect(onChange).toHaveBeenCalledWith("2026-10-23");
-    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
-    expect(onChange).toHaveBeenLastCalledWith("2026-10-19");
   });
 
   it("modo semana: al elegir un día se toma el lunes de su semana", () => {

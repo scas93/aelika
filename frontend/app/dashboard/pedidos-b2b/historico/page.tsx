@@ -25,7 +25,6 @@ import {
 import Card from "../../_components/Card";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
-import { PageActions } from "../../_components/PageHeader";
 import BarraBusqueda from "../../_components/BarraFiltros";
 import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../../_components/FiltroSelect";
@@ -163,16 +162,10 @@ export default function PedidosB2bHistoricoPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <PageActions
-        acciones={[
-          { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !result || result.total === 0, cargando: exporting },
-        ]}
-      />
-
       {/* Una sola barra: buscador + «Filtros» (Estado, Pago, Semana, Total). Los filtros aplican al elegir. */}
       <BarraBusqueda
         placeholder="Buscar negocio…"
-        exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !result || result.total === 0, cargando: exporting }}
+        acciones={[{ key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !result || result.total === 0, cargando: exporting }]}
         onBuscar={(texto) => setNegocioNombre(texto || null)}
         filtros={[
           {
