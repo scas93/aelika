@@ -212,7 +212,12 @@ export class PedidosB2bService {
     const [data, total] = await Promise.all([
       this.tenantPrisma.client.order.findMany({
         where,
-        orderBy: { detalleB2b: { semanaInicio: 'desc' } },
+        // Semana más reciente primero; dentro de la misma semana, el pedido más nuevo primero (id desempata: paginación estable).
+        orderBy: [
+          { detalleB2b: { semanaInicio: 'desc' } },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
         skip,
         take: query.limit,
         select: REPORTABLE_SELECT,

@@ -191,4 +191,20 @@ describe('Clientes B2B · historial de pedidos y entregas', () => {
       expect((await entregas(c.id, p.id, apiOtro)).status).toBe(404);
     });
   });
+
+  describe('GET /pedidos-b2b: orden del listado (Históricos y Pedidos activos)', () => {
+    it('semana más reciente primero; dentro de la misma semana, el pedido más nuevo primero', async () => {
+      const a = await alta('Café A', 'a');
+      const b = await alta('Café B', 'b');
+      const c = await alta('Café C', 'c');
+      jest.setSystemTime(new Date('2026-09-30T16:00:00.000Z'));
+      const viejoSemana1 = await pedir(a.id, SEMANA_PROXIMA);
+      jest.setSystemTime(new Date('2026-09-30T17:00:00.000Z'));
+      const nuevoSemana1 = await pedir(b.id, SEMANA_PROXIMA);
+      jest.setSystemTime(new Date('2026-09-30T15:00:00.000Z')); // creado ANTES, pero de una semana posterior
+      const semana2 = await pedir(c.id, SEMANA_SIGUIENTE);
+      const r = (await admin().get('/pedidos-b2b?limit=10').expect(200)).body;
+      expect(r.data.map((p: any) => p.id)).toStrictEqual([semana2.id, nuevoSemana1.id, viejoSemana1.id]);
+    });
+  });
 });
