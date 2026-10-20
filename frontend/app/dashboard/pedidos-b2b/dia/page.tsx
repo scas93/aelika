@@ -5,7 +5,6 @@ import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, 
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
-  avanzarPedidoB2b,
   cerrarEntregaPedidoB2b,
   exportPedidosB2bDiaXlsx,
   fetchPedidosB2bDia,
@@ -53,7 +52,6 @@ const abierta = (e: PedidoB2bEntregaDia) => e.entregaEstado === "PENDIENTE" || e
 
 export default function PedidosB2bDiaPage() {
   const { token, user } = useSession();
-  const esAdmin = user.rol === "GERENTE" || user.rol === "DUENO";
   const movil = useEsMovil();
   const [fecha, setFecha] = useState(() => hoyYYYYMMDD());
   const [entregas, setEntregas] = useState<PedidoB2bEntregaDia[] | null>(null);
@@ -132,20 +130,6 @@ export default function PedidosB2bDiaPage() {
       await recargar();
     } catch (err) {
       setCerrarError(err instanceof ApiError ? err.message : "No se pudo cerrar la entrega");
-    } finally {
-      setCerrandoId(null);
-    }
-  }
-
-  // Confirmar el pedido desde la fila: mismo endpoint y permisos que el panel del pedido (solo Gerente/Dueño).
-  async function handleConfirmar(entrega: PedidoB2bEntregaDia) {
-    setCerrandoId(entrega.entregaId);
-    setCerrarError(null);
-    try {
-      await avanzarPedidoB2b(token, entrega.id);
-      await recargar();
-    } catch (err) {
-      setCerrarError(err instanceof ApiError ? err.message : "No se pudo confirmar el pedido");
     } finally {
       setCerrandoId(null);
     }
@@ -253,44 +237,50 @@ export default function PedidosB2bDiaPage() {
       compact: true,
       movil: true,
       render: (e) => (
-        // Una sola línea: «Entregada» a la vista y el resto en el menú «⋯». Los botones no despliegan la fila.
+        // Computadora, siempre en este orden y con Imprimir al final (alineado en todas las filas): [Entregada] [No recogida] [Imprimir].
+        // Solo las entregas abiertas de un pedido confirmado se cierran; las demás solo imprimen. En teléfono, todo va en el menú «⋯».
         <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={(ev) => ev.stopPropagation()}>
-          {!movil && esAdmin && sinConfirmar(e) && (
-            <Button variant="secondary" size="tabla" onClick={() => handleConfirmar(e)} disabled={cerrandoId !== null}>
-              {cerrandoId === e.entregaId ? "Guardando..." : "Confirmar pedido"}
-            </Button>
-          )}
           {!movil && puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e) && (
-            <Button
-              variant="secondary"
-              size="tabla"
-              onClick={() => handleCerrar(e, "ENTREGADA")}
-              disabled={cerrandoId !== null}
-            >
-              <IconCheck size={14} className="shrink-0" />
-              {cerrandoId === e.entregaId ? "Guardando..." : "Entregada"}
-            </Button>
+            <span className="flex items-center gap-1">
+              <Button variant="secondary" size="tabla" onClick={() => handleCerrar(e, "ENTREGADA")} disabled={cerrandoId !== null}>
+                <IconCheck size={14} className="shrink-0" />
+                {cerrandoId === e.entregaId ? "Guardando..." : "Entregada"}
+              </Button>
+              <Button variant="secondary" size="tabla" onClick={() => handleCerrar(e, "NO_RECOGIDA")} disabled={cerrandoId !== null}>
+                <IconX size={14} className="shrink-0" />
+                No recogida
+              </Button>
+            </span>
           )}
-          <MenuAcciones
-            acciones={[
-              // En el teléfono «Entregada» también va en el menú «⋯» (la tabla muestra solo Negocio, Estado y el menú).
-              ...(movil && esAdmin && sinConfirmar(e)
-                ? [{ label: "Confirmar pedido", icon: <IconCheck size={14} />, onClick: () => handleConfirmar(e), disabled: cerrandoId !== null }]
-                : []),
-              ...(movil && puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e)
-                ? [{ label: "Entregada", icon: <IconCheck size={14} />, onClick: () => handleCerrar(e, "ENTREGADA"), disabled: cerrandoId !== null }]
-                : []),
-              ...(puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e)
-                ? [{ label: "No recogida", icon: <IconX size={14} />, onClick: () => handleCerrar(e, "NO_RECOGIDA"), disabled: cerrandoId !== null }]
-                : []),
-              {
-                label: printingId === e.id ? "Imprimiendo..." : "Imprimir",
-                icon: <IconPrinter size={14} />,
-                onClick: () => handleImprimir(e),
-                disabled: printingId === e.id || imprimiendoTodo !== null || !webUsbSupported,
-              },
-            ]}
-          />
+          {!movil ? (
+            <button
+              type="button"
+              title="Imprimir"
+              aria-label="Imprimir"
+              onClick={() => handleImprimir(e)}
+              disabled={printingId === e.id || imprimiendoTodo !== null || !webUsbSupported}
+              className="inline-flex h-tabla w-tabla shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <IconPrinter size={16} className={printingId === e.id ? "animate-pulse" : ""} />
+            </button>
+          ) : (
+            <MenuAcciones
+              acciones={[
+                ...(puedeCerrarEntregas(e.estado, e.cancelado) && abierta(e)
+                  ? [
+                      { label: "Entregada", icon: <IconCheck size={14} />, onClick: () => handleCerrar(e, "ENTREGADA"), disabled: cerrandoId !== null },
+                      { label: "No recogida", icon: <IconX size={14} />, onClick: () => handleCerrar(e, "NO_RECOGIDA"), disabled: cerrandoId !== null },
+                    ]
+                  : []),
+                {
+                  label: printingId === e.id ? "Imprimiendo..." : "Imprimir",
+                  icon: <IconPrinter size={14} />,
+                  onClick: () => handleImprimir(e),
+                  disabled: printingId === e.id || imprimiendoTodo !== null || !webUsbSupported,
+                },
+              ]}
+            />
+          )}
         </div>
       ),
     },
@@ -335,17 +325,24 @@ export default function PedidosB2bDiaPage() {
             data={ordenadas}
             rowKey={(e) => e.id}
             onRowClick={(e) => alternar(e.id)}
-            expandedRow={(e) =>
-              desplegadas.has(e.id) ? (
-                <ul className="flex flex-col gap-1">
-                  {e.items.map((item, i) => (
-                    <li key={`${item.productId}-${i}`} className="flex items-baseline gap-3 text-sm text-admin-ink">
-                      <span className="w-10 text-right font-bold tabular-nums">{item.cantidad}</span>
-                      <span>{item.nombreProducto}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null
+            subFilas={(e) =>
+              desplegadas.has(e.id)
+                ? [...e.items]
+                    .sort((a, b) => a.nombreProducto.localeCompare(b.nombreProducto, "es"))
+                    .map((item, i) => ({
+                      key: `${e.id}-${item.productId ?? item.nombreProducto}-${i}`,
+                      celdas: {
+                        // Nombre con sangría bajo «Negocio»; en teléfono (sin columna Piezas) la cantidad va al final de la misma línea.
+                        negocio: (
+                          <span className="flex items-baseline justify-between gap-3 pl-[22px]">
+                            <span className="truncate">{item.nombreProducto}</span>
+                            <span className="tabular-nums md:hidden">{item.cantidad}</span>
+                          </span>
+                        ),
+                        piezas: <span className="tabular-nums">{item.cantidad}</span>,
+                      },
+                    }))
+                : []
             }
           />
         </>

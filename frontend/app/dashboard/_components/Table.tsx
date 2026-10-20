@@ -48,6 +48,8 @@ interface TableProps<T> {
   // cursor — hoy solo pedidos-b2b/historico pasa esto.
   onRowClick?: (row: T) => void;
   // Fila desplegable: si devuelve contenido, se pinta bajo la fila en una celda que abarca todas las columnas (null = fila plegada).
+  /** Líneas extra bajo la fila, con las MISMAS columnas: `celdas` por clave de columna (las demás quedan vacías). */
+  subFilas?: (row: T) => { key: string; celdas: Record<string, ReactNode> }[];
   expandedRow?: (row: T) => ReactNode | null;
   // Paginación opcional — se omite por completo (sin renderizar nada) en
   // los módulos que hoy no la tienen (ej. notificaciones/regla-listado).
@@ -58,7 +60,7 @@ interface TableProps<T> {
 // de cada página (algunas lo envuelven en Card, otras no; hay un prompt
 // aparte pendiente para unificarlo). Table solo se monta cuando ya hay
 // datos que mostrar.
-export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRow, pagination }: TableProps<T>) {
+export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRow, subFilas, pagination }: TableProps<T>) {
   const hayMovil = columns.some((c) => c.movil);
   const oculta = (c: TableColumn<T>) => (hayMovil && !c.movil ? "max-md:hidden" : "");
   return (
@@ -77,12 +79,13 @@ export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRo
           <tbody>
             {data.map((row) => {
               const expansion = expandedRow?.(row) ?? null;
+              const subs = subFilas?.(row) ?? [];
               return (
                 <Fragment key={rowKey(row)}>
                   <tr
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                     className={`border-b border-admin-border last:border-b-0 ${onRowClick ? "cursor-pointer hover:bg-admin-bg" : ""} ${
-                      expansion ? "border-b-0" : ""
+                      expansion || subs.length > 0 ? "border-b-0" : ""
                     }`}
                   >
                     {columns.map((col) => (
@@ -94,6 +97,15 @@ export default function Table<T>({ columns, data, rowKey, onRowClick, expandedRo
                       </td>
                     ))}
                   </tr>
+                  {subs.map((sub, i) => (
+                    <tr key={sub.key} className={`bg-admin-bg/40 ${i === subs.length - 1 ? "border-b border-admin-border last:border-b-0" : "border-b border-admin-border/50"}`}>
+                      {columns.map((col) => (
+                        <td key={col.key} className={`${oculta(col)} ${col.compact ? "w-px whitespace-nowrap px-3 max-md:px-2" : "px-4"} py-2 text-admin-ink ${col.align === "right" ? "text-right" : ""} ${col.truncate ? "w-full max-w-0 overflow-hidden" : ""}`}>
+                          {sub.celdas[col.key] ?? null}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
                   {expansion && (
                     <tr className="border-b border-admin-border last:border-b-0">
                       <td colSpan={columns.length} className="bg-admin-bg/60 px-4 py-3">
