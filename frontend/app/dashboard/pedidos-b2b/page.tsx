@@ -277,7 +277,11 @@ export default function PedidosB2bPage() {
 
       </div>
 
-      <BarraBusqueda placeholder="Buscar por negocio…" onBuscar={setBusqueda} />
+      <BarraBusqueda
+        placeholder="Buscar por negocio…"
+        onBuscar={setBusqueda}
+        exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !pedidos, cargando: exporting }}
+      />
 
       {semanaError && <p className="text-sm text-red-600">{semanaError}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}

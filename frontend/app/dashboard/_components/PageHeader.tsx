@@ -7,7 +7,6 @@ import { IconDots, IconPlus } from "@tabler/icons-react";
 import { useEsMovil } from "@/lib/use-es-movil";
 import { ALL_NAV_ITEMS, buscarPorHref } from "../nav-items";
 import Button from "./Button";
-import BotonExportar from "./BotonExportar";
 import MenuAcciones from "./MenuAcciones";
 
 // Encabezado de página DENTRO del área de contenido (ya no hay franja blanca con borde): título a la izquierda, más chico, y las
@@ -53,16 +52,9 @@ function Acciones({ acciones }: { acciones: AccionPagina[] }) {
   if (!movil) {
     return (
       <>
-        {acciones.map((a) =>
-          a.tipo === "exportar" ? (
-            <BotonExportar
-              key={a.key}
-              label={a.label as "Exportar Excel" | "Exportar CSV"}
-              onClick={a.onClick}
-              disabled={a.disabled}
-              cargando={a.cargando}
-            />
-          ) : a.tipo === "crear" ? (
+        {/* «exportar» ya no va en el título: en computadora vive en la barra del buscador (BarraBusqueda `exportar`). */}
+        {acciones.filter((a) => a.tipo !== "exportar").map((a) =>
+          a.tipo === "crear" ? (
             <Button key={a.key} variant="primary" onClick={a.onClick} disabled={a.disabled}>
               {a.label}
             </Button>

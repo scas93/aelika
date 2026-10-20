@@ -172,6 +172,7 @@ export default function PedidosB2bHistoricoPage() {
       {/* Una sola barra: buscador + «Filtros» (Estado, Pago, Semana, Total). Los filtros aplican al elegir. */}
       <BarraBusqueda
         placeholder="Buscar negocio…"
+        exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !result || result.total === 0, cargando: exporting }}
         onBuscar={(texto) => setNegocioNombre(texto || null)}
         filtros={[
           {

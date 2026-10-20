@@ -229,6 +229,7 @@ export default function PagosPage() {
 
       {/* Sin buscador (el listado no tiene búsqueda por texto): solo «Filtros». Orden fijo: el cobro más reciente primero. */}
       <BarraBusqueda
+        exportar={{ label: "Exportar CSV", onClick: () => setExportOpen(true) }}
         filtros={[
           {
             key: "estado",

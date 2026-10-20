@@ -2,7 +2,9 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { IconChevronDown, IconFilter, IconSearch } from "@tabler/icons-react";
+import { useEsMovil } from "@/lib/use-es-movil";
 import Popover from "./Popover";
+import BotonExportar from "./BotonExportar";
 
 // Una sola barra de búsqueda y filtros para todo el panel: buscador ancho con lupa que busca mientras escribes (sin botón
 // «Buscar») y, si la pantalla tiene filtros, un botón «Filtros» que abre un panel con todos. Los filtros activos se ven como chips
@@ -24,12 +26,16 @@ export default function BarraBusqueda({
   placeholder,
   onBuscar,
   filtros = [],
+  exportar,
 }: {
   /** Sin placeholder/onBuscar la pantalla no tiene buscador (solo «Filtros»). */
   placeholder?: string;
   onBuscar?: (texto: string) => void;
   filtros?: FiltroDef[];
+  /** Exportar: botón cuadrado de solo ícono a la derecha de «Filtros». En teléfono va en el menú «⋯» del título, no aquí. */
+  exportar?: { label: "Exportar Excel" | "Exportar CSV"; onClick: () => void; disabled?: boolean; cargando?: boolean };
 }) {
+  const movil = useEsMovil();
   const [texto, setTexto] = useState("");
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [seccion, setSeccion] = useState<string | null>(null);
@@ -59,7 +65,7 @@ export default function BarraBusqueda({
               onChange={(e) => setTexto(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder ?? "Buscar"}
-              className="admin-input w-full pl-9!"
+              className="admin-input h-11 w-full py-0! pl-9!"
             />
           </div>
         )}
@@ -76,7 +82,7 @@ export default function BarraBusqueda({
                 onClick={() => setPanelAbierto((v) => !v)}
                 aria-haspopup="dialog"
                 aria-expanded={panelAbierto}
-                className="inline-flex items-center gap-1.5 rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 py-2 text-sm font-semibold text-admin-ink transition hover:bg-admin-bg"
+                className="inline-flex h-11 items-center gap-1.5 rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 text-sm font-semibold text-admin-ink transition hover:bg-admin-bg"
               >
                 <IconFilter size={16} className="shrink-0" />
                 Filtros
@@ -110,6 +116,7 @@ export default function BarraBusqueda({
             </div>
           </Popover>
         )}
+        {exportar && !movil && <BotonExportar grande {...exportar} />}
       </div>
 
       {activos.length > 0 && (
