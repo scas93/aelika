@@ -24,6 +24,9 @@ import { FiltroSelectPopover } from "../_components/FiltroSelect";
 import { FiltroTextoPopover } from "../_components/FiltroTexto";
 import { PageActions } from "../_components/PageHeader";
 import Aviso from "../_components/Aviso";
+import SelectorPeriodo from "../_components/SelectorPeriodo";
+import { lunesDe } from "../_components/Calendario";
+import { hoyYYYYMMDD } from "@/lib/fecha";
 import BarraBusqueda from "../_components/BarraFiltros";
 import DetallePanel from "./detalle-panel";
 import NuevoPedidoPanel from "./nuevo-pedido-panel";
@@ -266,31 +269,16 @@ export default function PedidosB2bPage() {
 
       <BarraBusqueda
         izquierda={
-          <div className="flex w-full items-center gap-3 md:w-auto">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-11 w-11"
-              onClick={() => setSemanaKey("actual")}
-              disabled={!semanas || semanaKey === "actual"}
-              aria-label="Semana actual"
-            >
-              ‹
-            </Button>
-            <span className="min-w-0 flex-1 text-center text-base font-bold text-admin-ink md:min-w-[160px] md:flex-none">
-              {semanaKey === "actual" ? "Semana en curso" : "Próxima semana"}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-11 w-11"
-              onClick={() => setSemanaKey("siguiente")}
-              disabled={!semanas || semanaKey === "siguiente"}
-              aria-label="Semana siguiente"
-            >
-              ›
-            </Button>
-          </div>
+          <SelectorPeriodo
+            modo="semana"
+            valor={semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD())}
+            deshabilitado={!semanas}
+            // La navegación es solo entre la semana en curso y la próxima; las anteriores están en el aviso de arriba.
+            min={semanas?.actual.inicio.slice(0, 10)}
+            max={semanas?.siguiente.inicio.slice(0, 10)}
+            tooltipMin="Las semanas anteriores están en el aviso de arriba"
+            onChange={(v) => setSemanaKey(semanas && v >= semanas.siguiente.inicio.slice(0, 10) ? "siguiente" : "actual")}
+          />
         }
         exportar={{ label: "Exportar Excel", onClick: handleExport, disabled: !pedidos, cargando: exporting }}
         derecha={

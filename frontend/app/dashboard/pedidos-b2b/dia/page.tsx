@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconDots, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
+import { IconCheck, IconChevronDown, IconChevronRight, IconDots, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -19,32 +19,12 @@ import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
 import MenuAcciones from "../../_components/MenuAcciones";
+import SelectorPeriodo from "../../_components/SelectorPeriodo";
 import BotonExportar from "../../_components/BotonExportar";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
 import DetallePanel from "../detalle-panel";
 
-// timeZone: "UTC" en todo este archivo — `fecha` es un string "YYYY-MM-DD"
-// parseado como medianoche UTC (mismo motivo que formatFecha en
-// pedidos-b2b/page.tsx): formatear/sumar días en la zona local del
-// navegador puede correr la fecha un día, sobre todo cerca de medianoche.
-function sumarDias(fecha: string, dias: number): string {
-  const d = new Date(`${fecha}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
-}
-
-// «Hoy · lunes 19 oct», «Mañana · …», «Ayer · …»; otros días solo «miércoles 21 oct».
-function formatFechaSelector(fecha: string, hoy: string): string {
-  const d = new Date(`${fecha}T00:00:00.000Z`);
-  const texto = d
-    .toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })
-    .replace(/\./g, "")
-    .replace(",", "")
-    .replace(" de ", " ");
-  const rel = fecha === hoy ? "Hoy" : fecha === sumarDias(hoy, 1) ? "Mañana" : fecha === sumarDias(hoy, -1) ? "Ayer" : null;
-  return rel ? `${rel} · ${texto}` : texto;
-}
-
+// timeZone: "UTC": `fecha` es un string "YYYY-MM-DD" parseado como medianoche UTC; formatear en la zona local del navegador puede correr un día.
 function formatFechaLarga(fecha: string): string {
   const d = new Date(`${fecha}T00:00:00.000Z`);
   const texto = d.toLocaleDateString("es-MX", {
@@ -317,7 +297,6 @@ export default function PedidosB2bDiaPage() {
     },
   ];
 
-  const hoy = hoyYYYYMMDD();
   const sinEntregas = entregas !== null && vigentes.length === 0;
   const accionImprimirTodo = imprimiendoTodo ? `Imprimiendo ${imprimiendoTodo.hechas}/${imprimiendoTodo.total}...` : "Imprimir todo";
   const sinImprimir = sinEntregas || entregas === null || vigentes.length === 0 || imprimiendoTodo !== null || !webUsbSupported;
@@ -325,21 +304,8 @@ export default function PedidosB2bDiaPage() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full items-center gap-3 md:w-auto">
-          <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, -1))} aria-label="Día anterior">
-            <IconChevronLeft size={14} />
-          </Button>
-          <span className="min-w-0 flex-1 text-center text-base font-bold first-letter:uppercase text-admin-ink md:min-w-[220px] md:flex-none">
-            {formatFechaSelector(fecha, hoy)}
-          </span>
-          <Button variant="secondary" size="sm" onClick={() => setFecha((f) => sumarDias(f, 1))} aria-label="Día siguiente">
-            <IconChevronRight size={14} />
-          </Button>
-          {fecha !== hoy && (
-            <Button variant="secondary" size="sm" onClick={() => setFecha(hoy)}>
-              Hoy
-            </Button>
-          )}
+        <div className="flex w-full items-center gap-2 md:w-auto">
+          <SelectorPeriodo modo="dia" valor={fecha} onChange={setFecha} />
           {movil && (
             <MenuAcciones
               label="Más acciones"

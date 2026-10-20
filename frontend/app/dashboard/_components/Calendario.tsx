@@ -33,10 +33,18 @@ export default function Calendario({
   modo = "dia",
   valor,
   onElegir,
+  unico = false,
+  min,
+  max,
 }: {
   modo?: "dia" | "semana";
   valor: RangoFechas | null;
   onElegir: (rango: RangoFechas) => void;
+  /** Un solo clic elige (un día, o la semana completa de ese día): sin segunda fecha. */
+  unico?: boolean;
+  /** Días fuera de [min, max] (YYYY-MM-DD) no se pueden elegir. */
+  min?: string;
+  max?: string;
 }) {
   const hoy = hoyYYYYMMDD();
   const [mes, setMes] = useState((valor?.desde ?? hoy).slice(0, 7)); // YYYY-MM
@@ -57,6 +65,10 @@ export default function Calendario({
 
   function elegir(dia: string) {
     const base = modo === "semana" ? lunesDe(dia) : dia;
+    if (unico) {
+      onElegir({ desde: base, hasta: modo === "semana" ? domingoDe(dia) : dia });
+      return;
+    }
     if (pendiente === null) {
       setPendiente(base);
       return;
@@ -97,12 +109,14 @@ export default function Calendario({
         {celdas.map((dia, i) => {
           if (!dia) return <span key={`v${i}`} />;
           const dentro = vista !== null && dia >= vista.desde && dia <= vista.hasta;
+          const fuera = (min !== undefined && dia < min) || (max !== undefined && dia > max);
           const extremo = vista !== null && (dia === vista.desde || dia === vista.hasta);
           return (
             <button
               key={dia}
               type="button"
               onClick={() => elegir(dia)}
+              disabled={fuera}
               aria-label={dia}
               aria-pressed={dentro}
               className={`h-8 text-sm transition ${
@@ -111,7 +125,7 @@ export default function Calendario({
                   : dentro
                     ? "bg-admin-accent-soft text-admin-accent-dark"
                     : "rounded-md text-admin-ink hover:bg-admin-bg"
-              } ${dia === hoy && !extremo ? "font-bold underline" : ""}`}
+              } ${fuera ? "cursor-not-allowed opacity-30" : ""} ${dia === hoy && !extremo ? "font-bold underline" : ""}`}
             >
               {Number(dia.slice(8))}
             </button>
@@ -119,6 +133,7 @@ export default function Calendario({
         })}
       </div>
 
+      {!unico && (
       <p className="text-xs text-admin-ink-soft">
         {pendiente
           ? modo === "semana"
@@ -128,6 +143,7 @@ export default function Calendario({
             ? "Elige la semana inicial (se toma completa)"
             : "Elige la fecha inicial"}
       </p>
+      )}
     </div>
   );
 }
