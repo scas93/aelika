@@ -23,7 +23,7 @@ export function FiltroTextoPopover({
       }}
       placeholder={placeholder}
       aria-label={placeholder}
-      className="admin-input w-full"
+      className="admin-input w-full bg-white!"
     />
   );
 }

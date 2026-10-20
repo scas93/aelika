@@ -171,7 +171,7 @@ export default function BarraBusqueda({
                 onChange={(e) => setTexto(e.target.value)}
                 placeholder={placeholder}
                 aria-label={placeholder ?? "Buscar"}
-                className="admin-input w-full pl-9!"
+                className="admin-input w-full bg-white! pl-9!"
               />
             </div>
           )}
