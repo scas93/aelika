@@ -8,9 +8,7 @@ interface SidePanelProps {
   title: string;
   children?: ReactNode;
   footer?: ReactNode;
-  /** Junto al título (p. ej. un badge de estado). */
-  headerRight?: ReactNode;
-  /** Línea debajo del título. */
+  /** Debajo del título (p. ej. el badge de estado). */
   subtitle?: ReactNode;
 }
 
@@ -20,7 +18,7 @@ const TRANSITION_MS = 200;
 // but for a full-height form panel instead of a small centered dialog.
 // Modal doesn't close on Escape today, so there was nothing to reuse for
 // that part; implemented fresh here only.
-export default function SidePanel({ open, onClose, title, children, footer, headerRight, subtitle }: SidePanelProps) {
+export default function SidePanel({ open, onClose, title, children, footer, subtitle }: SidePanelProps) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
 
@@ -53,17 +51,16 @@ export default function SidePanel({ open, onClose, title, children, footer, head
       onClick={onClose}
     >
       <div
-        className={`fixed right-0 top-0 flex h-full w-[480px] max-w-full flex-col bg-white shadow-[-4px_0_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ${
+        className={`fixed right-0 top-0 flex h-full w-full flex-col md:w-[480px] md:max-w-full bg-white shadow-[-4px_0_16px_rgba(0,0,0,0.08)] transition-transform duration-200 ${
           visible ? "translate-x-0" : "translate-x-full"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-admin-border p-6">
-          <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex items-start justify-between gap-3 border-b border-admin-border p-4 md:p-6">
+          <div className="flex min-w-0 flex-col items-start gap-2">
             <h2 className="text-[22px] font-bold text-admin-ink">{title}</h2>
             {subtitle && <div className="text-sm text-admin-ink-soft">{subtitle}</div>}
           </div>
-          {headerRight && <div className="ml-auto shrink-0 pt-1.5">{headerRight}</div>}
           <button
             type="button"
             onClick={onClose}
@@ -74,9 +71,12 @@ export default function SidePanel({ open, onClose, title, children, footer, head
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">{children}</div>
 
-        {footer && <div className="flex justify-end gap-2 border-t border-admin-border p-6">{footer}</div>}
+        {/* Teléfono: pantalla completa; las acciones quedan fijas abajo, a lo ancho. */}
+        {footer && (
+          <div className="flex justify-end gap-2 border-t border-admin-border p-6 max-md:flex-col-reverse max-md:p-4 max-md:[&>button]:w-full">{footer}</div>
+        )}
       </div>
     </div>
   );

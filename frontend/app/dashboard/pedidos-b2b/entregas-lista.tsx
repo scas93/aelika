@@ -7,7 +7,7 @@ import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/canti
 import Badge from "../_components/Badge";
 import Button from "../_components/Button";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT } from "./estado";
-import { entregaAbiertaPorDefecto, fechaCorta, montoDeEntrega, piezasDeEntrega, type EntregaVista } from "./entregas-vista";
+import { entregaAbiertaPorDefecto, fechaCorta, type EntregaVista } from "./entregas-vista";
 
 function formatCierre(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -130,7 +130,7 @@ function CorregirEntregaForm({
 }
 
 // Bloque de entregas del pedido, compartido por el panel del pedido y el historial del cliente. Una fila plegable por entrega
-// («Mié 21 oct · 30 piezas · $1,253» + estado); al abrirla, sus productos con el importe de la línea. El monto es ANTES del
+// («Mié 21 oct» + estado); al abrirla, sus productos con el importe de la línea. El monto es ANTES del
 // descuento (el descuento se aplica una sola vez en los totales). Abierta por defecto: la atrasada, o si no la próxima pendiente.
 // Sin `onCerrar`/`onCorregir` es solo lectura. Con `onCerrar`, la entrega pendiente abierta ofrece "Entregada" / "No recogida"
 // (una por una, nunca en bloque); con `onCorregir` (solo admin), la ya cerrada ofrece "Corregir".
@@ -201,7 +201,6 @@ export default function EntregasLista({
           const cerrada = entrega.estado === "ENTREGADA" || entrega.estado === "NO_RECOGIDA";
           const cancelada = entrega.estado === "CANCELADA";
           const abierta = abiertas.has(entrega.id);
-          const piezas = piezasDeEntrega(entrega);
           const { lineas, bloqueada } = lineasDe(entrega);
           return (
             <li key={entrega.id} className={`flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3 ${cancelada ? "bg-admin-bg" : ""}`}>
@@ -213,7 +212,7 @@ export default function EntregasLista({
               >
                 <span className={`text-sm font-semibold ${cancelada ? "text-admin-ink-soft" : "text-admin-ink"}`}>
                   <span className="mr-1.5 text-xs text-admin-ink-soft">{abierta ? "▼" : "▶"}</span>
-                  {fechaCorta(entrega.fecha)} · {piezas} pieza{piezas === 1 ? "" : "s"} · {formatMoney(montoDeEntrega(entrega))}
+                  {fechaCorta(entrega.fecha)}
                 </span>
                 <span className="flex items-center gap-1.5">
                   {entrega.atrasada && <Badge variant="peligro">Atrasada</Badge>}

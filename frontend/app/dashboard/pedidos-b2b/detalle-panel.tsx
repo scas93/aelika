@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { IconArrowRight, IconCheck, IconPencil } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -36,6 +38,7 @@ import {
 } from "./estado";
 import EntregasLista from "./entregas-lista";
 import SidePanel from "../_components/SidePanel";
+import Aviso from "../_components/Aviso";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
@@ -43,7 +46,6 @@ import { formatearFolioB2b } from "@/lib/format";
 import {
   entregasDesdePedido,
   fechaCorta,
-  resumenPorProducto,
 } from "./entregas-vista";
 
 // Estado local de edición — una fila por producto, con un id propio
@@ -103,6 +105,7 @@ export default function DetallePanel({
   onChanged: () => void;
 }) {
   const { token, user } = useSession();
+  const router = useRouter();
   // Admin (Gerente/Dueño): pagos y correcciones de entregas cerradas. El Operador edita, confirma y cancela, pero un
   // pedido Pagado le queda bloqueado para editar y cancelar (el servidor también responde 403).
   const esAdmin = user.rol === "GERENTE" || user.rol === "DUENO";
@@ -125,7 +128,6 @@ export default function DetallePanel({
     null,
   );
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
-  const [resumenAbierto, setResumenAbierto] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -382,7 +384,6 @@ export default function DetallePanel({
     ) ?? [];
 
   const entregasVista = pedido ? entregasDesdePedido(pedido) : [];
-  const resumen = resumenPorProducto(entregasVista);
   const pedidoOriginal = pedido ? pedido.items.reduce((s, i) => s + Number(i.precioUnitario) * i.cantidadTotal, 0) : 0;
   // «Editar pedido» (encabezado de Entregas): donde el servidor deja editar — cualquier estado no cancelado, incluido
   // Completado; al Operador le queda bloqueado un pedido Pagado.
@@ -397,7 +398,7 @@ export default function DetallePanel({
     pedido && !editMode && (puedeConfirmar || puedeCancelar) ? (
       <div className="flex w-full flex-col gap-2">
         {actionError && <p className="text-sm text-red-600">{actionError}</p>}
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 max-md:flex-col-reverse max-md:items-stretch max-md:[&>button]:w-full">
           {puedeCancelar && puedeConfirmar && (
             <Button variant="danger" onClick={() => setConfirmCancelOpen(true)} disabled={cancelando || avanzando}>
               Cancelar pedido
@@ -426,20 +427,12 @@ export default function DetallePanel({
     <SidePanel
       open={pedidoId !== null}
       onClose={onClose}
-      title={pedido ? pedido.negocioNombre : "Pedido"}
-      headerRight={
+      title={pedido ? `Semana del ${fechaCorta(pedido.semanaInicio, false)}` : "Pedido"}
+      subtitle={
         pedido ? (
           <Badge variant={pedido.cancelado ? "peligro" : ESTADO_VARIANT[pedido.estado]}>
             {pedido.cancelado ? "Cancelado" : ESTADO_LABEL[pedido.estado]}
           </Badge>
-        ) : undefined
-      }
-      subtitle={
-        pedido ? (
-          <>
-            <div>{`Semana del ${fechaCorta(pedido.semanaInicio, false)} · ${pedido.contactoNombre} · ${pedido.contactoTelefono}`}</div>
-            {pedido.contactoCorreo && <div>{pedido.contactoCorreo}</div>}
-          </>
         ) : undefined
       }
       footer={pie}
@@ -450,83 +443,92 @@ export default function DetallePanel({
 
       {pedido && (
         <div className="flex flex-col gap-5">
-          {pedido.cancelado && (
-            <div role="status" className="rounded-[var(--radius-admin-control)] border border-red-200 bg-red-50 p-3 text-sm text-admin-ink">
-              Cancelado{pedido.canceladoAt ? ` el ${formatFechaHora(pedido.canceladoAt)}` : ""} · Pedido original{" "}
-              {formatMoney(pedidoOriginal)} · A cobrar {formatMoney(pedido.total)}
-            </div>
-          )}
+          {pedido.cancelado && <Aviso tono="rojo">Cancelado{pedido.canceladoAt ? ` el ${formatFechaHora(pedido.canceladoAt)}` : ""}</Aviso>}
 
           {!pedido.cancelado && pedido.modificadoPorClienteAt && (
-            <div
-              role="status"
-              className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3"
+            <Aviso
+              tono="ambar"
+              accion={{ label: revisando ? "Guardando..." : "Marcar como revisado", onClick: () => void handleRevisado(), disabled: revisando || editMode }}
             >
-              <span className="text-sm font-bold text-admin-ink">
-                Modificado por el cliente
-              </span>
-              <p className="text-sm text-admin-ink">
-                El cliente cambió este pedido desde el portal
-                {pedido.estado === "PENDIENTE_CONFIRMACION"
-                  ? ". La marca se apaga al confirmarlo."
-                  : ". Revísalo y márcalo como revisado cuando lo hayas visto."}
-              </p>
-              <div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void handleRevisado()}
-                  disabled={revisando || editMode}
-                >
-                  {revisando ? "Guardando..." : "Marcar como revisado"}
-                </Button>
-              </div>
-            </div>
+              Modificado por el cliente desde el portal
+              {pedido.estado === "PENDIENTE_CONFIRMACION" ? " · la marca se apaga al confirmarlo" : ""}
+            </Aviso>
           )}
 
-          {/* Franja de resumen: total en grande, estado de pago y modo de cobro. Marcar pagado (Gerente/Dueño) vive aquí y pide
-              confirmación (modal con folio y total). */}
-          <div className="flex items-end justify-between gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-4">
+          {/* Tarjeta de montos y pago: el único lugar del panel con el total. Marcar pagado (Gerente/Dueño) pide confirmación
+              (modal con folio y total). En un cancelado, «Pedido original» va como línea y el total es lo que queda por cobrar. */}
+          <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-admin-ink-soft">Total</span>
-              <span className="text-3xl font-bold leading-none text-admin-ink">{formatMoney(pedido.total)}</span>
-              <span className="flex flex-wrap items-center gap-1.5 text-xs text-admin-ink-soft">
+              {pedido.cancelado && (
+                <div className="flex justify-between text-sm text-admin-ink-soft">
+                  <span>Pedido original</span>
+                  <span>{formatMoney(pedidoOriginal)}</span>
+                </div>
+              )}
+              {/* Sin descuento, el subtotal es igual al total: solo se muestra el Total. */}
+              {Number(pedido.descuentoTotal) > 0 && (
+                <>
+                  <div className="flex justify-between text-sm text-admin-ink-soft">
+                    <span>Subtotal</span>
+                    <span>{formatMoney(pedido.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-admin-green-dark">
+                    <span>
+                      Descuento
+                      {pedido.descuentoPorcentajeAplicado
+                        ? ` (${Number(pedido.descuentoPorcentajeAplicado)}%)`
+                        : pedido.codigoDescuentoTexto
+                          ? ` (${pedido.codigoDescuentoTexto})`
+                          : ""}
+                    </span>
+                    <span>-{formatMoney(pedido.descuentoTotal)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-baseline justify-between text-admin-ink">
+                <span className="text-sm font-bold">{pedido.cancelado ? "Total a cobrar" : "Total"}</span>
+                <span className="text-2xl font-bold leading-none">{formatMoney(pedido.total)}</span>
+              </div>
+              {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
+              {pedido.minimoPiezasAplicado > 0 && (
+                <span className="text-xs text-admin-ink-soft">
+                  {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-admin-border pt-3">
+              <span className="flex items-center gap-1.5 text-xs text-admin-ink-soft">
                 Pago:
                 <Badge variant={ESTADO_PAGO_VARIANT[pedido.estadoPago]}>{ESTADO_PAGO_LABEL[pedido.estadoPago]}</Badge>
-                {pagado && <span>{pedido.pagadoAt ? formatFechaHora(pedido.pagadoAt) : "Fecha no registrada"}</span>}
-                · {pedido.modoCobro === "AL_INICIO" ? "Al inicio" : "Al final"}
               </span>
+              {puedeMarcarPagado && (
+                <Button variant="secondary" size="xs" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
+                  <IconCheck size={12} className="shrink-0" />
+                  Marcar pagado
+                </Button>
+              )}
+              {esAdmin && pagado && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmPago("desmarcar")}
+                  disabled={pagando || editMode}
+                  className="text-xs font-semibold text-admin-ink-soft hover:underline disabled:opacity-50"
+                >
+                  Desmarcar pago
+                </button>
+              )}
             </div>
-            {puedeMarcarPagado && (
-              <Button variant="primary" onClick={() => setConfirmPago("marcar")} disabled={pagando || editMode}>
-                Marcar pagado
-              </Button>
-            )}
-            {esAdmin && pagado && (
-              <button
-                type="button"
-                onClick={() => setConfirmPago("desmarcar")}
-                disabled={pagando || editMode}
-                className="text-xs font-semibold text-admin-ink-soft hover:underline disabled:opacity-50"
-              >
-                Desmarcar pago
-              </button>
-            )}
           </div>
 
           {pedido.notaCliente && (
-            <div className="flex flex-col gap-1 rounded-[var(--radius-admin-control)] border border-amber-300 bg-amber-50 p-3">
-              <span className="text-sm font-bold text-admin-ink">
-                Nota del cliente
-              </span>
-              <p className="whitespace-pre-wrap text-sm text-admin-ink">
-                {pedido.notaCliente}
-              </p>
-            </div>
+            <Aviso tono="neutro">
+              <span className="font-bold">Nota del cliente:</span> <span className="whitespace-pre-wrap">{pedido.notaCliente}</span>
+            </Aviso>
           )}
 
           {!editMode ? (
             <EntregasLista
+              key={pedido.id}
               entregas={entregasVista}
               onCerrar={puedeCerrar ? handleCerrarEntrega : undefined}
               onCorregir={esAdmin ? handleCorregirEntrega : undefined}
@@ -534,9 +536,10 @@ export default function DetallePanel({
               cargarProductos={cargarProductos}
               encabezadoAccion={
                 puedeEditarAhora ? (
-                  <button type="button" onClick={startEdit} className="text-sm font-semibold text-mayoreo-accent hover:underline">
-                    Editar pedido
-                  </button>
+                  <Button variant="secondary" size="xs" onClick={startEdit}>
+                    <IconPencil size={12} className="shrink-0" />
+                    Editar
+                  </Button>
                 ) : undefined
               }
             />
@@ -653,60 +656,24 @@ export default function DetallePanel({
           )}
 
           {!editMode && (
-            <div className="flex flex-col gap-1 border-t border-admin-border pt-3">
-              <div className="flex justify-between text-sm text-admin-ink-soft">
-                <span>Subtotal</span>
-                <span>{formatMoney(pedido.subtotal)}</span>
-              </div>
-              {Number(pedido.descuentoTotal) > 0 && (
-                <div className="flex justify-between text-sm text-admin-green-dark">
-                  <span>
-                    Descuento
-                    {pedido.codigoDescuentoTexto
-                      ? ` (${pedido.codigoDescuentoTexto})`
-                      : pedido.descuentoPorcentajeAplicado
-                        ? ` (${Number(pedido.descuentoPorcentajeAplicado)}%)`
-                        : ""}
-                  </span>
-                  <span>-{formatMoney(pedido.descuentoTotal)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-base font-bold text-admin-ink">
-                <span>Total</span>
-                <span>{formatMoney(pedido.total)}</span>
-              </div>
-              {/* Mínimo 0 = el pedido se creó sin mínimo: no hay leyenda de piezas mínimas. */}
-              {pedido.minimoPiezasAplicado > 0 && (
-                <span className="text-xs text-admin-ink-soft">
-                  {pedido.totalPiezas} / {pedido.minimoPiezasAplicado} piezas mínimas
-                </span>
-              )}
-            </div>
-          )}
-
-          {!editMode && resumen.length > 0 && (
+            // Mismo patrón que Entregas: título fuera de la tarjeta, acción a la derecha en la misma fila.
             <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setResumenAbierto((v) => !v)}
-                aria-expanded={resumenAbierto}
-                className="flex items-center gap-1.5 text-left text-sm font-bold text-admin-ink"
-              >
-                <span className="text-xs text-admin-ink-soft">{resumenAbierto ? "▼" : "▶"}</span>
-                Resumen por producto
-              </button>
-              {resumenAbierto && (
-                <ul className="flex flex-col gap-1 text-sm text-admin-ink">
-                  {resumen.map((r) => (
-                    <li key={r.nombreProducto} className="flex justify-between gap-2">
-                      <span>
-                        {r.nombreProducto} × {r.cantidad}
-                      </span>
-                      <span className="tabular-nums text-admin-ink-soft">{formatMoney(r.monto)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-admin-ink">Cliente</span>
+                {/* «Ver cliente» solo para Gerente/Dueño: son los roles con acceso al módulo de Clientes. */}
+                {esAdmin && pedido.clienteId && (
+                  <Button variant="secondary" size="xs" onClick={() => router.push(`/dashboard/clientes?cliente=${pedido.clienteId}`)}>
+                    Ver cliente
+                    <IconArrowRight size={12} className="shrink-0" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex min-w-0 flex-col gap-0.5 rounded-[var(--radius-admin-control)] border border-admin-border p-4">
+                <span className="text-sm font-bold text-admin-ink">{pedido.negocioNombre}</span>
+                <span className="text-sm text-admin-ink-soft">
+                  {[pedido.contactoNombre, pedido.contactoTelefono, pedido.contactoCorreo].filter(Boolean).join(" · ")}
+                </span>
+              </div>
             </div>
           )}
 

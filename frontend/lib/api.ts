@@ -1562,6 +1562,8 @@ export interface PedidoB2bEntrega {
 }
 
 export interface PedidoB2bDetalle extends PublicPedidoB2b {
+  // Cliente (Cliente.id) dueño del pedido: lo usa «Ver cliente» en el panel.
+  clienteId?: string;
   cancelado: boolean;
   canceladoAt: string | null;
   // Marca «Modificado por el cliente»: la enciende el portal y se apaga al reconfirmar o con «Marcar como revisado».

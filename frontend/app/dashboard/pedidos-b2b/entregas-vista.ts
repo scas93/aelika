@@ -35,11 +35,6 @@ export function entregasDesdeHistorial(entregas: ClienteB2bEntregaHistorial[]): 
   }));
 }
 
-export const piezasDeEntrega = (e: EntregaVista) => e.productos.reduce((s, p) => s + p.cantidad, 0);
-export const montoDeEntrega = (e: EntregaVista) => e.productos.reduce((s, p) => s + p.cantidad * p.precioUnitario, 0);
-/** Las canceladas no se cobran: no suman al subtotal. */
-export const montoCobrable = (entregas: EntregaVista[]) => entregas.filter((e) => e.estado !== "CANCELADA").reduce((s, e) => s + montoDeEntrega(e), 0);
-
 /**
  * Entrega abierta por defecto: la atrasada (la más antigua) si hay; si no, la próxima pendiente (Pendiente/Lista, por fecha).
  * Si todas están cerradas o canceladas, ninguna.
@@ -49,21 +44,6 @@ export function entregaAbiertaPorDefecto(entregas: EntregaVista[]): string | nul
   const atrasada = porFecha.find((e) => e.atrasada);
   if (atrasada) return atrasada.id;
   return porFecha.find((e) => e.estado === "PENDIENTE" || e.estado === "LISTA")?.id ?? null;
-}
-
-/** Resumen por producto de lo que se cobra (entregas no canceladas): producto × cantidad total, con su importe. */
-export function resumenPorProducto(entregas: EntregaVista[]): { nombreProducto: string; cantidad: number; monto: number }[] {
-  const mapa = new Map<string, { nombreProducto: string; cantidad: number; monto: number }>();
-  for (const e of entregas) {
-    if (e.estado === "CANCELADA") continue;
-    for (const p of e.productos) {
-      const fila = mapa.get(p.nombreProducto) ?? { nombreProducto: p.nombreProducto, cantidad: 0, monto: 0 };
-      fila.cantidad += p.cantidad;
-      fila.monto += p.cantidad * p.precioUnitario;
-      mapa.set(p.nombreProducto, fila);
-    }
-  }
-  return [...mapa.values()];
 }
 
 /** «Mié 21 oct» — fecha corta sin repetir el día. `fecha` es @db.Date (medianoche UTC): se formatea en UTC. */
