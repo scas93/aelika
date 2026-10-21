@@ -170,6 +170,16 @@ describe('B2B · exportaciones Excel', () => {
     );
     expect(todos.libro.worksheets.map((h) => h.name)).toStrictEqual([
       'Pedidos',
+      'Entregas',
+    ]);
+    // Históricos: las 3 entregas Entregadas del Completado; las del cancelado (todas Canceladas) no salen.
+    const entregasHist = filas(todos.libro.getWorksheet('Entregas')!);
+    expect(
+      entregasHist.map((r) => [r['Negocio'], r['Estado de la entrega']]),
+    ).toStrictEqual([
+      ['Abarrotes Uno', 'Entregada'],
+      ['Abarrotes Uno', 'Entregada'],
+      ['Abarrotes Uno', 'Entregada'],
     ]);
     expect(
       (todos.libro.getWorksheet('Pedidos')!.getRow(1).values as string[]).slice(
@@ -264,6 +274,115 @@ describe('B2B · exportaciones Excel', () => {
     expect(
       activos.map((r) => [r['Negocio'], r['Estado del pedido']]),
     ).toStrictEqual([['Cafetería Tres', 'Por confirmar']]);
+  });
+
+  it('hoja Entregas: una fila por entrega no cancelada, importe antes de descuento, Atrasada, filtros y hoja vacía con encabezados', async () => {
+    const { a, b } = await escenario();
+    await dueno().patch(`/pedidos-b2b/${a.id}/avanzar`).expect(200);
+    const detalleA = (await dueno().get(`/pedidos-b2b/${a.id}`).expect(200))
+      .body;
+    await dueno()
+      .patch(`/pedidos-b2b/${a.id}/entregas/${detalleA.entregas[0].id}/cerrar`)
+      .send({ estado: 'ENTREGADA' })
+      .expect(200);
+    await dueno().patch(`/pedidos-b2b/${b.id}/cancelar`).expect(200);
+    // Jueves 8 de oct: lo Pendiente del lunes 5 y del miércoles 7 está atrasado; el viernes 9 no.
+    jest.setSystemTime(new Date('2026-10-08T16:00:00.000Z'));
+
+    const base =
+      '/pedidos-b2b/export-xlsx?estados=PENDIENTE_CONFIRMACION,CONFIRMADO_SURTIENDO,EN_PROCESO&cancelado=false&desde=2026-10-05&hasta=2026-10-05';
+    const { libro } = await descargar(apiRol(s.h, s.base, 'GERENTE'), base);
+    expect(libro.worksheets.map((h) => h.name)).toStrictEqual([
+      'Pedidos',
+      'Entregas',
+    ]);
+    const hoja = libro.getWorksheet('Entregas')!;
+    expect((hoja.getRow(1).values as string[]).slice(1)).toStrictEqual([
+      'Folio',
+      'Código del cliente',
+      'Negocio',
+      'Fecha de entrega',
+      'Día',
+      'Estado de la entrega',
+      'Piezas',
+      'Importe (antes de descuento)',
+      'Cerrada el',
+      'Nota de la entrega',
+    ]);
+    const f = filas(hoja);
+    expect(
+      f.map((r) => [
+        (r['Fecha de entrega'] as Date).toISOString().slice(0, 10),
+        r['Día'],
+        r['Negocio'],
+        r['Estado de la entrega'],
+        r['Piezas'],
+        r['Importe (antes de descuento)'],
+      ]),
+    ).toStrictEqual([
+      ['2026-10-05', 'Lun', 'Abarrotes Uno', 'Entregada', 6, 270],
+      ['2026-10-05', 'Lun', 'Cafetería Tres', 'Atrasada', 6, 270],
+      ['2026-10-07', 'Mié', 'Abarrotes Uno', 'Atrasada', 6, 270],
+      ['2026-10-07', 'Mié', 'Cafetería Tres', 'Atrasada', 6, 270],
+      ['2026-10-09', 'Vie', 'Abarrotes Uno', 'Pendiente', 4, 122],
+      ['2026-10-09', 'Vie', 'Cafetería Tres', 'Pendiente', 4, 122],
+    ]); // Bodega Dos (cancelado) no sale
+    expect(f[0]['Cerrada el']).toBeInstanceOf(Date);
+    expect(f[1]['Cerrada el']).toBeNull();
+    for (const r of f) expect(typeof r['Piezas']).toBe('number');
+
+    // Coincide con la vista del panel: Σ precio × cantidad de cada día en GET /pedidos-b2b/:id.
+    const panel = (await dueno().get(`/pedidos-b2b/${a.id}`).expect(200)).body;
+    for (const e of panel.entregas as { dia: string; fecha: string }[]) {
+      const importe = (
+        panel.items as {
+          precioUnitario: string;
+          distribucion: { dia: string; cantidad: number }[];
+        }[]
+      ).reduce(
+        (n, i) =>
+          n +
+          Number(i.precioUnitario) *
+            (i.distribucion.find((d) => d.dia === e.dia)?.cantidad ?? 0),
+        0,
+      );
+      const fila = f.find(
+        (r) =>
+          r['Negocio'] === 'Abarrotes Uno' &&
+          (r['Fecha de entrega'] as Date).toISOString().slice(0, 10) ===
+            e.fecha.slice(0, 10),
+      )!;
+      expect(fila['Importe (antes de descuento)']).toBe(importe);
+    }
+
+    // Filtros de Pedidos activos: negocio, pago y estado reducen AMBAS hojas.
+    const porNegocio = (await descargar(dueno(), `${base}&negocioNombre=cafet`))
+      .libro;
+    expect(
+      filas(porNegocio.getWorksheet('Pedidos')!).map((r) => r['Negocio']),
+    ).toStrictEqual(['Cafetería Tres']);
+    expect(
+      new Set(
+        filas(porNegocio.getWorksheet('Entregas')!).map((r) => r['Negocio']),
+      ),
+    ).toStrictEqual(new Set(['Cafetería Tres']));
+    const porEstado = (
+      await descargar(
+        dueno(),
+        '/pedidos-b2b/export-xlsx?estados=EN_PROCESO&cancelado=false&desde=2026-10-05&hasta=2026-10-05',
+      )
+    ).libro;
+    expect(
+      filas(porEstado.getWorksheet('Pedidos')!).map((r) => r['Negocio']),
+    ).toStrictEqual(['Abarrotes Uno']);
+    expect(filas(porEstado.getWorksheet('Entregas')!)).toHaveLength(3);
+
+    // Pedidos vacío ⇒ Entregas existe, vacía y con encabezados.
+    const vacio = (await descargar(dueno(), `${base}&estadoPago=PAGADO`)).libro;
+    expect(filas(vacio.getWorksheet('Pedidos')!)).toHaveLength(0);
+    const hojaVacia = vacio.getWorksheet('Entregas')!;
+    expect(filas(hojaVacia)).toHaveLength(0);
+    expect((hojaVacia.getRow(1).values as string[]).slice(1)[0]).toBe('Folio');
   });
 
   it('los 3 roles pueden exportar los tres archivos', async () => {

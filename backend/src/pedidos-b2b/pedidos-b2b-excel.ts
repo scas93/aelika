@@ -59,7 +59,40 @@ export interface FilaPedidoExcel {
 const cuenta = (f: FilaPedidoExcel, estado: string) =>
   f.estadosEntregas.filter((e) => e === estado).length;
 
-export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
+/** Una entrega no cancelada de un pedido de la hoja «Pedidos». El importe es antes del descuento (precio del pedido × piezas). */
+export interface FilaEntregaPedidoExcel {
+  fecha: Date;
+  folio: string;
+  clienteCodigo: string | null;
+  negocioNombre: string;
+  /** Estado de la entrega en BD; «Atrasada» se deriva de `atrasada`. */
+  estado: string;
+  atrasada: boolean;
+  piezas: number;
+  importe: number;
+  /** Solo Entregada y No recogida. */
+  cerradaAt: Date | null;
+  nota: string | null;
+}
+
+const DIA_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+/** Fecha ascendente, luego negocio, luego folio (numérico si el folio es numérico). */
+export function ordenarEntregasPedidos(
+  filas: FilaEntregaPedidoExcel[],
+): FilaEntregaPedidoExcel[] {
+  return [...filas].sort(
+    (a, b) =>
+      a.fecha.getTime() - b.fecha.getTime() ||
+      a.negocioNombre.localeCompare(b.negocioNombre, 'es') ||
+      a.folio.localeCompare(b.folio, 'es', { numeric: true }),
+  );
+}
+
+export async function libroPedidos(
+  filas: FilaPedidoExcel[],
+  entregas: FilaEntregaPedidoExcel[] = [],
+): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
   agregarHoja<FilaPedidoExcel>(
     libro,
@@ -176,6 +209,69 @@ export async function libroPedidos(filas: FilaPedidoExcel[]): Promise<Buffer> {
       },
     ],
     filas,
+  );
+  agregarHoja<FilaEntregaPedidoExcel>(
+    libro,
+    'Entregas',
+    [
+      { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (f) => f.folio },
+      {
+        encabezado: 'Código del cliente',
+        tipo: 'texto',
+        ancho: 28,
+        valor: (f) => f.clienteCodigo,
+      },
+      {
+        encabezado: 'Negocio',
+        tipo: 'texto',
+        ancho: 32,
+        valor: (f) => f.negocioNombre,
+      },
+      {
+        encabezado: 'Fecha de entrega',
+        tipo: 'fecha',
+        ancho: 17,
+        valor: (f) => f.fecha,
+      },
+      {
+        encabezado: 'Día',
+        tipo: 'texto',
+        ancho: 8,
+        valor: (f) => DIA_CORTO[f.fecha.getUTCDay()],
+      },
+      {
+        encabezado: 'Estado de la entrega',
+        tipo: 'texto',
+        ancho: 20,
+        valor: (f) =>
+          f.atrasada ? 'Atrasada' : etiquetaEstadoEntrega(f.estado),
+      },
+      {
+        encabezado: 'Piezas',
+        tipo: 'entero',
+        ancho: 10,
+        valor: (f) => f.piezas,
+      },
+      {
+        encabezado: 'Importe (antes de descuento)',
+        tipo: 'moneda',
+        ancho: 28,
+        valor: (f) => f.importe,
+      },
+      {
+        encabezado: 'Cerrada el',
+        tipo: 'fechaHora',
+        ancho: 20,
+        valor: (f) => (f.cerradaAt ? fechaHoraExcelMexico(f.cerradaAt) : null),
+      },
+      {
+        encabezado: 'Nota de la entrega',
+        tipo: 'texto',
+        ancho: 40,
+        valor: (f) => f.nota,
+      },
+    ],
+    ordenarEntregasPedidos(entregas),
   );
   return libroABuffer(libro);
 }

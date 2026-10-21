@@ -9,11 +9,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { toCsv } from '../common/csv';
 import { fechaExcel } from '../common/xlsx';
+import { round2 } from '../common/money';
 import {
   libroEntregasDia,
   libroPedidos,
   type FilaEntregaExcel,
   type FilaPedidoExcel,
+  type FilaEntregaPedidoExcel,
 } from './pedidos-b2b-excel';
 import {
   ClienteCanal,
@@ -289,7 +291,20 @@ export class PedidosB2bService {
             notaCliente: true,
           },
         },
-        entregas: { select: { estado: true } },
+        entregas: {
+          select: {
+            estado: true,
+            fecha: true,
+            nota: true,
+            estadoCambiadoAt: true,
+            items: {
+              select: {
+                cantidad: true,
+                orderItem: { select: { precioUnitario: true } },
+              },
+            },
+          },
+        },
       },
     });
     const filas: FilaPedidoExcel[] = pedidos.map((o) => ({
@@ -311,7 +326,31 @@ export class PedidosB2bService {
       descuentoTotal: Number(o.descuentoTotal),
       total: Number(o.total),
     }));
-    return libroPedidos(filas);
+    // Hoja «Entregas»: las entregas no canceladas de los mismos pedidos. Importe = precio del pedido × piezas (antes del descuento).
+    const entregas: FilaEntregaPedidoExcel[] = pedidos.flatMap((o) =>
+      o.entregas
+        .filter((e) => e.estado !== EstadoEntrega.CANCELADA)
+        .map((e) => ({
+          fecha: fechaExcel(e.fecha),
+          folio: o.folio,
+          clienteCodigo: o.cliente.codigo,
+          negocioNombre: o.detalleB2b!.negocioNombre,
+          estado: e.estado,
+          atrasada: entregaAtrasada(e.estado, e.fecha),
+          piezas: e.items.reduce((s, i) => s + i.cantidad, 0),
+          importe: round2(
+            e.items.reduce(
+              (s, i) => s + i.cantidad * Number(i.orderItem.precioUnitario),
+              0,
+            ),
+          ),
+          cerradaAt: ESTADOS_ENTREGA_CERRADOS.includes(e.estado)
+            ? e.estadoCambiadoAt
+            : null,
+          nota: e.nota,
+        })),
+    );
+    return libroPedidos(filas, entregas);
   }
 
   /** Excel (.xlsx) de Entregas del día: hojas Entregas (una fila por producto de cada entrega, sin canceladas) y Consolidado. */

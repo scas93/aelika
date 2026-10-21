@@ -9,9 +9,10 @@ vi.mock("./nuevo-pedido-panel", () => ({ default: () => null }));
 
 const fetchPedidosB2b = vi.fn();
 const fetchPedidosB2bResumen = vi.fn();
+const exportPedidosB2bXlsx = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, fetchPedidosB2b, fetchPedidosB2bResumen };
+  return { ...actual, fetchPedidosB2b, fetchPedidosB2bResumen, exportPedidosB2bXlsx };
 });
 
 const { default: PedidosB2bPage } = await import("./page");
@@ -50,6 +51,7 @@ describe("Pedidos activos B2B (tabla)", () => {
   beforeEach(() => {
     fetchPedidosB2b.mockReset();
     fetchPedidosB2bResumen.mockReset();
+    exportPedidosB2bXlsx.mockReset();
   });
   afterEach(cleanup);
 
@@ -86,6 +88,30 @@ describe("Pedidos activos B2B (tabla)", () => {
     expect(screen.getByText("Negocio: 2")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(screen.getByText("Negocio 1")).toBeTruthy();
+  });
+
+  it("Exportar Excel manda los filtros puestos (estado, pago, negocio); sin filtros, los 3 estados activos", async () => {
+    Object.assign(window.URL, { createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    exportPedidosB2bXlsx.mockResolvedValue(new Blob(["x"]));
+    datos([pedido("1", { estado: "CONFIRMADO_SURTIENDO", estadoPago: "PAGADO", negocioNombre: "Negocio A" })]);
+    render(<PedidosB2bPage />);
+    await screen.findByText("Negocio A");
+
+    fireEvent.click(screen.getByRole("button", { name: "Exportar Excel" }));
+    await waitFor(() => expect(exportPedidosB2bXlsx).toHaveBeenCalledTimes(1));
+    const sinFiltros = exportPedidosB2bXlsx.mock.calls[0][1];
+    expect(sinFiltros.estados).toStrictEqual(["PENDIENTE_CONFIRMACION", "CONFIRMADO_SURTIENDO", "EN_PROCESO"]);
+    expect(sinFiltros.estadoPago).toBeUndefined();
+    expect(sinFiltros.negocioNombre).toBeUndefined();
+    expect(sinFiltros.cancelado).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Negocio/ }));
+    fireEvent.change(screen.getByPlaceholderText("Buscar negocio…"), { target: { value: " Negocio A " } });
+    fireEvent.click(screen.getByRole("button", { name: "Exportar Excel" }));
+    await waitFor(() => expect(exportPedidosB2bXlsx).toHaveBeenCalledTimes(2));
+    expect(exportPedidosB2bXlsx.mock.calls[1][1].negocioNombre).toBe("Negocio A");
   });
 
   it("sin pedidos en la semana: mensaje vacío claro", async () => {

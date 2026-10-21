@@ -227,10 +227,13 @@ export default function PedidosB2bPage() {
     setExportError(null);
     try {
       const blob = await exportPedidosB2bXlsx(token, {
-        estados: ESTADOS_ACTIVOS,
+        // Con un estado elegido se manda solo ese (`estados` tiene prioridad en el backend); sin él, los 3 activos.
+        estados: fEstado ? [fEstado] : ESTADOS_ACTIVOS,
         cancelado: false,
         desde: semanaSeleccionada.inicio,
         hasta: semanaSeleccionada.inicio,
+        estadoPago: fPago ?? undefined,
+        negocioNombre: fNegocio?.trim() || undefined,
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
