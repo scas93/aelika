@@ -371,7 +371,7 @@ export interface CreatePublicOrderPayload {
   facturaUsoCfdi?: string;
   facturaCodigoPostal?: string;
   facturaCorreo?: string;
-  items: { productId: string; cantidad: number; modifierOptionIds?: string[] }[];
+  items: { productId: string; cantidad: number; modifierOptionIds?: string[]; nota?: string }[];
 }
 
 export interface PublicOrderItem {
@@ -380,6 +380,8 @@ export interface PublicOrderItem {
   nombreProducto: string;
   precioUnitario: string;
   cantidad: number;
+  // Nota por producto (solo B2C); null cuando la línea no la trae.
+  nota?: string | null;
 }
 
 export type EstadoPedido = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "LISTO_ENTREGA" | "DESPACHADO";

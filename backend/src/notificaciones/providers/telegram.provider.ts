@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { dividirMensajeTelegram } from './telegram-dividir';
 import type { NotificacionEnvioResultado, NotificacionMensaje, NotificacionProvider } from './notificacion-provider.interface';
 
 /**
@@ -30,18 +31,24 @@ export class TelegramProvider implements NotificacionProvider {
     }
 
     try {
-      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: destinatario, text: mensaje.texto }),
-      });
+      // Un texto que cabe en un mensaje se envía igual que siempre; uno más largo que el límite de Telegram (4096) llega
+      // completo en varios mensajes consecutivos, en orden. Si una parte falla se corta el envío y se reporta el fallo.
+      const partes = dividirMensajeTelegram(mensaje.texto);
+      for (let i = 0; i < partes.length; i++) {
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: destinatario, text: partes[i] }),
+        });
 
-      const body = await response.json().catch(() => null);
+        const body = await response.json().catch(() => null);
 
-      if (!response.ok || !body?.ok) {
-        const detalle = body?.description ?? `HTTP ${response.status}`;
-        this.logger.warn(`Telegram rechazó el envío a chat_id=${destinatario}: ${detalle}`);
-        return { exito: false, error: `Telegram: ${detalle}` };
+        if (!response.ok || !body?.ok) {
+          const detalle = body?.description ?? `HTTP ${response.status}`;
+          const parte = partes.length > 1 ? ` (parte ${i + 1}/${partes.length})` : '';
+          this.logger.warn(`Telegram rechazó el envío a chat_id=${destinatario}${parte}: ${detalle}`);
+          return { exito: false, error: `Telegram: ${detalle}${parte}` };
+        }
       }
 
       return { exito: true };

@@ -26,6 +26,50 @@ const base = (): EntradaHuella => ({
 });
 
 describe('calcularHuellaCheckout', () => {
+  it('sin nota por línea la huella es EXACTAMENTE la que producía el código anterior a la nota por producto (no rompe pedidos pendientes al desplegar)', () => {
+    // Valor calculado con la versión previa de huella-checkout.ts sobre base().
+    expect(calcularHuellaCheckout(base())).toBe('48043e8171de7ebbee821ddf4c3f2042b83bf22d5704f73826548a5dd59d4442');
+    const e = base();
+    e.items = e.items.map((i) => ({ ...i, nota: undefined }));
+    expect(calcularHuellaCheckout(e)).toBe('48043e8171de7ebbee821ddf4c3f2042b83bf22d5704f73826548a5dd59d4442');
+    e.items = e.items.map((i) => ({ ...i, nota: null }));
+    expect(calcularHuellaCheckout(e)).toBe('48043e8171de7ebbee821ddf4c3f2042b83bf22d5704f73826548a5dd59d4442');
+    e.items = e.items.map((i) => ({ ...i, nota: '' }));
+    expect(calcularHuellaCheckout(e)).toBe('48043e8171de7ebbee821ddf4c3f2042b83bf22d5704f73826548a5dd59d4442');
+  });
+
+  it('la nota por línea cambia la huella; otra nota la cambia otra vez', () => {
+    const sin = calcularHuellaCheckout(base());
+    const e = base();
+    e.items[0].nota = 'Extra caliente';
+    const con = calcularHuellaCheckout(e);
+    expect(con).not.toBe(sin);
+    e.items[0].nota = 'Sin hielo';
+    expect(calcularHuellaCheckout(e)).not.toBe(con);
+  });
+
+  it('líneas del mismo producto con notas distintas NO se fusionan; con la misma nota sí', () => {
+    expect(
+      carritoCanonico([
+        { productId: 'a', cantidad: 1, nota: 'x' },
+        { productId: 'a', cantidad: 1, nota: 'y' },
+      ]),
+    ).toHaveLength(2);
+    expect(carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'x' }, { productId: 'a', cantidad: 1, nota: 'x' }])).toStrictEqual(
+      carritoCanonico([{ productId: 'a', cantidad: 2, nota: 'x' }]),
+    );
+    expect(carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'x' }, { productId: 'a', cantidad: 1 }])).toHaveLength(2);
+  });
+
+  it('mayúsculas y minúsculas cuentan distinto, y una nota con ";" o "x2" no se confunde con otra línea', () => {
+    expect(carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'Sin hielo' }])).not.toStrictEqual(
+      carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'sin hielo' }]),
+    );
+    const a = carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'x;b[]x2' }]);
+    const b = carritoCanonico([{ productId: 'a', cantidad: 1, nota: 'x' }, { productId: 'b', cantidad: 2 }]);
+    expect(a.join(';')).not.toBe(b.join(';'));
+  });
+
   it('es un SHA-256 hexadecimal y determinista', () => {
     const h = calcularHuellaCheckout(base());
     expect(h).toMatch(/^[0-9a-f]{64}$/);

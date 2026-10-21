@@ -44,6 +44,8 @@ export interface CartItem {
   // Snapshot of the selected options (nombre/precioAdicional), so the cart
   // summary can render them without looking the product back up.
   modifiers: CartItemModifier[];
+  // Nota por producto ya normalizada ("" o ausente = sin nota). Forma parte de la identidad de la línea.
+  nota?: string;
 }
 
 // Same shape as CartItem, plus the pre-discount list price — used to render
@@ -299,6 +301,7 @@ export default function CheckoutModal({
           productId: item.productId,
           cantidad: item.cantidad,
           modifierOptionIds: item.modifiers.length > 0 ? item.modifiers.map((m) => m.modifierOptionId) : undefined,
+          nota: item.nota || undefined,
         })),
       });
       setOrder(created);
@@ -377,6 +380,9 @@ export default function CheckoutModal({
                       <span className="text-xs text-black/50 dark:text-white/50">
                         {item.modifiers.map((m) => `+ ${m.nombre}`).join(", ")}
                       </span>
+                    )}
+                    {item.nota && (
+                      <span className="text-xs italic text-black/50 dark:text-white/50">↳ {item.nota}</span>
                     )}
                     <span className="text-xs text-black/50 dark:text-white/50">
                       ${(item.precioUnitario + extraPorUnidad).toFixed(2)} c/u
@@ -677,6 +683,9 @@ export default function CheckoutModal({
                           <span className="text-xs text-black/50 dark:text-white/50">
                             {item.modifiers.map((m) => `+ ${m.nombre}`).join(", ")}
                           </span>
+                        )}
+                        {item.nota && (
+                          <span className="text-xs italic text-black/50 dark:text-white/50">↳ {item.nota}</span>
                         )}
                       </li>
                     );

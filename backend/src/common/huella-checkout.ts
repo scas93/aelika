@@ -14,6 +14,8 @@ export interface LineaHuella {
   productId: string;
   cantidad: number;
   modifierOptionIds?: string[];
+  /** Nota por producto ya normalizada (parte de la identidad de la línea). Sin nota la clave es idéntica a la de antes. */
+  nota?: string | null;
 }
 
 export interface EntradaHuella {
@@ -62,7 +64,9 @@ export function carritoCanonico(items: LineaHuella[]): string[] {
   const acumulado = new Map<string, number>();
   for (const item of items) {
     const mods = [...(item.modifierOptionIds ?? [])].sort();
-    const clave = `${item.productId}[${mods.join(',')}]`;
+    // JSON.stringify de la nota: sin ambigüedad con ';' o 'x<n>' dentro del texto. Sin nota no agrega nada (misma huella que antes).
+    const nota = item.nota ? `#${JSON.stringify(item.nota)}` : '';
+    const clave = `${item.productId}[${mods.join(',')}]${nota}`;
     acumulado.set(clave, (acumulado.get(clave) ?? 0) + item.cantidad);
   }
   return [...acumulado.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([clave, cantidad]) => `${clave}x${cantidad}`);

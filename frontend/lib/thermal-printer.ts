@@ -129,7 +129,7 @@ function padColumnas(izquierda: string, derecha: string, columns: number): strin
   return izquierda + " ".repeat(espacio) + derecha;
 }
 
-function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayBuffer> {
+export function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayBuffer> {
   const horaRecogidaDisplay =
     order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
       ? `Recoge: ${order.horaRecogida}`
@@ -181,6 +181,10 @@ function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayB
       encoder.line(nombreLinea).align("right").line(precioTexto).align("left");
     }
     encoder.bold(false);
+    // Nota por producto debajo de su línea. ">>" en vez de "↳": la flecha no está en la página de códigos de la térmica.
+    if (item.nota) {
+      encoder.line(`  >> ${item.nota}`);
+    }
   }
 
   if (order.notas) {

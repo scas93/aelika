@@ -422,6 +422,7 @@ export class PublicService {
               productId: i.productId,
               cantidad: i.cantidad,
               modifierOptionIds: i.modifierOptionIds,
+              nota: i.nota,
             })),
             metodoEntrega,
             puntoEnvioId: puntoEnvio?.id,
@@ -500,6 +501,7 @@ export class PublicService {
                 nombreProducto: product.nombre,
                 precioUnitario: product.precio,
                 cantidad: item.cantidad,
+                nota: item.nota ?? null,
                 modificadores:
                   modificadores.length > 0
                     ? {
@@ -1010,6 +1012,10 @@ export class PublicService {
       );
       for (const modificador of item.modificadores) {
         lineas.push(`   ${modificador.nombreGrupo}: ${modificador.nombre}`);
+      }
+      // Nota por producto, debajo de la línea y de sus modificadores. Texto literal (la nota ya viene normalizada: una línea).
+      if (item.nota) {
+        lineas.push(`   ↳ ${item.nota}`);
       }
 
       if (index < order.items.length - 1) {

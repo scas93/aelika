@@ -771,6 +771,9 @@ model OrderItem {
   // Etapa 2: posición del ítem dentro de su orden. Solo la puebla B2B (para conservar un orden estable al editar
   // por diff); B2C la deja en 0 y no la expone (ver aRespuestaOrder).
   orden          Int     @default(0)
+  // Nota por producto (solo B2C): instrucción del cliente para esta línea, ya normalizada (máx. 140). NULL = sin nota
+  // (pedidos anteriores y todo B2B). Va en la huella de checkout con tarjeta como parte de la identidad de la línea.
+  nota           String?
 
   tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
