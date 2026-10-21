@@ -1600,9 +1600,15 @@ export interface ListPedidosB2bFilter extends FiltroImporte {
   // activos", que trae todo sin paginar y filtra en el cliente).
   negocioNombre?: string;
   // Filtro de Históricos por estado de pago.
-  estadoPago?: PedidoB2bEstadoPago;
+  estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[];
+  conCancelados?: boolean;
   page?: number;
   limit?: number;
+}
+
+function appendEstadoPago(params: URLSearchParams, estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[]) {
+  const valores = Array.isArray(estadoPago) ? estadoPago : estadoPago ? [estadoPago] : [];
+  if (valores.length > 0) params.set("estadoPago", valores.join(","));
 }
 
 export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
@@ -1615,7 +1621,8 @@ export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
-  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  appendEstadoPago(params, filter?.estadoPago);
+  if (filter?.conCancelados) params.set("conCancelados", "true");
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
   appendFiltroImporte(params, filter);
@@ -1760,8 +1767,13 @@ export interface ExportPedidosB2bFilter {
   desde?: string;
   hasta?: string;
   negocioNombre?: string;
-  estadoPago?: PedidoB2bEstadoPago;
+  // Uno o varios (se envían separados por coma; un solo valor viaja igual que siempre). Vacío = sin filtrar.
+  estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[];
+  // Con `estados`: incluye además los pedidos cancelados en cualquier estado (selección «Cancelado» de Históricos).
+  conCancelados?: boolean;
   soloHistorico?: boolean;
+  // Solo cambia las columnas del Excel: Históricos manda HISTORICOS; sin ella salen las de Pedidos activos.
+  vista?: "ACTIVOS" | "HISTORICOS";
 }
 
 // Bypasses request() on purpose: este endpoint regresa un archivo Excel (.xlsx), no JSON. El CSV del backend
@@ -1774,8 +1786,10 @@ export async function exportPedidosB2bXlsx(token: string, filter?: ExportPedidos
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
-  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  appendEstadoPago(params, filter?.estadoPago);
+  if (filter?.conCancelados) params.set("conCancelados", "true");
   if (filter?.soloHistorico) params.set("soloHistorico", "true");
+  if (filter?.vista) params.set("vista", filter.vista);
   const query = params.toString();
 
   const res = await fetch(`${API_URL}/pedidos-b2b/export-xlsx${query ? `?${query}` : ""}`, {

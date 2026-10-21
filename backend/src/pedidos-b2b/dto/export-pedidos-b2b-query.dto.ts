@@ -54,6 +54,12 @@ export class ExportPedidosB2bQueryDto {
   @IsBoolean()
   soloHistorico?: boolean;
 
+  // Columnas del Excel: HISTORICOS (pantalla de Históricos) o ACTIVOS (Pedidos activos). No filtra nada. Sin ella manda
+  // `soloHistorico` (compatibilidad con llamadas anteriores) y, si tampoco viene, las de Pedidos activos.
+  @IsOptional()
+  @IsIn(['ACTIVOS', 'HISTORICOS'])
+  vista?: 'ACTIVOS' | 'HISTORICOS';
+
   // Solo pedidos de semanas ANTERIORES a esta fecha (semanaInicio < semanaAntesDe, "YYYY-MM-DD"): los pedidos activos que
   // quedaron de semanas pasadas. Se combina con el resto de filtros.
   @IsOptional()
@@ -61,9 +67,21 @@ export class ExportPedidosB2bQueryDto {
   semanaAntesDe?: string;
 
   // Filtro por estado de pago (Pendiente / Pagado) — Históricos B2B.
+  // Uno o varios valores ("estadoPago=PAGADO" o "estadoPago=PENDIENTE,PAGADO"): dentro del filtro se combinan con O.
+  // Un solo valor, en el formato de siempre, funciona igual. Todos los valores = sin filtrar.
   @IsOptional()
-  @IsIn(ESTADOS_PAGO_B2B_FILTRO)
-  estadoPago?: EstadoPagoB2bFiltro;
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsIn(ESTADOS_PAGO_B2B_FILTRO, { each: true })
+  estadoPago?: EstadoPagoB2bFiltro[];
+
+  // Históricos con selección múltiple de Estado: "Cancelado" no es un estado sino el indicador `cancelado`. Con `conCancelados=true`
+  // y `estados`, el resultado es (estadoPedido en `estados` Y no cancelado) O cancelado en cualquier estado; un pedido que cumple
+  // por las dos vías sale una sola vez. Sin `estados`, equivale a `cancelado=true`.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @IsBoolean()
+  conCancelados?: boolean;
 
   @IsOptional()
   @IsDateString()
