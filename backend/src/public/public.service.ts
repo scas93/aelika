@@ -1021,6 +1021,11 @@ export class PublicService {
     if (Number(order.descuentoTotal) > 0) {
       lineas.push(`Descuento: -$${Number(order.descuentoTotal).toFixed(2)}`);
     }
+    // Nota libre del cliente, tal cual la escribió (texto plano, sin parse_mode: nada que escapar). Vacía o solo espacios no deja etiqueta.
+    if (order.notas && order.notas.trim() !== '') {
+      if (Number(order.descuentoTotal) > 0) lineas.push('');
+      lineas.push('Notas:', order.notas);
+    }
     lineas.push('------------------------------', `TOTAL: $${Number(order.total).toFixed(2)} MXN`, '', `Recibido: ${this.formatearFechaRecibo(order.createdAt)}`);
 
     return lineas.join('\n');

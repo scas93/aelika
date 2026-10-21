@@ -45,8 +45,37 @@ describe('B2C · salidas', () => {
         }),
       );
       await waitForCalls(s.h.fakes.queueAdd);
-      // Congelado tal cual: el recibo no incluye las notas del cliente.
+      // Cambio a propósito (nota en el recibo): la nota del cliente ahora va en el recibo de Telegram, entre las líneas y el total.
       expect(recibo().texto).toMatchSnapshot();
+    });
+
+    it('con nota: "Notas:" y el texto del cliente van después de las líneas y antes del total', async () => {
+      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { notas: 'Sin cebolla' }));
+      await waitForCalls(s.h.fakes.queueAdd);
+      const { texto } = recibo();
+      expect(texto).toContain('\nNotas:\nSin cebolla\n------------------------------\nTOTAL:');
+      expect(texto.indexOf('Notas:')).toBeGreaterThan(texto.indexOf('x '));
+    });
+
+    it('sin nota o con nota solo de espacios: el recibo es idéntico y sin etiqueta', async () => {
+      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base));
+      await waitForCalls(s.h.fakes.queueAdd);
+      const sinNota = recibo().texto;
+      expect(sinNota).not.toContain('Notas');
+      s.h.fakes.queueAdd.mockClear();
+
+      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { notas: '   ' }));
+      await waitForCalls(s.h.fakes.queueAdd);
+      const conEspacios = recibo().texto;
+      expect(conEspacios).not.toContain('Notas');
+      expect(conEspacios.replace('#2', '#1').replace(/Recibido: .*/, '')).toBe(sinNota.replace(/Recibido: .*/, ''));
+    });
+
+    it('nota con caracteres especiales y saltos de línea: se envía literal', async () => {
+      const nota = 'Sin <b>cebolla</b> & *extra* _salsa_ `x` [a](b)\nSegunda línea: "gracias" 🙏';
+      await postCheckout(s.h, s.base.tenant.slug, bodyCheckout(s.base, { notas: nota }));
+      await waitForCalls(s.h.fakes.queueAdd);
+      expect(recibo().texto).toContain(`\nNotas:\n${nota}\n------------------------------\nTOTAL:`);
     });
 
     it('modificadores por línea + descuento de combo', async () => {
