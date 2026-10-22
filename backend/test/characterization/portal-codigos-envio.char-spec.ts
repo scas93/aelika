@@ -42,6 +42,8 @@ describe('Portal · envío del código y callback (4g)', () => {
   const alta = () =>
     crearClienteB2b(s.h.prisma, {
       tenantId: s.base.tenant.id,
+      modalidadPago: 'AL_FINAL',
+      modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
       tenantSlug: slug(),
       sufijo: 'aurora',
       nombre: 'Café Aurora',
@@ -79,6 +81,8 @@ describe('Portal · envío del código y callback (4g)', () => {
       // Segundo cliente (otro teléfono): el límite es de 3 códigos por hora por teléfono.
       await crearClienteB2b(s.h.prisma, {
         tenantId: s.base.tenant.id,
+        modalidadPago: 'AL_FINAL',
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
         tenantSlug: slug(),
         sufijo: 'norte',
         nombre: 'Café Norte',

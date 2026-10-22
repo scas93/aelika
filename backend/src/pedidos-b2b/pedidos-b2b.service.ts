@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { toCsv } from '../common/csv';
+import { ETIQUETA_MODALIDAD } from '../common/modalidades-cobro';
 import { fechaExcel } from '../common/xlsx';
 import { round2 } from '../common/money';
 import {
@@ -266,7 +267,10 @@ export class PedidosB2bService {
         value: (p) => p.semanaInicio.toISOString().slice(0, 10),
       },
       { header: 'Estado', value: (p) => p.estado },
-      { header: 'Modo de cobro', value: (p) => p.modoCobro },
+      {
+        header: 'Modo de cobro',
+        value: (p) => ETIQUETA_MODALIDAD[p.modoCobro],
+      },
       { header: 'Estado de pago', value: (p) => p.estadoPago },
       { header: 'Cancelado', value: (p) => (p.cancelado ? 'Sí' : 'No') },
       { header: 'Piezas', value: (p) => p.totalPiezas },
@@ -782,7 +786,7 @@ export class PedidosB2bService {
     // que TenantService.
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
-      select: { pedidoB2bModoCobro: true, pedidoB2bMinimoPiezas: true },
+      select: { pedidoB2bMinimoPiezas: true },
     });
 
     const semanaInicio = assertLunes(dto.semanaInicio);

@@ -123,6 +123,14 @@ export async function altaClienteB2bDePrueba(
     });
     descuento = Number(codigo.descuentoPorcentaje);
   }
+  // La modalidad es obligatoria. Por defecto, la primera activa del negocio (así `configurarB2b({ modoCobro })` sigue
+  // significando «los clientes de esta prueba cobran así»); una prueba que quiera otra la pasa en `modalidadPago`. Las altas
+  // directas del arnés no validan contra las activas: eso se cubre en las pruebas de la API.
+  const tenantCfg = await h.prisma.tenant.findUniqueOrThrow({
+    where: { id: base.tenant.id },
+    select: { modalidadesCobroB2b: true },
+  });
+  const activasTenant = (tenantCfg.modalidadesCobroB2b as ('AL_INICIO' | 'AL_FINAL')[]) ?? [];
   const cliente = await crearClienteB2b(h.prisma, {
     tenantId: base.tenant.id,
     tenantSlug: base.tenant.slug,
@@ -131,7 +139,10 @@ export async function altaClienteB2bDePrueba(
     direccion: 'Calle de Prueba 123',
     descuentoPorcentaje: descuento,
     modalidadPago:
-      (extra.modalidadPago as 'AL_INICIO' | 'AL_FINAL' | undefined) ?? null,
+      (extra.modalidadPago as 'AL_INICIO' | 'AL_FINAL' | undefined) ??
+      activasTenant[0] ??
+      'AL_FINAL',
+    modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
     telefonos: [
       {
         // Las pruebas usan teléfonos de fantasía a veces cortos: se completan a 10 dígitos.

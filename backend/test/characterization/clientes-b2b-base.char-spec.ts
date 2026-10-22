@@ -16,6 +16,8 @@ describe('Clientes B2B · base (2a)', () => {
   ) =>
     crearClienteB2b(s.h.prisma, {
       tenantId: s.base.tenant.id,
+      modalidadPago: 'AL_FINAL',
+      modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
       tenantSlug: s.base.tenant.slug,
       sufijo,
       nombre: `Cliente ${sufijo}`,
@@ -121,6 +123,8 @@ describe('Clientes B2B · base (2a)', () => {
   it('sembrar es idempotente: actualiza datos y reemplaza teléfonos sin duplicar', async () => {
     const base = {
       tenantId: s.base.tenant.id,
+      modalidadPago: 'AL_FINAL',
+      modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
       tenantSlug: s.base.tenant.slug,
       sufijo: 'matriz',
       nombre: 'A',

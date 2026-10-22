@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { ApiError, fetchTenantSettings } from "@/lib/api";
+import { ApiError, fetchTenantSettings, type ModalidadPagoB2b } from "@/lib/api";
 import StripeSection from "../stripe-section";
+import ModalidadesCobroSection from "../modalidades-cobro-section";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesPagosPage() {
@@ -12,18 +13,17 @@ export default function AjustesPagosPage() {
   return (
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
-      {user.tenant.tipoStorefront === "RETAIL_B2B" ? (
-        <p className="text-sm text-admin-ink-soft">Esta sección no aplica a negocios de mayoreo.</p>
-      ) : user.rol !== "DUENO" ? (
+      {user.rol !== "DUENO" ? (
         <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
       ) : (
-        <PagosLoader token={token} />
+        <PagosLoader token={token} esMayoreo={user.tenant.tipoStorefront === "RETAIL_B2B"} />
       )}
     </div>
   );
 }
 
-function PagosLoader({ token }: { token: string }) {
+function PagosLoader({ token, esMayoreo }: { token: string; esMayoreo: boolean }) {
+  const [modalidades, setModalidades] = useState<ModalidadPagoB2b[]>([]);
   const [stripeContactEmail, setStripeContactEmail] = useState<string | null>(null);
   const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
   const [stripeChargesEnabled, setStripeChargesEnabled] = useState(false);
@@ -38,6 +38,7 @@ function PagosLoader({ token }: { token: string }) {
         setStripeAccountId(settings.stripeAccountId);
         setStripeChargesEnabled(settings.stripeChargesEnabled);
         setStripePayoutsEnabled(settings.stripePayoutsEnabled);
+        setModalidades(settings.modalidadesCobroB2b ?? []);
       })
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de Stripe"))
       .finally(() => setLoading(false));
@@ -48,6 +49,11 @@ function PagosLoader({ token }: { token: string }) {
   }
   if (loadError) {
     return <p className="text-sm text-red-600">{loadError}</p>;
+  }
+
+  // Mayoreo: modalidades de cobro; la conexión de Stripe no se muestra (todavía no se usa en mayoreo).
+  if (esMayoreo) {
+    return <ModalidadesCobroSection token={token} activas={modalidades} onUpdated={setModalidades} />;
   }
 
   return (

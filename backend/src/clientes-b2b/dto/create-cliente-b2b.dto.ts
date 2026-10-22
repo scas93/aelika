@@ -47,10 +47,9 @@ export class CreateClienteB2bDto {
   @Max(100)
   descuentoPorcentaje?: number;
 
-  // Vacía = la modalidad de cobro del negocio.
-  @IsOptional()
+  // Obligatoria. Que esté activa en el negocio lo valida el helper compartido (validarModalidadCliente).
   @IsEnum(PedidoB2bModoCobro)
-  modalidadPago?: PedidoB2bModoCobro;
+  modalidadPago: PedidoB2bModoCobro;
 
   @IsArray()
   @ArrayMinSize(1)

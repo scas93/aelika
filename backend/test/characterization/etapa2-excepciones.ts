@@ -26,6 +26,10 @@
  *     no conoce.
  * 11. (Fase 4, 4f) `modificadoPorClienteAt`: campo NUEVO de la forma del panel (respuestas de pedido y lista) con la marca
  *     «Modificado por el cliente»; siempre null en el escenario dorado (nadie modifica desde el portal).
+ * 12. (Configuración de pagos, Fase 0) Dos cambios deliberados: (a) el CSV de pedidos B2B muestra la modalidad con su nombre
+ *     («A crédito» / «Pago por adelantado») en vez del valor interno AL_FINAL / AL_INICIO; se lleva de vuelta al valor interno.
+ *     (b) la info pública del storefront de mayoreo ya no expone `pedidoB2bModoCobro` (el modo del negocio dejó de ser fuente de
+ *     verdad: cada cliente trae su modalidad); se quita del golden.
  * 10. (Fase 4, 4d) El catálogo de mayoreo y la vista previa de códigos de descuento ya NO son públicos: las dos consultas «pública
  *     catálogo» y «pública código» responden 404 (el golden trae 200 con el catálogo / el porcentaje). Solo se compara el
  *     código de estado: 404. El catálogo con sesión del portal se cubre en portal-pedidos.char-spec.ts.
@@ -88,6 +92,8 @@ export function adaptarAlDorado(
     const texto = recibido.texto.map((l) => {
       let linea = l
         .replace(',COMPLETADO,', ',DESPACHADO,')
+        .replace(',A crédito,', ',AL_FINAL,')
+        .replace(',Pago por adelantado,', ',AL_INICIO,') // (12a)
         .replace(/\bP-0*(\d+)\b/g, '$1'); // (1) y (6)
       if (
         op.cancelacionRecalcula &&
@@ -138,6 +144,15 @@ export function ajustarDorado(
 ): Dorado {
   if (CONSULTAS_PUBLICAS_CERRADAS.includes(nombre)) return { status: 404 }; // (10)
   dorado = sinIdentidadB2b(nombre, dorado);
+  if (dorado.body !== undefined) {
+    // (12b) el golden trae `pedidoB2bModoCobro` en la info pública; ya no se expone.
+    dorado = {
+      ...dorado,
+      body: recorrer(dorado.body, (o) => {
+        delete o.pedidoB2bModoCobro;
+      }),
+    };
+  }
   // (5) Fase 1b: GET /pedidos-b2b ahora respeta `estados=A,B` (antes el listado lo ignoraba y devolvía todos los no cancelados,
   // incluido el Despachado p1). Con los 3 estados activos, el Completado/Despachado ya no entra.
   if (nombre === 'lista?estados+cancelado=false') {

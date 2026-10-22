@@ -146,7 +146,14 @@ model Tenant {
   // tenant, no por pedido/cliente. modoCobro/minimoPiezas se snapshotean en
   // cada PedidoB2b al crearse, así que cambiar esto no afecta pedidos ya
   // creados.
+  // DEPRECADO como fuente de verdad (Configuración de pagos, Fase 0): ya no se usa para crear pedidos ni se edita por la
+  // API. La modalidad de cada pedido sale de Cliente.modalidadPago y las que el negocio ofrece, de modalidadesCobroB2b.
+  // Se conserva solo como dato histórico y como origen del script de migración; la columna se borra en un cambio posterior.
   pedidoB2bModoCobro           PedidoB2bModoCobro @default(AL_FINAL)
+  // Modalidades de cobro B2B que el negocio tiene activas (Ajustes → Pagos): arreglo JSON de valores de
+  // PedidoB2bModoCobro, p. ej. ["AL_FINAL"]. Json (no un arreglo de enum de Postgres) para poder sumar modalidades nuevas
+  // sin otra migración de este campo. Al menos una; lo valida la capa de aplicación (common/modalidades-cobro.ts).
+  modalidadesCobroB2b          Json               @default("[\"AL_FINAL\"]")
   pedidoB2bMinimoPiezas        Int                @default(100)
   // Ventana semanal recurrente en la que el storefront público de mayoreo
   // acepta pedidos nuevos — reemplaza a horarioAtencion/isAbiertoAhora para
@@ -1163,7 +1170,8 @@ model Cliente {
   direccion           String?
   // % sobre el total del pedido; NULL o 0 = sin descuento. Se snapshotea en el pedido al crearlo.
   descuentoPorcentaje Decimal?            @db.Decimal(5, 2)
-  // NULL = usa la modalidad de cobro del negocio.
+  // Modalidad de cobro del cliente (obligatoria en la aplicación para todo cliente B2B; sigue nullable en la base hasta que
+  // se confirme la migración de datos). Ya NO hereda del negocio: los pedidos nuevos usan siempre esta.
   modalidadPago       PedidoB2bModoCobro?
   // Baja lógica: no puede pedir ni entrar; sus pedidos activos siguen y el historial se conserva.
   bajaAt              DateTime?

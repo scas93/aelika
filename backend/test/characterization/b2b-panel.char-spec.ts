@@ -284,13 +284,14 @@ describe('B2B · panel', () => {
       expect(cabecera).toBe(CAB);
       return rows.sort();
     };
+    // Cambio deliberado (modalidades de cobro): el CSV muestra «A crédito» / «Pago por adelantado» en vez de AL_FINAL / AL_INICIO.
     const R: Record<string, string> = {
-      '1': 'P-000001,Abarrotes Uno,Uno,2026-09-14,COMPLETADO,AL_FINAL,PAGADO,No,12,540.00',
-      '2': 'P-000002,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,AL_FINAL,PENDIENTE,No,12,540.00',
-      '3': 'P-000003,Cafetería Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,10,305.00',
-      '4': 'P-000004,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,No,15,542.25',
-      '5': 'P-000005,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,AL_FINAL,PENDIENTE,Sí,10,0.00',
-      '6': 'P-000006,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,AL_INICIO,PAGADO,No,20,900.00',
+      '1': 'P-000001,Abarrotes Uno,Uno,2026-09-14,COMPLETADO,A crédito,PAGADO,No,12,540.00',
+      '2': 'P-000002,Bodega Dos,Dos,2026-09-28,CONFIRMADO_SURTIENDO,A crédito,PENDIENTE,No,12,540.00',
+      '3': 'P-000003,Cafetería Tres,Tres,2026-09-28,PENDIENTE_CONFIRMACION,A crédito,PENDIENTE,No,10,305.00',
+      '4': 'P-000004,Deli Cuatro,Cuatro,2026-10-05,PENDIENTE_CONFIRMACION,A crédito,PENDIENTE,No,15,542.25',
+      '5': 'P-000005,Express Cinco,Cinco,2026-10-05,PENDIENTE_CONFIRMACION,A crédito,PENDIENTE,Sí,10,0.00',
+      '6': 'P-000006,Fonda Seis,Seis,2026-10-12,CONFIRMADO_SURTIENDO,Pago por adelantado,PAGADO,No,20,900.00',
     };
     const esperado = (...f: string[]) => f.map((x) => R[x]).sort();
 

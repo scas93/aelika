@@ -46,7 +46,7 @@
     },
     "pedidoB2b": {
       "minimoPiezas": 0,
-      "modoCobro": "AL_FINAL",
+      "modalidadesActivas": ["AL_FINAL", "AL_INICIO"],
       "ventanaAperturaDia": "LUNES",
       "ventanaAperturaHora": "08:00",
       "ventanaCierreDia": "VIERNES",
@@ -78,7 +78,7 @@
       "nombre": "Café Aurora Matriz",
       "direccion": "Av. Insurgentes Sur 1200, Col. Del Valle, CDMX",
       "descuentoPorcentaje": 10,
-      "modalidadPago": null,
+      "modalidadPago": "AL_FINAL",
       "telefonos": [
         {
           "telefono": "5555010001",
@@ -97,7 +97,7 @@
       "nombre": "Café Aurora Américas",
       "direccion": "Av. Américas 450, Col. Providencia, Guadalajara",
       "descuentoPorcentaje": 10,
-      "modalidadPago": null,
+      "modalidadPago": "AL_FINAL",
       "telefonos": [
         {
           "telefono": "5555010001",

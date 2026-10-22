@@ -43,6 +43,7 @@ import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import { formatearFolioB2b } from "@/lib/format";
+import { MODALIDAD_LABEL } from "@/lib/modalidades-cobro";
 import {
   entregasDesdePedido,
   fechaCorta,
@@ -724,8 +725,8 @@ export default function DetallePanel({
         </p>
         {confirmPago === "desmarcar" && pedido?.modoCobro === "AL_INICIO" && (
           <p className="mt-2 text-xs text-admin-ink-soft">
-            Este negocio cobra por adelantado: desmarcar el pago no regresa el
-            pedido a Por confirmar; seguirá {ESTADO_LABEL[pedido.estado]}.
+            Este pedido es de «{MODALIDAD_LABEL.AL_INICIO}»: desmarcar el pago
+            no regresa el pedido a Por confirmar; seguirá {ESTADO_LABEL[pedido.estado]}.
           </p>
         )}
       </Modal>

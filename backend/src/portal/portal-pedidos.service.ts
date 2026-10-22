@@ -306,7 +306,6 @@ export class PortalPedidosService {
           origen: OrigenPedidoB2b.PORTAL_CLIENTE,
           tenantId: t.id,
           tenant: {
-            pedidoB2bModoCobro: t.pedidoB2bModoCobro,
             pedidoB2bMinimoPiezas: t.pedidoB2bMinimoPiezas,
           },
           cliente,

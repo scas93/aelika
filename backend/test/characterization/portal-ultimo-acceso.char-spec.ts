@@ -23,6 +23,8 @@ describe('Portal · último acceso del cliente', () => {
   const alta = (nombre: string, sufijo: string) =>
     crearClienteB2b(s.h.prisma, {
       tenantId: s.base.tenant.id,
+      modalidadPago: 'AL_FINAL',
+      modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
       tenantSlug: slug(),
       sufijo,
       nombre,

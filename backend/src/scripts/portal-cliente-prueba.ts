@@ -20,6 +20,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client';
 import { crearClienteB2b } from '../clientes/cliente-b2b';
 import { normalizarTelefono } from '../common/telefono';
+import { normalizarModalidades } from '../common/modalidades-cobro';
 
 const log = (m = '') => process.stderr.write(m + '\n');
 const args = process.argv.slice(2);
@@ -75,6 +76,7 @@ async function main() {
     if (tenant.tipoStorefront !== 'RETAIL_B2B')
       throw new Error(`"${slug}" no es un negocio de mayoreo.`);
 
+    const modalidadesActivas = normalizarModalidades(tenant.modalidadesCobroB2b);
     const clientes = await prisma.cliente.findMany({
       where: { tenantId: tenant.id, canal: 'B2B' },
       include: { telefonos: { orderBy: { createdAt: 'asc' } } },
@@ -122,6 +124,9 @@ async function main() {
         sufijo: 'prueba-portal',
         nombre: 'Cliente Prueba Portal',
         direccion: 'Cliente de prueba del portal (staging)',
+        // La modalidad es obligatoria: la primera activa del negocio («A crédito» si está activa).
+        modalidadPago: modalidadesActivas[0],
+        modalidadesActivas,
         telefonos: [{ telefono, principal: true }],
       });
       return log(`Creado: ${c.codigo}`);

@@ -1,5 +1,8 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsEmail,
   IsEnum,
   IsInt,
@@ -51,9 +54,16 @@ export class UpdateTenantDto {
   @IsEnum(FacturacionModo)
   facturacionModo?: FacturacionModo;
 
+  // Modalidades de cobro B2B activas (Ajustes → Pagos). Reemplaza al antiguo pedidoB2bModoCobro, que ya no se edita por la
+  // API (el ValidationPipe whitelist lo descarta). Al menos una, sin repetidas; solo negocios de mayoreo (lo valida el servicio).
   @IsOptional()
-  @IsEnum(PedidoB2bModoCobro)
-  pedidoB2bModoCobro?: PedidoB2bModoCobro;
+  @IsArray()
+  @ArrayMinSize(1, {
+    message: 'Debe quedar activa al menos una modalidad de cobro',
+  })
+  @ArrayUnique()
+  @IsEnum(PedidoB2bModoCobro, { each: true })
+  modalidadesCobroB2b?: PedidoB2bModoCobro[];
 
   @IsOptional()
   @IsInt()

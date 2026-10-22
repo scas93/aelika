@@ -560,6 +560,8 @@ export interface TenantSettings {
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
   ventanaRecepcionB2b: VentanaRecepcionB2b | null;
+  // Modalidades de cobro B2B activas (Ajustes → Pagos). Siempre al menos una.
+  modalidadesCobroB2b: ModalidadPagoB2b[];
   // Mínimo de piezas por pedido de mayoreo; 0 = sin mínimo.
   pedidoB2bMinimoPiezas: number;
   // Calendario del portal del cliente B2B (hora de Ciudad de México).
@@ -589,6 +591,8 @@ export interface UpdateTenantSettingsPayload {
   // configurada"), omitido para no tocarla — mismo contrato que
   // UpdateTenantDto.ventanaRecepcionB2b en el backend.
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
+  // Modalidades de cobro B2B activas: al menos una, sin repetidas (solo negocios de mayoreo).
+  modalidadesCobroB2b?: ModalidadPagoB2b[];
   // Entero ≥ 0 (0 = sin mínimo).
   pedidoB2bMinimoPiezas?: number;
   // Calendario del portal: HH:mm; horas enteras 0–168; semanas 0–4; número de 10 dígitos (null o "" lo quita).
@@ -1127,6 +1131,11 @@ export function updateTenantSettings(token: string, payload: UpdateTenantSetting
   });
 }
 
+/** Cuántos clientes B2B activos (sin baja) usan cada modalidad: se muestra antes de confirmar que se desactiva una. */
+export function fetchUsoModalidadesCobro(token: string) {
+  return request<Record<ModalidadPagoB2b, number>>("/tenant/me/modalidades-cobro/uso", { headers: authHeaders(token) });
+}
+
 export function regenerateBotApiKey(token: string) {
   return request<TenantSettings>("/tenant/me/regenerate-bot-key", {
     method: "POST",
@@ -1446,7 +1455,6 @@ export interface PedidoB2bSemanaDestino {
 export interface PublicPedidoB2bTenantInfo {
   nombre: string;
   logoUrl: string | null;
-  pedidoB2bModoCobro: PedidoB2bModoCobro;
   pedidoB2bMinimoPiezas: number;
   // A diferencia de PublicTenantInfo.abierto (B2C, horario de atención),
   // este refleja la ventana de recepción de pedidos del módulo B2B — ver
@@ -2070,6 +2078,8 @@ export interface ClienteB2bDetalle {
   direccion: string | null;
   descuentoPorcentaje: number | null;
   modalidadPago: ModalidadPagoB2b | null;
+  // true = conserva una modalidad que el negocio ya desactivó en Ajustes → Pagos.
+  modalidadInactiva: boolean;
   activo: boolean;
   bajaAt: string | null;
   pedidosActivos: number;
@@ -2098,16 +2108,17 @@ export interface CreateClienteB2bPayload {
   nombre: string;
   direccion: string;
   descuentoPorcentaje?: number;
-  modalidadPago?: ModalidadPagoB2b;
+  // Obligatoria, y debe estar activa en Ajustes → Pagos.
+  modalidadPago: ModalidadPagoB2b;
   telefonos: TelefonoClienteB2bInput[];
 }
 
 export interface UpdateClienteB2bPayload {
   nombre?: string;
   direccion?: string;
-  // null borra el descuento / la modalidad (queda la del negocio).
+  // null borra el descuento. La modalidad no se puede borrar: se omite para no tocarla.
   descuentoPorcentaje?: number | null;
-  modalidadPago?: ModalidadPagoB2b | null;
+  modalidadPago?: ModalidadPagoB2b;
 }
 
 export function fetchClientesB2b(
@@ -2176,9 +2187,9 @@ export function fetchEntregasPedidoClienteB2b(token: string, clienteId: string, 
   });
 }
 
-/** Lo que el formulario de alta necesita del negocio: su modalidad de cobro por defecto. */
+/** Lo que el alta y la ficha del cliente necesitan del negocio: qué modalidades de cobro están activas. */
 export function fetchClientesB2bConfig(token: string) {
-  return request<{ modalidadCobroNegocio: PedidoB2bModoCobro }>("/clientes-b2b/config", { headers: authHeaders(token) });
+  return request<{ modalidadesActivas: ModalidadPagoB2b[] }>("/clientes-b2b/config", { headers: authHeaders(token) });
 }
 
 export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {

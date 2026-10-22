@@ -38,7 +38,6 @@ export class PublicPedidosB2bService {
       select: {
         nombre: true,
         logoUrl: true,
-        pedidoB2bModoCobro: true,
         pedidoB2bMinimoPiezas: true,
         pedidoB2bVentanaAperturaDia: true,
         pedidoB2bVentanaAperturaHora: true,
@@ -57,7 +56,6 @@ export class PublicPedidosB2bService {
     return {
       nombre: tenant.nombre,
       logoUrl: tenant.logoUrl,
-      pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
       pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
       // A diferencia de PublicService.getTenantInfo (B2C, que usa
       // isAbiertoAhora/HorarioSemana), este storefront gatea el checkout con

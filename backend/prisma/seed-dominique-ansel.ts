@@ -68,7 +68,8 @@ interface MenuData {
     horarioAtencion: HorarioSemana;
     pedidoB2b: {
       minimoPiezas: number;
-      modoCobro: keyof typeof PedidoB2bModoCobro;
+      /** Modalidades de cobro que el negocio tiene activas (Ajustes → Pagos); el seed manda sobre el default. */
+      modalidadesActivas: (keyof typeof PedidoB2bModoCobro)[];
       ventanaAperturaDia: keyof typeof DiaSemana;
       ventanaAperturaHora: string;
       ventanaCierreDia: keyof typeof DiaSemana;
@@ -88,7 +89,8 @@ interface MenuData {
     nombre: string;
     direccion: string;
     descuentoPorcentaje: number | null;
-    modalidadPago: keyof typeof PedidoB2bModoCobro | null;
+    /** Obligatoria y debe estar entre las modalidades activas del negocio. */
+    modalidadPago: keyof typeof PedidoB2bModoCobro;
     telefonos: {
       telefono: string;
       principal: boolean;
@@ -154,6 +156,10 @@ async function main() {
     menu.tenant.horarioAtencion,
   ) as unknown as Prisma.InputJsonValue;
 
+  const modalidadesActivas = menu.tenant.pedidoB2b.modalidadesActivas.map(
+    (m) => PedidoB2bModoCobro[m],
+  );
+
   const tenantData = {
     nombre: menu.tenant.nombre,
     logoUrl: menu.tenant.logoUrl,
@@ -163,7 +169,9 @@ async function main() {
     tipoStorefront: TipoStorefront[menu.tenant.tipoStorefront],
     facturacionModo: FacturacionModo[menu.tenant.facturacionModo],
     pedidoB2bMinimoPiezas: menu.tenant.pedidoB2b.minimoPiezas,
-    pedidoB2bModoCobro: PedidoB2bModoCobro[menu.tenant.pedidoB2b.modoCobro],
+    modalidadesCobroB2b: modalidadesActivas,
+    // Columna deprecada (ya no decide nada): se deja coherente con la primera modalidad activa.
+    pedidoB2bModoCobro: modalidadesActivas[0],
     pedidoB2bVentanaAperturaDia:
       DiaSemana[menu.tenant.pedidoB2b.ventanaAperturaDia],
     pedidoB2bVentanaAperturaHora: menu.tenant.pedidoB2b.ventanaAperturaHora,
@@ -235,9 +243,8 @@ async function main() {
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       ...cliente,
-      modalidadPago: cliente.modalidadPago
-        ? PedidoB2bModoCobro[cliente.modalidadPago]
-        : null,
+      modalidadPago: PedidoB2bModoCobro[cliente.modalidadPago],
+      modalidadesActivas,
     });
   }
 

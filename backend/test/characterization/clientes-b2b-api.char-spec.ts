@@ -1,4 +1,4 @@
-import { BaseSeed, seedBase } from './db';
+import { BaseSeed, configurarB2b, seedBase } from './db';
 import { usarSuite } from './helpers';
 import { apiRol, crearPublicoB2b } from './b2b-helpers';
 
@@ -11,6 +11,7 @@ describe('Clientes B2B · API', () => {
     nombre: 'Café Aurora Matriz',
     sufijo: 'matriz',
     direccion: 'Av. Siempre Viva 123',
+    modalidadPago: 'AL_FINAL',
     telefonos: [
       {
         telefono: '+52 55 1111 2222',
@@ -33,6 +34,7 @@ describe('Clientes B2B · API', () => {
             .send({
               nombre,
               direccion: 'Calle 1',
+              modalidadPago: 'AL_FINAL',
               telefonos: [{ telefono: tel }],
             })
             .expect(201)
@@ -48,13 +50,23 @@ describe('Clientes B2B · API', () => {
       );
     });
 
-    it('GET /clientes-b2b/config da la modalidad de cobro del negocio (Gerente)', async () => {
+    it('GET /clientes-b2b/config da las modalidades activas del negocio (Gerente)', async () => {
+      // Cambio deliberado: antes daba la modalidad por defecto del negocio («Igual que el negocio»).
       const r = await admin().get('/clientes-b2b/config').expect(200);
-      expect(['AL_INICIO', 'AL_FINAL']).toContain(r.body.modalidadCobroNegocio);
+      expect(r.body).toEqual({ modalidadesActivas: ['AL_FINAL'] });
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_INICIO', 'AL_FINAL'],
+      });
+      expect((await admin().get('/clientes-b2b/config').expect(200)).body).toEqual({
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
+      });
       await operador().get('/clientes-b2b/config').expect(403);
     });
 
     it('crea con código {slug}-{sufijo}, dos teléfonos normalizados y uno principal', async () => {
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
+      });
       const c = await alta({
         descuentoPorcentaje: 10,
         modalidadPago: 'AL_INICIO',
@@ -130,6 +142,8 @@ describe('Clientes B2B · API', () => {
         { descuentoPorcentaje: 101 },
         { descuentoPorcentaje: -1 },
         { modalidadPago: 'NUNCA' },
+        { modalidadPago: undefined }, // obligatoria
+        { modalidadPago: null },
       ]) {
         expect(
           (await admin().post('/clientes-b2b').send(body(extra))).status,
@@ -201,7 +215,10 @@ describe('Clientes B2B · API', () => {
   });
 
   describe('edición', () => {
-    it('edita todo menos el código (un codigo en el body se ignora); null borra descuento y modalidad', async () => {
+    it('edita todo menos el código (un codigo en el body se ignora); null borra el descuento', async () => {
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
+      });
       const c = await alta({
         descuentoPorcentaje: 20,
         modalidadPago: 'AL_INICIO',
@@ -224,11 +241,11 @@ describe('Clientes B2B · API', () => {
       });
       const r2 = await admin()
         .patch(`/clientes-b2b/${c.id}`)
-        .send({ descuentoPorcentaje: null, modalidadPago: null })
+        .send({ descuentoPorcentaje: null })
         .expect(200);
       expect(r2.body).toMatchObject({
         descuentoPorcentaje: null,
-        modalidadPago: null,
+        modalidadPago: 'AL_INICIO', // cambio deliberado: ya no se puede borrar la modalidad
         codigo: 'cafe-test-matriz',
       });
       expect(
@@ -238,6 +255,55 @@ describe('Clientes B2B · API', () => {
             .send({ descuentoPorcentaje: 150 })
         ).status,
       ).toBe(400);
+    });
+  });
+
+  describe('modalidad de pago (obligatoria y solo entre las activas)', () => {
+    const crearConStatus = (extra: Record<string, unknown>) =>
+      admin().post('/clientes-b2b').send(body(extra));
+
+    it('alta sin modalidad o con null: 400 y no se crea el cliente', async () => {
+      expect((await crearConStatus({ modalidadPago: undefined })).status).toBe(400);
+      expect((await crearConStatus({ modalidadPago: null })).status).toBe(400);
+      expect(await s.h.prisma.cliente.count()).toBe(0);
+    });
+
+    it('alta con una modalidad INACTIVA: 400 con el aviso de Ajustes → Pagos; con la activa, 201', async () => {
+      // El negocio de la prueba solo tiene «A crédito» (AL_FINAL).
+      const r = await crearConStatus({ modalidadPago: 'AL_INICIO' });
+      expect(r.status).toBe(400);
+      expect(r.body.message).toMatch(/Pago por adelantado.*Ajustes → Pagos/);
+      expect(await s.h.prisma.cliente.count()).toBe(0);
+      expect((await crearConStatus({ modalidadPago: 'AL_FINAL' })).status).toBe(201);
+    });
+
+    it('edición: null se rechaza; conservar la actual (aunque se desactivó) se acepta; elegir OTRA inactiva se rechaza', async () => {
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
+      });
+      const c = await alta({ modalidadPago: 'AL_INICIO' });
+      // El Dueño desactiva «Pago por adelantado»: el cliente la conserva.
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_FINAL'],
+      });
+      const det = (await admin().get(`/clientes-b2b/${c.id}`).expect(200)).body;
+      expect(det).toMatchObject({ modalidadPago: 'AL_INICIO', modalidadInactiva: true });
+      // Llega igual que la guardada: se acepta.
+      await admin().patch(`/clientes-b2b/${c.id}`).send({ modalidadPago: 'AL_INICIO', nombre: 'Nombre nuevo' }).expect(200);
+      // Cambiarla a una activa: se acepta y la advertencia desaparece.
+      const r = await admin().patch(`/clientes-b2b/${c.id}`).send({ modalidadPago: 'AL_FINAL' }).expect(200);
+      expect(r.body).toMatchObject({ modalidadPago: 'AL_FINAL', modalidadInactiva: false });
+      // Ya no puede volver a la inactiva (ahora es «otra», no la actual).
+      const rechazo = await admin().patch(`/clientes-b2b/${c.id}`).send({ modalidadPago: 'AL_INICIO' });
+      expect(rechazo.status).toBe(400);
+      // null se rechaza siempre.
+      expect((await admin().patch(`/clientes-b2b/${c.id}`).send({ modalidadPago: null })).status).toBe(400);
+      expect((await s.h.prisma.cliente.findUniqueOrThrow({ where: { id: c.id } })).modalidadPago).toBe('AL_FINAL');
+    });
+
+    it('el detalle marca modalidadInactiva=false cuando la modalidad sigue activa', async () => {
+      const c = await alta();
+      expect((await admin().get(`/clientes-b2b/${c.id}`).expect(200)).body.modalidadInactiva).toBe(false);
     });
   });
 

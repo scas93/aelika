@@ -16,7 +16,9 @@ import {
   type ModalidadPagoB2b,
 } from "@/lib/api";
 import { formatTelefono } from "@/lib/format";
-import { descuentoValido, etiquetaModalidadNegocio, MODALIDAD_LABEL, parseDescuento } from "./cliente-b2b-form";
+import { descuentoValido, parseDescuento } from "./cliente-b2b-form";
+import SelectorModalidadPago from "./selector-modalidad-pago";
+import { AVISO_MODALIDAD_INACTIVA } from "@/lib/modalidades-cobro";
 import SidePanel from "../_components/SidePanel";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
@@ -45,7 +47,7 @@ export default function ClienteB2bPanel({
   const [direccion, setDireccion] = useState("");
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
-  const [modalidadNegocio, setModalidadNegocio] = useState<ModalidadPagoB2b | null>(null);
+  const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export default function ClienteB2bPanel({
   useEffect(() => {
     let cancelled = false;
     fetchClientesB2bConfig(token)
-      .then((c) => !cancelled && setModalidadNegocio(c.modalidadCobroNegocio))
+      .then((c) => !cancelled && setModalidadesActivas(c.modalidadesActivas))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -110,7 +112,7 @@ export default function ClienteB2bPanel({
     (nombre.trim() !== cliente.nombre ||
       direccion.trim() !== (cliente.direccion ?? "") ||
       descuentoCambio ||
-      (modalidad || null) !== (cliente.modalidadPago ?? null));
+      modalidad !== (cliente.modalidadPago ?? ""));
   const puedeGuardar = hayCambios && nombre.trim().length >= 2 && direccion.trim().length >= 3 && descuentoValido(descuentoNum) && !guardando;
 
   async function handleGuardar() {
@@ -123,7 +125,8 @@ export default function ClienteB2bPanel({
         nombre: nombre.trim(),
         direccion: direccion.trim(),
         descuentoPorcentaje: descuentoNum && descuentoNum > 0 ? descuentoNum : null,
-        modalidadPago: modalidad || null,
+        // Solo se manda si hay una elegida (la modalidad no se puede borrar).
+        ...(modalidad ? { modalidadPago: modalidad } : {}),
       });
       aplicar(c);
       setGuardado(true);
@@ -235,15 +238,11 @@ export default function ClienteB2bPanel({
                 <input value={descuento} onChange={(e) => setDescuento(e.target.value)} inputMode="decimal" className="admin-input" placeholder="Sin descuento" />
                 {!descuentoValido(descuentoNum) && <span className="text-xs font-normal text-red-600">Escribe un número entre 0 y 100.</span>}
               </label>
-              <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-                Modalidad de pago
-                <select value={modalidad} onChange={(e) => setModalidad(e.target.value as "" | ModalidadPagoB2b)} className="admin-input">
-                  <option value="">{etiquetaModalidadNegocio(modalidadNegocio)}</option>
-                  <option value="AL_INICIO">{MODALIDAD_LABEL.AL_INICIO}</option>
-                  <option value="AL_FINAL">{MODALIDAD_LABEL.AL_FINAL}</option>
-                </select>
-              </label>
+              <SelectorModalidadPago value={modalidad} onChange={setModalidad} activas={modalidadesActivas} />
             </div>
+            {cliente.modalidadInactiva && modalidad === cliente.modalidadPago && (
+              <Aviso tono="ambar">{AVISO_MODALIDAD_INACTIVA}. Elige otra modalidad arriba para cambiarla.</Aviso>
+            )}
             {descuentoCambio && <p className="text-xs font-semibold text-amber-800">No afecta pedidos ya creados.</p>}
 
             {error && <p className="text-sm text-red-600">{error}</p>}

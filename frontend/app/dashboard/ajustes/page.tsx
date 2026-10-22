@@ -19,6 +19,8 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/notificaciones": "Avisos por Telegram y correo cuando algo pasa con un pedido",
 };
 
+const DESCRIPCION_PAGOS_B2B = "Modalidades de cobro: a crédito o pago por adelantado";
+
 interface Grupo {
   titulo: string;
   hrefs: string[];
@@ -57,12 +59,10 @@ export default function AjustesPage() {
   }
 
   const esB2b = user.tenant.tipoStorefront === "RETAIL_B2B";
-  // B2B no cobra con tarjeta ni usa puntos de envío; Códigos de descuento se oculta si el módulo está apagado.
+  // B2B no usa puntos de envío (Pagos sí aplica: ahí se eligen las modalidades de cobro); Códigos de descuento se oculta si
+  // el módulo está apagado.
   const ocultos = new Set<string>();
-  if (esB2b) {
-    ocultos.add("/dashboard/ajustes/pagos");
-    ocultos.add("/dashboard/ajustes/envios");
-  }
+  if (esB2b) ocultos.add("/dashboard/ajustes/envios");
   if (!moduloActivo(user.tenant.modulosDesactivados, "CODIGOS_DESCUENTO")) ocultos.add("/dashboard/ajustes/codigos-descuento");
   const grupos = (esB2b ? [...GRUPOS, GRUPO_PEDIDOS_B2B] : GRUPOS)
     .map((grupo) => ({ ...grupo, hrefs: grupo.hrefs.filter((href) => !ocultos.has(href)) }))
@@ -90,7 +90,9 @@ export default function AjustesPage() {
                     </span>
                     <div className="flex min-w-0 flex-col">
                       <span className="text-sm font-bold text-admin-ink">{item.label}</span>
-                      <span className="truncate text-xs text-admin-ink-soft">{DESCRIPCIONES[href]}</span>
+                      <span className="truncate text-xs text-admin-ink-soft">
+                        {esB2b && href === "/dashboard/ajustes/pagos" ? DESCRIPCION_PAGOS_B2B : DESCRIPCIONES[href]}
+                      </span>
                     </div>
                   </Card>
                 </Link>
