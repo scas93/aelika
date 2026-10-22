@@ -197,6 +197,7 @@ model Tenant {
   clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
+  reglaClienteEstados       ReglaClienteEstado[]
   loyaltyCards              LoyaltyCard[]
   loyaltyVisits             LoyaltyVisit[]
   loyaltyRedemptions        LoyaltyRedemption[]
@@ -1188,6 +1189,7 @@ model Cliente {
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
+  reglaEstados   ReglaClienteEstado[]
   loyaltyCard    LoyaltyCard?
 
   @@unique([tenantId, canal, telefono])
@@ -1480,14 +1482,41 @@ model Regla {
   // MANUAL, que no tienen este concepto de disparo único.
   disparadaEn DateTime?
 
+  // Solo ESTADO_CLIENTE. true = en su próximo barrido la regla NO envía: solo registra (ReglaClienteEstado) a los clientes
+  // que ya cumplen el filtro y se apaga. La migración 20261023120000 lo enciende en las reglas ESTADO_CLIENTE activas al
+  // desplegar, para que nadie reciba un mensaje por una regla que ya venía operando. Interno: no sale en la API.
+  estadoBasePendiente Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  envios ReglaEnvioLog[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  envios         ReglaEnvioLog[]
+  clientesEstado ReglaClienteEstado[]
 
   @@index([tenantId])
   @@map("reglas")
+}
+
+// Quién cumple hoy el filtro de una Regla ESTADO_CLIENTE. Una fila = ese cliente cumple la condición desde `cumpleDesde`
+// (y, salvo que el envío estuviera bloqueado por el candado, ya se intentó mandarle el mensaje). ReglaBarridoService
+// la mantiene en cada barrido: los clientes que entran al filtro reciben el mensaje y se registran; los que siguen no
+// reciben otra vez; los que salen se borran, así que si vuelven a cumplir la condición reciben de nuevo. Un envío en
+// FALLO también deja la fila (definitivo hasta que el cliente salga y vuelva a entrar).
+model ReglaClienteEstado {
+  id          String   @id @default(uuid())
+  tenantId    String
+  reglaId     String
+  clienteId   String
+  cumpleDesde DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  regla   Regla   @relation(fields: [reglaId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([reglaId, clienteId])
+  @@index([tenantId])
+  @@map("regla_cliente_estados")
 }
 
 // EN_CURSO: el POST a Botpress salió y fue aceptado (o el servicio de envío

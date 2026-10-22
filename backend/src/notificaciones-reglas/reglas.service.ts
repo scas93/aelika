@@ -26,6 +26,9 @@ import { FiltroCondicion } from './filtro-condicion.type';
 
 const PRISMA_NOT_FOUND = 'P2025';
 
+// Campos de Regla que son estado interno del barrido y no forman parte del contrato de la API.
+const SIN_CAMPOS_INTERNOS = { estadoBasePendiente: true } as const;
+
 interface PayloadValidado {
   triggerConfig: Record<string, unknown> | null;
   filtro: unknown[];
@@ -61,7 +64,7 @@ export class ReglasService {
   ) {}
 
   findAll() {
-    return this.tenantPrisma.client.regla.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.tenantPrisma.client.regla.findMany({ orderBy: { createdAt: 'desc' }, omit: SIN_CAMPOS_INTERNOS });
   }
 
   /**
@@ -78,7 +81,7 @@ export class ReglasService {
   }
 
   async findOne(id: string) {
-    const regla = await this.tenantPrisma.client.regla.findUnique({ where: { id } });
+    const regla = await this.tenantPrisma.client.regla.findUnique({ where: { id }, omit: SIN_CAMPOS_INTERNOS });
     if (!regla) {
       throw new NotFoundException('Regla no encontrada');
     }
@@ -107,6 +110,7 @@ export class ReglasService {
         plantillaVariables,
         activa: dto.activa ?? true,
       } as any,
+      omit: SIN_CAMPOS_INTERNOS,
     });
   }
 
@@ -159,7 +163,7 @@ export class ReglasService {
     }
 
     try {
-      return await this.tenantPrisma.client.regla.update({
+      const actualizada = await this.tenantPrisma.client.regla.update({
         where: { id },
         data: {
           nombre: dto.nombre,
@@ -175,7 +179,14 @@ export class ReglasService {
           activa: dto.activa,
           disparadaEn,
         } as any,
+        omit: SIN_CAMPOS_INTERNOS,
       });
+      // Una regla que deja de ser ESTADO_CLIENTE pierde su registro de quién cumple (si luego vuelve a serlo, empieza de cero).
+      if (existente.trigger === 'ESTADO_CLIENTE' && trigger !== 'ESTADO_CLIENTE') {
+        await this.tenantPrisma.client.reglaClienteEstado.deleteMany({ where: { reglaId: id } });
+        await this.tenantPrisma.client.regla.update({ where: { id }, data: { estadoBasePendiente: false } as any });
+      }
+      return actualizada;
     } catch (error: any) {
       if (error?.code === PRISMA_NOT_FOUND) {
         throw new NotFoundException('Regla no encontrada');

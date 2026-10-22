@@ -15,7 +15,11 @@ interface EstadisticasBarrido {
   enviosDisparados: number;
   enviosBloqueadosPorCandado: number;
   enviosConError: number;
+  omitidosYaEnviado: number;
+  clientesBaseRegistrados: number;
 }
+
+type ResultadoEnvio = 'enviado' | 'bloqueado' | 'error';
 
 /**
  * Job periódico único (no uno por Regla, ver CLAUDE.md) que en cada corrida
@@ -69,6 +73,8 @@ export class ReglaBarridoService {
       enviosDisparados: 0,
       enviosBloqueadosPorCandado: 0,
       enviosConError: 0,
+      omitidosYaEnviado: 0,
+      clientesBaseRegistrados: 0,
     };
 
     const reglas = (await this.prisma.regla.findMany({
@@ -105,19 +111,61 @@ export class ReglaBarridoService {
     this.logger.log(
       `Barrido de Reglas terminado: ${stats.reglasProcesadas} procesada(s), ${stats.reglasConError} con error, ` +
         `${stats.enviosDisparados} envío(s) disparado(s), ${stats.enviosBloqueadosPorCandado} bloqueado(s) por candado, ` +
-        `${stats.enviosConError} envío(s) con error.`,
+        `${stats.enviosConError} envío(s) con error, ` +
+        `${stats.omitidosYaEnviado} omitido(s) por ya enviado, ${stats.clientesBaseRegistrados} cliente(s) registrado(s) como base sin enviar.`,
     );
 
     return stats;
   }
 
+  /**
+   * ESTADO_CLIENTE: un cliente recibe la regla UNA vez mientras siga cumpliendo el filtro. `ReglaClienteEstado` guarda
+   * quién cumple hoy; en cada barrido se recalcula el conjunto:
+   *  - sale (estaba registrado y ya no cumple) → se borra su fila, así que si vuelve a cumplir recibe otra vez;
+   *  - sigue (registrado y cumple) → no se envía, cuenta como omitido;
+   *  - entra (cumple y no estaba registrado) → candado y envío; si se intentó enviar (aunque terminara en FALLO, que es
+   *    definitivo) se registra; si el candado lo bloquea o el envío no pudo ni intentarse (tenant sin webhook, cliente
+   *    sin teléfono) NO se registra y se reevalúa en el siguiente barrido.
+   * `estadoBasePendiente` (lo enciende la migración en las reglas que ya operaban): ese barrido solo registra a quienes
+   * ya cumplen, sin enviar.
+   */
   private async procesarEstadoCliente(regla: ReglaConTenant, stats: EstadisticasBarrido): Promise<void> {
     const condiciones = regla.filtro as unknown as FiltroCondicion[];
     const clientes = await this.filtroService.evaluar(regla.tenantId, condiciones);
+    const cumplen = new Set(clientes.map((c) => c.id));
 
-    for (const cliente of clientes) {
-      await this.intentarEnviar(regla, cliente, stats);
+    const filas = await this.prisma.reglaClienteEstado.findMany({ where: { reglaId: regla.id }, select: { clienteId: true } });
+    const registrados = new Set(filas.map((f) => f.clienteId));
+
+    const salen = [...registrados].filter((id) => !cumplen.has(id));
+    if (salen.length > 0) {
+      await this.prisma.reglaClienteEstado.deleteMany({ where: { reglaId: regla.id, clienteId: { in: salen } } });
     }
+
+    const entran = clientes.filter((c) => !registrados.has(c.id));
+    stats.omitidosYaEnviado += clientes.length - entran.length;
+
+    if (regla.estadoBasePendiente) {
+      await this.registrar(regla, entran.map((c) => c.id));
+      await this.prisma.regla.update({ where: { id: regla.id }, data: { estadoBasePendiente: false } });
+      stats.clientesBaseRegistrados += entran.length;
+      return;
+    }
+
+    for (const cliente of entran) {
+      const resultado = await this.intentarEnviar(regla, cliente, stats);
+      if (resultado === 'enviado') {
+        await this.registrar(regla, [cliente.id]);
+      }
+    }
+  }
+
+  private async registrar(regla: ReglaConTenant, clienteIds: string[]): Promise<void> {
+    if (clienteIds.length === 0) return;
+    await this.prisma.reglaClienteEstado.createMany({
+      data: clienteIds.map((clienteId) => ({ tenantId: regla.tenantId, reglaId: regla.id, clienteId })),
+      skipDuplicates: true,
+    });
   }
 
   private async procesarFechaProgramada(regla: ReglaConTenant, ahora: Date, stats: EstadisticasBarrido): Promise<void> {
@@ -155,16 +203,17 @@ export class ReglaBarridoService {
     await this.prisma.regla.update({ where: { id: regla.id }, data: { disparadaEn: ahora } });
   }
 
-  private async intentarEnviar(regla: ReglaConTenant, cliente: Cliente, stats: EstadisticasBarrido): Promise<void> {
+  private async intentarEnviar(regla: ReglaConTenant, cliente: Cliente, stats: EstadisticasBarrido): Promise<ResultadoEnvio> {
     try {
       const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
       if (bloqueado) {
         stats.enviosBloqueadosPorCandado++;
-        return;
+        return 'bloqueado';
       }
 
       await this.envioService.enviar(regla.tenant, cliente, regla);
       stats.enviosDisparados++;
+      return 'enviado';
     } catch (error: any) {
       // Aislamiento por Cliente: un envío que falla (ej. tenant sin
       // botWebhookUrl) no debe impedir que se intente con el resto de los
@@ -174,6 +223,7 @@ export class ReglaBarridoService {
       this.logger.error(
         `Error enviando Regla ${regla.id} a Cliente ${cliente.id} (tenant=${regla.tenantId}): ${error?.message ?? error}`,
       );
+      return 'error';
     }
   }
 }

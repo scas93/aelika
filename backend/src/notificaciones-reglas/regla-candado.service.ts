@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReglaMensajeCategoria } from '../../generated/prisma/enums';
+import { ReglaEnvioEstado, ReglaMensajeCategoria } from '../../generated/prisma/enums';
 import type { Tenant } from '../../generated/prisma/client';
 
 const DIAS_CANDADO_MARKETING_DEFAULT = 7;
@@ -41,6 +41,8 @@ export class ReglaCandadoService {
         tenantId: tenant.id,
         clienteId,
         categoria: ReglaMensajeCategoria.MARKETING,
+        // Un mensaje que no llegó (FALLO) no consume el cupo del cliente; EN_CURSO y EXITO sí.
+        estado: { not: ReglaEnvioEstado.FALLO },
         createdAt: { gte: desde },
       },
       select: { id: true },

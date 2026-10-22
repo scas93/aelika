@@ -121,6 +121,9 @@ export class TenantPrismaService {
           pedidoB2bCodigoDescuento: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          reglaClienteEstado: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           notificacionCanalConfig: {
             $allOperations: tenantScopedQuery(tenantId),
           },
