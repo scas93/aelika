@@ -21,13 +21,11 @@ import {
 } from './plantilla-variable-catalogo';
 import { sanitizarParaMeta } from './plantilla-variable-formato';
 import { telefonoDestino } from '../clientes/cliente-b2b';
+import { telefonoParaEnvio } from '../common/telefono-internacional';
 
-// Todos los tenants piloto operan en México — mismo supuesto ya hardcodeado
-// en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono (B2C) y
-// ClienteTelefono (B2B) guardan solo los 10 dígitos nacionales (ver common/telefono.ts), sin
-// código de país, así que hay que anteponerlo aquí antes de mandarlo a
-// Botpress/Meta, que sí lo requieren en el número.
-const LADA_PAIS = '+52';
+// Cliente.telefono (B2C) y ClienteTelefono (B2B) guardan 10 dígitos nacionales para México (ver common/telefono.ts), sin
+// código de país; los números internacionales de reservas se guardan con "+" y completos (common/telefono-internacional.ts).
+// telefonoParaEnvio antepone +52 solo a los primeros.
 
 /**
  * Dispara el envío de WhatsApp de una Regla ya evaluada/filtrada por los
@@ -99,7 +97,8 @@ export class ReglaEnvioService {
 
     const payload = {
       correlacionId: log.id,
-      telefono: `${LADA_PAIS}${telefono}`,
+      // Mexicano (10 dígitos guardados) → +52; internacional (guardado con "+") → tal cual, completo.
+      telefono: telefonoParaEnvio(telefono),
       plantilla: {
         nombre: regla.plantillaNombre,
         idioma: regla.plantillaIdioma,

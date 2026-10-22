@@ -70,6 +70,7 @@ export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
   EFECTIVO: 'Efectivo',
   TRANSFERENCIA: 'Transferencia',
   TARJETA: 'Tarjeta',
+  EXTERNO: 'Pago externo',
 };
 
 export interface ItemParaResumen {

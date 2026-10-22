@@ -47,7 +47,7 @@ export class TenantB2bPublicGuard implements CanActivate {
 }
 
 /**
- * Storefront público de MENUDEO (B2C): un negocio de mayoreo (RETAIL_B2B) no lo usa — se rechaza con el mismo 404 que un slug
+ * Storefront público de MENUDEO (B2C): un negocio de mayoreo (RETAIL_B2B) o un hotel (HOTEL) no lo usa — se rechaza con el mismo 404 que un slug
  * inexistente (no crea pedidos ni confirma que el negocio existe como otro tipo). Espejo de TenantB2bPublicGuard.
  * Se aplica a todas las rutas de PublicController salvo `GET tenants/:slug` (info): esa la consultan el proxy y la página
  * /tienda/[slug] justamente para saber el tipoStorefront y redirigir a /mayoreo.
@@ -60,7 +60,7 @@ export class TenantB2cPublicGuard implements CanActivate {
     const slug = context.switchToHttp().getRequest<Request>().params?.slug;
     if (typeof slug !== 'string') return true;
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { tipoStorefront: true } });
-    if (tenant?.tipoStorefront === TipoStorefront.RETAIL_B2B) {
+    if (tenant?.tipoStorefront === TipoStorefront.RETAIL_B2B || tenant?.tipoStorefront === TipoStorefront.HOTEL) {
       throw new NotFoundException('Negocio no encontrado');
     }
     return true;

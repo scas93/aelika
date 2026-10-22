@@ -37,7 +37,7 @@ export interface Session {
 // más valores en el futuro, ligados a otras verticales de negocio. Ver
 // TipoStorefront en el schema de Prisma y dashboard/nav-items.ts, que filtra
 // la navegación según este valor.
-export type TipoStorefront = "RETAIL_B2C" | "RETAIL_B2B";
+export type TipoStorefront = "RETAIL_B2C" | "RETAIL_B2B" | "HOTEL";
 
 export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripcion: string }[] = [
   {
@@ -49,6 +49,11 @@ export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripci
     value: "RETAIL_B2B",
     label: "Retail (B2B)",
     descripcion: "Pedidos semanales a crédito para negocios que te compran a ti (cafeterías, restaurantes).",
+  },
+  {
+    value: "HOTEL",
+    label: "Hotel",
+    descripcion: "Reservas importadas de tu sistema de reservas (PMS) para enviar avisos a tus huéspedes. Sin tienda pública.",
   },
 ];
 

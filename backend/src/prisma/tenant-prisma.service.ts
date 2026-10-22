@@ -88,6 +88,9 @@ export class TenantPrismaService {
           detalleB2C: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          detalleReserva: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           detalleB2B: {
             $allOperations: tenantScopedQuery(tenantId),
           },

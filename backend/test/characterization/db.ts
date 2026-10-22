@@ -39,7 +39,7 @@ export async function seedBase(
     horario?: unknown;
     facturacionModo?: 'OBLIGATORIO' | 'OPCIONAL' | 'DESACTIVADO';
     /** RETAIL_B2B además configura el módulo B2B con un mínimo BAJO (10 piezas, no el default 100). */
-    tipoStorefront?: 'RETAIL_B2C' | 'RETAIL_B2B';
+    tipoStorefront?: 'RETAIL_B2C' | 'RETAIL_B2B' | 'HOTEL';
     b2b?: ConfigB2b;
   } = {},
 ): Promise<BaseSeed> {

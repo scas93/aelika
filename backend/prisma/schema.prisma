@@ -45,6 +45,8 @@ enum PedidoB2bModoCobro {
 enum TipoStorefront {
   RETAIL_B2C
   RETAIL_B2B
+  // Hotel (PMS Amenitiz): sin tienda pública ni pedidos; sus órdenes son RESERVA, ingeridas por POST /internal/reservas/amenitiz.
+  HOTEL
 }
 
 // Vertical/giro del negocio — dato de segmentación interna de Aelika, no del
@@ -198,6 +200,7 @@ model Tenant {
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
   reglaClienteEstados       ReglaClienteEstado[]
+  detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
   loyaltyVisits             LoyaltyVisit[]
   loyaltyRedemptions        LoyaltyRedemption[]
@@ -317,6 +320,8 @@ enum HoraRecogidaTipo {
 
 enum MetodoPago {
   EFECTIVO
+  // Solo reservas (TipoOrden.RESERVA): el cobro ocurre fuera de Aelika (en el PMS); Aelika no lo registra.
+  EXTERNO
   // Not implemented yet (see PublicService) — kept so we don't need another
   // migration whenever this gets built.
   TRANSFERENCIA
@@ -487,6 +492,8 @@ model NotificacionEventoConfig {
 enum TipoOrden {
   B2C
   B2B
+  // Reserva de hotel importada de un PMS (DetalleReserva, 1:1). Sin OrderItem; no aparece en ningún módulo B2C/B2B.
+  RESERVA
 }
 
 model Order {
@@ -608,6 +615,8 @@ model Order {
   detalleB2c DetalleB2C?
   // Etapa 2: detalle exclusivo de B2B (1:1) y entregas (1:N). Mismo cuidado de casing que detalleB2c.
   detalleB2b DetalleB2B?
+  // Reserva de hotel (tipo RESERVA, 1:1). Mismo cuidado de casing que detalleB2c.
+  detalleReserva DetalleReserva?
   entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
@@ -701,6 +710,37 @@ model DetalleB2B {
   @@index([tenantId, semanaInicio])
   @@index([codigoDescuentoId])
   @@map("detalles_b2b")
+}
+
+// Lo exclusivo de una reserva de hotel (Order.tipo = RESERVA), 1:1 con Order. Aelika es un espejo de solo lectura del PMS:
+// lo escribe únicamente POST /internal/reservas/amenitiz. Folio de la orden = pmsReservaId. tenantId denormalizado (convención).
+model DetalleReserva {
+  id               String   @id @default(uuid())
+  tenantId         String
+  orderId          String   @unique
+  // Proveedor del PMS ('AMENITIZ') + id de la reserva en él, como texto. Único por tenant y proveedor.
+  pmsProveedor     String
+  pmsReservaId     String
+  checkIn          DateTime @db.Date
+  checkOut         DateTime @db.Date
+  adultos          Int      @default(0)
+  ninos            Int      @default(0)
+  // "Habitación Superior #5, Estándar #15"
+  habitaciones     String?
+  // Tal como lo da el PMS (booking.com, manual, A-Expedia, amenitiz…).
+  origen           String?
+  // Moneda del total (Order.total); no se convierte ni se valida.
+  moneda           String?
+  idiomaHuesped    String?
+  // Enlace personal del huésped al registro en línea: no se expone en ninguna respuesta ni log.
+  onlineCheckinUrl String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, pmsProveedor, pmsReservaId])
+  @@index([tenantId, checkIn])
+  @@map("detalles_reserva")
 }
 
 // Origen de un pedido B2B: lo creó el propio cliente en el portal o lo capturó el equipo en el panel.
