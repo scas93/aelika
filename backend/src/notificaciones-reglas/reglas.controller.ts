@@ -32,13 +32,13 @@ export class ReglasController {
   }
 
   @Post()
-  create(@Body() dto: CreateReglaDto) {
-    return this.reglasService.create(dto);
+  create(@Body() dto: CreateReglaDto, @CurrentUser() user: JwtPayload) {
+    return this.reglasService.create(dto, user.tenantId);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateReglaDto) {
-    return this.reglasService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateReglaDto, @CurrentUser() user: JwtPayload) {
+    return this.reglasService.update(id, dto, user.tenantId);
   }
 
   @Post(':id/disparar')

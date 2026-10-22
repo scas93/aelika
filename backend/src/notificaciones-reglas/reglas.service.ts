@@ -3,6 +3,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { validarFiltroReserva, validarTriggerConfigReserva } from './reserva-trigger';
 import {
   EstadoPedido,
   PedidoB2bEstado,
@@ -58,6 +60,7 @@ export class ReglasService {
 
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
     private readonly filtroService: ReglasFiltroService,
     private readonly candadoService: ReglaCandadoService,
     private readonly envioService: ReglaEnvioService,
@@ -88,8 +91,9 @@ export class ReglasService {
     return regla;
   }
 
-  async create(dto: CreateReglaDto) {
+  async create(dto: CreateReglaDto, tenantId: string) {
     const { triggerConfig, filtro, plantillaVariables } = await this.validarPayload({
+      tenantId,
       trigger: dto.trigger,
       triggerConfigRaw: dto.triggerConfig,
       filtroRaw: dto.filtro ?? [],
@@ -114,7 +118,7 @@ export class ReglasService {
     });
   }
 
-  async update(id: string, dto: UpdateReglaDto) {
+  async update(id: string, dto: UpdateReglaDto, tenantId: string) {
     const existente = await this.tenantPrisma.client.regla.findUnique({ where: { id } });
     if (!existente) {
       throw new NotFoundException('Regla no encontrada');
@@ -135,6 +139,7 @@ export class ReglasService {
     const soloDesactiva = dto.activa === false && Object.entries(dto).every(([clave, valor]) => clave === 'activa' || valor === undefined);
 
     const { triggerConfig, filtro, plantillaVariables } = await this.validarPayload({
+      tenantId,
       trigger,
       triggerConfigRaw,
       filtroRaw,
@@ -248,6 +253,7 @@ export class ReglasService {
   }
 
   private async validarPayload(input: {
+    tenantId: string;
     trigger: ReglaTriggerTipo;
     triggerConfigRaw: Record<string, unknown> | undefined;
     filtroRaw: unknown[];
@@ -256,13 +262,25 @@ export class ReglasService {
   }): Promise<PayloadValidado> {
     const { trigger } = input;
 
+    // RESERVA_AUTOMATICA solo existe para negocios Hotel.
+    if (trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: input.tenantId }, select: { tipoStorefront: true } });
+      if (tenant?.tipoStorefront !== 'HOTEL') {
+        throw new BadRequestException('El trigger de reservas solo está disponible para negocios de tipo Hotel.');
+      }
+    }
+
     const triggerConfig = await this.validarTriggerConfig(trigger, input.triggerConfigRaw, input.permitirDespachadoB2bObsoleto);
 
     // El Filtro no aplica a EVENTO_PEDIDO (decisión de producto ya tomada) —
     // se limpia en vez de rechazar, mismo criterio que triggerConfig al
     // cambiar de tipo (ver casos borde del prompt de esta etapa).
     const filtro =
-      trigger === ReglaTriggerTipo.EVENTO_PEDIDO ? [] : await this.validarFiltro(input.filtroRaw);
+      trigger === ReglaTriggerTipo.EVENTO_PEDIDO
+        ? []
+        : trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA
+          ? validarFiltroReserva(input.filtroRaw)
+          : await this.validarFiltro(input.filtroRaw);
 
     // Origen (ORDER/PEDIDO_B2B) solo existe dentro de triggerConfig cuando
     // trigger = EVENTO_PEDIDO — es lo que decide si las variables "solo
@@ -295,6 +313,10 @@ export class ReglasService {
       }
       this.assertEstatusValido(instancia.origen, instancia.estatus);
       return { origen: instancia.origen, estatus: instancia.estatus };
+    }
+
+    if (trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA) {
+      return { ...validarTriggerConfigReserva(raw) };
     }
 
     if (trigger === ReglaTriggerTipo.FECHA_PROGRAMADA) {

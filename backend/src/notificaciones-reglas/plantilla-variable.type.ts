@@ -63,4 +63,19 @@ export interface PedidoContextoPedidoB2b extends PedidoContextoBase {
  * pedido por su cuenta, porque eso lo obligaría a saber si viene de Order o
  * PedidoB2b — mezclando responsabilidades que hoy no tiene.
  */
-export type PedidoContexto = PedidoContextoOrder | PedidoContextoPedidoB2b;
+/**
+ * Reserva de hotel que disparó el envío (trigger RESERVA_AUTOMATICA). Cumple PedidoContextoBase solo para encajar en la
+ * unión (`estatus` va vacío, `items` vacío): las variables de pedido B2C/B2B se rechazan aquí (ver `restriccion`).
+ * `folio` = número de reserva del PMS. `enlaceCheckin` lleva un token personal: nunca se escribe en logs.
+ */
+export interface PedidoContextoReserva extends PedidoContextoBase {
+  origen: 'RESERVA';
+  checkIn: Date;
+  checkOut: Date;
+  adultos: number;
+  ninos: number;
+  habitaciones: string | null;
+  enlaceCheckin: string | null;
+}
+
+export type PedidoContexto = PedidoContextoOrder | PedidoContextoPedidoB2b | PedidoContextoReserva;

@@ -617,6 +617,7 @@ model Order {
   detalleB2b DetalleB2B?
   // Reserva de hotel (tipo RESERVA, 1:1). Mismo cuidado de casing que detalleB2c.
   detalleReserva DetalleReserva?
+  reglaEnvioLogs ReglaEnvioLog[]
   entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
@@ -1376,6 +1377,9 @@ enum ReglaTriggerTipo {
   ESTADO_CLIENTE
   FECHA_PROGRAMADA
   MANUAL
+  // Solo negocios HOTEL: evalúa sus reservas (Order RESERVA) en cada barrido — ver reserva-trigger.ts. triggerConfig
+  // { frecuencia: 'CADA_HORA' } | { frecuencia: 'DIARIA', hora: 0-23 (CDMX) }; filtro = condiciones sobre la reserva.
+  RESERVA_AUTOMATICA
 }
 
 // Alineado 1:1 a las categorías de plantilla de Meta/WhatsApp — no hay una
@@ -1443,6 +1447,8 @@ enum ReglaPlantillaVariableFuente {
   // siempre, así que no necesita datos adicionales para resolverla.
   NOMBRE_NEGOCIO
   VALOR_FIJO
+  // Datos de la reserva (check-in, noches, habitaciones…). Solo en reglas RESERVA_AUTOMATICA.
+  CAMPO_RESERVA
 }
 
 // Regla = Trigger + Filtro + Canal + Mensaje. Esta etapa solo modela la
@@ -1587,6 +1593,8 @@ model ReglaEnvioLog {
   categoria ReglaMensajeCategoria
   estado    ReglaEnvioEstado      @default(EN_CURSO)
   createdAt DateTime              @default(now())
+  // Reserva (Order RESERVA) que originó el envío; null en el resto de los triggers. Un envío por (regla, reserva).
+  orderId   String?
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -1595,10 +1603,12 @@ model ReglaEnvioLog {
   // frecuencia necesite — mismo criterio que PedidoB2b.codigoDescuento (sin
   // Restrict, sin snapshot que perder).
   regla   Regla?  @relation(fields: [reglaId], references: [id], onDelete: SetNull)
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   // El candado de frecuencia consulta exactamente esta combinación en cada
   // evaluación de regla Marketing — ver ReglaCandadoService.
   @@index([tenantId, clienteId, categoria, createdAt])
+  @@index([reglaId, orderId])
   @@map("regla_envio_logs")
 }
 

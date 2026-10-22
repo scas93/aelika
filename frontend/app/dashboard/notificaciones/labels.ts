@@ -1,4 +1,5 @@
 import type {
+  ReservaFiltroCampo,
   ReglaFiltroCampo,
   ReglaFiltroOperador,
   ReglaMensajeCategoria,
@@ -29,6 +30,7 @@ export const TRIGGER_LABEL: Record<ReglaTriggerTipo, string> = {
   ESTADO_CLIENTE: "Estado del cliente",
   FECHA_PROGRAMADA: "Fecha programada",
   MANUAL: "Manual",
+  RESERVA_AUTOMATICA: "Reservas (automático)",
 };
 
 // Reusa pares de acento ya existentes en nav-items.ts (mismo criterio que
@@ -40,6 +42,7 @@ export const TRIGGER_BADGE_COLOR: Record<ReglaTriggerTipo, string> = {
   ESTADO_CLIENTE: "bg-[#FFE4E6] text-[#E11D48]",
   FECHA_PROGRAMADA: "bg-[#DBEAFE] text-[#3B82F6]",
   MANUAL: "bg-[#EDE9FE] text-[#8B5CF6]",
+  RESERVA_AUTOMATICA: "bg-[#D1FAE5] text-[#047857]",
 };
 
 export const CATEGORIA_LABEL: Record<ReglaMensajeCategoria, string> = {
@@ -89,4 +92,23 @@ export const IDIOMAS_PLANTILLA: { value: string; label: string }[] = [
   { value: "en_US", label: "Inglés (EE. UU.)" },
   { value: "en", label: "Inglés" },
   { value: "pt_BR", label: "Portugués (Brasil)" },
+];
+
+// Filtro de reservas (trigger RESERVA_AUTOMATICA).
+export const RESERVA_CAMPO_LABEL: Record<ReservaFiltroCampo, string> = {
+  DIAS_PARA_CHECKIN: "Días para el check-in",
+  DIAS_DESDE_CHECKOUT: "Días desde el check-out",
+  IDIOMA_HUESPED: "Idioma del huésped",
+};
+export const RESERVA_OPERADOR_LABEL: Record<string, string> = {
+  IGUAL: "es igual a",
+  MAYOR_IGUAL: "es mayor o igual a",
+  MENOR_IGUAL: "es menor o igual a",
+  ES: "es",
+  NO_ES: "no es",
+};
+export const RESERVA_IDIOMAS = [
+  { value: "ES", label: "Español" },
+  { value: "EN", label: "Inglés" },
+  { value: "DE", label: "Alemán" },
 ];

@@ -6,6 +6,15 @@ import { ReglasFiltroService } from './reglas-filtro.service';
 import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
 import { FiltroCondicion } from './filtro-condicion.type';
+import { PedidoContextoReserva } from './plantilla-variable.type';
+import {
+  TriggerConfigReserva,
+  CondicionReserva,
+  coincideIdioma,
+  condicionesDiasAWhere,
+  hoyCdmx,
+  ventanaActiva,
+} from './reserva-trigger';
 
 type ReglaConTenant = Regla & { tenant: Tenant };
 
@@ -78,7 +87,7 @@ export class ReglaBarridoService {
     };
 
     const reglas = (await this.prisma.regla.findMany({
-      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA'] } },
+      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA', 'RESERVA_AUTOMATICA'] } },
       include: { tenant: true },
     })) as ReglaConTenant[];
 
@@ -95,6 +104,8 @@ export class ReglaBarridoService {
       try {
         if (regla.trigger === 'ESTADO_CLIENTE') {
           await this.procesarEstadoCliente(regla, stats);
+        } else if (regla.trigger === 'RESERVA_AUTOMATICA') {
+          await this.procesarReservas(regla, ahora, stats);
         } else {
           await this.procesarFechaProgramada(regla, ahora, stats);
         }
@@ -160,6 +171,52 @@ export class ReglaBarridoService {
     }
   }
 
+  /**
+   * RESERVA_AUTOMATICA (solo hoteles): reservas NO canceladas que cumplen el filtro de días/idioma y a las que esta regla
+   * todavía no ha enviado nada (un envío por regla y reserva: cualquier ReglaEnvioLog de esa regla para esa reserva —EN_CURSO,
+   * EXITO o FALLO— cuenta como enviado, sin importar si luego se canceló o reactivó). Las DIARIAS solo corren desde su hora
+   * (CDMX) hasta el fin del día. Bloqueada por candado, o un envío que ni pudo intentarse, NO deja registro: se reevalúa en el
+   * siguiente barrido mientras la reserva siga dentro de la ventana del filtro.
+   */
+  private async procesarReservas(regla: ReglaConTenant, ahora: Date, stats: EstadisticasBarrido): Promise<void> {
+    if (regla.tenant.tipoStorefront !== 'HOTEL') return;
+    const config = regla.triggerConfig as unknown as TriggerConfigReserva;
+    if (!ventanaActiva(config, ahora)) return;
+
+    const condiciones = regla.filtro as unknown as CondicionReserva[];
+    const reservas = await this.prisma.order.findMany({
+      where: {
+        tenantId: regla.tenantId,
+        tipo: 'RESERVA',
+        cancelado: false,
+        reglaEnvioLogs: { none: { reglaId: regla.id } },
+        detalleReserva: { is: { AND: condicionesDiasAWhere(condiciones, hoyCdmx(ahora)) } },
+      },
+      include: { detalleReserva: true, cliente: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const reserva of reservas) {
+      const det = reserva.detalleReserva;
+      if (!det || !coincideIdioma(condiciones, det.idiomaHuesped)) continue;
+      const contexto: PedidoContextoReserva = {
+        origen: 'RESERVA',
+        folio: det.pmsReservaId,
+        total: reserva.total,
+        estatus: '',
+        createdAt: reserva.createdAt,
+        items: [],
+        checkIn: det.checkIn,
+        checkOut: det.checkOut,
+        adultos: det.adultos,
+        ninos: det.ninos,
+        habitaciones: det.habitaciones,
+        enlaceCheckin: det.onlineCheckinUrl,
+      };
+      await this.intentarEnviar(regla, reserva.cliente, stats, contexto, reserva.id);
+    }
+  }
+
   private async registrar(regla: ReglaConTenant, clienteIds: string[]): Promise<void> {
     if (clienteIds.length === 0) return;
     await this.prisma.reglaClienteEstado.createMany({
@@ -203,7 +260,13 @@ export class ReglaBarridoService {
     await this.prisma.regla.update({ where: { id: regla.id }, data: { disparadaEn: ahora } });
   }
 
-  private async intentarEnviar(regla: ReglaConTenant, cliente: Cliente, stats: EstadisticasBarrido): Promise<ResultadoEnvio> {
+  private async intentarEnviar(
+    regla: ReglaConTenant,
+    cliente: Cliente,
+    stats: EstadisticasBarrido,
+    contexto?: PedidoContextoReserva,
+    orderId?: string,
+  ): Promise<ResultadoEnvio> {
     try {
       const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
       if (bloqueado) {
@@ -211,7 +274,7 @@ export class ReglaBarridoService {
         return 'bloqueado';
       }
 
-      await this.envioService.enviar(regla.tenant, cliente, regla);
+      await this.envioService.enviar(regla.tenant, cliente, regla, contexto, orderId);
       stats.enviosDisparados++;
       return 'enviado';
     } catch (error: any) {

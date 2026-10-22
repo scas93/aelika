@@ -1276,20 +1276,34 @@ export function deleteCodigoDescuentoB2b(token: string, id: string) {
 
 // --- Motor de reglas de notificación (/dashboard/notificaciones/{recontacto,seguimiento}, Módulo 3) ---
 
-export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL";
+export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL" | "RESERVA_AUTOMATICA";
 export type ReglaCanal = "WHATSAPP";
 export type ReglaMensajeCategoria = "UTILITY" | "MARKETING";
 export type ReglaFiltroCampo = "TOTAL_PEDIDOS" | "ULTIMO_PEDIDO_ANTIGUEDAD_DIAS" | "PRIMER_PEDIDO_ANTIGUEDAD_DIAS";
 // IGUAL solo tiene sentido para TOTAL_PEDIDOS — el backend lo rechaza para
 // los dos campos de antigüedad (ver ReglasService.validarFiltro).
 export type ReglaFiltroOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL";
-export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO";
+export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO" | "CAMPO_RESERVA";
 export type ReglaTriggerOrigenPedido = "ORDER" | "PEDIDO_B2B";
 
 export interface FiltroCondicion {
   campo: ReglaFiltroCampo;
   operador: ReglaFiltroOperador;
   valor: number;
+}
+
+// Filtro del trigger RESERVA_AUTOMATICA (solo hoteles): condiciones sobre la reserva, unidas con Y. Días de calendario en
+// CDMX; "días para el check-in" es negativo si ya pasó (0 = hoy); "días desde el check-out" 0 = hoy, 1 = ayer.
+export type ReservaFiltroCampo = "DIAS_PARA_CHECKIN" | "DIAS_DESDE_CHECKOUT" | "IDIOMA_HUESPED";
+export interface CondicionReserva {
+  campo: ReservaFiltroCampo;
+  operador: "IGUAL" | "MAYOR_IGUAL" | "MENOR_IGUAL" | "ES" | "NO_ES";
+  valor: number | string;
+}
+// triggerConfig de RESERVA_AUTOMATICA: cada hora, o diaria desde `hora` (0-23, CDMX) hasta el fin del día.
+export interface ReservaTriggerConfig {
+  frecuencia: "CADA_HORA" | "DIARIA";
+  hora?: number;
 }
 
 export interface PlantillaVariable {
@@ -1304,12 +1318,13 @@ export interface PlantillaVariable {
 // backend/src/notificaciones-reglas/plantilla-variable-catalogo.ts).
 // Agregar una variable nueva al catálogo es agregar una entrada ahí — este
 // archivo no necesita ningún cambio para que aparezca en el dropdown.
-export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO";
+export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO" | "RESERVA";
 
 export type CatalogoVariableRestriccion =
   | { tipo: "ninguna" }
   | { tipo: "evento_pedido"; motivo: string }
-  | { tipo: "evento_pedido_menudeo"; motivo: string };
+  | { tipo: "evento_pedido_menudeo"; motivo: string }
+  | { tipo: "reserva"; motivo: string };
 
 export interface CatalogoVariableDef {
   fuente: ReglaPlantillaVariableFuente;
@@ -1348,7 +1363,7 @@ export interface Regla {
   triggerConfig: Record<string, unknown> | null;
   // Siempre [] si trigger = EVENTO_PEDIDO (el Filtro no aplica — decisión
   // de producto ya tomada, el backend lo fuerza al guardar).
-  filtro: FiltroCondicion[];
+  filtro: FiltroCondicion[] | CondicionReserva[];
   canal: ReglaCanal;
   plantillaNombre: string;
   plantillaIdioma: string;
@@ -1367,7 +1382,7 @@ export interface CreateReglaPayload {
   nombre: string;
   trigger: ReglaTriggerTipo;
   triggerConfig?: Record<string, unknown>;
-  filtro?: FiltroCondicion[];
+  filtro?: FiltroCondicion[] | CondicionReserva[];
   canal?: ReglaCanal;
   plantillaNombre: string;
   plantillaIdioma: string;
