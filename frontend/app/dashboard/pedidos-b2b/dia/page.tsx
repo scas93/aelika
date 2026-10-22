@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
-import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconWorld, IconX } from "@tabler/icons-react";
+import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -13,7 +13,6 @@ import {
 } from "@/lib/api";
 import { hoyYYYYMMDD } from "@/lib/fecha";
 import { useEsMovil } from "@/lib/use-es-movil";
-import { isWebUsbSupported, printComandaB2bDiaWebUsb } from "@/lib/thermal-printer";
 import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
@@ -57,12 +56,8 @@ export default function PedidosB2bDiaPage() {
   const [fecha, setFecha] = useState(() => hoyYYYYMMDD());
   const [entregas, setEntregas] = useState<PedidoB2bEntregaDia[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [webUsbSupported, setWebUsbSupported] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [printingId, setPrintingId] = useState<string | null>(null);
-  const [imprimiendoTodo, setImprimiendoTodo] = useState<{ hechas: number; total: number } | null>(null);
-  const [printError, setPrintError] = useState<string | null>(null);
   const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const [cerrarError, setCerrarError] = useState<string | null>(null);
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
@@ -76,15 +71,9 @@ export default function PedidosB2bDiaPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
-    setWebUsbSupported(isWebUsbSupported());
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets stale state before re-fetching whenever `fecha` changes
     setError(null);
-    setPrintError(null);
     setDesplegadas(new Set());
     fetchPedidosB2bDia(token, fecha)
       .then((data) => {
@@ -149,39 +138,10 @@ export default function PedidosB2bDiaPage() {
     impresoPor: { nombre: user.nombre, rol: user.rol },
   });
 
-  async function handleImprimir(entrega: PedidoB2bEntregaDia) {
-    setPrintingId(entrega.id);
-    setPrintError(null);
-    try {
-      await printComandaB2bDiaWebUsb(entrega, contextoImpresion());
-    } catch (err) {
-      setPrintError(err instanceof Error ? err.message : "No se pudo imprimir la comanda");
-    } finally {
-      setPrintingId(null);
-    }
-  }
-
-  // Respaldo: abre el diálogo de impresión del navegador con solo el ticket de esta entrega (sirve para impresoras sin WebUSB).
-  function handleImprimirNavegador(entrega: PedidoB2bEntregaDia) {
+  // Abre el diálogo de impresión del navegador con solo el ticket de esta entrega (cualquier impresora instalada en el sistema, USB o red).
+  function handleImprimir(entrega: PedidoB2bEntregaDia) {
     flushSync(() => setParaNavegador({ entrega, fecha: new Date() }));
     window.print();
-  }
-
-  // Imprime la hoja de entrega de TODAS las entregas no canceladas del día, una tras otra, en el mismo formato que la individual.
-  async function handleImprimirTodo() {
-    const lista = ordenadas;
-    setPrintError(null);
-    setImprimiendoTodo({ hechas: 0, total: lista.length });
-    try {
-      for (let i = 0; i < lista.length; i++) {
-        await printComandaB2bDiaWebUsb(lista[i], contextoImpresion());
-        setImprimiendoTodo({ hechas: i + 1, total: lista.length });
-      }
-    } catch (err) {
-      setPrintError(err instanceof Error ? err.message : "No se pudo imprimir todo");
-    } finally {
-      setImprimiendoTodo(null);
-    }
   }
 
   function alternar(id: string) {
@@ -262,22 +222,9 @@ export default function PedidosB2bDiaPage() {
               title="Imprimir"
               aria-label="Imprimir"
               onClick={() => handleImprimir(e)}
-              disabled={printingId === e.id || imprimiendoTodo !== null || !webUsbSupported}
-              className="inline-flex h-tabla w-tabla shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-tabla w-tabla shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg"
             >
-              <IconPrinter size={16} className={printingId === e.id ? "animate-pulse" : ""} />
-            </button>
-          ) : null}
-          {!movil ? (
-            <button
-              type="button"
-              title="Imprimir con el navegador"
-              aria-label="Imprimir con el navegador"
-              onClick={() => handleImprimirNavegador(e)}
-              disabled={imprimiendoTodo !== null}
-              className="inline-flex h-tabla w-tabla shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <IconWorld size={16} />
+              <IconPrinter size={16} />
             </button>
           ) : (
             <MenuAcciones
@@ -288,18 +235,7 @@ export default function PedidosB2bDiaPage() {
                       { label: "No recogida", icon: <IconX size={14} />, onClick: () => handleCerrar(e, "NO_RECOGIDA"), disabled: cerrandoId !== null },
                     ]
                   : []),
-                {
-                  label: printingId === e.id ? "Imprimiendo..." : "Imprimir",
-                  icon: <IconPrinter size={14} />,
-                  onClick: () => handleImprimir(e),
-                  disabled: printingId === e.id || imprimiendoTodo !== null || !webUsbSupported,
-                },
-                {
-                  label: "Imprimir con el navegador",
-                  icon: <IconWorld size={14} />,
-                  onClick: () => handleImprimirNavegador(e),
-                  disabled: imprimiendoTodo !== null,
-                },
+                { label: "Imprimir", icon: <IconPrinter size={14} />, onClick: () => handleImprimir(e) },
               ]}
             />
           )}
@@ -310,8 +246,6 @@ export default function PedidosB2bDiaPage() {
 
   const accionHoy = accionPeriodo("dia", fecha, setFecha);
   const sinEntregas = entregas !== null && vigentes.length === 0;
-  const accionImprimirTodo = imprimiendoTodo ? `Imprimiendo ${imprimiendoTodo.hechas}/${imprimiendoTodo.total}...` : "Imprimir todo";
-  const sinImprimir = sinEntregas || entregas === null || vigentes.length === 0 || imprimiendoTodo !== null || !webUsbSupported;
 
   return (
     <div className="flex flex-col gap-3">
@@ -319,20 +253,13 @@ export default function PedidosB2bDiaPage() {
         izquierda={({ corto }) => <SelectorPeriodo modo="dia" corto={corto} valor={fecha} onChange={setFecha} />}
         acciones={[
           ...(accionHoy ? [accionHoy] : []),
-          { key: "imprimir", label: accionImprimirTodo, icon: <IconPrinter size={16} />, onClick: handleImprimirTodo, disabled: sinImprimir },
           { key: "exportar", label: "Exportar Excel", icon: <IconDownload size={16} />, tipo: "exportar", onClick: handleExport, disabled: !entregas || entregas.length === 0, cargando: exporting },
         ]}
       />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
-      {printError && <p className="text-sm text-red-600">{printError}</p>}
       {cerrarError && <p className="text-sm text-red-600">{cerrarError}</p>}
-      {!webUsbSupported && (
-        <p className="text-sm text-admin-ink-soft">
-          «Imprimir» (USB) requiere Chrome o Edge. En este navegador usa «Imprimir con el navegador» en cada entrega.
-        </p>
-      )}
 
       {entregas === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
