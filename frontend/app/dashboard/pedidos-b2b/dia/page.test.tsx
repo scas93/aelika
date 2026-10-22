@@ -14,7 +14,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, fetchPedidosB2bDia, cerrarEntregaPedidoB2b, exportPedidosB2bDiaXlsx: vi.fn() };
 });
 const imprimir = vi.fn();
-vi.mock("@/lib/thermal-printer", () => ({ isWebUsbSupported: () => true, printComandaB2bDiaWebUsb: (...a: unknown[]) => imprimir(...a) }));
+let webUsb = true;
+vi.mock("@/lib/thermal-printer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/thermal-printer")>();
+  return { ...actual, isWebUsbSupported: () => webUsb, printComandaB2bDiaWebUsb: (...a: unknown[]) => imprimir(...a) };
+});
 
 const { default: DiaPage } = await import("./page");
 
@@ -46,6 +50,7 @@ const DIA = [
 describe("Entregas del día (B2B)", () => {
   beforeEach(() => {
     rol = "GERENTE";
+    webUsb = true;
     fetchPedidosB2bDia.mockReset();
     cerrarEntregaPedidoB2b.mockReset();
     imprimir.mockReset();
@@ -113,7 +118,7 @@ describe("Entregas del día (B2B)", () => {
     // orden dentro de la fila de Café B: Entregada, No recogida, Imprimir
     const fila = screen.getByText("Café B").closest("tr")!;
     const nombres = [...fila.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? b.textContent?.trim());
-    expect(nombres.slice(-3)).toStrictEqual(["Entregada", "No recogida", "Imprimir"]);
+    expect(nombres.slice(-4)).toStrictEqual(["Entregada", "No recogida", "Imprimir", "Imprimir con el navegador"]);
   });
 
   it("pedido sin confirmar: solo Imprimir (sin «Confirmar pedido» ni cierre), para cualquier rol", async () => {
@@ -163,6 +168,37 @@ describe("Entregas del día (B2B)", () => {
     imprimir.mockClear();
     fireEvent.click(screen.getAllByRole("button", { name: "Imprimir" })[0]);
     await waitFor(() => expect(imprimir).toHaveBeenCalledTimes(1));
+  });
+
+  it("«Imprimir con el navegador» por entrega: imprime solo el ticket de esa entrega", async () => {
+    const print = vi.fn();
+    vi.stubGlobal("print", print);
+    render(<DiaPage />);
+    await screen.findByText("Café B");
+    expect(screen.getAllByRole("button", { name: "Imprimir con el navegador" })).toHaveLength(4);
+    expect(document.querySelector("#comanda-b2b-imprimible")).toBeNull();
+    const filaB = screen.getByText("Café B").closest("tr")!;
+    fireEvent.click(within(filaB).getByRole("button", { name: "Imprimir con el navegador" }));
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(imprimir).not.toHaveBeenCalled();
+    const ticket = document.querySelector("#comanda-b2b-imprimible")!;
+    expect(document.querySelectorAll("#comanda-b2b-imprimible")).toHaveLength(1);
+    expect(ticket.textContent).toContain("Nombre del negocio: Café B");
+    expect(ticket.textContent).toContain("5x Pan");
+    expect(ticket.textContent).toContain("20x Cuerno");
+    expect(ticket.textContent).toContain("Impreso por: Ana");
+    expect(ticket.textContent).not.toContain("Café A");
+    expect(ticket.textContent).not.toContain("$");
+    vi.unstubAllGlobals();
+  });
+
+  it("sin WebUSB: «Imprimir» deshabilitado, «Imprimir con el navegador» disponible y el aviso ofrece la alternativa", async () => {
+    webUsb = false;
+    render(<DiaPage />);
+    await screen.findByText("Café B");
+    for (const b of screen.getAllByRole("button", { name: "Imprimir" })) expect((b as HTMLButtonElement).disabled).toBe(true);
+    for (const b of screen.getAllByRole("button", { name: "Imprimir con el navegador" })) expect((b as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(/usa «Imprimir con el navegador»/)).toBeTruthy();
   });
 
   it("botón «Hoy» solo en otro día; sin entregas: mensaje vacío", async () => {

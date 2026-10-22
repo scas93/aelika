@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconX } from "@tabler/icons-react";
+import { flushSync } from "react-dom";
+import { IconCheck, IconChevronDown, IconChevronRight, IconDownload, IconInbox, IconPrinter, IconWorld, IconX } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
 import {
   ApiError,
@@ -20,6 +21,7 @@ import Table, { type TableColumn } from "../../_components/Table";
 import MenuAcciones from "../../_components/MenuAcciones";
 import BarraBusqueda from "../../_components/BarraFiltros";
 import SelectorPeriodo, { accionPeriodo } from "../../_components/SelectorPeriodo";
+import ComandaB2bImprimible from "./comanda-b2b-imprimible";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT, puedeCerrarEntregas } from "../estado";
 
 // timeZone: "UTC": `fecha` es un string "YYYY-MM-DD" parseado como medianoche UTC; formatear en la zona local del navegador puede correr un día.
@@ -64,6 +66,14 @@ export default function PedidosB2bDiaPage() {
   const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const [cerrarError, setCerrarError] = useState<string | null>(null);
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
+  // Entrega que se está imprimiendo con el diálogo del navegador (el ticket oculto solo existe mientras dura la impresión).
+  const [paraNavegador, setParaNavegador] = useState<{ entrega: PedidoB2bEntregaDia; fecha: Date } | null>(null);
+
+  useEffect(() => {
+    const limpiar = () => setParaNavegador(null);
+    window.addEventListener("afterprint", limpiar);
+    return () => window.removeEventListener("afterprint", limpiar);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time browser capability check
@@ -149,6 +159,12 @@ export default function PedidosB2bDiaPage() {
     } finally {
       setPrintingId(null);
     }
+  }
+
+  // Respaldo: abre el diálogo de impresión del navegador con solo el ticket de esta entrega (sirve para impresoras sin WebUSB).
+  function handleImprimirNavegador(entrega: PedidoB2bEntregaDia) {
+    flushSync(() => setParaNavegador({ entrega, fecha: new Date() }));
+    window.print();
   }
 
   // Imprime la hoja de entrega de TODAS las entregas no canceladas del día, una tras otra, en el mismo formato que la individual.
@@ -251,6 +267,18 @@ export default function PedidosB2bDiaPage() {
             >
               <IconPrinter size={16} className={printingId === e.id ? "animate-pulse" : ""} />
             </button>
+          ) : null}
+          {!movil ? (
+            <button
+              type="button"
+              title="Imprimir con el navegador"
+              aria-label="Imprimir con el navegador"
+              onClick={() => handleImprimirNavegador(e)}
+              disabled={imprimiendoTodo !== null}
+              className="inline-flex h-tabla w-tabla shrink-0 items-center justify-center rounded-[var(--radius-admin-control)] border border-admin-border bg-white text-admin-ink transition hover:bg-admin-bg disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <IconWorld size={16} />
+            </button>
           ) : (
             <MenuAcciones
               acciones={[
@@ -265,6 +293,12 @@ export default function PedidosB2bDiaPage() {
                   icon: <IconPrinter size={14} />,
                   onClick: () => handleImprimir(e),
                   disabled: printingId === e.id || imprimiendoTodo !== null || !webUsbSupported,
+                },
+                {
+                  label: "Imprimir con el navegador",
+                  icon: <IconWorld size={14} />,
+                  onClick: () => handleImprimirNavegador(e),
+                  disabled: imprimiendoTodo !== null,
                 },
               ]}
             />
@@ -295,7 +329,9 @@ export default function PedidosB2bDiaPage() {
       {printError && <p className="text-sm text-red-600">{printError}</p>}
       {cerrarError && <p className="text-sm text-red-600">{cerrarError}</p>}
       {!webUsbSupported && (
-        <p className="text-sm text-admin-ink-soft">Imprimir comandas requiere Chrome o Edge — no está disponible en este navegador.</p>
+        <p className="text-sm text-admin-ink-soft">
+          «Imprimir» (USB) requiere Chrome o Edge. En este navegador usa «Imprimir con el navegador» en cada entrega.
+        </p>
       )}
 
       {entregas === null ? (
@@ -336,6 +372,7 @@ export default function PedidosB2bDiaPage() {
         </>
       )}
 
+      {paraNavegador && <ComandaB2bImprimible entrega={paraNavegador.entrega} ctx={contextoImpresion()} fechaImpresion={paraNavegador.fecha} />}
     </div>
   );
 }
