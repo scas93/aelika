@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ReglasService } from './reglas.service';
+import { ReglaBarridoService } from './regla-barrido.service';
 import { CreateReglaDto } from './dto/create-regla.dto';
 import { UpdateReglaDto } from './dto/update-regla.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -12,7 +13,10 @@ import type { JwtPayload } from '../common/types/jwt-payload.type';
 @Roles(Role.DUENO)
 @Controller('reglas')
 export class ReglasController {
-  constructor(private readonly reglasService: ReglasService) {}
+  constructor(
+    private readonly reglasService: ReglasService,
+    private readonly barridoService: ReglaBarridoService,
+  ) {}
 
   @Get()
   findAll() {
@@ -44,5 +48,11 @@ export class ReglasController {
   @Post(':id/disparar')
   disparar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.reglasService.dispararManual(id, user.tenantId);
+  }
+
+  // «Ejecutar ahora» de una regla RESERVA_AUTOMATICA (solo Dueño y solo Hotel, ver ReglaBarridoService.ejecutarReservaAhora).
+  @Post(':id/ejecutar-ahora')
+  ejecutarAhora(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.barridoService.ejecutarReservaAhora(id, user.tenantId);
   }
 }

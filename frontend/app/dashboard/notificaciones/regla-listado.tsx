@@ -6,11 +6,13 @@ import { useSession } from "@/lib/session-context";
 import {
   ApiError,
   dispararReglaManual,
+  ejecutarReglaReservaAhora,
   fetchReglas,
   updateRegla,
   type Regla,
   type ReglaMensajeCategoria,
   type ResumenDisparoManual,
+  type ResumenEjecucionReserva,
 } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
@@ -40,6 +42,8 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
   const [disparando, setDisparando] = useState<string | null>(null);
   const [resumenDisparo, setResumenDisparo] = useState<{ regla: Regla; resumen: ResumenDisparoManual } | null>(null);
   const [errorDisparo, setErrorDisparo] = useState<string | null>(null);
+  const [ejecutando, setEjecutando] = useState<string | null>(null);
+  const [resumenEjecucion, setResumenEjecucion] = useState<{ regla: Regla; resumen: ResumenEjecucionReserva } | null>(null);
 
   async function load() {
     try {
@@ -75,6 +79,19 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
       setErrorDisparo(err instanceof ApiError ? err.message : "No se pudo disparar la regla");
     } finally {
       setDisparando(null);
+    }
+  }
+
+  async function handleEjecutarAhora(regla: Regla) {
+    setEjecutando(regla.id);
+    setErrorDisparo(null);
+    try {
+      const resumen = await ejecutarReglaReservaAhora(token, regla.id);
+      setResumenEjecucion({ regla, resumen });
+    } catch (err) {
+      setErrorDisparo(err instanceof ApiError ? err.message : "No se pudo ejecutar la regla");
+    } finally {
+      setEjecutando(null);
     }
   }
 
@@ -121,6 +138,16 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
               disabled={disparando === regla.id || !regla.activa}
             >
               {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
+            </Button>
+          )}
+          {regla.trigger === "RESERVA_AUTOMATICA" && (
+            <Button
+              variant="secondary"
+              size="tabla"
+              onClick={() => handleEjecutarAhora(regla)}
+              disabled={ejecutando === regla.id || !regla.activa}
+            >
+              {ejecutando === regla.id ? "Ejecutando..." : "Ejecutar ahora"}
             </Button>
           )}
           <Link href={`${basePath}/${regla.id}`}>
@@ -175,6 +202,36 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
             )}
           </ul>
         )}
+      </Modal>
+
+      <Modal
+        open={resumenEjecucion !== null}
+        onClose={() => setResumenEjecucion(null)}
+        title={`"${resumenEjecucion?.regla.nombre ?? ""}" ejecutada`}
+        footer={
+          <Button variant="primary" onClick={() => setResumenEjecucion(null)}>
+            Cerrar
+          </Button>
+        }
+      >
+        {resumenEjecucion &&
+          (resumenEjecucion.resumen.fueraDeVentana ? (
+            <p className="text-sm text-admin-ink">
+              Esta regla diaria todavía no llega a su hora de hoy (hora de CDMX): no se evaluó ninguna reserva.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5 text-sm text-admin-ink">
+              <li>{resumenEjecucion.resumen.reservasEvaluadas} reserva(s) evaluadas</li>
+              <li>{resumenEjecucion.resumen.enviadas} enviada(s) ahora</li>
+              <li>{resumenEjecucion.resumen.omitidasYaEnviadas} omitida(s) por ya enviadas</li>
+              {resumenEjecucion.resumen.bloqueadasPorCandado > 0 && (
+                <li>{resumenEjecucion.resumen.bloqueadasPorCandado} bloqueada(s) por el candado de frecuencia</li>
+              )}
+              {resumenEjecucion.resumen.fallidas > 0 && (
+                <li className="text-red-600">{resumenEjecucion.resumen.fallidas} fallida(s) (no se reintentan)</li>
+              )}
+            </ul>
+          ))}
       </Modal>
     </div>
   );

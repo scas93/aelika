@@ -1436,6 +1436,22 @@ export function dispararReglaManual(token: string, id: string) {
   });
 }
 
+export interface ResumenEjecucionReserva {
+  reservasEvaluadas: number;
+  enviadas: number;
+  omitidasYaEnviadas: number;
+  fallidas: number;
+  bloqueadasPorCandado: number;
+  fueraDeVentana: boolean;
+}
+
+export function ejecutarReglaReservaAhora(token: string, id: string) {
+  return request<ResumenEjecucionReserva>(`/reglas/${id}/ejecutar-ahora`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // --- Storefront público de pedidos B2B (/mayoreo/[slug]) ---
 // Deliberadamente separado de los tipos Public*/PedidoB2b* de arriba, aunque
 // el nombre "Dia" choque en concepto con DiaSemana (horario) — ese tipo es
