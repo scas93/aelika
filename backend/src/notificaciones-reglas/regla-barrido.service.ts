@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Cliente, Regla, Tenant } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,15 @@ import { ReglasFiltroService } from './reglas-filtro.service';
 import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
 import { FiltroCondicion } from './filtro-condicion.type';
+import { PedidoContextoReserva } from './plantilla-variable.type';
+import {
+  TriggerConfigReserva,
+  CondicionReserva,
+  coincideIdioma,
+  condicionesDiasAWhere,
+  hoyCdmx,
+  ventanaActiva,
+} from './reserva-trigger';
 
 type ReglaConTenant = Regla & { tenant: Tenant };
 
@@ -15,6 +24,26 @@ interface EstadisticasBarrido {
   enviosDisparados: number;
   enviosBloqueadosPorCandado: number;
   enviosConError: number;
+  omitidosYaEnviado: number;
+  clientesBaseRegistrados: number;
+}
+
+type ResultadoEnvio = 'enviado' | 'bloqueado' | 'error';
+
+/** Resultado de «Ejecutar ahora» sobre una regla RESERVA_AUTOMATICA (ver `ReglaBarridoService.ejecutarReservaAhora`). */
+export interface ResumenEjecucionReserva {
+  /** Reservas no canceladas que cumplen el filtro de la regla (incluye las que ya recibieron el mensaje). */
+  reservasEvaluadas: number;
+  /** Envíos hechos en esta ejecución que Botpress aceptó (quedan EN_CURSO hasta su callback). */
+  enviadas: number;
+  /** Reservas que ya tenían un registro de esta regla (EN_CURSO, EXITO o FALLO): no se reenvían. */
+  omitidasYaEnviadas: number;
+  /** Envíos de esta ejecución que fallaron (Botpress rechazó o no respondió, o el envío no pudo ni intentarse). */
+  fallidas: number;
+  /** Reservas a las que el candado de Marketing impidió enviar (siguen pendientes). */
+  bloqueadasPorCandado: number;
+  /** Regla diaria evaluada antes de su hora: no se evaluó ninguna reserva. */
+  fueraDeVentana: boolean;
 }
 
 /**
@@ -52,6 +81,7 @@ interface EstadisticasBarrido {
 @Injectable()
 export class ReglaBarridoService {
   private readonly logger = new Logger(ReglaBarridoService.name);
+  private readonly reglasEjecutandoAhora = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -69,10 +99,12 @@ export class ReglaBarridoService {
       enviosDisparados: 0,
       enviosBloqueadosPorCandado: 0,
       enviosConError: 0,
+      omitidosYaEnviado: 0,
+      clientesBaseRegistrados: 0,
     };
 
     const reglas = (await this.prisma.regla.findMany({
-      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA'] } },
+      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA', 'RESERVA_AUTOMATICA'] } },
       include: { tenant: true },
     })) as ReglaConTenant[];
 
@@ -89,6 +121,8 @@ export class ReglaBarridoService {
       try {
         if (regla.trigger === 'ESTADO_CLIENTE') {
           await this.procesarEstadoCliente(regla, stats);
+        } else if (regla.trigger === 'RESERVA_AUTOMATICA') {
+          await this.procesarReservas(regla, ahora, stats);
         } else {
           await this.procesarFechaProgramada(regla, ahora, stats);
         }
@@ -105,19 +139,201 @@ export class ReglaBarridoService {
     this.logger.log(
       `Barrido de Reglas terminado: ${stats.reglasProcesadas} procesada(s), ${stats.reglasConError} con error, ` +
         `${stats.enviosDisparados} envío(s) disparado(s), ${stats.enviosBloqueadosPorCandado} bloqueado(s) por candado, ` +
-        `${stats.enviosConError} envío(s) con error.`,
+        `${stats.enviosConError} envío(s) con error, ` +
+        `${stats.omitidosYaEnviado} omitido(s) por ya enviado, ${stats.clientesBaseRegistrados} cliente(s) registrado(s) como base sin enviar.`,
     );
 
     return stats;
   }
 
+  /**
+   * ESTADO_CLIENTE: un cliente recibe la regla UNA vez mientras siga cumpliendo el filtro. `ReglaClienteEstado` guarda
+   * quién cumple hoy; en cada barrido se recalcula el conjunto:
+   *  - sale (estaba registrado y ya no cumple) → se borra su fila, así que si vuelve a cumplir recibe otra vez;
+   *  - sigue (registrado y cumple) → no se envía, cuenta como omitido;
+   *  - entra (cumple y no estaba registrado) → candado y envío; si se intentó enviar (aunque terminara en FALLO, que es
+   *    definitivo) se registra; si el candado lo bloquea o el envío no pudo ni intentarse (tenant sin webhook, cliente
+   *    sin teléfono) NO se registra y se reevalúa en el siguiente barrido.
+   * `estadoBasePendiente` (lo enciende la migración en las reglas que ya operaban): ese barrido solo registra a quienes
+   * ya cumplen, sin enviar.
+   */
   private async procesarEstadoCliente(regla: ReglaConTenant, stats: EstadisticasBarrido): Promise<void> {
     const condiciones = regla.filtro as unknown as FiltroCondicion[];
     const clientes = await this.filtroService.evaluar(regla.tenantId, condiciones);
+    const cumplen = new Set(clientes.map((c) => c.id));
 
-    for (const cliente of clientes) {
-      await this.intentarEnviar(regla, cliente, stats);
+    const filas = await this.prisma.reglaClienteEstado.findMany({ where: { reglaId: regla.id }, select: { clienteId: true } });
+    const registrados = new Set(filas.map((f) => f.clienteId));
+
+    const salen = [...registrados].filter((id) => !cumplen.has(id));
+    if (salen.length > 0) {
+      await this.prisma.reglaClienteEstado.deleteMany({ where: { reglaId: regla.id, clienteId: { in: salen } } });
     }
+
+    const entran = clientes.filter((c) => !registrados.has(c.id));
+    stats.omitidosYaEnviado += clientes.length - entran.length;
+
+    if (regla.estadoBasePendiente) {
+      await this.registrar(regla, entran.map((c) => c.id));
+      await this.prisma.regla.update({ where: { id: regla.id }, data: { estadoBasePendiente: false } });
+      stats.clientesBaseRegistrados += entran.length;
+      return;
+    }
+
+    for (const cliente of entran) {
+      const resultado = await this.intentarEnviar(regla, cliente, stats);
+      if (resultado === 'enviado') {
+        await this.registrar(regla, [cliente.id]);
+      }
+    }
+  }
+
+  /**
+   * RESERVA_AUTOMATICA (solo hoteles): reservas NO canceladas que cumplen el filtro de días/idioma y a las que esta regla
+   * todavía no ha enviado nada (un envío por regla y reserva: cualquier ReglaEnvioLog de esa regla para esa reserva —EN_CURSO,
+   * EXITO o FALLO— cuenta como enviado, sin importar si luego se canceló o reactivó). Las DIARIAS solo corren desde su hora
+   * (CDMX) hasta el fin del día. Bloqueada por candado, o un envío que ni pudo intentarse, NO deja registro: se reevalúa en el
+   * siguiente barrido mientras la reserva siga dentro de la ventana del filtro.
+   */
+  private async procesarReservas(regla: ReglaConTenant, ahora: Date, stats: EstadisticasBarrido): Promise<void> {
+    if (regla.tenant.tipoStorefront !== 'HOTEL') return;
+    const config = regla.triggerConfig as unknown as TriggerConfigReserva;
+    if (!ventanaActiva(config, ahora)) return;
+
+    const condiciones = regla.filtro as unknown as CondicionReserva[];
+    const reservas = await this.prisma.order.findMany({
+      where: {
+        tenantId: regla.tenantId,
+        tipo: 'RESERVA',
+        cancelado: false,
+        reglaEnvioLogs: { none: { reglaId: regla.id } },
+        detalleReserva: { is: { AND: condicionesDiasAWhere(condiciones, hoyCdmx(ahora)) } },
+      },
+      include: { detalleReserva: true, cliente: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const reserva of reservas) {
+      const det = reserva.detalleReserva;
+      if (!det || !coincideIdioma(condiciones, det.idiomaHuesped)) continue;
+      const contexto: PedidoContextoReserva = {
+        origen: 'RESERVA',
+        folio: det.pmsReservaId,
+        total: reserva.total,
+        estatus: '',
+        createdAt: reserva.createdAt,
+        items: [],
+        checkIn: det.checkIn,
+        checkOut: det.checkOut,
+        adultos: det.adultos,
+        ninos: det.ninos,
+        habitaciones: det.habitaciones,
+        enlaceCheckin: det.onlineCheckinUrl,
+      };
+      await this.intentarEnviar(regla, reserva.cliente, stats, contexto, reserva.id);
+    }
+  }
+
+  /**
+   * «Ejecutar ahora» (solo Dueño, solo negocios Hotel): evalúa UNA regla RESERVA_AUTOMATICA en este momento con exactamente
+   * la misma evaluación del barrido (`procesarReservas`: filtro, solo reservas no canceladas, un envío por regla y reserva,
+   * ventana de las diarias y candado de Marketing). Ejecutarla de nuevo no reenvía nada: lo ya enviado (EN_CURSO, EXITO o
+   * FALLO) se omite. El resumen se calcula aparte de `procesarReservas` (que no se toca): una consulta previa cuenta las
+   * reservas evaluadas y las ya enviadas, y después se lee el estado de los registros que dejó esta ejecución.
+   * Un clic doble o dos pestañas a la vez sobre la MISMA regla: la segunda recibe 409 (candado en memoria, válido mientras el
+   * backend corra en una sola instancia, el mismo supuesto del barrido). No se coordina con el barrido horario.
+   */
+  async ejecutarReservaAhora(reglaId: string, tenantId: string): Promise<ResumenEjecucionReserva> {
+    const regla = (await this.prisma.regla.findFirst({
+      where: { id: reglaId, tenantId },
+      include: { tenant: true },
+    })) as ReglaConTenant | null;
+    if (!regla) throw new NotFoundException('Regla no encontrada');
+    if (regla.trigger !== 'RESERVA_AUTOMATICA') {
+      throw new BadRequestException('Solo se puede ejecutar ahora una regla de reservas (RESERVA_AUTOMATICA).');
+    }
+    if (regla.tenant.tipoStorefront !== 'HOTEL') {
+      throw new BadRequestException('Las reglas de reservas solo están disponibles para negocios de tipo Hotel.');
+    }
+    if (!regla.activa) throw new BadRequestException('Esta Regla está inactiva.');
+    if (this.reglasEjecutandoAhora.has(regla.id)) {
+      throw new ConflictException('Esta regla ya se está ejecutando, espera a que termine.');
+    }
+
+    this.reglasEjecutandoAhora.add(regla.id);
+    try {
+      const ahora = new Date();
+      const resumen: ResumenEjecucionReserva = {
+        reservasEvaluadas: 0,
+        enviadas: 0,
+        omitidasYaEnviadas: 0,
+        fallidas: 0,
+        bloqueadasPorCandado: 0,
+        fueraDeVentana: false,
+      };
+      const config = regla.triggerConfig as unknown as TriggerConfigReserva;
+      if (!ventanaActiva(config, ahora)) {
+        resumen.fueraDeVentana = true;
+        return resumen;
+      }
+
+      const condiciones = regla.filtro as unknown as CondicionReserva[];
+      const candidatas = await this.prisma.order.findMany({
+        where: {
+          tenantId: regla.tenantId,
+          tipo: 'RESERVA',
+          cancelado: false,
+          detalleReserva: { is: { AND: condicionesDiasAWhere(condiciones, hoyCdmx(ahora)) } },
+        },
+        select: {
+          id: true,
+          detalleReserva: { select: { idiomaHuesped: true } },
+          reglaEnvioLogs: { where: { reglaId: regla.id }, select: { id: true }, take: 1 },
+        },
+      });
+      const evaluadas = candidatas.filter((o) => o.detalleReserva && coincideIdioma(condiciones, o.detalleReserva.idiomaHuesped));
+      const pendientes = evaluadas.filter((o) => o.reglaEnvioLogs.length === 0).map((o) => o.id);
+      resumen.reservasEvaluadas = evaluadas.length;
+      resumen.omitidasYaEnviadas = evaluadas.length - pendientes.length;
+
+      const stats: EstadisticasBarrido = {
+        reglasProcesadas: 0,
+        reglasConError: 0,
+        enviosDisparados: 0,
+        enviosBloqueadosPorCandado: 0,
+        enviosConError: 0,
+        omitidosYaEnviado: 0,
+        clientesBaseRegistrados: 0,
+      };
+      await this.procesarReservas(regla, ahora, stats);
+
+      // Un envío que Botpress rechaza o que vence no lanza: deja su registro en FALLO. Se lee de ahí, no de `stats`.
+      const registros = await this.prisma.reglaEnvioLog.findMany({
+        where: { reglaId: regla.id, orderId: { in: pendientes } },
+        select: { estado: true },
+      });
+      const fallosRegistrados = registros.filter((r) => r.estado === 'FALLO').length;
+      resumen.enviadas = registros.length - fallosRegistrados;
+      resumen.fallidas = fallosRegistrados + stats.enviosConError;
+      resumen.bloqueadasPorCandado = stats.enviosBloqueadosPorCandado;
+
+      this.logger.log(
+        `Ejecución manual de Regla ${regla.id} (tenant=${regla.tenantId}): ${resumen.reservasEvaluadas} evaluada(s), ` +
+          `${resumen.enviadas} enviada(s), ${resumen.omitidasYaEnviadas} ya enviada(s), ${resumen.fallidas} fallida(s), ` +
+          `${resumen.bloqueadasPorCandado} bloqueada(s) por candado.`,
+      );
+      return resumen;
+    } finally {
+      this.reglasEjecutandoAhora.delete(regla.id);
+    }
+  }
+
+  private async registrar(regla: ReglaConTenant, clienteIds: string[]): Promise<void> {
+    if (clienteIds.length === 0) return;
+    await this.prisma.reglaClienteEstado.createMany({
+      data: clienteIds.map((clienteId) => ({ tenantId: regla.tenantId, reglaId: regla.id, clienteId })),
+      skipDuplicates: true,
+    });
   }
 
   private async procesarFechaProgramada(regla: ReglaConTenant, ahora: Date, stats: EstadisticasBarrido): Promise<void> {
@@ -155,16 +371,23 @@ export class ReglaBarridoService {
     await this.prisma.regla.update({ where: { id: regla.id }, data: { disparadaEn: ahora } });
   }
 
-  private async intentarEnviar(regla: ReglaConTenant, cliente: Cliente, stats: EstadisticasBarrido): Promise<void> {
+  private async intentarEnviar(
+    regla: ReglaConTenant,
+    cliente: Cliente,
+    stats: EstadisticasBarrido,
+    contexto?: PedidoContextoReserva,
+    orderId?: string,
+  ): Promise<ResultadoEnvio> {
     try {
       const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
       if (bloqueado) {
         stats.enviosBloqueadosPorCandado++;
-        return;
+        return 'bloqueado';
       }
 
-      await this.envioService.enviar(regla.tenant, cliente, regla);
+      await this.envioService.enviar(regla.tenant, cliente, regla, contexto, orderId);
       stats.enviosDisparados++;
+      return 'enviado';
     } catch (error: any) {
       // Aislamiento por Cliente: un envío que falla (ej. tenant sin
       // botWebhookUrl) no debe impedir que se intente con el resto de los
@@ -174,6 +397,7 @@ export class ReglaBarridoService {
       this.logger.error(
         `Error enviando Regla ${regla.id} a Cliente ${cliente.id} (tenant=${regla.tenantId}): ${error?.message ?? error}`,
       );
+      return 'error';
     }
   }
 }

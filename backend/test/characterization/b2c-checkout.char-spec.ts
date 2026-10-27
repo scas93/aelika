@@ -22,7 +22,7 @@ describe('B2C · checkout EFECTIVO (caso base)', () => {
         {
           descuentoTotal: '0', // Decimal serializado como string, sin ceros de relleno
           total: '90',
-          items: [{ id: '<uuid>', tenantId: '<tenant>', orderId: '<order>', productId: '<productoA>', nombreProducto: 'Café americano', precioUnitario: '45', cantidad: 2, modificadores: [] }],
+          items: [{ id: '<uuid>', tenantId: '<tenant>', orderId: '<order>', productId: '<productoA>', nombreProducto: 'Café americano', precioUnitario: '45', cantidad: 2, nota: null, modificadores: [] }],
         },
         { mod: true },
       ),

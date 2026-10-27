@@ -19,7 +19,7 @@ import Modal from "../_components/Modal";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
 import { IconDownload } from "@tabler/icons-react";
-import { FiltroSelectPopover } from "../_components/FiltroSelect";
+import { FiltroMultiSelectPopover, labelMultiSelect } from "../_components/FiltroMultiSelect";
 import { FiltroTextoPopover } from "../_components/FiltroTexto";
 import Aviso from "../_components/Aviso";
 import SelectorPeriodo, { accionPeriodo } from "../_components/SelectorPeriodo";
@@ -117,8 +117,9 @@ export default function PedidosB2bPage() {
   const [anterioresAbierto, setAnterioresAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Filtros sobre la semana elegida (en el cliente: ya se trajeron todos los activos de esa semana).
-  const [fEstado, setFEstado] = useState<PedidoB2bEstado | null>(null);
-  const [fPago, setFPago] = useState<PedidoB2bEstadoPago | null>(null);
+  // Estado y Pago son de selección múltiple (O dentro del filtro, Y entre filtros); vacío = todos.
+  const [fEstado, setFEstado] = useState<PedidoB2bEstado[]>([]);
+  const [fPago, setFPago] = useState<PedidoB2bEstadoPago[]>([]);
   const [fNegocio, setFNegocio] = useState<string | null>(null);
   // `?pedido=<id>` abre ese pedido directo (enlaces desde Adopción).
   const [selectedId, setSelectedId] = useState<string | null>(() =>
@@ -214,12 +215,15 @@ export default function PedidosB2bPage() {
     if (!pedidos) return null;
     const q = (fNegocio ?? "").toLowerCase();
     return pedidos.filter(
-      (p) => (!fEstado || p.estado === fEstado) && (!fPago || p.estadoPago === fPago) && (!q || p.negocioNombre.toLowerCase().includes(q)),
+      (p) =>
+        (fEstado.length === 0 || fEstado.includes(p.estado)) &&
+        (fPago.length === 0 || fPago.includes(p.estadoPago)) &&
+        (!q || p.negocioNombre.toLowerCase().includes(q)),
     );
   }, [pedidos, fEstado, fPago, fNegocio]);
   const cambiarSemana = (v: string) => setSemanaKey(semanas && v >= semanas.siguiente.inicio.slice(0, 10) ? "siguiente" : "actual");
   const accionActual = accionPeriodo("semana", semanaSeleccionada?.inicio.slice(0, 10) ?? lunesDe(hoyYYYYMMDD()), cambiarSemana, !semanas);
-  const hayFiltros = !!(fEstado || fPago || fNegocio);
+  const hayFiltros = !!(fEstado.length > 0 || fPago.length > 0 || fNegocio);
 
   async function handleExport() {
     if (!semanaSeleccionada) return;
@@ -227,10 +231,13 @@ export default function PedidosB2bPage() {
     setExportError(null);
     try {
       const blob = await exportPedidosB2bXlsx(token, {
-        estados: ESTADOS_ACTIVOS,
+        // Con estados elegidos se mandan esos (`estados` tiene prioridad en el backend); sin ninguno, los 3 activos.
+        estados: fEstado.length > 0 ? fEstado : ESTADOS_ACTIVOS,
         cancelado: false,
         desde: semanaSeleccionada.inicio,
         hasta: semanaSeleccionada.inicio,
+        estadoPago: fPago.length > 0 ? fPago : undefined,
+        negocioNombre: fNegocio?.trim() || undefined,
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -279,28 +286,26 @@ export default function PedidosB2bPage() {
           {
             key: "estado",
             label: "Estado",
-            valueLabel: fEstado ? ESTADO_LABEL[fEstado] : null,
-            onClear: () => setFEstado(null),
-            render: ({ cerrar }) => (
-              <FiltroSelectPopover
+            valueLabel: labelMultiSelect(fEstado, (e) => ESTADO_LABEL[e]),
+            onClear: () => setFEstado([]),
+            render: () => (
+              <FiltroMultiSelectPopover
                 opciones={ESTADOS_ACTIVOS.map((e) => ({ value: e, label: ESTADO_LABEL[e] }))}
-                valorAplicado={fEstado}
+                valoresAplicados={fEstado}
                 onAplicar={setFEstado}
-                close={cerrar}
               />
             ),
           },
           {
             key: "pago",
             label: "Pago",
-            valueLabel: fPago ? ESTADO_PAGO_LABEL[fPago] : null,
-            onClear: () => setFPago(null),
-            render: ({ cerrar }) => (
-              <FiltroSelectPopover
+            valueLabel: labelMultiSelect(fPago, (e) => ESTADO_PAGO_LABEL[e]),
+            onClear: () => setFPago([]),
+            render: () => (
+              <FiltroMultiSelectPopover
                 opciones={ESTADOS_PAGO_FILTRO.map((e) => ({ value: e, label: ESTADO_PAGO_LABEL[e] }))}
-                valorAplicado={fPago}
+                valoresAplicados={fPago}
                 onAplicar={setFPago}
-                close={cerrar}
               />
             ),
           },

@@ -45,6 +45,8 @@ export function itemEsperado(overrides: Record<string, unknown> = {}, mod = fals
     nombreProducto: 'Café americano',
     precioUnitario: '45',
     cantidad: 1,
+    // Nota por producto: el ítem B2C ahora la incluye (null cuando la línea no la trae).
+    nota: null,
     ...(mod ? { modificadores: [] } : {}),
     ...overrides,
   };

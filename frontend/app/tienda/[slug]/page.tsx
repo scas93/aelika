@@ -99,13 +99,17 @@ export default function TiendaPage() {
     precioUnitario: number,
     modifiers: CartItemModifier[] = [],
     cantidad = 1,
+    nota = "",
   ) {
     setCart((prev) => {
-      const existing = prev.find((item) => item.productId === productId && mismaSeleccion(item.modifiers, modifiers));
+      // Misma línea = mismo producto + mismos modificadores + misma nota (ya normalizada; mayúsculas cuentan distinto).
+      const existing = prev.find(
+        (item) => item.productId === productId && mismaSeleccion(item.modifiers, modifiers) && (item.nota ?? "") === nota,
+      );
       if (existing) {
         return prev.map((item) => (item.id === existing.id ? { ...item, cantidad: item.cantidad + cantidad } : item));
       }
-      return [...prev, { id: crypto.randomUUID(), productId, nombre, precioUnitario, cantidad, modifiers }];
+      return [...prev, { id: crypto.randomUUID(), productId, nombre, precioUnitario, cantidad, modifiers, ...(nota ? { nota } : {}) }];
     });
   }
 
@@ -127,7 +131,7 @@ export default function TiendaPage() {
         const category = catalog.categories.find((c) => c.products.some((p) => p.id === productId));
         const product = category?.products.find((p) => p.id === productId);
         const precioUnitario = product ? Number(product.precio) : 0;
-        const existing = next.find((item) => item.productId === productId && item.modifiers.length === 0);
+        const existing = next.find((item) => item.productId === productId && item.modifiers.length === 0 && !item.nota);
         next = existing
           ? next.map((item) => (item.id === existing.id ? { ...item, cantidad: item.cantidad + 1 } : item))
           : [...next, { id: crypto.randomUUID(), productId, nombre, precioUnitario, cantidad: 1, modifiers: [] }];
@@ -381,13 +385,14 @@ export default function TiendaPage() {
           product={modifierTarget.product}
           precioUnitario={modifierTarget.precioUnitario}
           onClose={() => setModifierTarget(null)}
-          onConfirm={(modifiers, cantidad) => {
+          onConfirm={(modifiers, cantidad, nota) => {
             addToCart(
               modifierTarget.product.id,
               modifierTarget.product.nombre,
               modifierTarget.precioUnitario,
               modifiers,
               cantidad,
+              nota,
             );
             setModifierTarget(null);
           }}

@@ -7,6 +7,7 @@ import {
   TipoStorefront,
 } from '../../generated/prisma/client';
 import { normalizarTelefono } from '../common/telefono';
+import { validarModalidadCliente } from '../common/modalidades-cobro';
 
 /**
  * Base de los clientes B2B (extienden Cliente con canal = B2B; ver docs/diseno-operacion.md). Las reglas que no
@@ -37,7 +38,10 @@ export interface CrearClienteB2bInput {
   nombre: string;
   direccion: string;
   descuentoPorcentaje?: number | null;
+  /** Obligatoria: sin ella (o inactiva en el negocio) el alta se rechaza con 400. */
   modalidadPago?: PedidoB2bModoCobro | null;
+  /** Modalidades activas del negocio (Tenant.modalidadesCobroB2b, ya normalizadas): el helper valida contra ellas. */
+  modalidadesActivas: readonly PedidoB2bModoCobro[];
   telefonos: TelefonoB2bInput[];
 }
 
@@ -134,6 +138,11 @@ export async function crearClienteB2b(
   db: ClienteB2bDb,
   input: CrearClienteB2bInput,
 ): Promise<Cliente> {
+  // Primero la modalidad: sin ella (o inactiva) no se consume ni un código.
+  const modalidadPago = validarModalidadCliente(
+    input.modalidadPago,
+    input.modalidadesActivas,
+  );
   const codigo = await resolverCodigoNuevo(db, input);
   const telefonos = normalizarTelefonosB2b(input.telefonos);
   const nombre = input.nombre.trim();
@@ -160,7 +169,7 @@ export async function crearClienteB2b(
       nombre,
       direccion,
       descuentoPorcentaje: descuento && descuento > 0 ? descuento : null,
-      modalidadPago: input.modalidadPago ?? null,
+      modalidadPago,
       primerPedidoAt: ahora,
       ultimoPedidoAt: ahora,
       totalPedidos: 0,
@@ -209,6 +218,13 @@ export async function sembrarClienteB2b(
   });
   if (!existente) return crearClienteB2b(db, input);
 
+  // Un cliente que ya existe puede conservar su modalidad aunque se haya desactivado; elegir otra inactiva no.
+  const modalidadPago = validarModalidadCliente(
+    input.modalidadPago,
+    input.modalidadesActivas,
+    existente.modalidadPago,
+  );
+
   const telefonos = normalizarTelefonosB2b(input.telefonos);
   const descuento = input.descuentoPorcentaje ?? null;
   const actualizado = await db.cliente.update({
@@ -217,7 +233,7 @@ export async function sembrarClienteB2b(
       nombre: input.nombre.trim(),
       direccion: input.direccion.trim(),
       descuentoPorcentaje: descuento && descuento > 0 ? descuento : null,
-      modalidadPago: input.modalidadPago ?? null,
+      modalidadPago,
       bajaAt: null,
     },
   });

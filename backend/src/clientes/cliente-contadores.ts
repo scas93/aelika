@@ -21,6 +21,7 @@ export type ClienteContadoresDb = Pick<
  *  - Canal B2B: cuentan las `Order` de tipo B2B con `cancelado = false`, sin importar
  *    `estadoPago` (un pedido B2B es real desde que nace; en AL_FINAL se cobra
  *    después de surtir). Desde la Etapa 2 viven en Order (antes, PedidoB2b).
+ *  - Canal B2C también cuenta las `Order` RESERVA no canceladas (hotel); una cancelada no cuenta.
  *  - Fechas = `createdAt` del pedido (no la fecha de pago). Consecuencia
  *    declarada: un pedido creado a las 23:58 y pagado a las 00:03 cuenta en el
  *    día en que se creó.
@@ -67,8 +68,11 @@ export async function calcularContadoresCliente(
       : await db.order.aggregate({
           where: {
             clienteId,
-            tipo: TipoOrden.B2C,
-            estadoPago: EstadoPago.PAGADO,
+            // Reservas de hotel (PMS): cuentan mientras no estén canceladas, sin importar estadoPago (el cobro es externo).
+            OR: [
+              { tipo: TipoOrden.B2C, estadoPago: EstadoPago.PAGADO },
+              { tipo: TipoOrden.RESERVA, cancelado: false },
+            ],
           },
           _count: true,
           _min: { createdAt: true },

@@ -46,7 +46,7 @@
     },
     "pedidoB2b": {
       "minimoPiezas": 50,
-      "modoCobro": "AL_FINAL",
+      "modalidadesActivas": ["AL_FINAL"],
       "ventanaAperturaDia": "LUNES",
       "ventanaAperturaHora": "08:00",
       "ventanaCierreDia": "VIERNES",
@@ -73,7 +73,7 @@
       "nombre": "Dominique Ansel Polanco",
       "direccion": "Av. Presidente Masaryk 360, Col. Polanco, CDMX",
       "descuentoPorcentaje": 20,
-      "modalidadPago": null,
+      "modalidadPago": "AL_FINAL",
       "telefonos": [
         {
           "telefono": "5555020001",
@@ -92,7 +92,7 @@
       "nombre": "Dominique Ansel Roma",
       "direccion": "Calle Álvaro Obregón 120, Col. Roma Norte, CDMX",
       "descuentoPorcentaje": null,
-      "modalidadPago": null,
+      "modalidadPago": "AL_FINAL",
       "telefonos": [
         {
           "telefono": "5555020001",

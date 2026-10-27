@@ -1,0 +1,20 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`B2C · nota por producto recibo de Telegram la nota va debajo de su línea, después de los modificadores, y el resto del recibo no cambia 1`] = `
+"NUEVO PEDIDO #1 - Negocio cafe-test
+🕓 PENDIENTE DE COBRO — se cobra al entregar/recoger
+------------------------------
+Cliente: Ana Prueba
+Telefono: +52 55 1111 2222
+
+1x Café americano (Bebidas) - $45.00 c/u = $75.00
+   Tamaño: Grande
+   ↳ Extra caliente
+
+1x Concha (Bebidas) - $30.50 c/u = $30.50
+
+------------------------------
+TOTAL: $105.50 MXN
+
+Recibido: 30/09/2026 10:00"
+`;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PublicProduct } from "@/lib/api";
+import { NOTA_LINEA_MAX, longitudNota, normalizarNotaLinea, recortarNota } from "@/lib/nota-linea";
 import type { CartItemModifier } from "./checkout-modal";
 
 // Generalizes checkout-modal's TOGGLE_ACTIVE/INACTIVE (built for exactly 2
@@ -27,10 +28,11 @@ export default function ProductModifiersModal({
   // scope), this modal never touches pricing logic beyond adding modifiers on top.
   precioUnitario: number;
   onClose: () => void;
-  onConfirm: (modifiers: CartItemModifier[], cantidad: number) => void;
+  onConfirm: (modifiers: CartItemModifier[], cantidad: number, nota: string) => void;
 }) {
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [cantidad, setCantidad] = useState(1);
+  const [nota, setNota] = useState("");
 
   function toggleUnica(groupId: string, optionId: string) {
     setSelections((prev) => {
@@ -80,7 +82,7 @@ export default function ProductModifiersModal({
         return { modifierOptionId: opcion.id, nombre: opcion.nombre, precioAdicional: Number(opcion.precioAdicional) };
       }),
     );
-    onConfirm(modifiers, cantidad);
+    onConfirm(modifiers, cantidad, normalizarNotaLinea(nota));
   }
 
   return (
@@ -127,6 +129,20 @@ export default function ProductModifiersModal({
             </div>
           </div>
         ))}
+
+        <label className="flex flex-col gap-1.5 border-t border-black/10 pt-3 text-sm font-medium dark:border-white/10">
+          Instrucciones (opcional)
+          <input
+            value={nota}
+            onChange={(e) => setNota(recortarNota(e.target.value))}
+            placeholder="Extra caliente, sin hielo…"
+            className="input"
+            // Sin maxLength nativo: cuenta unidades UTF-16 y partiría emojis; el tope (140) se aplica por caracteres en recortarNota.
+          />
+          <span className="self-end text-xs font-normal text-black/50 dark:text-white/50">
+            {longitudNota(nota)}/{NOTA_LINEA_MAX}
+          </span>
+        </label>
 
         <div className="flex items-center justify-between border-t border-black/10 pt-3 dark:border-white/10">
           <span className="text-sm font-medium">Cantidad</span>

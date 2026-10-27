@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import request from 'supertest';
 import { ReglaEnvioService } from '../../src/notificaciones-reglas/regla-envio.service';
 import { crearClienteB2b } from '../../src/clientes/cliente-b2b';
-import { BaseSeed, seedBase } from './db';
+import { BaseSeed, configurarB2b, seedBase } from './db';
 import { usarSuite } from './helpers';
 import { waitForCalls } from './harness';
 import { apiRol, SEMANA_PROXIMA, SEMANA_SIGUIENTE } from './b2b-helpers';
@@ -24,6 +24,7 @@ describe('Clientes B2B · pedidos (2d)', () => {
           nombre: 'Café Aurora Matriz',
           sufijo: 'matriz',
           direccion: 'Av. Siempre Viva 123',
+          modalidadPago: 'AL_FINAL',
           telefonos: [
             {
               telefono: '5511112222',
@@ -125,15 +126,33 @@ describe('Clientes B2B · pedidos (2d)', () => {
       });
     });
 
-    it('modalidad de pago: la del cliente si la tiene, si no la del negocio', async () => {
+    it('modalidad de pago: el pedido usa SIEMPRE la del cliente (ya no hereda del negocio)', async () => {
+      // Cambio deliberado (modalidades configurables por negocio y obligatoria por cliente): antes, un cliente sin modalidad
+      // heredaba la del negocio. Ahora el negocio puede tener activas las dos y cada cliente trae la suya.
+      await configurarB2b(s.h.prisma, s.base.tenant.id, {
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
+      });
       const a = await alta({ modalidadPago: 'AL_INICIO' });
       const b = await alta({
         sufijo: 'norte',
         nombre: 'Norte',
+        modalidadPago: 'AL_FINAL',
         telefonos: [{ telefono: '5500001111' }],
       });
       expect((await crear(a.id)).body.modoCobro).toBe('AL_INICIO');
-      expect((await crear(b.id)).body.modoCobro).toBe('AL_FINAL'); // default del negocio en la prueba
+      expect((await crear(b.id)).body.modoCobro).toBe('AL_FINAL');
+    });
+
+    it('cliente sin modalidad (dato heredado): el pedido se rechaza con un error claro, sin caer a otro valor', async () => {
+      const a = await alta();
+      await s.h.prisma.cliente.update({
+        where: { id: a.id },
+        data: { modalidadPago: null },
+      });
+      const r = await crear(a.id);
+      expect(r.status).toBe(409);
+      expect(r.body.message).toMatch(/no tiene modalidad de pago/);
+      expect(await s.h.prisma.order.count({ where: { tipo: 'B2B' } })).toBe(0);
     });
 
     it('guarda como snapshot el nombre del cliente, el contacto y teléfono principal, y la nota; no crea ni toca clientes', async () => {
@@ -258,6 +277,8 @@ describe('Clientes B2B · pedidos (2d)', () => {
       });
       const ajeno = await crearClienteB2b(s.h.prisma, {
         tenantId: otro.tenant.id,
+        modalidadPago: 'AL_FINAL',
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
         tenantSlug: otro.tenant.slug,
         sufijo: 'x',
         nombre: 'Ajeno',
@@ -365,6 +386,8 @@ describe('Clientes B2B · pedidos (2d)', () => {
       });
       const ajeno = await crearClienteB2b(s.h.prisma, {
         tenantId: otro.tenant.id,
+        modalidadPago: 'AL_FINAL',
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
         tenantSlug: otro.tenant.slug,
         sufijo: 'x',
         nombre: 'Ajeno',
@@ -542,6 +565,7 @@ describe('Clientes B2B · notificaciones (2d)', () => {
           sufijo,
           direccion: 'Calle 1',
           descuentoPorcentaje: 10,
+          modalidadPago: 'AL_FINAL',
           telefonos,
         })
         .expect(201)

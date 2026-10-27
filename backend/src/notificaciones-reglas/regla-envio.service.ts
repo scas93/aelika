@@ -21,13 +21,14 @@ import {
 } from './plantilla-variable-catalogo';
 import { sanitizarParaMeta } from './plantilla-variable-formato';
 import { telefonoDestino } from '../clientes/cliente-b2b';
+import { telefonoParaEnvio } from '../common/telefono-internacional';
 
-// Todos los tenants piloto operan en México — mismo supuesto ya hardcodeado
-// en backend/src/common/horario.ts (America/Mexico_City). Cliente.telefono (B2C) y
-// ClienteTelefono (B2B) guardan solo los 10 dígitos nacionales (ver common/telefono.ts), sin
-// código de país, así que hay que anteponerlo aquí antes de mandarlo a
-// Botpress/Meta, que sí lo requieren en el número.
-const LADA_PAIS = '+52';
+// Cliente.telefono (B2C) y ClienteTelefono (B2B) guardan 10 dígitos nacionales para México (ver common/telefono.ts), sin
+// código de país; los números internacionales de reservas se guardan con "+" y completos (common/telefono-internacional.ts).
+// telefonoParaEnvio antepone +52 solo a los primeros.
+
+/** Tiempo máximo de la llamada al webhook de Botpress (aplica a TODAS las reglas). Mismo valor que el envío del código del portal. */
+export const TIMEOUT_ENVIO_MS = 10_000;
 
 /**
  * Dispara el envío de WhatsApp de una Regla ya evaluada/filtrada por los
@@ -59,6 +60,7 @@ export class ReglaEnvioService {
     cliente: Cliente,
     regla: Regla,
     contexto?: PedidoContexto,
+    orderId?: string,
   ): Promise<ReglaEnvioLog> {
     if (!tenant.botWebhookUrl) {
       throw new BadRequestException(
@@ -79,6 +81,7 @@ export class ReglaEnvioService {
       tenant,
       cliente,
       contexto,
+      regla.plantillaIdioma,
     );
 
     // Se crea ANTES del POST (estado EN_CURSO por default, ver schema.prisma)
@@ -94,12 +97,15 @@ export class ReglaEnvioService {
         clienteId: cliente.id,
         reglaId: regla.id,
         categoria: regla.plantillaCategoria,
+        // Reserva que originó el envío (trigger RESERVA_AUTOMATICA); null en el resto.
+        ...(orderId ? { orderId } : {}),
       },
     });
 
     const payload = {
       correlacionId: log.id,
-      telefono: `${LADA_PAIS}${telefono}`,
+      // Mexicano (10 dígitos guardados) → +52; internacional (guardado con "+") → tal cual, completo.
+      telefono: telefonoParaEnvio(telefono),
       plantilla: {
         nombre: regla.plantillaNombre,
         idioma: regla.plantillaIdioma,
@@ -117,6 +123,8 @@ export class ReglaEnvioService {
             : {}),
         },
         body: JSON.stringify(payload),
+        // Una llamada lenta no debe detener el barrido: al vencer el límite el envío queda en FALLO (definitivo).
+        signal: AbortSignal.timeout(TIMEOUT_ENVIO_MS),
       });
 
       if (!response.ok) {
@@ -137,8 +145,9 @@ export class ReglaEnvioService {
       );
       return log;
     } catch (error: unknown) {
+      const vencio = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
       this.logger.error(
-        `Error de red mandando ReglaEnvioLog ${log.id} (tenant=${tenant.id}) a Botpress: ${error instanceof Error ? error.message : String(error)}`,
+        `${vencio ? `Botpress no respondió en ${TIMEOUT_ENVIO_MS / 1000} s` : 'Error de red'} mandando ReglaEnvioLog ${log.id} (tenant=${tenant.id}) a Botpress: ${error instanceof Error ? error.message : String(error)}`,
       );
       return this.prisma.reglaEnvioLog.update({
         where: { id: log.id },
@@ -202,6 +211,7 @@ export class ReglaEnvioService {
     tenant: Tenant,
     cliente: Cliente,
     contexto: PedidoContexto | undefined,
+    idiomaPlantilla: string,
   ): string[] {
     const ahora = new Date();
     const storefrontUrl = buildStorefrontUrl(
@@ -240,6 +250,7 @@ export class ReglaEnvioService {
           contexto,
           ahora,
           storefrontUrl,
+          idiomaPlantilla,
         });
         return sanitizarParaMeta(valor ?? '', definicion.fallback);
       });

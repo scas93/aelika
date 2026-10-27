@@ -8,6 +8,8 @@ import {
   formatFechaHoraCorta,
   formatFechaLarga,
   formatMesAnio,
+  formatFechaCompleta,
+  nochesEntre,
   METODO_ENTREGA_LABEL,
   METODO_PAGO_LABEL,
   PEDIDO_B2B_ESTADO_LABEL,
@@ -43,7 +45,8 @@ export type RestriccionVariable =
   | { tipo: 'evento_pedido'; motivo: string }
   // Además de EVENTO_PEDIDO, solo aplica si el pedido es de menudeo (Order)
   // — PedidoB2b no tiene tipo de entrega/dirección/método de pago propio.
-  | { tipo: 'evento_pedido_menudeo'; motivo: string };
+  | { tipo: 'evento_pedido_menudeo'; motivo: string }
+  | { tipo: 'reserva'; motivo: string };
 
 export interface ResolverContexto {
   tenant: Tenant;
@@ -51,12 +54,14 @@ export interface ResolverContexto {
   contexto: PedidoContexto | undefined;
   ahora: Date;
   storefrontUrl: string;
+  /** Idioma de la plantilla de la regla ("es", "en_US"…): define el formato de fechas de reserva. */
+  idiomaPlantilla?: string;
 }
 
 export interface CatalogoVariableDef {
   fuente: ReglaPlantillaVariableFuente;
   valor: string;
-  grupo: 'CLIENTE' | 'PEDIDO' | 'NEGOCIO';
+  grupo: 'CLIENTE' | 'PEDIDO' | 'NEGOCIO' | 'RESERVA';
   label: string;
   ejemplo: string;
   restriccion: RestriccionVariable;
@@ -70,6 +75,7 @@ const SOLO_EVENTO_PEDIDO: RestriccionVariable = {
   tipo: 'evento_pedido',
   motivo: 'Solo en reglas de evento de pedido',
 };
+const SOLO_RESERVA: RestriccionVariable = { tipo: 'reserva', motivo: 'Solo en reglas de reservas de hotel' };
 const SOLO_EVENTO_PEDIDO_MENUDEO: RestriccionVariable = {
   tipo: 'evento_pedido_menudeo',
   motivo: 'Solo pedidos de menudeo',
@@ -275,6 +281,61 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
   },
 ];
 
+function reserva(ctx: ResolverContexto) {
+  return ctx.contexto?.origen === 'RESERVA' ? ctx.contexto : null;
+}
+
+const VARIABLES_RESERVA: CatalogoVariableDef[] = [
+  { valor: 'numeroReserva', label: 'Número de reserva', ejemplo: '9641816459', resolver: (c) => reserva(c)?.folio ?? null },
+  {
+    valor: 'checkIn',
+    label: 'Fecha de check-in',
+    ejemplo: '25 de diciembre de 2026',
+    resolver: (c) => {
+      const r = reserva(c);
+      return r ? formatFechaCompleta(r.checkIn, c.idiomaPlantilla ?? 'es') : null;
+    },
+  },
+  {
+    valor: 'checkOut',
+    label: 'Fecha de check-out',
+    ejemplo: '29 de diciembre de 2026',
+    resolver: (c) => {
+      const r = reserva(c);
+      return r ? formatFechaCompleta(r.checkOut, c.idiomaPlantilla ?? 'es') : null;
+    },
+  },
+  {
+    valor: 'noches',
+    label: 'Noches',
+    ejemplo: '4',
+    resolver: (c) => {
+      const r = reserva(c);
+      return r ? String(nochesEntre(r.checkIn, r.checkOut)) : null;
+    },
+  },
+  { valor: 'adultos', label: 'Adultos', ejemplo: '2', resolver: (c) => (reserva(c) ? String(reserva(c)!.adultos) : null) },
+  { valor: 'ninos', label: 'Niños', ejemplo: '1', resolver: (c) => (reserva(c) ? String(reserva(c)!.ninos) : null) },
+  {
+    valor: 'huespedes',
+    label: 'Total de huéspedes',
+    ejemplo: '3',
+    resolver: (c) => {
+      const r = reserva(c);
+      return r ? String(r.adultos + r.ninos) : null;
+    },
+  },
+  { valor: 'habitaciones', label: 'Habitaciones', ejemplo: 'Habitación Superior #5, Estándar #15', resolver: (c) => reserva(c)?.habitaciones ?? null },
+  { valor: 'enlaceCheckin', label: 'Enlace de check-in en línea', ejemplo: 'https://…/online-check-in', resolver: (c) => reserva(c)?.enlaceCheckin ?? null },
+].map((v) => ({
+  fuente: ReglaPlantillaVariableFuente.CAMPO_RESERVA,
+  grupo: 'RESERVA' as const,
+  restriccion: SOLO_RESERVA,
+  fallback: '—',
+  ...v,
+}));
+CATALOGO_VARIABLES.push(...VARIABLES_RESERVA);
+
 export function buscarEnCatalogo(fuente: ReglaPlantillaVariableFuente, valor: string): CatalogoVariableDef | undefined {
   return CATALOGO_VARIABLES.find((def) => def.fuente === fuente && def.valor === valor);
 }
@@ -286,6 +347,7 @@ export function disponibleParaTrigger(
   origen: ReglaTriggerOrigenPedido | undefined,
 ): boolean {
   if (restriccion.tipo === 'ninguna') return true;
+  if (restriccion.tipo === 'reserva') return trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA;
   if (trigger !== ReglaTriggerTipo.EVENTO_PEDIDO) return false;
   if (restriccion.tipo === 'evento_pedido') return true;
   return origen === ReglaTriggerOrigenPedido.ORDER;
@@ -295,6 +357,8 @@ export function disponibleParaTrigger(
 export function disponibleParaContexto(restriccion: RestriccionVariable, contexto: PedidoContexto | undefined): boolean {
   if (restriccion.tipo === 'ninguna') return true;
   if (!contexto) return false;
+  if (restriccion.tipo === 'reserva') return contexto.origen === 'RESERVA';
+  if (contexto.origen === 'RESERVA') return false; // las variables de pedido B2C/B2B no aplican a una reserva
   if (restriccion.tipo === 'evento_pedido') return true;
   return contexto.origen === 'ORDER';
 }

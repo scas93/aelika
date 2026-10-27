@@ -14,7 +14,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, fetchPedidosB2bDia, cerrarEntregaPedidoB2b, exportPedidosB2bDiaXlsx: vi.fn() };
 });
 const imprimir = vi.fn();
-vi.mock("@/lib/thermal-printer", () => ({ isWebUsbSupported: () => true, printComandaB2bDiaWebUsb: (...a: unknown[]) => imprimir(...a) }));
+let webUsb = true;
+vi.mock("@/lib/thermal-printer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/thermal-printer")>();
+  return { ...actual, isWebUsbSupported: () => webUsb, printComandaB2bDiaWebUsb: (...a: unknown[]) => imprimir(...a) };
+});
 
 const { default: DiaPage } = await import("./page");
 
@@ -46,6 +50,7 @@ const DIA = [
 describe("Entregas del día (B2B)", () => {
   beforeEach(() => {
     rol = "GERENTE";
+    webUsb = true;
     fetchPedidosB2bDia.mockReset();
     cerrarEntregaPedidoB2b.mockReset();
     imprimir.mockReset();
@@ -106,7 +111,7 @@ describe("Entregas del día (B2B)", () => {
     render(<DiaPage />);
     await screen.findByText("Café B");
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull(); // sin menú «⋯» en computadora
-    expect(screen.getAllByRole("button", { name: "Imprimir" })).toHaveLength(4); // una por fila
+    expect(screen.getAllByRole("button", { name: "Imprimir" })).toHaveLength(4); // un solo control por fila
     expect(screen.getAllByRole("button", { name: "No recogida" })).toHaveLength(2); // B y D (abiertas)
     fireEvent.click(screen.getAllByRole("button", { name: "No recogida" })[0]);
     await waitFor(() => expect(cerrarEntregaPedidoB2b).toHaveBeenCalledWith("t", "2", "e2", "NO_RECOGIDA"));
@@ -153,16 +158,36 @@ describe("Entregas del día (B2B)", () => {
     expect(within(cuerno).getAllByRole("cell")[3].textContent).toBe("");
   });
 
-  it("«Imprimir todo» imprime cada entrega del día, una tras otra; «Imprimir» de la fila solo la suya", async () => {
-    imprimir.mockResolvedValue(undefined);
+  it("un solo control «Imprimir» por entrega: imprime por navegador solo el ticket de esa entrega", async () => {
+    const print = vi.fn();
+    vi.stubGlobal("print", print);
     render(<DiaPage />);
     await screen.findByText("Café B");
-    fireEvent.click(screen.getByRole("button", { name: "Imprimir todo" }));
-    await waitFor(() => expect(imprimir).toHaveBeenCalledTimes(4));
-    expect(imprimir.mock.calls.map((c) => (c[0] as PedidoB2bEntregaDia).negocioNombre)).toStrictEqual(["Café B", "Café D", "Café A", "Café C"]);
-    imprimir.mockClear();
-    fireEvent.click(screen.getAllByRole("button", { name: "Imprimir" })[0]);
-    await waitFor(() => expect(imprimir).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByRole("button", { name: "Imprimir" })).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /navegador/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Imprimir todo/ })).toBeNull();
+    expect(document.querySelector("#comanda-b2b-imprimible")).toBeNull();
+    const filaB = screen.getByText("Café B").closest("tr")!;
+    fireEvent.click(within(filaB).getByRole("button", { name: "Imprimir" }));
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(imprimir).not.toHaveBeenCalled(); // nunca por USB
+    const ticket = document.querySelector("#comanda-b2b-imprimible")!;
+    expect(document.querySelectorAll("#comanda-b2b-imprimible")).toHaveLength(1);
+    expect(ticket.textContent).toContain("Nombre del negocio: Café B");
+    expect(ticket.textContent).toContain("5x Pan");
+    expect(ticket.textContent).toContain("20x Cuerno");
+    expect(ticket.textContent).toContain("Impreso por: Ana");
+    expect(ticket.textContent).not.toContain("Café A");
+    expect(ticket.textContent).not.toContain("$");
+    vi.unstubAllGlobals();
+  });
+
+  it("sin WebUSB: «Imprimir» sigue disponible y no hay aviso de Chrome o Edge", async () => {
+    webUsb = false;
+    render(<DiaPage />);
+    await screen.findByText("Café B");
+    for (const b of screen.getAllByRole("button", { name: "Imprimir" })) expect((b as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/Chrome o Edge/)).toBeNull();
   });
 
   it("botón «Hoy» solo en otro día; sin entregas: mensaje vacío", async () => {

@@ -15,7 +15,9 @@ export class InternalService {
       mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
       abierto: isAbiertoAhora(tenant.horarioAtencion as HorarioSemana | null),
       ubicacion: tenant.ubicacion,
-      catalogoUrl: buildStorefrontUrl(this.configService, tenant.slug, tenant.tipoStorefront),
+      // Un hotel no tiene tienda pública.
+      catalogoUrl:
+        tenant.tipoStorefront === 'HOTEL' ? null : buildStorefrontUrl(this.configService, tenant.slug, tenant.tipoStorefront),
     };
   }
 }

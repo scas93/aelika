@@ -39,7 +39,7 @@ export async function seedBase(
     horario?: unknown;
     facturacionModo?: 'OBLIGATORIO' | 'OPCIONAL' | 'DESACTIVADO';
     /** RETAIL_B2B además configura el módulo B2B con un mínimo BAJO (10 piezas, no el default 100). */
-    tipoStorefront?: 'RETAIL_B2C' | 'RETAIL_B2B';
+    tipoStorefront?: 'RETAIL_B2C' | 'RETAIL_B2B' | 'HOTEL';
     b2b?: ConfigB2b;
   } = {},
 ): Promise<BaseSeed> {
@@ -162,7 +162,10 @@ export async function conectarStripe(prisma: PrismaService, tenantId: string, ch
 // ---------------------------------------------------------------------------
 
 export interface ConfigB2b {
+  /** Atajo: deja activa SOLO esta modalidad en el negocio (equivale a `modalidadesActivas: [modoCobro]`). */
   modoCobro?: 'AL_INICIO' | 'AL_FINAL';
+  /** Modalidades de cobro activas del negocio (Ajustes → Pagos). Gana sobre `modoCobro` si vienen las dos. */
+  modalidadesActivas?: ('AL_INICIO' | 'AL_FINAL')[];
   /** Mínimo de piezas para confirmar. El default de la BD es 100: aquí los tests lo fijan explícito. */
   minimoPiezas?: number;
   /** null = sin ventana de recepción (siempre abierto). */
@@ -177,6 +180,9 @@ export interface ConfigB2b {
 function datosConfigB2b(c: ConfigB2b): Prisma.TenantUncheckedUpdateInput {
   return {
     ...(c.modoCobro ? { pedidoB2bModoCobro: c.modoCobro } : {}),
+    ...(c.modalidadesActivas || c.modoCobro
+      ? { modalidadesCobroB2b: c.modalidadesActivas ?? [c.modoCobro as string] }
+      : {}),
     ...(c.minimoPiezas !== undefined ? { pedidoB2bMinimoPiezas: c.minimoPiezas } : {}),
     ...(c.ventana === null
       ? {

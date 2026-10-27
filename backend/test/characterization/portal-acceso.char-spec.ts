@@ -34,6 +34,8 @@ describe('Portal · acceso y sesión (4b)', () => {
   ) {
     return crearClienteB2b(s.h.prisma, {
       tenantId: s.base.tenant.id,
+      modalidadPago: 'AL_FINAL',
+      modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
       tenantSlug: slug(),
       sufijo,
       nombre,
@@ -191,6 +193,8 @@ describe('Portal · acceso y sesión (4b)', () => {
       });
       await crearClienteB2b(s.h.prisma, {
         tenantId: otro.tenant.id,
+        modalidadPago: 'AL_FINAL',
+        modalidadesActivas: ['AL_FINAL', 'AL_INICIO'],
         tenantSlug: otro.tenant.slug,
         sufijo: 'x',
         nombre: 'Ajeno',

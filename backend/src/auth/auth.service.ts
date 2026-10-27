@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { MODALIDADES_POR_DEFECTO } from '../common/modalidades-cobro';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '../../generated/prisma/enums';
@@ -58,6 +59,8 @@ export class AuthService {
         horarioAtencion: horarioAtencion as any,
         ubicacion: dto.ubicacion,
         botApiKey: generateApiKey(),
+        // Un negocio de mayoreo nuevo arranca solo con «A crédito» activa (también es el default de la columna).
+        modalidadesCobroB2b: [...MODALIDADES_POR_DEFECTO],
         users: {
           create: {
             nombre: dto.nombreDueno,

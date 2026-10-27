@@ -279,11 +279,14 @@ function OrderCard({
 
             <ul className="flex flex-col">
               {order.items.map((item) => (
-                <li key={item.id} className="flex items-center justify-between py-2 text-[15px] text-admin-ink">
-                  <span>
-                    {item.cantidad}× {item.nombreProducto}
-                  </span>
-                  <span>${(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
+                <li key={item.id} className="flex flex-col py-2 text-[15px] text-admin-ink">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {item.cantidad}× {item.nombreProducto}
+                    </span>
+                    <span>${(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</span>
+                  </div>
+                  {item.nota && <span className="text-sm italic text-admin-ink-soft">↳ {item.nota}</span>}
                 </li>
               ))}
             </ul>
@@ -445,6 +448,7 @@ function ComandaImprimible({
                   <p className="text-right">{precioTexto}</p>
                 </>
               )}
+              {item.nota && <p className="pl-3 text-sm font-normal italic">↳ {item.nota}</p>}
             </li>
           );
         })}

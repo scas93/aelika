@@ -45,6 +45,8 @@ enum PedidoB2bModoCobro {
 enum TipoStorefront {
   RETAIL_B2C
   RETAIL_B2B
+  // Hotel (PMS Amenitiz): sin tienda pública ni pedidos; sus órdenes son RESERVA, ingeridas por POST /internal/reservas/amenitiz.
+  HOTEL
 }
 
 // Vertical/giro del negocio — dato de segmentación interna de Aelika, no del
@@ -146,7 +148,14 @@ model Tenant {
   // tenant, no por pedido/cliente. modoCobro/minimoPiezas se snapshotean en
   // cada PedidoB2b al crearse, así que cambiar esto no afecta pedidos ya
   // creados.
+  // DEPRECADO como fuente de verdad (Configuración de pagos, Fase 0): ya no se usa para crear pedidos ni se edita por la
+  // API. La modalidad de cada pedido sale de Cliente.modalidadPago y las que el negocio ofrece, de modalidadesCobroB2b.
+  // Se conserva solo como dato histórico y como origen del script de migración; la columna se borra en un cambio posterior.
   pedidoB2bModoCobro           PedidoB2bModoCobro @default(AL_FINAL)
+  // Modalidades de cobro B2B que el negocio tiene activas (Ajustes → Pagos): arreglo JSON de valores de
+  // PedidoB2bModoCobro, p. ej. ["AL_FINAL"]. Json (no un arreglo de enum de Postgres) para poder sumar modalidades nuevas
+  // sin otra migración de este campo. Al menos una; lo valida la capa de aplicación (common/modalidades-cobro.ts).
+  modalidadesCobroB2b          Json               @default("[\"AL_FINAL\"]")
   pedidoB2bMinimoPiezas        Int                @default(100)
   // Ventana semanal recurrente en la que el storefront público de mayoreo
   // acepta pedidos nuevos — reemplaza a horarioAtencion/isAbiertoAhora para
@@ -190,6 +199,8 @@ model Tenant {
   clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
+  reglaClienteEstados       ReglaClienteEstado[]
+  detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
   loyaltyVisits             LoyaltyVisit[]
   loyaltyRedemptions        LoyaltyRedemption[]
@@ -309,6 +320,8 @@ enum HoraRecogidaTipo {
 
 enum MetodoPago {
   EFECTIVO
+  // Solo reservas (TipoOrden.RESERVA): el cobro ocurre fuera de Aelika (en el PMS); Aelika no lo registra.
+  EXTERNO
   // Not implemented yet (see PublicService) — kept so we don't need another
   // migration whenever this gets built.
   TRANSFERENCIA
@@ -479,6 +492,8 @@ model NotificacionEventoConfig {
 enum TipoOrden {
   B2C
   B2B
+  // Reserva de hotel importada de un PMS (DetalleReserva, 1:1). Sin OrderItem; no aparece en ningún módulo B2C/B2B.
+  RESERVA
 }
 
 model Order {
@@ -600,6 +615,9 @@ model Order {
   detalleB2c DetalleB2C?
   // Etapa 2: detalle exclusivo de B2B (1:1) y entregas (1:N). Mismo cuidado de casing que detalleB2c.
   detalleB2b DetalleB2B?
+  // Reserva de hotel (tipo RESERVA, 1:1). Mismo cuidado de casing que detalleB2c.
+  detalleReserva DetalleReserva?
+  reglaEnvioLogs ReglaEnvioLog[]
   entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
@@ -695,6 +713,37 @@ model DetalleB2B {
   @@map("detalles_b2b")
 }
 
+// Lo exclusivo de una reserva de hotel (Order.tipo = RESERVA), 1:1 con Order. Aelika es un espejo de solo lectura del PMS:
+// lo escribe únicamente POST /internal/reservas/amenitiz. Folio de la orden = pmsReservaId. tenantId denormalizado (convención).
+model DetalleReserva {
+  id               String   @id @default(uuid())
+  tenantId         String
+  orderId          String   @unique
+  // Proveedor del PMS ('AMENITIZ') + id de la reserva en él, como texto. Único por tenant y proveedor.
+  pmsProveedor     String
+  pmsReservaId     String
+  checkIn          DateTime @db.Date
+  checkOut         DateTime @db.Date
+  adultos          Int      @default(0)
+  ninos            Int      @default(0)
+  // "Habitación Superior #5, Estándar #15"
+  habitaciones     String?
+  // Tal como lo da el PMS (booking.com, manual, A-Expedia, amenitiz…).
+  origen           String?
+  // Moneda del total (Order.total); no se convierte ni se valida.
+  moneda           String?
+  idiomaHuesped    String?
+  // Enlace personal del huésped al registro en línea: no se expone en ninguna respuesta ni log.
+  onlineCheckinUrl String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, pmsProveedor, pmsReservaId])
+  @@index([tenantId, checkIn])
+  @@map("detalles_reserva")
+}
+
 // Origen de un pedido B2B: lo creó el propio cliente en el portal o lo capturó el equipo en el panel.
 enum OrigenPedidoB2b {
   PORTAL_CLIENTE
@@ -771,6 +820,9 @@ model OrderItem {
   // Etapa 2: posición del ítem dentro de su orden. Solo la puebla B2B (para conservar un orden estable al editar
   // por diff); B2C la deja en 0 y no la expone (ver aRespuestaOrder).
   orden          Int     @default(0)
+  // Nota por producto (solo B2C): instrucción del cliente para esta línea, ya normalizada (máx. 140). NULL = sin nota
+  // (pedidos anteriores y todo B2B). Va en la huella de checkout con tarjeta como parte de la identidad de la línea.
+  nota           String?
 
   tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -1160,7 +1212,8 @@ model Cliente {
   direccion           String?
   // % sobre el total del pedido; NULL o 0 = sin descuento. Se snapshotea en el pedido al crearlo.
   descuentoPorcentaje Decimal?            @db.Decimal(5, 2)
-  // NULL = usa la modalidad de cobro del negocio.
+  // Modalidad de cobro del cliente (obligatoria en la aplicación para todo cliente B2B; sigue nullable en la base hasta que
+  // se confirme la migración de datos). Ya NO hereda del negocio: los pedidos nuevos usan siempre esta.
   modalidadPago       PedidoB2bModoCobro?
   // Baja lógica: no puede pedir ni entrar; sus pedidos activos siguen y el historial se conserva.
   bajaAt              DateTime?
@@ -1177,6 +1230,7 @@ model Cliente {
   orders         Order[]
   pedidosB2b     PedidoB2b[]
   reglaEnvioLogs ReglaEnvioLog[]
+  reglaEstados   ReglaClienteEstado[]
   loyaltyCard    LoyaltyCard?
 
   @@unique([tenantId, canal, telefono])
@@ -1323,6 +1377,9 @@ enum ReglaTriggerTipo {
   ESTADO_CLIENTE
   FECHA_PROGRAMADA
   MANUAL
+  // Solo negocios HOTEL: evalúa sus reservas (Order RESERVA) en cada barrido — ver reserva-trigger.ts. triggerConfig
+  // { frecuencia: 'CADA_HORA' } | { frecuencia: 'DIARIA', hora: 0-23 (CDMX) }; filtro = condiciones sobre la reserva.
+  RESERVA_AUTOMATICA
 }
 
 // Alineado 1:1 a las categorías de plantilla de Meta/WhatsApp — no hay una
@@ -1390,6 +1447,8 @@ enum ReglaPlantillaVariableFuente {
   // siempre, así que no necesita datos adicionales para resolverla.
   NOMBRE_NEGOCIO
   VALOR_FIJO
+  // Datos de la reserva (check-in, noches, habitaciones…). Solo en reglas RESERVA_AUTOMATICA.
+  CAMPO_RESERVA
 }
 
 // Regla = Trigger + Filtro + Canal + Mensaje. Esta etapa solo modela la
@@ -1469,14 +1528,41 @@ model Regla {
   // MANUAL, que no tienen este concepto de disparo único.
   disparadaEn DateTime?
 
+  // Solo ESTADO_CLIENTE. true = en su próximo barrido la regla NO envía: solo registra (ReglaClienteEstado) a los clientes
+  // que ya cumplen el filtro y se apaga. La migración 20261023120000 lo enciende en las reglas ESTADO_CLIENTE activas al
+  // desplegar, para que nadie reciba un mensaje por una regla que ya venía operando. Interno: no sale en la API.
+  estadoBasePendiente Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  envios ReglaEnvioLog[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  envios         ReglaEnvioLog[]
+  clientesEstado ReglaClienteEstado[]
 
   @@index([tenantId])
   @@map("reglas")
+}
+
+// Quién cumple hoy el filtro de una Regla ESTADO_CLIENTE. Una fila = ese cliente cumple la condición desde `cumpleDesde`
+// (y, salvo que el envío estuviera bloqueado por el candado, ya se intentó mandarle el mensaje). ReglaBarridoService
+// la mantiene en cada barrido: los clientes que entran al filtro reciben el mensaje y se registran; los que siguen no
+// reciben otra vez; los que salen se borran, así que si vuelven a cumplir la condición reciben de nuevo. Un envío en
+// FALLO también deja la fila (definitivo hasta que el cliente salga y vuelva a entrar).
+model ReglaClienteEstado {
+  id          String   @id @default(uuid())
+  tenantId    String
+  reglaId     String
+  clienteId   String
+  cumpleDesde DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  regla   Regla   @relation(fields: [reglaId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([reglaId, clienteId])
+  @@index([tenantId])
+  @@map("regla_cliente_estados")
 }
 
 // EN_CURSO: el POST a Botpress salió y fue aceptado (o el servicio de envío
@@ -1507,6 +1593,8 @@ model ReglaEnvioLog {
   categoria ReglaMensajeCategoria
   estado    ReglaEnvioEstado      @default(EN_CURSO)
   createdAt DateTime              @default(now())
+  // Reserva (Order RESERVA) que originó el envío; null en el resto de los triggers. Un envío por (regla, reserva).
+  orderId   String?
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -1515,10 +1603,12 @@ model ReglaEnvioLog {
   // frecuencia necesite — mismo criterio que PedidoB2b.codigoDescuento (sin
   // Restrict, sin snapshot que perder).
   regla   Regla?  @relation(fields: [reglaId], references: [id], onDelete: SetNull)
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   // El candado de frecuencia consulta exactamente esta combinación en cada
   // evaluación de regla Marketing — ver ReglaCandadoService.
   @@index([tenantId, clienteId, categoria, createdAt])
+  @@index([reglaId, orderId])
   @@map("regla_envio_logs")
 }
 

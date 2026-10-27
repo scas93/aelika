@@ -14,7 +14,6 @@ describe('B2B · lecturas públicas', () => {
       expect(res.body).toStrictEqual({
         nombre: 'Negocio cafe-test',
         logoUrl: null,
-        pedidoB2bModoCobro: 'AL_FINAL',
         pedidoB2bMinimoPiezas: 10,
         abierto: true,
         ventanaCerradaMensaje: null,
@@ -32,7 +31,6 @@ describe('B2B · lecturas públicas', () => {
       expect(res.body).toStrictEqual({
         nombre: 'Negocio cafe-test',
         logoUrl: null,
-        pedidoB2bModoCobro: 'AL_FINAL',
         pedidoB2bMinimoPiezas: 10,
         abierto: false,
         ventanaCerradaMensaje: 'Este negocio no recibe pedidos en este momento — vuelve a abrir el jueves a las 08:00.',
@@ -49,14 +47,13 @@ describe('B2B · lecturas públicas', () => {
       expect((await get('').expect(200)).body.semanaDestino).toStrictEqual({ inicio: '2026-10-05', fin: '2026-10-11' });
     });
 
-    it('refleja la configuración del tenant (modo de cobro, mínimo, facturación)', async () => {
+    it('refleja la configuración del tenant (mínimo, facturación) y ya no expone el modo de cobro del negocio', async () => {
       await configurarB2b(s.h.prisma, s.base.tenant.id, { modoCobro: 'AL_INICIO', minimoPiezas: 40 });
       await s.h.prisma.tenant.update({ where: { id: s.base.tenant.id }, data: { facturacionModo: 'OBLIGATORIO' } });
       const res = await get('').expect(200);
       expect(res.body).toStrictEqual({
         nombre: 'Negocio cafe-test',
         logoUrl: null,
-        pedidoB2bModoCobro: 'AL_INICIO',
         pedidoB2bMinimoPiezas: 40,
         abierto: true,
         ventanaCerradaMensaje: null,

@@ -8,12 +8,16 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { toCsv } from '../common/csv';
+import { ETIQUETA_MODALIDAD } from '../common/modalidades-cobro';
 import { fechaExcel } from '../common/xlsx';
+import { round2 } from '../common/money';
 import {
   libroEntregasDia,
   libroPedidos,
+  repartirDescuento,
   type FilaEntregaExcel,
   type FilaPedidoExcel,
+  type FilaEntregaPedidoExcel,
 } from './pedidos-b2b-excel';
 import {
   ClienteCanal,
@@ -67,6 +71,7 @@ import {
   estadoB2bVisible,
   ESTADOS_ENTREGA_CERRADOS,
   estadosDeBdParaFiltro,
+  ESTADOS_PAGO_B2B_FILTRO,
   puedeEditarPedidoPagado,
   recalcularEstadoB2b,
   recalcularTotalesB2b,
@@ -140,7 +145,8 @@ export class PedidosB2bService {
   private buildWhere(query: {
     estado?: EstadoB2bFiltro;
     estados?: EstadoB2bFiltro[];
-    estadoPago?: EstadoPagoB2bFiltro;
+    estadoPago?: EstadoPagoB2bFiltro[];
+    conCancelados?: boolean;
     soloHistorico?: boolean;
     semanaAntesDe?: string;
     cancelado?: boolean;
@@ -171,32 +177,39 @@ export class PedidosB2bService {
         ? { contains: query.negocioNombre, mode: 'insensitive' }
         : undefined,
     };
+    const estadosSel = query.estados ?? (query.estado ? [query.estado] : undefined);
+    const porEstado: Prisma.OrderWhereInput | undefined = estadosSel
+      ? {
+          // COMPLETADO también abarca el DESPACHADO heredado (antes de migrar los datos).
+          estadoPedido: {
+            in: [...new Set(estadosSel.flatMap(estadosDeBdParaFiltro))],
+          },
+        }
+      : undefined;
+    const y: Prisma.OrderWhereInput[] = [];
+    // Estado con "Cancelado" marcado: (estados Y no cancelado) O cancelado. Si no hay estados, solo los cancelados.
+    const conCancelados = query.conCancelados;
+    if (conCancelados && porEstado && estadosSel!.length > 0) {
+      y.push({ OR: [{ AND: [porEstado, { cancelado: false }] }, { cancelado: true }] });
+    }
+    // Históricos: solo Completados (incluye el DESPACHADO heredado) y Cancelados.
+    if (query.soloHistorico) {
+      y.push({
+        OR: [{ cancelado: true }, { estadoPedido: { in: ESTADOS_B2B_COMPLETADOS } }],
+      });
+    }
+    const combinado = conCancelados && porEstado && estadosSel!.length > 0;
+    // Marcar todos los estados de pago equivale a no filtrar por pago.
+    const pagos = [...new Set(query.estadoPago ?? [])];
+    const filtraPago = pagos.length > 0 && pagos.length < ESTADOS_PAGO_B2B_FILTRO.length;
     return {
       tipo: TipoOrden.B2B,
-      // `estados` (multi-valor) tiene prioridad si llega — ver
-      // ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
+      // `estados` (multi-valor) tiene prioridad si llega — ver ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
       // estatus a la vez, sin pestaña por estatus).
-      // COMPLETADO también abarca el DESPACHADO heredado (antes de migrar los datos).
-      estadoPedido: query.estados
-        ? { in: [...new Set(query.estados.flatMap(estadosDeBdParaFiltro))] }
-        : query.estado
-          ? { in: estadosDeBdParaFiltro(query.estado) }
-          : undefined,
-      cancelado: query.cancelado,
-      estadoPago: query.estadoPago ? query.estadoPago : undefined,
-      // Históricos: solo Completados (incluye el DESPACHADO heredado) y Cancelados.
-      ...(query.soloHistorico
-        ? {
-            AND: [
-              {
-                OR: [
-                  { cancelado: true },
-                  { estadoPedido: { in: ESTADOS_B2B_COMPLETADOS } },
-                ],
-              },
-            ],
-          }
-        : {}),
+      estadoPedido: combinado ? undefined : porEstado?.estadoPedido,
+      cancelado: combinado ? undefined : (query.cancelado ?? (conCancelados ? true : undefined)),
+      estadoPago: filtraPago ? { in: pagos } : undefined,
+      ...(y.length > 0 ? { AND: y } : {}),
       total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
       // Siempre hay detalle en una orden B2B; el filtro solo se agrega si realmente se filtra por él.
       ...(detalle.semanaInicio || detalle.negocioNombre
@@ -254,7 +267,10 @@ export class PedidosB2bService {
         value: (p) => p.semanaInicio.toISOString().slice(0, 10),
       },
       { header: 'Estado', value: (p) => p.estado },
-      { header: 'Modo de cobro', value: (p) => p.modoCobro },
+      {
+        header: 'Modo de cobro',
+        value: (p) => ETIQUETA_MODALIDAD[p.modoCobro],
+      },
       { header: 'Estado de pago', value: (p) => p.estadoPago },
       { header: 'Cancelado', value: (p) => (p.cancelado ? 'Sí' : 'No') },
       { header: 'Piezas', value: (p) => p.totalPiezas },
@@ -289,7 +305,20 @@ export class PedidosB2bService {
             notaCliente: true,
           },
         },
-        entregas: { select: { estado: true } },
+        entregas: {
+          select: {
+            estado: true,
+            fecha: true,
+            nota: true,
+            estadoCambiadoAt: true,
+            items: {
+              select: {
+                cantidad: true,
+                orderItem: { select: { precioUnitario: true } },
+              },
+            },
+          },
+        },
       },
     });
     const filas: FilaPedidoExcel[] = pedidos.map((o) => ({
@@ -304,6 +333,11 @@ export class PedidosB2bService {
       estadoPago: o.estadoPago,
       pagadoAt: o.detalleB2b!.pagadoAt,
       estadosEntregas: o.entregas.map((e) => e.estado),
+      // Solo las piezas de entregas NO canceladas: cuadra con el Total del pedido (que ya excluye las canceladas) y con la suma de
+      // Piezas de la hoja «Entregas». Sin entregas canceladas es el mismo número que `totalPiezas` del pedido.
+      totalPiezas: o.entregas
+        .filter((e) => e.estado !== EstadoEntrega.CANCELADA)
+        .reduce((n, e) => n + e.items.reduce((m, i) => m + i.cantidad, 0), 0),
       subtotal: Number(o.detalleB2b!.subtotal),
       descuentoPorcentaje: Number(
         o.detalleB2b!.descuentoPorcentajeAplicado ?? 0,
@@ -311,7 +345,40 @@ export class PedidosB2bService {
       descuentoTotal: Number(o.descuentoTotal),
       total: Number(o.total),
     }));
-    return libroPedidos(filas);
+    // Hoja «Entregas»: las entregas no canceladas de los mismos pedidos. Importe = precio del pedido × piezas (antes del descuento).
+    const entregas: FilaEntregaPedidoExcel[] = pedidos.flatMap((o) => {
+      const vivas = o.entregas
+        .filter((e) => e.estado !== EstadoEntrega.CANCELADA)
+        .map((e) => ({
+          fecha: fechaExcel(e.fecha),
+          folio: o.folio,
+          clienteCodigo: o.cliente.codigo,
+          negocioNombre: o.detalleB2b!.negocioNombre,
+          estado: e.estado,
+          atrasada: entregaAtrasada(e.estado, e.fecha),
+          piezas: e.items.reduce((s, i) => s + i.cantidad, 0),
+          importe: round2(
+            e.items.reduce(
+              (s, i) => s + i.cantidad * Number(i.orderItem.precioUnitario),
+              0,
+            ),
+          ),
+          cerradaAt: ESTADOS_ENTREGA_CERRADOS.includes(e.estado)
+            ? e.estadoCambiadoAt
+            : null,
+          nota: e.nota,
+        }));
+      // Descuento del pedido repartido entre sus entregas no canceladas (solo lo muestra la hoja de Pedidos activos).
+      const descuentos = repartirDescuento(Number(o.descuentoTotal), vivas);
+      return vivas.map((e, n) => ({ ...e, descuento: descuentos[n] }));
+    });
+    // Columnas: `vista` manda; sin ella, `soloHistorico` (llamadas anteriores) y, si tampoco viene, las de Pedidos activos.
+    return libroPedidos(
+      filas,
+      entregas,
+      query.vista ?? (query.soloHistorico ? 'HISTORICOS' : 'ACTIVOS'),
+    );
+
   }
 
   /** Excel (.xlsx) de Entregas del día: hojas Entregas (una fila por producto de cada entrega, sin canceladas) y Consolidado. */
@@ -719,7 +786,7 @@ export class PedidosB2bService {
     // que TenantService.
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
-      select: { pedidoB2bModoCobro: true, pedidoB2bMinimoPiezas: true },
+      select: { pedidoB2bMinimoPiezas: true },
     });
 
     const semanaInicio = assertLunes(dto.semanaInicio);

@@ -7,6 +7,7 @@ import {
   fetchCatalogoVariables,
   type CatalogoVariableDef,
   type CatalogoVariableGrupo,
+  type CondicionReserva,
   type CreateReglaPayload,
   type FiltroCondicion,
   type PlantillaVariable,
@@ -28,6 +29,9 @@ import {
   FILTRO_OPERADOR_LABEL,
   IDIOMAS_PLANTILLA,
   ORIGEN_PEDIDO_LABEL,
+  RESERVA_CAMPO_LABEL,
+  RESERVA_IDIOMAS,
+  RESERVA_OPERADOR_LABEL,
   TRIGGER_LABEL,
 } from "./labels";
 import { formatFechaHora } from "@/lib/format";
@@ -35,12 +39,15 @@ import { formatFechaHora } from "@/lib/format";
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
 const TRIGGERS: ReglaTriggerTipo[] = ["EVENTO_PEDIDO", "ESTADO_CLIENTE", "FECHA_PROGRAMADA", "MANUAL"];
+// Solo los negocios Hotel ven el trigger de reservas (el backend lo rechaza para cualquier otro tipo).
+const TRIGGERS_HOTEL: ReglaTriggerTipo[] = ["RESERVA_AUTOMATICA", ...TRIGGERS];
 const HORAS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 
-const GRUPO_ORDEN: CatalogoVariableGrupo[] = ["CLIENTE", "PEDIDO", "NEGOCIO"];
+const GRUPO_ORDEN: CatalogoVariableGrupo[] = ["CLIENTE", "PEDIDO", "RESERVA", "NEGOCIO"];
 const GRUPO_LABEL: Record<CatalogoVariableGrupo, string> = {
   CLIENTE: "Cliente",
   PEDIDO: "Pedido",
+  RESERVA: "Reserva",
   NEGOCIO: "Negocio",
 };
 const CLAVE_VALOR_FIJO = "VALOR_FIJO";
@@ -72,6 +79,7 @@ function disponibilidad(
   origen: ReglaTriggerOrigenPedido,
 ): { ok: boolean; motivo?: string } {
   if (restriccion.tipo === "ninguna") return { ok: true };
+  if (restriccion.tipo === "reserva") return trigger === "RESERVA_AUTOMATICA" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
   if (trigger !== "EVENTO_PEDIDO") return { ok: false, motivo: restriccion.motivo };
   if (restriccion.tipo === "evento_pedido") return { ok: true };
   return origen === "ORDER" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
@@ -119,20 +127,29 @@ interface ReglaFormProps {
 }
 
 export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }: ReglaFormProps) {
+  const { token, user } = useSession();
+  const esHotel = user.tenant.tipoStorefront === "HOTEL";
   const triggerConfigInicial = (initial?.triggerConfig ?? {}) as Record<string, unknown>;
   const fechaInicial = esFechaProgramadaConValor(initial)
     ? isoAFechaLocal(String(triggerConfigInicial.fechaHora))
     : { dia: "", hora: "00" };
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
-  const [trigger, setTrigger] = useState<ReglaTriggerTipo>(initial?.trigger ?? "ESTADO_CLIENTE");
+  const [trigger, setTrigger] = useState<ReglaTriggerTipo>(initial?.trigger ?? (esHotel ? "RESERVA_AUTOMATICA" : "ESTADO_CLIENTE"));
+  const [frecuencia, setFrecuencia] = useState<"CADA_HORA" | "DIARIA">(
+    (triggerConfigInicial.frecuencia as "CADA_HORA" | "DIARIA") ?? "CADA_HORA",
+  );
+  const [horaDiaria, setHoraDiaria] = useState(String(typeof triggerConfigInicial.hora === "number" ? triggerConfigInicial.hora : 11).padStart(2, "0"));
+  const [filtroReserva, setFiltroReserva] = useState<CondicionReserva[]>(
+    initial?.trigger === "RESERVA_AUTOMATICA" ? (initial.filtro as CondicionReserva[]) : [{ campo: "DIAS_PARA_CHECKIN", operador: "MAYOR_IGUAL", valor: 0 }],
+  );
   const [origen, setOrigen] = useState<ReglaTriggerOrigenPedido>(
     (triggerConfigInicial.origen as ReglaTriggerOrigenPedido) ?? "ORDER",
   );
   const [estatus, setEstatus] = useState<string>((triggerConfigInicial.estatus as string) ?? "");
   const [fechaDia, setFechaDia] = useState(fechaInicial.dia);
   const [fechaHoraSel, setFechaHoraSel] = useState(fechaInicial.hora);
-  const [filtro, setFiltro] = useState<FiltroCondicion[]>(initial?.filtro ?? []);
+  const [filtro, setFiltro] = useState<FiltroCondicion[]>(initial?.trigger === "RESERVA_AUTOMATICA" ? [] : ((initial?.filtro ?? []) as FiltroCondicion[]));
   const [plantillaNombre, setPlantillaNombre] = useState(initial?.plantillaNombre ?? "");
   const [plantillaIdioma, setPlantillaIdioma] = useState(initial?.plantillaIdioma ?? "es_MX");
   const [plantillaTexto, setPlantillaTexto] = useState(initial?.plantillaTexto ?? "");
@@ -141,7 +158,6 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { token } = useSession();
   const [catalogo, setCatalogo] = useState<CatalogoVariableDef[] | null>(null);
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
 
@@ -206,6 +222,22 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
     );
   }
 
+  function updateCondicionReserva(index: number, patch: Partial<CondicionReserva>) {
+    setFiltroReserva((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        const nueva = { ...c, ...patch };
+        if (patch.campo) {
+          // Al cambiar de campo se restablece operador y valor a los de ese tipo de condición.
+          return patch.campo === "IDIOMA_HUESPED"
+            ? { campo: patch.campo, operador: "ES" as const, valor: "ES" }
+            : { campo: patch.campo, operador: "IGUAL" as const, valor: 0 };
+        }
+        return nueva;
+      }),
+    );
+  }
+
   function removeCondicion(index: number) {
     setFiltro((prev) => prev.filter((_, i) => i !== index));
   }
@@ -247,13 +279,17 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
         ? { origen, estatus }
         : trigger === "FECHA_PROGRAMADA"
           ? { fechaHora: fechaHoraALocalIso(fechaDia, fechaHoraSel) }
-          : undefined;
+          : trigger === "RESERVA_AUTOMATICA"
+            ? frecuencia === "DIARIA"
+              ? { frecuencia, hora: Number(horaDiaria) }
+              : { frecuencia }
+            : undefined;
 
     return {
       nombre: nombre.trim(),
       trigger,
       triggerConfig,
-      filtro: trigger === "EVENTO_PEDIDO" ? [] : filtro,
+      filtro: trigger === "EVENTO_PEDIDO" ? [] : trigger === "RESERVA_AUTOMATICA" ? filtroReserva : filtro,
       canal: "WHATSAPP",
       plantillaNombre: plantillaNombre.trim(),
       plantillaIdioma,
@@ -266,7 +302,12 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
 
   const triggerConfigValido =
     trigger === "EVENTO_PEDIDO" ? estatus !== "" : trigger === "FECHA_PROGRAMADA" ? fechaDia !== "" : true;
-  const filtroValido = trigger === "EVENTO_PEDIDO" || filtro.every((c) => Number.isFinite(c.valor));
+  const filtroReservaValido =
+    filtroReserva.some((c) => c.campo !== "IDIOMA_HUESPED") &&
+    filtroReserva.every((c) => (c.campo === "IDIOMA_HUESPED" ? typeof c.valor === "string" && c.valor !== "" : Number.isInteger(c.valor)));
+  const filtroValido =
+    trigger === "EVENTO_PEDIDO" ||
+    (trigger === "RESERVA_AUTOMATICA" ? filtroReservaValido : filtro.every((c) => Number.isFinite(c.valor)));
   const variablesValidas = variables.every((v) => {
     if (v.fuente === "VALOR_FIJO") return v.valor.trim() !== "";
     if (!catalogo) return false;
@@ -320,7 +361,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
               onChange={(e) => handleTriggerChange(e.target.value as ReglaTriggerTipo)}
               className="admin-input"
             >
-              {TRIGGERS.map((t) => (
+              {(esHotel ? TRIGGERS_HOTEL : TRIGGERS).map((t) => (
                 <option key={t} value={t}>
                   {TRIGGER_LABEL[t]}
                 </option>
@@ -358,6 +399,37 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                   ))}
                 </select>
               </label>
+            </div>
+          )}
+
+          {trigger === "RESERVA_AUTOMATICA" && (
+            <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                  Frecuencia
+                  <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as "CADA_HORA" | "DIARIA")} className="admin-input">
+                    <option value="CADA_HORA">Cada hora</option>
+                    <option value="DIARIA">Diario a una hora</option>
+                  </select>
+                </label>
+                {frecuencia === "DIARIA" && (
+                  <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                    Hora (CDMX)
+                    <select value={horaDiaria} onChange={(e) => setHoraDiaria(e.target.value)} className="admin-input">
+                      {HORAS.map((h) => (
+                        <option key={h} value={h}>
+                          {h}:00
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <p className="text-sm text-admin-ink-soft">
+                {frecuencia === "DIARIA"
+                  ? "Se evalúa desde esa hora hasta el fin del día (hora de CDMX): una reserva que llega más tarde todavía recibe el mensaje ese mismo día."
+                  : "Se evalúa en cada barrido (cada hora). Cada reserva recibe el mensaje una sola vez por regla."}
+              </p>
             </div>
           )}
 
@@ -401,11 +473,75 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
             <p className="text-sm text-admin-ink-soft">
               {trigger === "EVENTO_PEDIDO"
                 ? "No aplica — el destinatario es siempre el cliente dueño del pedido."
-                : "Condiciones combinadas con Y. Sin condiciones, aplica a todos los clientes."}
+                : trigger === "RESERVA_AUTOMATICA"
+                  ? "Condiciones combinadas con Y, sobre reservas no canceladas. Debe haber al menos una de días. Cada reserva recibe el mensaje una sola vez."
+                  : "Condiciones combinadas con Y. Sin condiciones, aplica a todos los clientes."}
             </p>
           </div>
 
-          {trigger !== "EVENTO_PEDIDO" && (
+          {trigger === "RESERVA_AUTOMATICA" && (
+            <div className="flex flex-col gap-2">
+              {filtroReserva.map((condicion, index) => (
+                <div key={index}>
+                  {index > 0 && <p className="py-1 text-xs font-bold uppercase text-admin-ink-soft">Y</p>}
+                  <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-2">
+                    <select
+                      value={condicion.campo}
+                      onChange={(e) => updateCondicionReserva(index, { campo: e.target.value as CondicionReserva["campo"] })}
+                      className="admin-input flex-1"
+                    >
+                      {(Object.keys(RESERVA_CAMPO_LABEL) as CondicionReserva["campo"][]).map((c) => (
+                        <option key={c} value={c}>
+                          {RESERVA_CAMPO_LABEL[c]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={condicion.operador}
+                      onChange={(e) => updateCondicionReserva(index, { operador: e.target.value as CondicionReserva["operador"] })}
+                      className="admin-input flex-1"
+                    >
+                      {(condicion.campo === "IDIOMA_HUESPED" ? ["ES", "NO_ES"] : ["IGUAL", "MAYOR_IGUAL", "MENOR_IGUAL"]).map((op) => (
+                        <option key={op} value={op}>
+                          {RESERVA_OPERADOR_LABEL[op]}
+                        </option>
+                      ))}
+                    </select>
+                    {condicion.campo === "IDIOMA_HUESPED" ? (
+                      <select value={String(condicion.valor)} onChange={(e) => updateCondicionReserva(index, { valor: e.target.value })} className="admin-input w-32">
+                        {RESERVA_IDIOMAS.map((i) => (
+                          <option key={i.value} value={i.value}>
+                            {i.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        value={condicion.valor}
+                        onChange={(e) => updateCondicionReserva(index, { valor: Number(e.target.value) })}
+                        className="admin-input w-24"
+                      />
+                    )}
+                    <Button type="button" variant="danger" size="barra" onClick={() => setFiltroReserva((prev) => prev.filter((_, i) => i !== index))}>
+                      Quitar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                size="tabla"
+                onClick={() => setFiltroReserva((prev) => [...prev, { campo: "DIAS_PARA_CHECKIN", operador: "IGUAL", valor: 0 }])}
+              >
+                + Agregar condición
+              </Button>
+              {!filtroReservaValido && <p className="text-sm text-red-600">Agrega al menos una condición de días.</p>}
+            </div>
+          )}
+
+          {trigger !== "EVENTO_PEDIDO" && trigger !== "RESERVA_AUTOMATICA" && (
             <div className="flex flex-col gap-2">
               {filtro.map((condicion, index) => (
                 <div key={index}>

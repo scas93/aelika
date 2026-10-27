@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import {
   OrigenPedidoB2b,
   Prisma,
@@ -43,12 +43,13 @@ export async function bloquearClienteB2b(
   return { cliente, principal };
 }
 
+const logger = new Logger('PedidosB2bCrear');
+
 export interface ParamsCrearPedidoB2b {
   /** Quién captura el pedido (portal del cliente o panel del equipo). */
   origen: OrigenPedidoB2b;
   tenantId: string;
   tenant: {
-    pedidoB2bModoCobro: Prisma.DetalleB2BUncheckedCreateInput['modoCobro'];
     pedidoB2bMinimoPiezas: number;
   };
   cliente: Awaited<ReturnType<typeof bloquearClienteB2b>>['cliente'];
@@ -89,6 +90,17 @@ export async function crearPedidoB2bDeCliente(
     });
   }
 
+  // La modalidad de cobro es SIEMPRE la del cliente: ya no hereda del negocio. Sin ella no se inventa otra: se rechaza.
+  const modoCobro = cliente.modalidadPago;
+  if (!modoCobro) {
+    logger.error(
+      `Cliente B2B ${cliente.id} (negocio ${tenantId}) sin modalidad de pago: no se creó el pedido (origen ${p.origen})`,
+    );
+    throw new ConflictException(
+      'Este cliente no tiene modalidad de pago asignada. Asígnala en su ficha de Clientes antes de crear el pedido.',
+    );
+  }
+
   const descuentoPorcentaje = cliente.descuentoPorcentaje
     ? Number(cliente.descuentoPorcentaje)
     : null;
@@ -109,7 +121,7 @@ export async function crearPedidoB2bDeCliente(
       contactoTelefono: principal.telefono,
       contactoCorreo: cliente.correo,
       semanaInicio,
-      modoCobro: cliente.modalidadPago ?? tenant.pedidoB2bModoCobro,
+      modoCobro,
       minimoPiezasAplicado: tenant.pedidoB2bMinimoPiezas,
       totalPiezas: p.totalPiezas,
       subtotal: p.subtotal,

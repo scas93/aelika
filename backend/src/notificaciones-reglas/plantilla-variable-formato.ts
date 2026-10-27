@@ -26,6 +26,26 @@ export function formatFechaLarga(fecha: Date): string {
   return FECHA_LARGA_FORMATTER.format(fecha);
 }
 
+/** ¿La plantilla de la regla es en español? ("es", "es_MX"…). Cualquier otro idioma usa el formato en inglés. */
+export function esPlantillaEspanol(idiomaPlantilla: string): boolean {
+  return idiomaPlantilla.trim().toLowerCase().startsWith('es');
+}
+
+/** Fecha de calendario (UTC a medianoche, como las columnas @db.Date) según el idioma de la plantilla: "25 de diciembre de 2026" / "December 25, 2026". */
+export function formatFechaCompleta(fecha: Date, idiomaPlantilla: string): string {
+  return new Intl.DateTimeFormat(esPlantillaEspanol(idiomaPlantilla) ? 'es-MX' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(fecha);
+}
+
+/** Noches entre dos fechas de calendario. */
+export function nochesEntre(checkIn: Date, checkOut: Date): number {
+  return Math.max(0, Math.round((checkOut.getTime() - checkIn.getTime()) / MILISEGUNDOS_POR_DIA));
+}
+
 /** "24 sep, 12:30". */
 export function formatFechaHoraCorta(fecha: Date): string {
   return `${FECHA_CORTA_FORMATTER.format(fecha)}, ${HORA_FORMATTER.format(fecha)}`;
@@ -70,6 +90,7 @@ export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
   EFECTIVO: 'Efectivo',
   TRANSFERENCIA: 'Transferencia',
   TARJETA: 'Tarjeta',
+  EXTERNO: 'Pago externo',
 };
 
 export interface ItemParaResumen {

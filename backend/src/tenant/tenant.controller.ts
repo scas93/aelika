@@ -22,6 +22,11 @@ export class TenantController {
     return this.tenantService.updateMine(user.tenantId, dto);
   }
 
+  @Get('me/modalidades-cobro/uso')
+  usoModalidadesCobro(@CurrentUser() user: JwtPayload) {
+    return this.tenantService.usoModalidadesCobro(user.tenantId);
+  }
+
   @Post('me/regenerate-bot-key')
   regenerateBotKey(@CurrentUser() user: JwtPayload) {
     return this.tenantService.regenerateBotKey(user.tenantId);

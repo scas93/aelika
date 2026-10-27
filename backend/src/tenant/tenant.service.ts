@@ -14,12 +14,17 @@ import {
   normalizarVentanaRecepcion,
   ventanaDesdeTenant,
 } from '../common/ventana-recepcion-b2b';
+import {
+  MODALIDADES_COBRO,
+  normalizarModalidades,
+  validarModalidadesActivas,
+} from '../common/modalidades-cobro';
+import { ClienteCanal } from '../../generated/prisma/enums';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import type {
   DiaSemana,
   FacturacionModo,
   GiroNegocio,
-  PedidoB2bModoCobro,
 } from '../../generated/prisma/enums';
 
 const SETTINGS_SELECT = {
@@ -41,7 +46,7 @@ const SETTINGS_SELECT = {
   stripeAccountId: true,
   stripeChargesEnabled: true,
   stripePayoutsEnabled: true,
-  pedidoB2bModoCobro: true,
+  modalidadesCobroB2b: true,
   pedidoB2bMinimoPiezas: true,
   pedidoB2bVentanaAperturaDia: true,
   pedidoB2bVentanaAperturaHora: true,
@@ -79,6 +84,13 @@ export class TenantService {
     // deliberate action (see regenerateBotKey), not a side effect of a
     // routine settings save.
     const ventana = normalizarVentanaRecepcion(dto.ventanaRecepcionB2b);
+    const modalidadesCobroB2b =
+      dto.modalidadesCobroB2b !== undefined
+        ? await this.resolverModalidadesActivas(
+            tenantId,
+            dto.modalidadesCobroB2b,
+          )
+        : undefined;
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -95,7 +107,7 @@ export class TenantService {
         giroNegocio: dto.giroNegocio,
         facturacionModo: dto.facturacionModo,
         stripeContactEmail: dto.stripeContactEmail,
-        pedidoB2bModoCobro: dto.pedidoB2bModoCobro,
+        modalidadesCobroB2b,
         pedidoB2bMinimoPiezas: dto.pedidoB2bMinimoPiezas,
         pedidoB2bVentanaAperturaDia: ventana?.pedidoB2bVentanaAperturaDia,
         pedidoB2bVentanaAperturaHora: ventana?.pedidoB2bVentanaAperturaHora,
@@ -116,6 +128,42 @@ export class TenantService {
       select: SETTINGS_SELECT,
     });
     return this.present(tenant);
+  }
+
+  /**
+   * Valida las modalidades que se quieren dejar activas: al menos una (cualquier vía), conocidas y solo en negocios de
+   * mayoreo. El DTO ya lo exige; esto cubre cualquier otro llamador del servicio.
+   */
+  private async resolverModalidadesActivas(tenantId: string, raw: unknown) {
+    const activas = validarModalidadesActivas(raw);
+    const t = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { tipoStorefront: true },
+    });
+    if (t.tipoStorefront !== 'RETAIL_B2B') {
+      throw new BadRequestException(
+        'Las modalidades de cobro solo aplican a negocios de mayoreo',
+      );
+    }
+    return activas;
+  }
+
+  /**
+   * Cuántos clientes B2B activos (sin baja) usan cada modalidad. Informativo: la interfaz lo muestra antes de confirmar que
+   * se desactiva una modalidad en uso. No se exige exactitud al guardar.
+   */
+  async usoModalidadesCobro(tenantId: string) {
+    const filas = await this.prisma.cliente.groupBy({
+      by: ['modalidadPago'],
+      where: { tenantId, canal: ClienteCanal.B2B, bajaAt: null },
+      _count: { _all: true },
+    });
+    const uso: Record<string, number> = {};
+    for (const m of MODALIDADES_COBRO) uso[m] = 0;
+    for (const f of filas) {
+      if (f.modalidadPago) uso[f.modalidadPago] = f._count._all;
+    }
+    return uso;
   }
 
   async regenerateBotKey(tenantId: string) {
@@ -282,7 +330,7 @@ export class TenantService {
     stripeAccountId: string | null;
     stripeChargesEnabled: boolean;
     stripePayoutsEnabled: boolean;
-    pedidoB2bModoCobro: PedidoB2bModoCobro;
+    modalidadesCobroB2b: unknown;
     pedidoB2bMinimoPiezas: number;
     pedidoB2bVentanaAperturaDia: DiaSemana | null;
     pedidoB2bVentanaAperturaHora: string | null;
@@ -309,7 +357,7 @@ export class TenantService {
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,
       stripePayoutsEnabled: tenant.stripePayoutsEnabled,
-      pedidoB2bModoCobro: tenant.pedidoB2bModoCobro,
+      modalidadesCobroB2b: normalizarModalidades(tenant.modalidadesCobroB2b),
       pedidoB2bMinimoPiezas: tenant.pedidoB2bMinimoPiezas,
       ventanaRecepcionB2b: ventanaDesdeTenant(tenant),
       portalHoraEntrega: tenant.portalHoraEntrega,

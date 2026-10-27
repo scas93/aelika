@@ -23,6 +23,7 @@ describe('Clientes B2B · historial de pedidos y entregas', () => {
           nombre,
           sufijo,
           direccion: 'Av. Siempre Viva 123',
+          modalidadPago: 'AL_FINAL',
           telefonos: [{ telefono: '5511112222', principal: true }],
         })
         .expect(201)

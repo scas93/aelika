@@ -88,6 +88,9 @@ export class TenantPrismaService {
           detalleB2C: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          detalleReserva: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           detalleB2B: {
             $allOperations: tenantScopedQuery(tenantId),
           },
@@ -119,6 +122,9 @@ export class TenantPrismaService {
             $allOperations: tenantScopedQuery(tenantId),
           },
           pedidoB2bCodigoDescuento: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
+          reglaClienteEstado: {
             $allOperations: tenantScopedQuery(tenantId),
           },
           notificacionCanalConfig: {

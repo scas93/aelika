@@ -3,19 +3,16 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import { ApiError, createClienteB2b, fetchClientesB2bConfig, type ClienteB2bDetalle, type ModalidadPagoB2b } from "@/lib/api";
+import { modalidadInicial } from "@/lib/modalidades-cobro";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
+import SelectorModalidadPago from "./selector-modalidad-pago";
 
 interface TelefonoForm {
   key: number;
   telefono: string;
   nombreContacto: string;
 }
-
-export const MODALIDAD_LABEL: Record<ModalidadPagoB2b, string> = {
-  AL_INICIO: "Al confirmar el pedido (por adelantado)",
-  AL_FINAL: "Al finalizar la semana (crédito)",
-};
 
 /** Convierte lo escrito en el campo de descuento a número (vacío = sin descuento). NaN si no es un número. */
 export function parseDescuento(texto: string): number | null {
@@ -29,17 +26,7 @@ export function descuentoValido(valor: number | null): boolean {
   return valor === null || (!Number.isNaN(valor) && valor >= 0 && valor <= 100);
 }
 
-export const MODALIDAD_CORTA: Record<ModalidadPagoB2b, string> = {
-  AL_INICIO: "Al inicio",
-  AL_FINAL: "Al final",
-};
-
-/** Texto de la opción por defecto del selector de modalidad: muestra el valor real del negocio. */
-export function etiquetaModalidadNegocio(modalidadNegocio: ModalidadPagoB2b | null): string {
-  return modalidadNegocio ? `Igual que el negocio (${MODALIDAD_CORTA[modalidadNegocio]})` : "Igual que el negocio";
-}
-
-type Errores = { nombre?: string; direccion?: string; descuento?: string; telefonos?: string; filas: Record<number, string> };
+type Errores = { nombre?: string; direccion?: string; descuento?: string; modalidad?: string; telefonos?: string; filas: Record<number, string> };
 
 const CAMPO_ERROR = (mensaje?: string) => (mensaje ? "border-red-500!" : "");
 
@@ -59,7 +46,7 @@ export default function ClienteB2bAltaModal({
   const [direccion, setDireccion] = useState("");
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
-  const [modalidadNegocio, setModalidadNegocio] = useState<ModalidadPagoB2b | null>(null);
+  const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
   const [telefonos, setTelefonos] = useState<TelefonoForm[]>([{ key: 1, telefono: "", nombreContacto: "" }]);
   const [principal, setPrincipal] = useState(1);
   const [siguienteKey, setSiguienteKey] = useState(2);
@@ -82,7 +69,12 @@ export default function ClienteB2bAltaModal({
     /* eslint-enable react-hooks/set-state-in-effect */
     let cancelled = false;
     fetchClientesB2bConfig(token)
-      .then((c) => !cancelled && setModalidadNegocio(c.modalidadCobroNegocio))
+      .then((c) => {
+        if (cancelled) return;
+        setModalidadesActivas(c.modalidadesActivas);
+        // Con una sola modalidad activa se selecciona sola; con dos o más el usuario debe elegir.
+        setModalidad(modalidadInicial(c.modalidadesActivas));
+      })
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -111,6 +103,7 @@ export default function ClienteB2bAltaModal({
     if (nombre.trim().length < 2) e.nombre = "Escribe el nombre comercial.";
     if (direccion.trim().length < 3) e.direccion = "Escribe la dirección.";
     if (!descuentoValido(descuentoNum)) e.descuento = "Escribe un número entre 0 y 100.";
+    if (!modalidad) e.modalidad = "Elige una modalidad de pago.";
     if (telefonosLlenos.length === 0) e.telefonos = "Agrega al menos un teléfono.";
     for (const t of telefonosLlenos) {
       if (t.telefono.replace(/\D/g, "").length < 10) e.filas[t.key] = "Debe tener 10 dígitos.";
@@ -121,7 +114,7 @@ export default function ClienteB2bAltaModal({
   async function handleGuardar() {
     const e = validar();
     setErrores(e);
-    if (e.nombre || e.direccion || e.descuento || e.telefonos || Object.keys(e.filas).length > 0) return;
+    if (e.nombre || e.direccion || e.descuento || e.modalidad || e.telefonos || Object.keys(e.filas).length > 0) return;
     setGuardando(true);
     setError(null);
     try {
@@ -131,7 +124,7 @@ export default function ClienteB2bAltaModal({
         nombre: nombre.trim(),
         direccion: direccion.trim(),
         descuentoPorcentaje: descuentoNum && descuentoNum > 0 ? descuentoNum : undefined,
-        modalidadPago: modalidad || undefined,
+        modalidadPago: modalidad as ModalidadPagoB2b,
         telefonos: telefonosLlenos.map((t) => ({
           telefono: t.telefono.trim(),
           principal: t.key === principalKey,
@@ -203,14 +196,7 @@ export default function ClienteB2bAltaModal({
             />
             {errores.descuento && <span className="text-xs font-normal text-red-600">{errores.descuento}</span>}
           </label>
-          <label className="flex min-w-0 flex-col gap-1.5 text-sm font-semibold text-admin-ink">
-            Modalidad de pago
-            <select value={modalidad} onChange={(e) => setModalidad(e.target.value as "" | ModalidadPagoB2b)} className="admin-input w-full min-w-0">
-              <option value="">{etiquetaModalidadNegocio(modalidadNegocio)}</option>
-              <option value="AL_INICIO">{MODALIDAD_LABEL.AL_INICIO}</option>
-              <option value="AL_FINAL">{MODALIDAD_LABEL.AL_FINAL}</option>
-            </select>
-          </label>
+          <SelectorModalidadPago value={modalidad} onChange={setModalidad} activas={modalidadesActivas} error={errores.modalidad} />
         </div>
 
         <fieldset className="flex flex-col gap-2">

@@ -222,11 +222,14 @@ body {
   }
 
   #comanda-imprimible,
-  #comanda-imprimible * {
+  #comanda-imprimible *,
+  #comanda-b2b-imprimible,
+  #comanda-b2b-imprimible * {
     visibility: visible;
   }
 
-  #comanda-imprimible {
+  #comanda-imprimible,
+  #comanda-b2b-imprimible {
     position: absolute;
     top: 0;
     left: 0;

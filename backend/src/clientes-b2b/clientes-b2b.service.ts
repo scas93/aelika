@@ -8,6 +8,10 @@ import { ClienteCanal, EstadoEntrega, Prisma, TipoOrden } from '../../generated/
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizarTelefono } from '../common/telefono';
+import {
+  normalizarModalidades,
+  validarModalidadCliente,
+} from '../common/modalidades-cobro';
 import { crearClienteB2b, type ClienteB2bDb } from '../clientes/cliente-b2b';
 import {
   entregaAtrasada,
@@ -133,6 +137,7 @@ export class ClientesB2bService {
     });
     if (!c) throw new NotFoundException('Cliente no encontrado');
     const activos = await this.pedidosActivosPorCliente([c.id]);
+    const modalidadesActivas = await this.modalidadesActivas(c.tenantId);
     return {
       id: c.id,
       codigo: c.codigo,
@@ -140,6 +145,9 @@ export class ClientesB2bService {
       direccion: c.direccion,
       descuentoPorcentaje: num(c.descuentoPorcentaje),
       modalidadPago: c.modalidadPago,
+      // true = el cliente conserva una modalidad que el negocio ya desactivó (la ficha lo avisa y deja cambiarla).
+      modalidadInactiva:
+        c.modalidadPago !== null && !modalidadesActivas.includes(c.modalidadPago),
       activo: c.bajaAt === null,
       bajaAt: c.bajaAt,
       pedidosActivos: activos.get(c.id) ?? 0,
@@ -294,12 +302,18 @@ export class ClientesB2bService {
 
   // ---- Alta y edición ----------------------------------------------------------------------------------
 
-  async config(tenantId: string) {
+  /** Modalidades de cobro que el negocio tiene activas (Ajustes → Pagos), normalizadas. */
+  private async modalidadesActivas(tenantId: string) {
     const t = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
-      select: { pedidoB2bModoCobro: true },
+      select: { modalidadesCobroB2b: true },
     });
-    return { modalidadCobroNegocio: t.pedidoB2bModoCobro };
+    return normalizarModalidades(t.modalidadesCobroB2b);
+  }
+
+  /** Lo que el alta y la ficha necesitan del negocio: qué modalidades están activas (las demás se ven deshabilitadas). */
+  async config(tenantId: string) {
+    return { modalidadesActivas: await this.modalidadesActivas(tenantId) };
   }
 
   async create(tenantId: string, dto: CreateClienteB2bDto) {
@@ -308,6 +322,7 @@ export class ClientesB2bService {
       where: { id: tenantId },
       select: { id: true, slug: true },
     });
+    const modalidadesActivas = await this.modalidadesActivas(tenant.id);
     try {
       const cliente = await this.db.$transaction((tx) =>
         crearClienteB2b(tx as unknown as ClienteB2bDb, {
@@ -318,6 +333,7 @@ export class ClientesB2bService {
           direccion: dto.direccion,
           descuentoPorcentaje: dto.descuentoPorcentaje,
           modalidadPago: dto.modalidadPago,
+          modalidadesActivas,
           telefonos: dto.telefonos,
         }),
       );
@@ -336,7 +352,7 @@ export class ClientesB2bService {
   }
 
   async update(id: string, dto: UpdateClienteB2bDto) {
-    await this.assertExiste(id);
+    const actual = await this.assertExiste(id);
     const data: Prisma.ClienteUpdateInput = {};
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim();
     if (dto.direccion !== undefined) data.direccion = dto.direccion.trim();
@@ -346,7 +362,14 @@ export class ClientesB2bService {
           ? dto.descuentoPorcentaje
           : null;
     }
-    if (dto.modalidadPago !== undefined) data.modalidadPago = dto.modalidadPago;
+    if (dto.modalidadPago !== undefined) {
+      // null se rechaza (la modalidad es obligatoria); la actual se acepta aunque se haya desactivado, otra inactiva no.
+      data.modalidadPago = validarModalidadCliente(
+        dto.modalidadPago,
+        await this.modalidadesActivas(actual.tenantId),
+        actual.modalidadPago,
+      );
+    }
     if (Object.keys(data).length > 0) {
       await this.db.cliente.update({ where: { id }, data });
     }

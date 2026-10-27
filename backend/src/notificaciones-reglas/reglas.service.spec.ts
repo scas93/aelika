@@ -5,7 +5,7 @@ function crearServicio() {
   // Los 4 colaboradores no los usa validarPlantillaVariables/catalogoVariables
   // (son puros respecto a sus argumentos) — dummies bastan, mismo criterio
   // que regla-envio.service.spec.ts.
-  return new ReglasService({} as any, {} as any, {} as any, {} as any);
+  return new ReglasService({} as any, {} as any, {} as any, {} as any, {} as any);
 }
 
 function validar(service: ReglasService, trigger: string, origen: string | undefined, raw: unknown[]) {

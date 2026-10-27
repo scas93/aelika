@@ -422,6 +422,7 @@ export class PublicService {
               productId: i.productId,
               cantidad: i.cantidad,
               modifierOptionIds: i.modifierOptionIds,
+              nota: i.nota,
             })),
             metodoEntrega,
             puntoEnvioId: puntoEnvio?.id,
@@ -500,6 +501,7 @@ export class PublicService {
                 nombreProducto: product.nombre,
                 precioUnitario: product.precio,
                 cantidad: item.cantidad,
+                nota: item.nota ?? null,
                 modificadores:
                   modificadores.length > 0
                     ? {
@@ -1011,6 +1013,10 @@ export class PublicService {
       for (const modificador of item.modificadores) {
         lineas.push(`   ${modificador.nombreGrupo}: ${modificador.nombre}`);
       }
+      // Nota por producto, debajo de la línea y de sus modificadores. Texto literal (la nota ya viene normalizada: una línea).
+      if (item.nota) {
+        lineas.push(`   ↳ ${item.nota}`);
+      }
 
       if (index < order.items.length - 1) {
         lineas.push('');
@@ -1020,6 +1026,11 @@ export class PublicService {
     lineas.push('');
     if (Number(order.descuentoTotal) > 0) {
       lineas.push(`Descuento: -$${Number(order.descuentoTotal).toFixed(2)}`);
+    }
+    // Nota libre del cliente, tal cual la escribió (texto plano, sin parse_mode: nada que escapar). Vacía o solo espacios no deja etiqueta.
+    if (order.notas && order.notas.trim() !== '') {
+      if (Number(order.descuentoTotal) > 0) lineas.push('');
+      lineas.push('Notas:', order.notas);
     }
     lineas.push('------------------------------', `TOTAL: $${Number(order.total).toFixed(2)} MXN`, '', `Recibido: ${this.formatearFechaRecibo(order.createdAt)}`);
 

@@ -37,7 +37,7 @@ export interface Session {
 // más valores en el futuro, ligados a otras verticales de negocio. Ver
 // TipoStorefront en el schema de Prisma y dashboard/nav-items.ts, que filtra
 // la navegación según este valor.
-export type TipoStorefront = "RETAIL_B2C" | "RETAIL_B2B";
+export type TipoStorefront = "RETAIL_B2C" | "RETAIL_B2B" | "HOTEL";
 
 export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripcion: string }[] = [
   {
@@ -49,6 +49,11 @@ export const TIPOS_STOREFRONT: { value: TipoStorefront; label: string; descripci
     value: "RETAIL_B2B",
     label: "Retail (B2B)",
     descripcion: "Pedidos semanales a crédito para negocios que te compran a ti (cafeterías, restaurantes).",
+  },
+  {
+    value: "HOTEL",
+    label: "Hotel",
+    descripcion: "Reservas importadas de tu sistema de reservas (PMS) para enviar avisos a tus huéspedes. Sin tienda pública.",
   },
 ];
 
@@ -371,7 +376,7 @@ export interface CreatePublicOrderPayload {
   facturaUsoCfdi?: string;
   facturaCodigoPostal?: string;
   facturaCorreo?: string;
-  items: { productId: string; cantidad: number; modifierOptionIds?: string[] }[];
+  items: { productId: string; cantidad: number; modifierOptionIds?: string[]; nota?: string }[];
 }
 
 export interface PublicOrderItem {
@@ -380,6 +385,8 @@ export interface PublicOrderItem {
   nombreProducto: string;
   precioUnitario: string;
   cantidad: number;
+  // Nota por producto (solo B2C); null cuando la línea no la trae.
+  nota?: string | null;
 }
 
 export type EstadoPedido = "PENDIENTE_CONFIRMACION" | "CONFIRMADO_SURTIENDO" | "LISTO_ENTREGA" | "DESPACHADO";
@@ -558,6 +565,8 @@ export interface TenantSettings {
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
   ventanaRecepcionB2b: VentanaRecepcionB2b | null;
+  // Modalidades de cobro B2B activas (Ajustes → Pagos). Siempre al menos una.
+  modalidadesCobroB2b: ModalidadPagoB2b[];
   // Mínimo de piezas por pedido de mayoreo; 0 = sin mínimo.
   pedidoB2bMinimoPiezas: number;
   // Calendario del portal del cliente B2B (hora de Ciudad de México).
@@ -587,6 +596,8 @@ export interface UpdateTenantSettingsPayload {
   // configurada"), omitido para no tocarla — mismo contrato que
   // UpdateTenantDto.ventanaRecepcionB2b en el backend.
   ventanaRecepcionB2b?: VentanaRecepcionB2b | null;
+  // Modalidades de cobro B2B activas: al menos una, sin repetidas (solo negocios de mayoreo).
+  modalidadesCobroB2b?: ModalidadPagoB2b[];
   // Entero ≥ 0 (0 = sin mínimo).
   pedidoB2bMinimoPiezas?: number;
   // Calendario del portal: HH:mm; horas enteras 0–168; semanas 0–4; número de 10 dígitos (null o "" lo quita).
@@ -1125,6 +1136,11 @@ export function updateTenantSettings(token: string, payload: UpdateTenantSetting
   });
 }
 
+/** Cuántos clientes B2B activos (sin baja) usan cada modalidad: se muestra antes de confirmar que se desactiva una. */
+export function fetchUsoModalidadesCobro(token: string) {
+  return request<Record<ModalidadPagoB2b, number>>("/tenant/me/modalidades-cobro/uso", { headers: authHeaders(token) });
+}
+
 export function regenerateBotApiKey(token: string) {
   return request<TenantSettings>("/tenant/me/regenerate-bot-key", {
     method: "POST",
@@ -1260,20 +1276,34 @@ export function deleteCodigoDescuentoB2b(token: string, id: string) {
 
 // --- Motor de reglas de notificación (/dashboard/notificaciones/{recontacto,seguimiento}, Módulo 3) ---
 
-export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL";
+export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL" | "RESERVA_AUTOMATICA";
 export type ReglaCanal = "WHATSAPP";
 export type ReglaMensajeCategoria = "UTILITY" | "MARKETING";
 export type ReglaFiltroCampo = "TOTAL_PEDIDOS" | "ULTIMO_PEDIDO_ANTIGUEDAD_DIAS" | "PRIMER_PEDIDO_ANTIGUEDAD_DIAS";
 // IGUAL solo tiene sentido para TOTAL_PEDIDOS — el backend lo rechaza para
 // los dos campos de antigüedad (ver ReglasService.validarFiltro).
 export type ReglaFiltroOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL";
-export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO";
+export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO" | "CAMPO_RESERVA";
 export type ReglaTriggerOrigenPedido = "ORDER" | "PEDIDO_B2B";
 
 export interface FiltroCondicion {
   campo: ReglaFiltroCampo;
   operador: ReglaFiltroOperador;
   valor: number;
+}
+
+// Filtro del trigger RESERVA_AUTOMATICA (solo hoteles): condiciones sobre la reserva, unidas con Y. Días de calendario en
+// CDMX; "días para el check-in" es negativo si ya pasó (0 = hoy); "días desde el check-out" 0 = hoy, 1 = ayer.
+export type ReservaFiltroCampo = "DIAS_PARA_CHECKIN" | "DIAS_DESDE_CHECKOUT" | "IDIOMA_HUESPED";
+export interface CondicionReserva {
+  campo: ReservaFiltroCampo;
+  operador: "IGUAL" | "MAYOR_IGUAL" | "MENOR_IGUAL" | "ES" | "NO_ES";
+  valor: number | string;
+}
+// triggerConfig de RESERVA_AUTOMATICA: cada hora, o diaria desde `hora` (0-23, CDMX) hasta el fin del día.
+export interface ReservaTriggerConfig {
+  frecuencia: "CADA_HORA" | "DIARIA";
+  hora?: number;
 }
 
 export interface PlantillaVariable {
@@ -1288,12 +1318,13 @@ export interface PlantillaVariable {
 // backend/src/notificaciones-reglas/plantilla-variable-catalogo.ts).
 // Agregar una variable nueva al catálogo es agregar una entrada ahí — este
 // archivo no necesita ningún cambio para que aparezca en el dropdown.
-export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO";
+export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO" | "RESERVA";
 
 export type CatalogoVariableRestriccion =
   | { tipo: "ninguna" }
   | { tipo: "evento_pedido"; motivo: string }
-  | { tipo: "evento_pedido_menudeo"; motivo: string };
+  | { tipo: "evento_pedido_menudeo"; motivo: string }
+  | { tipo: "reserva"; motivo: string };
 
 export interface CatalogoVariableDef {
   fuente: ReglaPlantillaVariableFuente;
@@ -1332,7 +1363,7 @@ export interface Regla {
   triggerConfig: Record<string, unknown> | null;
   // Siempre [] si trigger = EVENTO_PEDIDO (el Filtro no aplica — decisión
   // de producto ya tomada, el backend lo fuerza al guardar).
-  filtro: FiltroCondicion[];
+  filtro: FiltroCondicion[] | CondicionReserva[];
   canal: ReglaCanal;
   plantillaNombre: string;
   plantillaIdioma: string;
@@ -1351,7 +1382,7 @@ export interface CreateReglaPayload {
   nombre: string;
   trigger: ReglaTriggerTipo;
   triggerConfig?: Record<string, unknown>;
-  filtro?: FiltroCondicion[];
+  filtro?: FiltroCondicion[] | CondicionReserva[];
   canal?: ReglaCanal;
   plantillaNombre: string;
   plantillaIdioma: string;
@@ -1405,6 +1436,22 @@ export function dispararReglaManual(token: string, id: string) {
   });
 }
 
+export interface ResumenEjecucionReserva {
+  reservasEvaluadas: number;
+  enviadas: number;
+  omitidasYaEnviadas: number;
+  fallidas: number;
+  bloqueadasPorCandado: number;
+  fueraDeVentana: boolean;
+}
+
+export function ejecutarReglaReservaAhora(token: string, id: string) {
+  return request<ResumenEjecucionReserva>(`/reglas/${id}/ejecutar-ahora`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // --- Storefront público de pedidos B2B (/mayoreo/[slug]) ---
 // Deliberadamente separado de los tipos Public*/PedidoB2b* de arriba, aunque
 // el nombre "Dia" choque en concepto con DiaSemana (horario) — ese tipo es
@@ -1444,7 +1491,6 @@ export interface PedidoB2bSemanaDestino {
 export interface PublicPedidoB2bTenantInfo {
   nombre: string;
   logoUrl: string | null;
-  pedidoB2bModoCobro: PedidoB2bModoCobro;
   pedidoB2bMinimoPiezas: number;
   // A diferencia de PublicTenantInfo.abierto (B2C, horario de atención),
   // este refleja la ventana de recepción de pedidos del módulo B2B — ver
@@ -1598,9 +1644,15 @@ export interface ListPedidosB2bFilter extends FiltroImporte {
   // activos", que trae todo sin paginar y filtra en el cliente).
   negocioNombre?: string;
   // Filtro de Históricos por estado de pago.
-  estadoPago?: PedidoB2bEstadoPago;
+  estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[];
+  conCancelados?: boolean;
   page?: number;
   limit?: number;
+}
+
+function appendEstadoPago(params: URLSearchParams, estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[]) {
+  const valores = Array.isArray(estadoPago) ? estadoPago : estadoPago ? [estadoPago] : [];
+  if (valores.length > 0) params.set("estadoPago", valores.join(","));
 }
 
 export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
@@ -1613,7 +1665,8 @@ export function fetchPedidosB2b(token: string, filter?: ListPedidosB2bFilter) {
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
-  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  appendEstadoPago(params, filter?.estadoPago);
+  if (filter?.conCancelados) params.set("conCancelados", "true");
   if (filter?.page) params.set("page", String(filter.page));
   if (filter?.limit) params.set("limit", String(filter.limit));
   appendFiltroImporte(params, filter);
@@ -1758,8 +1811,13 @@ export interface ExportPedidosB2bFilter {
   desde?: string;
   hasta?: string;
   negocioNombre?: string;
-  estadoPago?: PedidoB2bEstadoPago;
+  // Uno o varios (se envían separados por coma; un solo valor viaja igual que siempre). Vacío = sin filtrar.
+  estadoPago?: PedidoB2bEstadoPago | PedidoB2bEstadoPago[];
+  // Con `estados`: incluye además los pedidos cancelados en cualquier estado (selección «Cancelado» de Históricos).
+  conCancelados?: boolean;
   soloHistorico?: boolean;
+  // Solo cambia las columnas del Excel: Históricos manda HISTORICOS; sin ella salen las de Pedidos activos.
+  vista?: "ACTIVOS" | "HISTORICOS";
 }
 
 // Bypasses request() on purpose: este endpoint regresa un archivo Excel (.xlsx), no JSON. El CSV del backend
@@ -1772,8 +1830,10 @@ export async function exportPedidosB2bXlsx(token: string, filter?: ExportPedidos
   if (filter?.desde) params.set("desde", filter.desde);
   if (filter?.hasta) params.set("hasta", filter.hasta);
   if (filter?.negocioNombre) params.set("negocioNombre", filter.negocioNombre);
-  if (filter?.estadoPago) params.set("estadoPago", filter.estadoPago);
+  appendEstadoPago(params, filter?.estadoPago);
+  if (filter?.conCancelados) params.set("conCancelados", "true");
   if (filter?.soloHistorico) params.set("soloHistorico", "true");
+  if (filter?.vista) params.set("vista", filter.vista);
   const query = params.toString();
 
   const res = await fetch(`${API_URL}/pedidos-b2b/export-xlsx${query ? `?${query}` : ""}`, {
@@ -2054,6 +2114,8 @@ export interface ClienteB2bDetalle {
   direccion: string | null;
   descuentoPorcentaje: number | null;
   modalidadPago: ModalidadPagoB2b | null;
+  // true = conserva una modalidad que el negocio ya desactivó en Ajustes → Pagos.
+  modalidadInactiva: boolean;
   activo: boolean;
   bajaAt: string | null;
   pedidosActivos: number;
@@ -2082,16 +2144,17 @@ export interface CreateClienteB2bPayload {
   nombre: string;
   direccion: string;
   descuentoPorcentaje?: number;
-  modalidadPago?: ModalidadPagoB2b;
+  // Obligatoria, y debe estar activa en Ajustes → Pagos.
+  modalidadPago: ModalidadPagoB2b;
   telefonos: TelefonoClienteB2bInput[];
 }
 
 export interface UpdateClienteB2bPayload {
   nombre?: string;
   direccion?: string;
-  // null borra el descuento / la modalidad (queda la del negocio).
+  // null borra el descuento. La modalidad no se puede borrar: se omite para no tocarla.
   descuentoPorcentaje?: number | null;
-  modalidadPago?: ModalidadPagoB2b | null;
+  modalidadPago?: ModalidadPagoB2b;
 }
 
 export function fetchClientesB2b(
@@ -2160,9 +2223,9 @@ export function fetchEntregasPedidoClienteB2b(token: string, clienteId: string, 
   });
 }
 
-/** Lo que el formulario de alta necesita del negocio: su modalidad de cobro por defecto. */
+/** Lo que el alta y la ficha del cliente necesitan del negocio: qué modalidades de cobro están activas. */
 export function fetchClientesB2bConfig(token: string) {
-  return request<{ modalidadCobroNegocio: PedidoB2bModoCobro }>("/clientes-b2b/config", { headers: authHeaders(token) });
+  return request<{ modalidadesActivas: ModalidadPagoB2b[] }>("/clientes-b2b/config", { headers: authHeaders(token) });
 }
 
 export function createClienteB2b(token: string, payload: CreateClienteB2bPayload) {
