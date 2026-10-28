@@ -199,6 +199,7 @@ model Tenant {
   clienteTelefonos          ClienteTelefono[]
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
+  avisosInternosEnvios      AvisoInternoEnvio[]
   reglaClienteEstados       ReglaClienteEstado[]
   detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
@@ -456,6 +457,7 @@ model NotificacionCanalConfig {
 
   tenant  Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   eventos NotificacionEventoConfig[]
+  avisosInternosEnvios AvisoInternoEnvio[]
 
   @@unique([tenantId, tipo])
   @@index([tenantId])
@@ -623,6 +625,7 @@ model Order {
   // Reserva de hotel (tipo RESERVA, 1:1). Mismo cuidado de casing que detalleB2c.
   detalleReserva DetalleReserva?
   reglaEnvioLogs ReglaEnvioLog[]
+  avisosInternosEnvios AvisoInternoEnvio[]
   entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
@@ -1642,4 +1645,42 @@ model SesionPortal {
 
   @@index([tenantId, telefono])
   @@map("sesiones_portal")
+}
+
+// ---------------------------------------------------------------------------
+// Avisos internos por WhatsApp (Cambio C). Un registro por destinatario y envío: a quién se mandó (id, nombre y solo los
+// últimos 4 dígitos del teléfono — nunca el número completo) y cómo terminó. No es ReglaEnvioLog (esa exige un Cliente).
+// Estado final inmutable; un EN_CURSO sin callback se queda así (no hay barrido).
+// ---------------------------------------------------------------------------
+enum EstadoAvisoInterno {
+  EN_CURSO
+  EXITO
+  FALLO
+}
+
+model AvisoInternoEnvio {
+  // Es el `correlacionId` que viaja a Botpress y vuelve en el callback.
+  id                 String             @id @default(uuid())
+  tenantId           String
+  orderId            String?
+  canalConfigId      String?
+  evento             NotificacionEvento
+  // Snapshots para leer el registro sin joins (el pedido o el canal pueden cambiar o borrarse).
+  folio              String?
+  negocioNombre      String?
+  destinatarioId     String
+  destinatarioNombre String
+  telefonoUltimos4   String
+  estado             EstadoAvisoInterno @default(EN_CURSO)
+  motivo             String?
+  createdAt          DateTime           @default(now())
+  resueltoAt         DateTime?
+
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order       Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  canalConfig NotificacionCanalConfig? @relation(fields: [canalConfigId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, orderId])
+  @@index([tenantId, createdAt])
+  @@map("avisos_internos_envios")
 }

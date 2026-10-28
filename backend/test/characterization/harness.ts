@@ -15,6 +15,8 @@ import { WalletPassService } from '../../src/lealtad/wallet-pass.service';
 import { ReglaBarridoService } from '../../src/notificaciones-reglas/regla-barrido.service';
 import { CODIGOS_STORE, MemoriaCodigosStore } from '../../src/portal/codigos-store';
 import { EnviarCodigoAccesoService } from '../../src/portal/enviar-codigo-acceso.service';
+import { AvisoWebhookClient } from '../../src/notificaciones/avisos-internos/aviso-webhook.client';
+import { AvisoPedidoModificadoService } from '../../src/notificaciones/avisos-internos/aviso-pedido-modificado.service';
 
 export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
 
@@ -36,6 +38,8 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
  *  - codigos: almacén de códigos y contadores del acceso al portal (Fase 4) en memoria (sin Redis); `codigos.caido = true`
  *    simula Redis caído. enviarCodigoAcceso: envío del código por WhatsApp (Botpress nunca se contacta); recibe los datos
  *    del envío ({ telefono, codigo, plantillaNombre, ... }).
+ *  - avisoWebhook: el POST del aviso interno (Cambio C) a Botpress; recibe `{ url, secreto, cuerpo }`. Por defecto resuelve 2xx.
+ *    Los avisos corren en segundo plano: `esperarAvisos()` los espera (la suite lo llama antes de cada TRUNCATE).
  */
 export interface Fakes {
   queueAdd: jest.Mock;
@@ -51,6 +55,7 @@ export interface Fakes {
   walletActualizarPase: jest.Mock;
   codigos: MemoriaCodigosStore;
   enviarCodigoAcceso: jest.Mock;
+  avisoWebhook: jest.Mock;
   reset(): void;
 }
 
@@ -60,6 +65,8 @@ export interface Harness {
   jwt: JwtService;
   stripe: Stripe;
   fakes: Fakes;
+  /** Espera los avisos internos en segundo plano (Cambio C). */
+  esperarAvisos(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -109,6 +116,7 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
   const walletActualizarPase = jest.fn();
   const codigos = new MemoriaCodigosStore();
   const enviarCodigoAcceso = jest.fn();
+  const avisoWebhook = jest.fn();
 
   const fakes: Fakes = {
     queueAdd,
@@ -123,7 +131,9 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     walletActualizarPase,
     codigos,
     enviarCodigoAcceso,
+    avisoWebhook,
     reset() {
+      avisoWebhook.mockReset().mockResolvedValue({ ok: true, status: 200 });
       codigos.reset();
       enviarCodigoAcceso.mockReset().mockResolvedValue({ enviado: true, correlacionId: 'envio-codigo-char' });
       queueAdd.mockReset().mockResolvedValue(undefined);
@@ -197,7 +207,9 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .overrideProvider(CODIGOS_STORE)
     .useValue(codigos)
     .overrideProvider(EnviarCodigoAccesoService)
-    .useValue({ enviar: enviarCodigoAcceso });
+    .useValue({ enviar: enviarCodigoAcceso })
+    .overrideProvider(AvisoWebhookClient)
+    .useValue({ post: avisoWebhook });
   if (!opts.reglasReales) {
     builder = builder.overrideProvider(ReglaEventoPedidoService).useValue({ dispararSeguro });
   }
@@ -221,7 +233,11 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     jwt: app.get(JwtService),
     stripe,
     fakes,
-    close: () => app.close(),
+    esperarAvisos: () => app.get(AvisoPedidoModificadoService).esperarPendientes(),
+    close: async () => {
+      await app.get(AvisoPedidoModificadoService).esperarPendientes();
+      await app.close();
+    },
   };
 }
 
