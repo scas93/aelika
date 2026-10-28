@@ -106,6 +106,24 @@ describe("Tarjeta de WhatsApp", () => {
     expect(agregar.disabled).toBe(false);
   });
 
+  it("la fila del destinatario no desborda la tarjeta: campos que se encogen, botón fijo y tarjeta que cabe en su columna", async () => {
+    datos({ canales: [canalWa()] });
+    render(<Pagina />);
+    const nombre = await screen.findByLabelText("Nombre del destinatario 1");
+    const telefono = screen.getByLabelText("Teléfono del destinatario 1");
+    for (const campo of [nombre, telefono]) {
+      expect(campo.className).toContain("min-w-0");
+      expect(campo.className).toContain("w-full");
+      expect(campo.className).toContain("truncate");
+    }
+    const quitar = screen.getByRole("button", { name: "Quitar al destinatario 1" });
+    expect(quitar.className).toContain("shrink-0");
+    expect(nombre.parentElement!.className).toContain("min-w-0");
+    expect(nombre.parentElement!.className).toContain("flex-col");
+    // La tarjeta es un ítem de grid: sin min-w-0 se estiraría más que su columna.
+    expect(nombre.closest("form")!.parentElement!.className).toContain("min-w-0");
+  });
+
   it("guardar manda los destinatarios recortados, y un canal nuevo nace inactivo", async () => {
     datos();
     createNotificacionCanal.mockResolvedValue({});

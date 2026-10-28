@@ -5,16 +5,18 @@ export function CanalCardShell({
   iconBg,
   iconColor,
   titulo,
+  className = "",
   children,
 }: {
   emoji: string;
   iconBg: string;
   iconColor: string;
   titulo: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className={`flex flex-col gap-3 ${className}`}>
       <div className="flex items-center gap-3">
         <span
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl"

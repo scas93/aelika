@@ -102,7 +102,7 @@ export default function WhatsappCard({
   }
 
   return (
-    <CanalCardShell emoji="📲" iconBg="#DCFCE7" iconColor="#16A34A" titulo="WhatsApp (avisos internos)">
+    <CanalCardShell emoji="📲" iconBg="#DCFCE7" iconColor="#16A34A" titulo="WhatsApp (avisos internos)" className="min-w-0">
       {activo ? <Badge variant="exito">Activo</Badge> : <Badge variant="neutro">{canal ? "Inactivo" : "Sin configurar"}</Badge>}
 
       <p className="text-sm text-admin-ink-soft">
@@ -120,14 +120,14 @@ export default function WhatsappCard({
         <div className="flex flex-col gap-2">
           {filas.length === 0 && <p className="text-xs text-admin-ink-soft">Aún no hay destinatarios.</p>}
           {filas.map((f, i) => (
-            <div key={f.id ?? `nueva-${i}`} className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div key={f.id ?? `nueva-${i}`} className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
               <input
                 value={f.nombre}
                 onChange={(e) => actualizar(i, { nombre: e.target.value })}
                 maxLength={MAX_NOMBRE}
                 placeholder="Nombre"
                 aria-label={`Nombre del destinatario ${i + 1}`}
-                className="admin-input md:flex-1"
+                className="admin-input w-full min-w-0 truncate md:flex-1"
               />
               <input
                 value={f.telefono}
@@ -135,7 +135,7 @@ export default function WhatsappCard({
                 placeholder="55 1234 5678 o +1 818 814 0000"
                 inputMode="tel"
                 aria-label={`Teléfono del destinatario ${i + 1}`}
-                className="admin-input md:flex-1"
+                className="admin-input w-full min-w-0 truncate md:flex-1"
               />
               <Button
                 type="button"
@@ -143,13 +143,14 @@ export default function WhatsappCard({
                 size="barra"
                 onClick={() => setFilas((prev) => prev.filter((_, j) => j !== i))}
                 aria-label={`Quitar al destinatario ${i + 1}`}
+                className="shrink-0 self-start md:self-auto"
               >
                 Quitar
               </Button>
             </div>
           ))}
         </div>
-        <p className="text-xs text-admin-ink-soft">
+        <p className="break-words text-xs text-admin-ink-soft">
           México: 10 dígitos. Otro país: empieza con + y el código de país. Máximo {MAX_DESTINATARIOS} destinatarios.
         </p>
 
