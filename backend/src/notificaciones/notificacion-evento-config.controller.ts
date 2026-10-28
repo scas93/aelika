@@ -3,6 +3,8 @@ import { NotificacionEventoConfigService } from './notificacion-evento-config.se
 import { CreateNotificacionEventoConfigDto } from './dto/create-notificacion-evento-config.dto';
 import { UpdateNotificacionEventoConfigDto } from './dto/update-notificacion-evento-config.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { Role } from '../../generated/prisma/enums';
 
 @Roles(Role.DUENO)
@@ -11,18 +13,18 @@ export class NotificacionEventoConfigController {
   constructor(private readonly service: NotificacionEventoConfigService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.service.findAll(user.tenantId);
   }
 
   @Post()
-  create(@Body() dto: CreateNotificacionEventoConfigDto) {
-    return this.service.create(dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateNotificacionEventoConfigDto) {
+    return this.service.create(user.tenantId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateNotificacionEventoConfigDto) {
-    return this.service.update(id, dto);
+  update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateNotificacionEventoConfigDto) {
+    return this.service.update(user.tenantId, id, dto);
   }
 
   @Delete(':id')

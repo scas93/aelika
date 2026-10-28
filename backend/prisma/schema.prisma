@@ -391,6 +391,9 @@ enum NotificacionCanalTipo {
   TELEGRAM
   SMS
   CORREO
+  // Avisos internos del negocio por WhatsApp (solo mayoreo, Cambio B): config = { destinatarios: [{ id, nombre, telefono }] },
+  // sin credenciales propias (usa Tenant.botWebhookUrl/botWebhookSecret). Este valor NO es el WhatsApp al cliente final.
+  WHATSAPP
 }
 
 // Lista extensible a propósito (mismo principio que TipoStorefront arriba)
@@ -405,6 +408,8 @@ enum NotificacionEvento {
   PEDIDO_EN_CAMINO
   PEDIDO_ENTREGADO
   PAGO_CONFIRMADO
+  // Solo mayoreo (Cambio B): un cliente B2B modificó su pedido desde el portal. Solo se combina con un canal WHATSAPP.
+  PEDIDO_MODIFICADO_CLIENTE
 }
 
 enum NotificacionAudiencia {

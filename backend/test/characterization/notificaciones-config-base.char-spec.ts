@@ -6,7 +6,8 @@ import { apiRol } from './b2b-helpers';
 import { expectError } from './exacto';
 
 // Contrato ACTUAL (antes del Cambio B) de /notificaciones/canales y /notificaciones/eventos. Congela solo lo que el
-// Cambio B no debe romper; lo que cambia a propósito está marcado «CAMBIA en el Cambio B» y se actualiza en su commit.
+// Cambio B no debe romper (negocio de menudeo). Cambios deliberados del Cambio B: duplicado 500 → 409, y mayoreo/Hotel ya no
+// pueden crear canales/eventos de menudeo (cubierto en notificaciones-whatsapp.char-spec.ts).
 const MSG_403 = 'No tienes permiso para realizar esta acción';
 const CLAVES_CANAL = ['activo', 'conectado', 'config', 'createdAt', 'id', 'tenantId', 'tipo', 'updatedAt'];
 const CLAVES_EVENTO = ['activo', 'audiencia', 'canalConfigId', 'createdAt', 'evento', 'id', 'tenantId', 'updatedAt'];
@@ -57,10 +58,10 @@ describe('Notificaciones · canales y eventos (contrato base)', () => {
       expect((await dueno().delete(`/notificaciones/canales/${c.id}`)).status).toBe(404);
     });
 
-    // CAMBIA en el Cambio B: hoy el duplicado revienta como 500 (P2002 sin capturar); pasa a 409.
-    it('un segundo canal del mismo tipo para el negocio hoy es 500 (CAMBIA en el Cambio B → 409)', async () => {
+    // Cambio B: antes el duplicado reventaba como 500 (P2002 sin capturar); ahora es 409 con mensaje.
+    it('un segundo canal del mismo tipo para el negocio es 409', async () => {
       await crearCorreo();
-      expect((await dueno().post('/notificaciones/canales', { tipo: 'CORREO', config: {} })).status).toBe(500);
+      expectError(await dueno().post('/notificaciones/canales', { tipo: 'CORREO', config: {} }), 409, 'Ya existe un canal de este tipo para tu negocio');
     });
 
     it('aislamiento: otro negocio no ve ni toca los canales', async () => {
@@ -116,14 +117,6 @@ describe('Notificaciones · canales y eventos (contrato base)', () => {
       await dueno().delete(`/notificaciones/canales/${c2.id}`).expect(200);
       expect((await dueno().get('/notificaciones/eventos').expect(200)).body).toStrictEqual([]);
       expect((await dueno().delete(`/notificaciones/eventos/${ev.id}`)).status).toBe(404);
-    });
-
-    // CAMBIA en el Cambio B: en mayoreo ya no se aceptan eventos de menudeo (hoy sí, el backend no mira el tipo de negocio).
-    it.each(['RETAIL_B2B', 'HOTEL'] as const)('hoy un negocio %s puede crear canales y eventos de menudeo', async (tipoStorefront) => {
-      const suiteB = await seedBase(s.h.prisma, { slug: `neg-${tipoStorefront.toLowerCase()}`, tipoStorefront });
-      const api = auth(s.h, tokenFor(s.h.jwt, suiteB.dueno, suiteB.tenant.id, 'DUENO'));
-      const c = (await api.post('/notificaciones/canales', { tipo: 'CORREO', config: {} }).expect(201)).body;
-      await api.post('/notificaciones/eventos', { evento: 'PEDIDO_RECIBIDO', audiencia: 'NEGOCIO', canalConfigId: c.id }).expect(201);
     });
   });
 

@@ -6,6 +6,7 @@ import {
   ApiError,
   fetchNotificacionCanales,
   fetchNotificacionEventos,
+  fetchTenantSettings,
   type NotificacionCanalConfig,
   type NotificacionEventoConfig,
 } from "@/lib/api";
@@ -18,22 +19,30 @@ export default function NotificacionesAjustesPage() {
   const { user, token } = useSession();
   const [canales, setCanales] = useState<NotificacionCanalConfig[] | null>(null);
   const [eventos, setEventos] = useState<NotificacionEventoConfig[] | null>(null);
+  const [tieneWebhook, setTieneWebhook] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const esMayoreo = user.tenant.tipoStorefront === "RETAIL_B2B";
   const esAdmin = user.rol === "DUENO";
 
   const load = useCallback(async () => {
     // Quien no es Admin ve el mensaje de acceso y no dispara ninguna llamada (el backend igual respondería 403).
     if (!esAdmin) return;
     try {
-      const [canalesData, eventosData] = await Promise.all([fetchNotificacionCanales(token), fetchNotificacionEventos(token)]);
+      const [canalesData, eventosData, ajustes] = await Promise.all([
+        fetchNotificacionCanales(token),
+        fetchNotificacionEventos(token),
+        // Solo mayoreo necesita saber si hay webhook (el canal WhatsApp no se activa sin él); los demás no hacen la llamada.
+        esMayoreo ? fetchTenantSettings(token) : Promise.resolve(null),
+      ]);
       setCanales(canalesData);
       setEventos(eventosData);
+      setTieneWebhook(Boolean(ajustes?.botWebhookUrl?.trim()));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de notificaciones");
     }
      
-  }, [token, esAdmin]);
+  }, [token, esAdmin, esMayoreo]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
@@ -70,8 +79,8 @@ export default function NotificacionesAjustesPage() {
     <div className="flex flex-col gap-6">
       <VolverAjustesLink />
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <NotificacionesCanalesSection token={token} canales={canales} onChange={load} />
-      <NotificacionesEventosSection token={token} canales={canales} eventos={eventos} onChange={load} />
+      <NotificacionesCanalesSection token={token} canales={canales} esMayoreo={esMayoreo} tieneWebhook={tieneWebhook} onChange={load} />
+      <NotificacionesEventosSection token={token} canales={canales} eventos={eventos} esMayoreo={esMayoreo} onChange={load} />
     </div>
   );
 }

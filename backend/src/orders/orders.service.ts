@@ -71,6 +71,7 @@ const EVENTO_TITULO: Record<NotificacionEvento, { titulo: string; subtitulo?: st
   },
   [NotificacionEvento.PEDIDO_EN_CAMINO]: { titulo: '🚚 Tu pedido va en camino' },
   [NotificacionEvento.PEDIDO_ENTREGADO]: { titulo: '✅ Tu pedido fue entregado' },
+  [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]: { titulo: 'Pedido modificado por el cliente' }, // no se usa aquí (mayoreo, no pasa por OrdersService)
 };
 
 @Injectable()

@@ -23,11 +23,13 @@ const EVENTO_LABEL: Record<NotificacionEvento, string> = {
   PEDIDO_CONFIRMADO: "Pedido confirmado",
   PEDIDO_EN_CAMINO: "Pedido en camino",
   PEDIDO_ENTREGADO: "Pedido entregado",
+  PEDIDO_MODIFICADO_CLIENTE: "Pedido modificado por el cliente",
 };
 
 const CANAL_LABEL: Record<string, string> = {
   TELEGRAM: "Telegram",
   CORREO: "Correo",
+  WHATSAPP: "WhatsApp",
 };
 
 interface EventoDef {
@@ -39,6 +41,9 @@ const EVENTOS_NEGOCIO: EventoDef[] = [
   { evento: "PEDIDO_RECIBIDO", audiencia: "NEGOCIO" },
   { evento: "PAGO_CONFIRMADO", audiencia: "NEGOCIO" },
 ];
+
+// Mayoreo: el único evento. Menudeo y Hotel nunca lo ven.
+const EVENTOS_MAYOREO: EventoDef[] = [{ evento: "PEDIDO_MODIFICADO_CLIENTE", audiencia: "NEGOCIO" }];
 
 const EVENTOS_CLIENTE: EventoDef[] = [
   { evento: "PEDIDO_CONFIRMADO", audiencia: "CLIENTE" },
@@ -57,6 +62,11 @@ const EVENTOS_CLIENTE: EventoDef[] = [
 function canalesDisponibles(canales: NotificacionCanalConfig[], audiencia: NotificacionAudiencia) {
   return canales.filter((c) => {
     if (c.tipo === "TELEGRAM") return audiencia === "NEGOCIO" && c.conectado;
+    // WhatsApp: activo y con al menos un destinatario (el backend ya impide lo contrario). Solo existe en mayoreo.
+    if (c.tipo === "WHATSAPP") {
+      const destinatarios = c.config.destinatarios;
+      return audiencia === "NEGOCIO" && c.activo && Array.isArray(destinatarios) && destinatarios.length > 0;
+    }
     if (c.tipo === "CORREO") {
       const campo = audiencia === "NEGOCIO" ? c.config.correoDestino : c.config.nombreRemitente;
       return typeof campo === "string" && campo.length > 0;
@@ -69,13 +79,33 @@ export default function NotificacionesEventosSection({
   token,
   canales,
   eventos,
+  esMayoreo,
   onChange,
 }: {
   token: string;
   canales: NotificacionCanalConfig[] | null;
   eventos: NotificacionEventoConfig[] | null;
+  esMayoreo: boolean;
   onChange: () => Promise<void>;
 }) {
+  if (esMayoreo) {
+    return (
+      <section className="flex flex-col gap-3">
+        <h2 className={SECTION_HEADER}>Eventos</h2>
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-bold text-admin-ink-soft">Para tu negocio</h3>
+          <Card padding={0} className="overflow-hidden">
+            <ul className="flex flex-col divide-y divide-admin-border">
+              {EVENTOS_MAYOREO.map((def) => (
+                <EventoRow key={def.evento} def={def} token={token} canales={canales} eventos={eventos} onChange={onChange} />
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <h2 className={SECTION_HEADER}>Eventos</h2>
