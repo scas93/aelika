@@ -56,10 +56,26 @@ describe("Ajustes → Equipo", () => {
 
   it("Admin: fila propia con «Tú» y sin menú; menú en las demás", async () => {
     await abrir("DUENO", "a");
-    expect(within(fila("Alma Admin")).getByText("Tú")).toBeTruthy();
+    // «Tú» va junto al nombre, no en la zona de rol ni de acciones.
+    const tu = within(fila("Alma Admin")).getByText("· Tú");
+    expect(tu.parentElement).toBe(screen.getByText("Alma Admin").parentElement);
     expect(menuDe("Alma Admin")).toBeNull();
     expect(menuDe("Gus Gerente")).toBeTruthy();
     expect(menuDe("Omar Operador")).toBeTruthy();
+  });
+
+  it("escritorio: rol, estado y acciones ocupan siempre su columna, haya o no menú", async () => {
+    await abrir("GERENTE", "g");
+    for (const nombre of ["Alma Admin", "Gus Gerente", "Omar Operador", "Ines Inactiva"]) {
+      expect(fila(nombre).children).toHaveLength(4);
+    }
+    // La celda de acciones de las filas sin menú queda vacía (sin control ni placeholder).
+    expect(fila("Alma Admin").children[3].textContent).toBe("");
+    expect(within(fila("Alma Admin").children[3] as HTMLElement).queryByRole("button")).toBeNull();
+    // El rol es siempre la segunda columna.
+    expect(fila("Alma Admin").children[1].textContent).toBe("Admin");
+    expect(fila("Gus Gerente").children[1].textContent).toBe("Gerente");
+    expect(fila("Omar Operador").children[1].textContent).toBe("Operador");
   });
 
   it("Gerente: sin menú en su fila ni en la del Admin; con menú en Operadores", async () => {

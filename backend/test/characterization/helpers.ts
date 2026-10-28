@@ -173,6 +173,8 @@ export function usarSuite(opts: { seed?: Parameters<typeof seedBase>[1]; reglasR
   });
   beforeEach(async () => {
     jest.setSystemTime(new Date(AHORA));
+    // Un aviso interno del test anterior (segundo plano) no debe seguir vivo cuando se vacía la base.
+    await ctx.h.esperarAvisos();
     await truncateAll(ctx.h.prisma);
     ctx.h.fakes.reset();
     ctx.base = await seedBase(ctx.h.prisma, opts.seed);

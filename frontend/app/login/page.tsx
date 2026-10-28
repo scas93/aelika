@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, fetchCurrentUser, login } from "@/lib/api";
+import { destinoTrasLogin } from "@/lib/destino-login";
 import { consumirAvisoLogin, saveSession } from "@/lib/session";
 import Button from "@/app/dashboard/_components/Button";
 
@@ -30,7 +31,8 @@ export default function LoginPage() {
       // B2B: todos los roles aterrizan en Inicio. B2C: Operador en Pedidos (no ve Inicio), Gerente y Dueño en Inicio.
       const me = await fetchCurrentUser(session.accessToken);
       const esB2b = me.tenant.tipoStorefront === "RETAIL_B2B";
-      router.push(!esB2b && session.user.rol === "OPERADOR" ? "/dashboard/pedidos" : "/dashboard");
+      const porDefecto = !esB2b && session.user.rol === "OPERADOR" ? "/dashboard/pedidos" : "/dashboard";
+      router.push(destinoTrasLogin(window.location.search, porDefecto));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión");
     } finally {

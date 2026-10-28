@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { NotificacionAudiencia, NotificacionEvento } from '../../generated/prisma/enums';
+import { EVENTO_MAYOREO, esMayoreo, exigirEventoPermitido } from './notificacion-reglas-negocio';
 
 const PRISMA_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
@@ -24,10 +26,21 @@ export interface UpdateNotificacionEventoConfigInput {
  */
 @Injectable()
 export class NotificacionEventoConfigService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  findAll() {
+  private async tipoDeNegocio(tenantId: string) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { tipoStorefront: true } });
+    return t.tipoStorefront;
+  }
+
+  /** Mayoreo solo ve su evento: si le quedaron filas viejas de menudeo no se borran, solo no se muestran. */
+  async findAll(tenantId: string) {
+    const tipo = await this.tipoDeNegocio(tenantId);
     return this.tenantPrisma.client.notificacionEventoConfig.findMany({
+      where: esMayoreo(tipo) ? { evento: EVENTO_MAYOREO } : {},
       orderBy: [{ evento: 'asc' }, { audiencia: 'asc' }],
       include: { canalConfig: true },
     });
@@ -44,8 +57,9 @@ export class NotificacionEventoConfigService {
     return evento;
   }
 
-  async create(dto: CreateNotificacionEventoConfigInput) {
-    await this.assertCanalConfigBelongsToTenant(dto.canalConfigId);
+  async create(tenantId: string, dto: CreateNotificacionEventoConfigInput) {
+    const canal = await this.assertCanalConfigBelongsToTenant(dto.canalConfigId);
+    exigirEventoPermitido(await this.tipoDeNegocio(tenantId), dto.evento, dto.audiencia, canal.tipo);
 
     try {
       return await this.tenantPrisma.client.notificacionEventoConfig.create({
@@ -66,10 +80,11 @@ export class NotificacionEventoConfigService {
     }
   }
 
-  async update(id: string, dto: UpdateNotificacionEventoConfigInput) {
-    if (dto.canalConfigId) {
-      await this.assertCanalConfigBelongsToTenant(dto.canalConfigId);
-    }
+  async update(tenantId: string, id: string, dto: UpdateNotificacionEventoConfigInput) {
+    const existente = await this.findOne(id);
+    // El canal efectivo tras el cambio (el actual si no se manda otro): se revalida toda la combinación.
+    const canal = dto.canalConfigId ? await this.assertCanalConfigBelongsToTenant(dto.canalConfigId) : existente.canalConfig;
+    exigirEventoPermitido(await this.tipoDeNegocio(tenantId), existente.evento, existente.audiencia, canal.tipo);
 
     try {
       return await this.tenantPrisma.client.notificacionEventoConfig.update({
@@ -107,10 +122,11 @@ export class NotificacionEventoConfigService {
   private async assertCanalConfigBelongsToTenant(canalConfigId: string) {
     const canal = await this.tenantPrisma.client.notificacionCanalConfig.findUnique({
       where: { id: canalConfigId },
-      select: { id: true },
+      select: { id: true, tipo: true },
     });
     if (!canal) {
       throw new NotFoundException('Configuración de canal no encontrada');
     }
+    return canal;
   }
 }

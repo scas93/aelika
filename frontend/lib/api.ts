@@ -636,18 +636,26 @@ export interface UpdatePuntoEnvioPayload {
 
 // --- Notificaciones (/dashboard/ajustes/notificaciones) ---
 
-export type NotificacionCanalTipo = "TELEGRAM" | "CORREO";
+export type NotificacionCanalTipo = "TELEGRAM" | "CORREO" | "WHATSAPP";
 export type NotificacionEvento =
   | "PEDIDO_RECIBIDO"
   | "PEDIDO_CONFIRMADO"
   | "PEDIDO_EN_CAMINO"
   | "PEDIDO_ENTREGADO"
-  | "PAGO_CONFIRMADO";
+  | "PAGO_CONFIRMADO"
+  | "PEDIDO_MODIFICADO_CLIENTE";
 export type NotificacionAudiencia = "CLIENTE" | "NEGOCIO";
 
 // `config` shape depende de `tipo` — ver comentario en schema.prisma:
 //   TELEGRAM -> { chatId: string } (lo captura el webhook de conexión)
 //   CORREO   -> { nombreRemitente: string, correoDestino?: string }
+//   WHATSAPP -> { destinatarios: DestinatarioWhatsapp[] } (solo mayoreo; el backend normaliza los teléfonos)
+export interface DestinatarioWhatsapp {
+  id: string;
+  nombre: string;
+  telefono: string;
+}
+
 export interface NotificacionCanalConfig {
   id: string;
   tenantId: string;

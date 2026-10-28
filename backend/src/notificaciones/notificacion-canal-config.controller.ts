@@ -3,6 +3,8 @@ import { NotificacionCanalConfigService } from './notificacion-canal-config.serv
 import { CreateNotificacionCanalConfigDto } from './dto/create-notificacion-canal-config.dto';
 import { UpdateNotificacionCanalConfigDto } from './dto/update-notificacion-canal-config.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { Role } from '../../generated/prisma/enums';
 
 // Solo Dueño — mismo criterio que TenantController: esta pantalla vive bajo
@@ -15,18 +17,18 @@ export class NotificacionCanalConfigController {
   constructor(private readonly service: NotificacionCanalConfigService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.service.findAll(user.tenantId);
   }
 
   @Post()
-  create(@Body() dto: CreateNotificacionCanalConfigDto) {
-    return this.service.create(dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateNotificacionCanalConfigDto) {
+    return this.service.create(user.tenantId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateNotificacionCanalConfigDto) {
-    return this.service.update(id, dto);
+  update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateNotificacionCanalConfigDto) {
+    return this.service.update(user.tenantId, id, dto);
   }
 
   // "Desconectar" un canal (Telegram) es borrar esta fila — cascada hacia

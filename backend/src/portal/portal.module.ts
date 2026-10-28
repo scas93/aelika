@@ -14,8 +14,10 @@ import { PortalModificarPedidoService } from './portal-modificar-pedido.service'
 import { PortalPedidosController } from './portal-pedidos.controller';
 import { PortalPedidosService } from './portal-pedidos.service';
 import { PortalCalendarioService } from './portal-calendario.service';
+import { AvisosInternosModule } from '../notificaciones/avisos-internos/avisos-internos.module';
 
 @Module({
+  imports: [AvisosInternosModule],
   controllers: [
     PortalAccesoController,
     PortalCalendarioController,

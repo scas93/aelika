@@ -27,6 +27,7 @@ import {
 import { calcularCalendario, semanasDelHorizonte } from './portal-calendario';
 import { cargarPedidosCalendario } from './portal-calendario.service';
 import { PortalMisPedidosService } from './portal-mis-pedidos.service';
+import { AvisoPedidoModificadoService } from '../notificaciones/avisos-internos/aviso-pedido-modificado.service';
 
 export interface CambioEntregaInput {
   fecha: string;
@@ -83,6 +84,7 @@ export class PortalModificarPedidoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly misPedidos: PortalMisPedidosService,
+    private readonly avisos: AvisoPedidoModificadoService,
   ) {}
 
   private clienteDe(sesion: SesionValida) {
@@ -480,8 +482,14 @@ export class PortalModificarPedidoService {
       });
       // En proceso conserva su estado salvo que el cálculo por entregas cambie (p. ej. Completado + día nuevo → En proceso).
       if (entregasCambiaron) await recalcularEstadoB2b(tx, id);
-      return { cambios: cambios.length, notaCambio };
+      // `marcaPrevia` se leyó con el pedido bloqueado: solo la edición que la pasa de null a una fecha avisa.
+      return { cambios: cambios.length, notaCambio, marcaPrevia: orden.modificadoPorClienteAt };
     });
+
+    // Aviso interno por WhatsApp (Cambio C): ya con la transacción confirmada, en segundo plano; nunca afecta la respuesta.
+    if (resultado && resultado.marcaPrevia === null) {
+      this.avisos.avisarSeguro({ tenantId: t.id, orderId: id });
+    }
 
     const detalle = await this.misPedidos.detalle(sesion, folio);
     return {

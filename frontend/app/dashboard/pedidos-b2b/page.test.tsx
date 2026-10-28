@@ -68,6 +68,18 @@ describe("Pedidos activos B2B (tabla)", () => {
     expect(await screen.findByText("panel 2")).toBeTruthy();
   });
 
+  it("?pedido=<id> abre el panel de ese pedido aunque no esté en la semana mostrada (p. ej. la siguiente)", async () => {
+    datos([pedido("1")]);
+    window.history.pushState({}, "", "/dashboard/pedidos-b2b?pedido=de-la-semana-siguiente");
+    try {
+      render(<PedidosB2bPage />);
+      expect(await screen.findByText("panel de-la-semana-siguiente")).toBeTruthy();
+      await screen.findByText("Negocio 1");
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+
   it("«Modificado por el cliente» se ve como badge junto al nombre del negocio", async () => {
     datos([pedido("1", { modificadoPorClienteAt: "2026-10-19T10:00:00.000Z" }), pedido("2")]);
     render(<PedidosB2bPage />);

@@ -164,18 +164,17 @@ function FilaPersona({
 }) {
   const atenuado = persona.activo ? "" : "opacity-50";
   const menu = acciones ? <MenuAcciones acciones={acciones} label={`Acciones de ${persona.nombre}`} /> : null;
+  const rol = <Badge variant="neutro">{ROLE_LABEL[persona.rol]}</Badge>;
+  const inactivo = !persona.activo ? <Badge variant="neutro">Inactivo</Badge> : null;
+  // «Tú» va junto al nombre (no en la zona de rol ni de acciones) para no empujar las columnas.
   const datos = (
     <div className={`flex min-w-0 flex-col ${atenuado}`}>
-      <span className="truncate text-[15px] font-semibold text-admin-ink">{persona.nombre}</span>
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="truncate text-[15px] font-semibold text-admin-ink">{persona.nombre}</span>
+        {esSelf && <span className="shrink-0 text-xs font-semibold text-admin-ink-soft">· Tú</span>}
+      </span>
       <span className="truncate text-sm text-admin-ink-soft">{persona.email}</span>
     </div>
-  );
-  const etiquetas = (
-    <>
-      <Badge variant="neutro">{ROLE_LABEL[persona.rol]}</Badge>
-      {!persona.activo && <Badge variant="neutro">Inactivo</Badge>}
-      {esSelf && <span className="text-sm font-semibold text-admin-ink-soft">Tú</span>}
-    </>
   );
 
   if (esMovil) {
@@ -185,18 +184,20 @@ function FilaPersona({
           {datos}
           {menu}
         </div>
-        <div className={`flex flex-wrap items-center gap-2 ${atenuado}`}>{etiquetas}</div>
+        <div className={`flex flex-wrap items-center gap-2 ${atenuado}`}>
+          {rol}
+          {inactivo}
+        </div>
       </li>
     );
   }
+  // Columnas de ancho fijo: rol, estado y acciones quedan alineados entre filas tengan o no menú; la celda vacía no pinta nada.
   return (
-    <li className="flex h-16 items-center justify-between gap-4 px-4 transition hover:bg-admin-bg">
+    <li className="grid h-16 grid-cols-[minmax(0,1fr)_7rem_6rem_2rem] items-center gap-4 px-4 transition hover:bg-admin-bg">
       {datos}
-      <div className="flex shrink-0 items-center gap-3">
-        <div className={`flex items-center gap-2 ${atenuado}`}>{etiquetas}</div>
-        {/* Reserva el ancho del menú aunque no haya: las etiquetas quedan alineadas entre filas. */}
-        <div className="flex h-tabla w-tabla items-center justify-center">{menu}</div>
-      </div>
+      <div className={`flex items-center ${atenuado}`}>{rol}</div>
+      <div className={`flex items-center ${atenuado}`}>{inactivo}</div>
+      <div className="flex items-center justify-center">{menu}</div>
     </li>
   );
 }
