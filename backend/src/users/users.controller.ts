@@ -7,7 +7,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../../generated/prisma/enums';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 
-@Roles(Role.DUENO)
+// Dueño y Gerente administran el equipo; lo que el Gerente NO puede hacer (crear/ascender/tocar Dueños) lo aplica UsersService.
+@Roles(Role.DUENO, Role.GERENTE)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -18,12 +19,12 @@ export class UsersController {
   }
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateUserDto) {
+    return this.usersService.create(user.rol, dto);
   }
 
   @Patch(':id')
   update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(user.sub, id, dto);
+    return this.usersService.update(user.sub, user.rol, id, dto);
   }
 }

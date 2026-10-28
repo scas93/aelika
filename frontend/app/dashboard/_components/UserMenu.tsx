@@ -5,8 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconChevronDown, IconKey, IconLogout } from "@tabler/icons-react";
 import { useSession } from "@/lib/session-context";
-
-const ROL_LABEL = { OPERADOR: "Operador", GERENTE: "Gerente", DUENO: "Dueño" } as const;
+import { ROLE_LABEL } from "@/lib/roles";
 
 // Bloque superior de la barra lateral: logo y nombre del negocio, y debajo el rol y el nombre del usuario con una flecha (el rol va primero para que se vea aunque el nombre se recorte). Al hacer clic se
 // abre el menú del usuario (cambiar contraseña, cerrar sesión), que se despliega hacia abajo. Un solo bloque para todos los tenants.
@@ -53,7 +52,7 @@ export default function UserMenu({ onCerrarDrawer }: { onCerrarDrawer?: () => vo
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-[15px] font-semibold text-admin-ink">{user.tenant.nombre}</span>
           <span className="truncate text-[13px] text-admin-ink-soft">
-            {ROL_LABEL[user.rol]} · {user.nombre}
+            {ROLE_LABEL[user.rol]} · {user.nombre}
           </span>
         </span>
         <IconChevronDown size={16} className={`shrink-0 text-admin-ink-soft transition-transform ${open ? "rotate-180" : ""}`} />

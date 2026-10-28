@@ -5,7 +5,7 @@ import { ApiError, updateTenantSettings } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 
-/** Mínimo de piezas por pedido de mayoreo (Dueño). 0 = sin mínimo: ninguna pantalla muestra la barra de mínimo. */
+/** Mínimo de piezas por pedido de mayoreo (Admin). 0 = sin mínimo: ninguna pantalla muestra la barra de mínimo. */
 export default function MinimoPiezasB2bSection({
   token,
   minimoPiezas,

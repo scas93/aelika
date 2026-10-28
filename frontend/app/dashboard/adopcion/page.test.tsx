@@ -77,11 +77,11 @@ describe("AdopcionPage", () => {
   it("un Gerente o un negocio de menudeo no ve el módulo ni consume sus endpoints", () => {
     usuario = { rol: "GERENTE", tenant: { tipoStorefront: "RETAIL_B2B" } };
     render(<AdopcionPage />);
-    expect(screen.getByText(/Solo el dueño de un negocio de mayoreo/)).toBeTruthy();
+    expect(screen.getByText(/Solo el Admin de un negocio de mayoreo/)).toBeTruthy();
     cleanup();
     usuario = { rol: "DUENO", tenant: { tipoStorefront: "RETAIL_B2C" } };
     render(<AdopcionPage />);
-    expect(screen.getByText(/Solo el dueño de un negocio de mayoreo/)).toBeTruthy();
+    expect(screen.getByText(/Solo el Admin de un negocio de mayoreo/)).toBeTruthy();
     expect(fetchAdopcionClientes).not.toHaveBeenCalled();
   });
 

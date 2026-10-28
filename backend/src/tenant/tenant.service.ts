@@ -19,8 +19,9 @@ import {
   normalizarModalidades,
   validarModalidadesActivas,
 } from '../common/modalidades-cobro';
-import { ClienteCanal } from '../../generated/prisma/enums';
+import { ClienteCanal, Role } from '../../generated/prisma/enums';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { UpdateNegocioDto } from './dto/update-negocio.dto';
 import type {
   DiaSemana,
   FacturacionModo,
@@ -59,6 +60,13 @@ const SETTINGS_SELECT = {
   numeroAtencion: true,
 } as const;
 
+// Subconjunto que ve y edita el Gerente (Ajustes → Información del negocio): nada de llaves, Stripe, facturación, mayoreo ni giro.
+const NEGOCIO_SELECT = {
+  mensajeBienvenida: true,
+  horarioAtencion: true,
+  ubicacion: true,
+} as const;
+
 const API_BASE_URL_DEFAULT = 'http://localhost:3001';
 
 @Injectable()
@@ -75,6 +83,54 @@ export class TenantService {
       select: SETTINGS_SELECT,
     });
     return this.present(tenant);
+  }
+
+  // El giro es exclusivo del Admin: para cualquier otro rol ni se lee de la base ni se escribe, y la clave no sale en la respuesta.
+  async getNegocio(tenantId: string, rol: Role) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { ...NEGOCIO_SELECT, giroNegocio: rol === Role.DUENO },
+    });
+    return this.presentNegocio(tenant, rol);
+  }
+
+  async updateNegocio(tenantId: string, rol: Role, dto: UpdateNegocioDto) {
+    const tenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        // Mismo criterio que updateMine: un textarea vacío vuelve a null para que se aplique el mensaje por defecto.
+        mensajeBienvenida:
+          dto.mensajeBienvenida !== undefined
+            ? dto.mensajeBienvenida.trim() || null
+            : undefined,
+        horarioAtencion: dto.horarioAtencion
+          ? (normalizarHorarioSemana(dto.horarioAtencion) as any)
+          : undefined,
+        ubicacion: dto.ubicacion,
+        giroNegocio: rol === Role.DUENO ? dto.giroNegocio : undefined,
+      },
+      select: { ...NEGOCIO_SELECT, giroNegocio: rol === Role.DUENO },
+    });
+    return this.presentNegocio(tenant, rol);
+  }
+
+  private presentNegocio(
+    tenant: {
+      giroNegocio?: GiroNegocio | null;
+      mensajeBienvenida: string | null;
+      horarioAtencion: unknown;
+      ubicacion: string | null;
+    },
+    rol: Role,
+  ) {
+    return {
+      ...(rol === Role.DUENO
+        ? { giroNegocio: tenant.giroNegocio ?? null }
+        : {}),
+      mensajeBienvenida: resolverMensajeBienvenida(tenant.mensajeBienvenida),
+      horarioAtencion: tenant.horarioAtencion,
+      ubicacion: tenant.ubicacion,
+    };
   }
 
   async updateMine(tenantId: string, dto: UpdateTenantDto) {

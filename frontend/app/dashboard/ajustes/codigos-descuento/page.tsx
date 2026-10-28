@@ -2,6 +2,7 @@
 
 import { useSession } from "@/lib/session-context";
 import CodigosDescuentoB2bSection from "../codigos-descuento-b2b-section";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 import { moduloActivo } from "../../nav-items";
 
@@ -12,10 +13,10 @@ export default function AjustesCodigosDescuentoPage() {
   // ajustes/pedidos-b2b/page.tsx) — accediendo directo por URL sin cumplir
   // la condición se ve un mensaje en vez de redirigir.
   let contenido: React.ReactNode;
-  if (!moduloActivo(user.tenant.modulosDesactivados, "CODIGOS_DESCUENTO")) {
+  if (user.rol !== "DUENO") {
+    contenido = <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>;
+  } else if (!moduloActivo(user.tenant.modulosDesactivados, "CODIGOS_DESCUENTO")) {
     contenido = <p className="text-sm text-admin-ink-soft">Este módulo no está habilitado para tu negocio.</p>;
-  } else if (user.rol !== "DUENO") {
-    contenido = <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>;
   } else if (user.tenant.tipoStorefront !== "RETAIL_B2B") {
     contenido = (
       <p className="text-sm text-admin-ink-soft">Los códigos de descuento solo aplican a negocios de mayoreo.</p>

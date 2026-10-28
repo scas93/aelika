@@ -5,6 +5,7 @@ import { useSession } from "@/lib/session-context";
 import { ApiError, fetchTenantSettings, type ModalidadPagoB2b } from "@/lib/api";
 import StripeSection from "../stripe-section";
 import ModalidadesCobroSection from "../modalidades-cobro-section";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesPagosPage() {
@@ -14,7 +15,7 @@ export default function AjustesPagosPage() {
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
       {user.rol !== "DUENO" ? (
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       ) : (
         <PagosLoader token={token} esMayoreo={user.tenant.tipoStorefront === "RETAIL_B2B"} />
       )}

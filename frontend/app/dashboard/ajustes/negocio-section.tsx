@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   ApiError,
-  fetchTenantSettings,
+  fetchNegocio,
   GIROS_NEGOCIO,
   horarioSemanaVacio,
-  updateTenantSettings,
+  updateNegocio,
   type GiroNegocio,
   type HorarioSemana,
 } from "@/lib/api";
@@ -18,13 +18,13 @@ import Button from "../_components/Button";
 // como prop desde un padre), esta es autocontenida — mismo patrón que
 // PuntosEnvioSection: hace su propio fetchTenantSettings, sin depender de un
 // estado compartido con otras subrutas de /dashboard/ajustes.
-export default function NegocioSection({ token }: { token: string }) {
+export default function NegocioSection({ token, puedeEditarGiro }: { token: string; puedeEditarGiro: boolean }) {
   const [mensajeBienvenida, setMensajeBienvenida] = useState("");
   const [horario, setHorario] = useState<HorarioSemana>(() => horarioSemanaVacio());
   const [ubicacion, setUbicacion] = useState("");
   // "" representa "sin especificar" (tenants creados antes de este campo) —
-  // distinto de un GiroNegocio real, y solo se manda en el payload si el
-  // Dueño elige uno.
+  // distinto de un GiroNegocio real, y solo se manda en el payload si quien edita
+  // elige uno.
   const [giroNegocio, setGiroNegocio] = useState<GiroNegocio | "">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export default function NegocioSection({ token }: { token: string }) {
   useEffect(() => {
     async function load() {
       try {
-        const settings = await fetchTenantSettings(token);
+        const settings = await fetchNegocio(token);
         setMensajeBienvenida(settings.mensajeBienvenida);
         setHorario(settings.horarioAtencion ?? horarioSemanaVacio());
         setUbicacion(settings.ubicacion ?? "");
@@ -55,11 +55,11 @@ export default function NegocioSection({ token }: { token: string }) {
     setError(null);
     setSaved(false);
     try {
-      const settings = await updateTenantSettings(token, {
+      const settings = await updateNegocio(token, {
         mensajeBienvenida,
         horarioAtencion: horario,
         ubicacion: ubicacion || undefined,
-        giroNegocio: giroNegocio || undefined,
+        giroNegocio: puedeEditarGiro ? giroNegocio || undefined : undefined,
       });
       setMensajeBienvenida(settings.mensajeBienvenida);
       setGiroNegocio(settings.giroNegocio ?? "");
@@ -98,6 +98,7 @@ export default function NegocioSection({ token }: { token: string }) {
       </Card>
 
       <Card className="flex flex-col gap-5">
+        {puedeEditarGiro && (
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
           Giro del negocio
           <select
@@ -116,6 +117,7 @@ export default function NegocioSection({ token }: { token: string }) {
             ))}
           </select>
         </label>
+        )}
 
         <HorarioEditor
           horario={horario}

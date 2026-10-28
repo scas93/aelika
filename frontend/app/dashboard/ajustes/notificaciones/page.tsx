@@ -9,6 +9,7 @@ import {
   type NotificacionCanalConfig,
   type NotificacionEventoConfig,
 } from "@/lib/api";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 import NotificacionesCanalesSection from "./canales-section";
 import NotificacionesEventosSection from "./eventos-section";
@@ -19,7 +20,11 @@ export default function NotificacionesAjustesPage() {
   const [eventos, setEventos] = useState<NotificacionEventoConfig[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const esAdmin = user.rol === "DUENO";
+
   const load = useCallback(async () => {
+    // Quien no es Admin ve el mensaje de acceso y no dispara ninguna llamada (el backend igual respondería 403).
+    if (!esAdmin) return;
     try {
       const [canalesData, eventosData] = await Promise.all([fetchNotificacionCanales(token), fetchNotificacionEventos(token)]);
       setCanales(canalesData);
@@ -28,7 +33,7 @@ export default function NotificacionesAjustesPage() {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de notificaciones");
     }
      
-  }, [token]);
+  }, [token, esAdmin]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
@@ -56,7 +61,7 @@ export default function NotificacionesAjustesPage() {
     return (
       <div className="flex flex-col gap-4">
         <VolverAjustesLink />
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       </div>
     );
   }

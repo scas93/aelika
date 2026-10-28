@@ -31,7 +31,7 @@ const entero = (v: string, min: number, max: number) => {
 };
 
 /**
- * Calendario del portal del cliente de mayoreo (Dueño): hora de entrega, anticipación para pedir y para modificar, cuántas
+ * Calendario del portal del cliente de mayoreo (Admin): hora de entrega, anticipación para pedir y para modificar, cuántas
  * semanas se pueden pedir y número de atención. Todo en hora de Ciudad de México.
  */
 export default function CalendarioPortalB2bSection({

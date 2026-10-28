@@ -8,6 +8,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { generateTemporaryPassword } from './generate-temporary-password';
 
 const SALT_ROUNDS = 10;
+const MSG_SOLO_DUENO = 'Solo un Admin puede crear, ascender o modificar a otro Admin';
 const SAFE_SELECT = { id: true, nombre: true, email: true, rol: true, activo: true, createdAt: true } as const;
 
 @Injectable()
@@ -24,7 +25,10 @@ export class UsersService {
     });
   }
 
-  async create(dto: CreateUserDto) {
+  async create(actorRol: Role, dto: CreateUserDto) {
+    if (actorRol !== Role.DUENO && dto.rol === Role.DUENO) {
+      throw new ForbiddenException(MSG_SOLO_DUENO);
+    }
     // Email is unique across all tenants (see AuthService.register), so this
     // check has to run against the raw, un-scoped client.
     const emailTaken = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -45,7 +49,7 @@ export class UsersService {
     return { ...user, temporaryPassword };
   }
 
-  async update(currentUserId: string, id: string, dto: UpdateUserDto) {
+  async update(currentUserId: string, actorRol: Role, id: string, dto: UpdateUserDto) {
     if (id === currentUserId) {
       throw new ForbiddenException('No puedes editarte a ti mismo desde aquí');
     }
@@ -53,6 +57,11 @@ export class UsersService {
     const target = await this.tenantPrisma.client.user.findUnique({ where: { id } });
     if (!target) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Quien no es Dueño (Gerente) no puede tocar a un Dueño ni asignar ese rol; entre Operador y Gerente sí puede mover.
+    if (actorRol !== Role.DUENO && (target.rol === Role.DUENO || dto.rol === Role.DUENO)) {
+      throw new ForbiddenException(MSG_SOLO_DUENO);
     }
 
     const nextRol = dto.rol ?? target.rol;
@@ -65,7 +74,7 @@ export class UsersService {
         where: { rol: Role.DUENO, activo: true, id: { not: id } },
       });
       if (otherActiveDuenos === 0) {
-        throw new ConflictException('El tenant debe tener al menos un dueño activo');
+        throw new ConflictException('El negocio debe tener al menos un Admin activo');
       }
     }
 

@@ -82,11 +82,11 @@ describe('Sesión vigente · usuario desactivado, borrado o con rol cambiado', (
 
   it('subir de rol aplica de inmediato; un rol falsificado en el token no vale', async () => {
     const tokenOp = tokenFor(s.h.jwt, s.base.operador, s.base.tenant.id, 'OPERADOR');
-    expectError(await auth(s.h, tokenOp).get('/users'), 403, SIN_PERMISO);
+    expectError(await auth(s.h, tokenOp).get('/tenant/me'), 403, SIN_PERMISO);
     await s.h.prisma.user.update({ where: { id: s.base.operador.id }, data: { rol: 'DUENO' } });
-    await auth(s.h, tokenOp).get('/users').expect(200);
+    await auth(s.h, tokenOp).get('/tenant/me').expect(200);
 
     const falso = tokenFor(s.h.jwt, s.base.gerente, s.base.tenant.id, 'DUENO'); // dice DUENO, en la base es GERENTE
-    expectError(await auth(s.h, falso).get('/users'), 403, SIN_PERMISO);
+    expectError(await auth(s.h, falso).get('/tenant/me'), 403, SIN_PERMISO);
   });
 });

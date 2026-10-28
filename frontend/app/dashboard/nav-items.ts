@@ -1,4 +1,5 @@
 import type { Role, TipoStorefront } from "@/lib/api";
+import { puedeVerAjustes } from "./ajustes/acceso";
 import {
   IconBell,
   IconBuildingStore,
@@ -62,7 +63,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/pedidos-b2b/historico", label: "Históricos", icon: IconHistory },
   { href: "/dashboard/catalogo", label: "Catálogo", icon: IconClipboardList },
   { href: "/dashboard/clientes", label: "Clientes", icon: IconUsers },
-  // Solo Dueño y solo mayoreo (ver getNavItems).
+  // Solo Admin (rol DUENO) y solo mayoreo (ver getNavItems).
   { href: "/dashboard/adopcion", label: "Adopción", icon: IconChartBar },
   // Sin caso especial en getNavItems: a diferencia de /dashboard/clientes
   // (solo Gerente/Dueño), esta operación es del día a día físico del
@@ -174,7 +175,7 @@ export function getNavItems(rol: Role, tipoStorefront: TipoStorefront, modulosDe
     if (item.href === "/dashboard/catalogo") return rol !== "OPERADOR";
     if (item.href === "/dashboard/adopcion") return rol === "DUENO" && tipoStorefront === "RETAIL_B2B";
     if (item.href === "/dashboard/clientes") return rol === "GERENTE" || rol === "DUENO";
-    if (item.href === "/dashboard/ajustes") return rol === "DUENO";
+    if (item.href === "/dashboard/ajustes") return puedeVerAjustes(rol);
     if (item.href === "/dashboard/notificaciones") return puedeVerNotificaciones(rol);
     if (tipoStorefront === "RETAIL_B2B" && HREFS_NO_APLICAN_A_RETAIL_B2B.has(item.href)) return false;
     if (tipoStorefront !== "RETAIL_B2B" && HREFS_SOLO_RETAIL_B2B.has(item.href)) return false;

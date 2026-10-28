@@ -8,7 +8,7 @@ import Button from "../_components/Button";
 import Modal from "../_components/Modal";
 
 /**
- * Modalidades de cobro de un negocio de mayoreo (solo Dueño). Al menos una debe quedar activa. Si se desactiva una que
+ * Modalidades de cobro de un negocio de mayoreo (solo Admin). Al menos una debe quedar activa. Si se desactiva una que
  * tienen clientes, se avisa cuántos (clientes activos, sin baja) y se pide confirmación: ellos la conservan y sus pedidos
  * nuevos la siguen usando.
  */

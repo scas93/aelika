@@ -750,7 +750,7 @@ export default function CheckoutModal({
                     >
                       {metodoPago === "EFECTIVO" && <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />}
                     </span>
-                    Efectivo
+                    {metodoEntrega === "RECOGER" ? "Pagar en el local al recoger" : "Pagar en efectivo al recibir"}
                   </button>
 
                   {aceptaTarjeta ? (
