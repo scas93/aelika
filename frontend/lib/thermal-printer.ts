@@ -24,11 +24,8 @@ export const COLUMNS_BODY = 56;
 // lib/horario.ts — Fase 1 pilots all operate in Mexico City.
 const TIMEZONE = "America/Mexico_City";
 
-export const ROLE_LABEL: Record<Role, string> = {
-  OPERADOR: "Operador",
-  GERENTE: "Gerente",
-  DUENO: "Dueño",
-};
+import { ROLE_LABEL } from "./roles";
+export { ROLE_LABEL };
 
 /** "D-M-YYYY HH:mm" in the tenant timezone — used for both the order's own
     creation time and the print timestamp on the ticket. */

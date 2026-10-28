@@ -162,7 +162,7 @@ export default function RegisterPage() {
           </div>
         </Field>
 
-        <Field label="Tu nombre (dueño/a)">
+        <Field label="Tu nombre (Admin)">
           <input
             required
             value={nombreDueno}

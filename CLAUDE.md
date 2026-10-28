@@ -320,6 +320,8 @@ Ver el ERD completo (diagrama Mermaid) en `Aelika - Documento de Planeacion.md`,
 | Gerente | Todo lo del Operador + editar catálogo |
 | Dueño | Todo lo del Gerente + ver dashboard (Fase 3) |
 
+**Rol "Dueño" = "Admin" en pantalla.** Solo cambió el nombre visible (`frontend/lib/roles.ts`, `ROLE_LABEL`); el valor interno sigue siendo `DUENO` (enum, JWT, base de datos, `@Roles`). **Ajustes:** el Gerente ve solo Información del negocio y Equipo. Información del negocio vive en `GET`/`PATCH /tenant/negocio` (Admin y Gerente; lista cerrada: giro, bienvenida, horario, ubicación) — `/tenant/me` sigue siendo solo Admin porque expone llave del bot, Stripe, facturación y mayoreo. `/users` es de Admin y Gerente; `UsersService` impide que un Gerente cree/ascenda a Admin o edite a un Admin (403). Frontend: `ajustes/acceso.ts` centraliza quién ve qué y el mensaje por rol.
+
 ## Hardware de referencia para impresión (Fase 1)
 
 Impresora térmica GHIA GTP801 (80mm, USB + Ethernet, ESC/POS) ya comprada para pruebas. La ruta de driver de sistema (imprimir vía el spooler del SO) no funcionó en macOS — GHIA no tiene driver de Mac utilizable — así que Fase 1 usa WebUSB con comandos ESC/POS crudos (`frontend/lib/thermal-printer.ts`, requiere Chrome o Edge), con `window.print()` como respaldo. Sin puente/agente local en ningún caso.

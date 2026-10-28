@@ -1128,6 +1128,34 @@ export function fetchTenantSettings(token: string) {
   return request<TenantSettings>("/tenant/me", { headers: authHeaders(token) });
 }
 
+/** Lo que ven y editan Admin y Gerente en Ajustes → Información del negocio (recurso aparte de /tenant/me, solo Admin). */
+export interface NegocioSettings {
+  // Solo viene para el Admin; el backend lo omite para el Gerente.
+  giroNegocio?: GiroNegocio | null;
+  mensajeBienvenida: string;
+  horarioAtencion: HorarioSemana | null;
+  ubicacion: string | null;
+}
+
+export type UpdateNegocioPayload = Partial<{
+  giroNegocio: GiroNegocio;
+  mensajeBienvenida: string;
+  horarioAtencion: HorarioSemana;
+  ubicacion: string;
+}>;
+
+export function fetchNegocio(token: string) {
+  return request<NegocioSettings>("/tenant/negocio", { headers: authHeaders(token) });
+}
+
+export function updateNegocio(token: string, payload: UpdateNegocioPayload) {
+  return request<NegocioSettings>("/tenant/negocio", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
 export function updateTenantSettings(token: string, payload: UpdateTenantSettingsPayload) {
   return request<TenantSettings>("/tenant/me", {
     method: "PATCH",

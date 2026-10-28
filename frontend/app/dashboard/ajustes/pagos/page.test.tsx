@@ -45,7 +45,7 @@ describe("Ajustes → Pagos", () => {
   it("quien no es Dueño no ve nada editable y no se pide la configuración", () => {
     sesion = { token: "t", user: { rol: "GERENTE", tenant: { tipoStorefront: "RETAIL_B2B" } } };
     render(<Pagos />);
-    expect(screen.getByText(/Solo el dueño/)).toBeTruthy();
+    expect(screen.getByText(/exclusiva del Admin|no tiene acceso/)).toBeTruthy();
     expect(fetchTenantSettings).not.toHaveBeenCalled();
   });
 });

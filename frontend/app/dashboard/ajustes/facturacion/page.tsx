@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session-context";
 import { ApiError, fetchTenantSettings, type FacturacionModo } from "@/lib/api";
 import FacturacionSection from "../facturacion-section";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 // FacturacionSection espera facturacionModo+onUpdated como props (no
@@ -17,7 +18,7 @@ export default function AjustesFacturacionPage() {
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
       {user.rol !== "DUENO" ? (
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       ) : (
         <FacturacionLoader token={token} />
       )}

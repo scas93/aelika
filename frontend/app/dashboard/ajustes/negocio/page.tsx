@@ -2,6 +2,7 @@
 
 import { useSession } from "@/lib/session-context";
 import NegocioSection from "../negocio-section";
+import { mensajeSinAcceso, puedeVerSubmodulo } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesNegocioPage() {
@@ -10,10 +11,10 @@ export default function AjustesNegocioPage() {
   return (
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
-      {user.rol !== "DUENO" ? (
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
+      {!puedeVerSubmodulo(user.rol, "/dashboard/ajustes/negocio") ? (
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       ) : (
-        <NegocioSection token={token} />
+        <NegocioSection token={token} puedeEditarGiro={user.rol === "DUENO"} />
       )}
     </div>
   );

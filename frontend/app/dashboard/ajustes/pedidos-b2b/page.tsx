@@ -13,6 +13,7 @@ import CalendarioPortalB2bSection, {
   calendarioDesdeSettings,
   type CalendarioPortalB2b,
 } from "../calendario-portal-b2b-section";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 export default function AjustesPedidosB2bPage() {
@@ -26,7 +27,7 @@ export default function AjustesPedidosB2bPage() {
   if (user.rol !== "DUENO") {
     contenido = (
       <p className="text-sm text-admin-ink-soft">
-        Solo el dueño del negocio puede editar los ajustes.
+        {mensajeSinAcceso(user.rol)}
       </p>
     );
   } else if (user.tenant.tipoStorefront !== "RETAIL_B2B") {

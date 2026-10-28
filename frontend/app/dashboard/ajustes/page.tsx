@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/session-context";
 import { ALL_NAV_ITEMS, moduloActivo } from "../nav-items";
 import Card from "../_components/Card";
+import { mensajeSinAcceso, puedeVerAjustes, puedeVerSubmodulo } from "./acceso";
 
 // Una línea por tarjeta — los labels ya vienen de ALL_NAV_ITEMS (mismo
 // título que el <h2> de cada sección), esto solo agrega el subtítulo.
@@ -54,8 +55,8 @@ const GRUPO_PEDIDOS_B2B: Grupo = {
 export default function AjustesPage() {
   const { user } = useSession();
 
-  if (user.rol !== "DUENO") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>;
+  if (!puedeVerAjustes(user.rol)) {
+    return <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>;
   }
 
   const esB2b = user.tenant.tipoStorefront === "RETAIL_B2B";
@@ -65,7 +66,10 @@ export default function AjustesPage() {
   if (esB2b) ocultos.add("/dashboard/ajustes/envios");
   if (!moduloActivo(user.tenant.modulosDesactivados, "CODIGOS_DESCUENTO")) ocultos.add("/dashboard/ajustes/codigos-descuento");
   const grupos = (esB2b ? [...GRUPOS, GRUPO_PEDIDOS_B2B] : GRUPOS)
-    .map((grupo) => ({ ...grupo, hrefs: grupo.hrefs.filter((href) => !ocultos.has(href)) }))
+    .map((grupo) => ({
+      ...grupo,
+      hrefs: grupo.hrefs.filter((href) => !ocultos.has(href) && puedeVerSubmodulo(user.rol, href)),
+    }))
     .filter((grupo) => grupo.hrefs.length > 0);
 
   return (

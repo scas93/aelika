@@ -22,7 +22,7 @@ export function clearSession() {
 
 const AVISO_KEY = "aelika_aviso_login";
 export const AVISO_SESION_INVALIDA =
-  "Tu sesión terminó: tu usuario fue desactivado o la sesión venció. Inicia sesión de nuevo o contacta al dueño del negocio.";
+  "Tu sesión terminó: tu usuario fue desactivado o la sesión venció. Inicia sesión de nuevo o contacta al Admin del negocio.";
 
 // Limpia la sesión local, deja un aviso para el login y manda a /login (recarga completa para cortar cualquier estado).
 export function avisarSesionInvalida() {

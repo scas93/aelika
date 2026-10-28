@@ -14,14 +14,16 @@ import Card from "../../_components/Card";
 import Button from "../../_components/Button";
 import Modal from "../../_components/Modal";
 import Badge from "../../_components/Badge";
+import { ROLE_LABEL } from "@/lib/roles";
+import { mensajeSinAcceso, puedeVerSubmodulo } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 const ROLES: Role[] = ["OPERADOR", "GERENTE", "DUENO"];
-const ROLE_LABEL: Record<Role, string> = {
-  OPERADOR: "Operador",
-  GERENTE: "Gerente",
-  DUENO: "Dueño",
-};
+// El Gerente solo asigna Operador y Gerente (el backend rechaza cualquier intento de crear, ascender o tocar a un Admin).
+const ROLES_ASIGNABLES_POR_GERENTE: Role[] = ["OPERADOR", "GERENTE"];
+function rolesAsignables(rolActual: Role): Role[] {
+  return rolActual === "DUENO" ? ROLES : ROLES_ASIGNABLES_POR_GERENTE;
+}
 
 export default function EquipoPage() {
   const { user, token } = useSession();
@@ -29,16 +31,16 @@ export default function EquipoPage() {
   return (
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
-      {user.rol !== "DUENO" ? (
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede administrar el equipo.</p>
+      {!puedeVerSubmodulo(user.rol, "/dashboard/ajustes/equipo") ? (
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       ) : (
-        <TeamManager currentUserId={user.id} token={token} />
+        <TeamManager currentUserId={user.id} rolActual={user.rol} token={token} />
       )}
     </div>
   );
 }
 
-function TeamManager({ currentUserId, token }: { currentUserId: string; token: string }) {
+function TeamManager({ currentUserId, rolActual, token }: { currentUserId: string; rolActual: Role; token: string }) {
   const [users, setUsers] = useState<TeamUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newPasswordFor, setNewPasswordFor] = useState<{ email: string; password: string } | null>(null);
@@ -87,6 +89,8 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
           <ul className="flex flex-col divide-y divide-admin-border">
             {users.map((teamUser) => {
               const isSelf = teamUser.id === currentUserId;
+              // Un Gerente ve a los Admin pero no puede editarlos: sin selector de rol ni botón de activar/desactivar.
+              const soloLectura = rolActual !== "DUENO" && teamUser.rol === "DUENO";
               return (
                 <li
                   key={teamUser.id}
@@ -106,13 +110,17 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {!teamUser.activo && <Badge variant="neutro">Inactivo</Badge>}
+                    {soloLectura ? (
+                      <Badge variant="neutro">{ROLE_LABEL[teamUser.rol]}</Badge>
+                    ) : (
+                    <>
                     <select
                       value={teamUser.rol}
                       disabled={isSelf}
                       onChange={(e) => handleUpdate(teamUser.id, { rol: e.target.value as Role })}
                       className="admin-input py-1.5 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {ROLES.map((rol) => (
+                      {rolesAsignables(rolActual).map((rol) => (
                         <option key={rol} value={rol}>
                           {ROLE_LABEL[rol]}
                         </option>
@@ -126,6 +134,8 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
                     >
                       {teamUser.activo ? "Desactivar" : "Activar"}
                     </Button>
+                    </>
+                    )}
                   </div>
                 </li>
               );
@@ -134,7 +144,7 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
         </Card>
       )}
 
-      <NewUserForm onCreate={handleCreate} />
+      <NewUserForm onCreate={handleCreate} roles={rolesAsignables(rolActual)} />
 
       <Modal
         open={newPasswordFor !== null}
@@ -156,7 +166,9 @@ function TeamManager({ currentUserId, token }: { currentUserId: string; token: s
 
 function NewUserForm({
   onCreate,
+  roles,
 }: {
+  roles: Role[];
   onCreate: (payload: { nombre: string; email: string; rol: Role }) => Promise<void>;
 }) {
   const [nombre, setNombre] = useState("");
@@ -204,7 +216,7 @@ function NewUserForm({
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
             Rol
             <select value={rol} onChange={(e) => setRol(e.target.value as Role)} className="admin-input">
-              {ROLES.map((r) => (
+              {roles.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABEL[r]}
                 </option>

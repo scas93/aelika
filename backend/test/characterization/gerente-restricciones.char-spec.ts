@@ -3,7 +3,8 @@ import { expectError } from './exacto';
 import { usarSuite } from './helpers';
 import { apiRol } from './b2b-helpers';
 
-// Gerente = Dueño en todo el panel salvo Adopción, Notificaciones y Ajustes (solo Dueño en la API). El Operador no cambia.
+// Gerente = Dueño en todo el panel salvo Adopción, Notificaciones y Ajustes (en Ajustes el Gerente solo tiene Información del
+// negocio y Equipo, con límites; ver gerente-ajustes.char-spec.ts). El Operador no cambia.
 // Se prueba en un tenant B2C y en uno B2B; las rutas de Ajustes no dependen del tipo de storefront.
 const MSG = 'No tienes permiso para realizar esta acción';
 
@@ -26,13 +27,11 @@ describe.each([['RETAIL_B2C'], ['RETAIL_B2B']] as const)('Rol Gerente · seccion
     }
   });
 
-  it('Ajustes: /tenant/me, /users, /notificaciones/*, /puntos-envio (escritura) y /aelika-scan 403 para Gerente', async () => {
+  it('Ajustes: /tenant/me, /notificaciones/*, /puntos-envio (escritura) y /aelika-scan 403 para Gerente', async () => {
     expectError(await gerente().get('/tenant/me'), 403, MSG);
     expectError(await gerente().patch('/tenant/me').send({ mensajeBienvenida: 'hola' }), 403, MSG);
     expectError(await gerente().post('/tenant/me/regenerate-bot-key', {}), 403, MSG);
     expectError(await gerente().post('/tenant/me/stripe-account', {}), 403, MSG);
-    expectError(await gerente().get('/users'), 403, MSG);
-    expectError(await gerente().post('/users', { nombre: 'Otro', email: 'otro@x.com', rol: 'DUENO' }), 403, MSG);
     expectError(await gerente().get('/notificaciones/canales'), 403, MSG);
     expectError(await gerente().get('/notificaciones/eventos'), 403, MSG);
     expectError(await gerente().post('/puntos-envio', { nombre: 'Zona', direccion: 'Calle 1' }), 403, MSG);

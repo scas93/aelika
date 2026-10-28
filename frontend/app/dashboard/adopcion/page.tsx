@@ -14,7 +14,7 @@ export default function AdopcionPage() {
   const [tab, setTab] = useState<TabKey>("clientes");
 
   if (user.rol !== "DUENO" || user.tenant.tipoStorefront !== "RETAIL_B2B") {
-    return <p className="text-sm text-admin-ink-soft">Solo el dueño de un negocio de mayoreo puede ver Adopción.</p>;
+    return <p className="text-sm text-admin-ink-soft">Solo el Admin de un negocio de mayoreo puede ver Adopción.</p>;
   }
 
   return (

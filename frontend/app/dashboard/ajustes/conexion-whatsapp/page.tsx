@@ -6,6 +6,7 @@ import { ApiError, fetchTenantSettings } from "@/lib/api";
 import BotApiKeySection from "./bot-api-key-section";
 import WebhookSection from "./webhook-section";
 import CandadoSection from "./candado-section";
+import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
 // Reemplaza /dashboard/ajustes/bot ("Llave del bot") — ahora junta las 3
@@ -22,7 +23,7 @@ export default function ConexionWhatsAppPage() {
     <div className="flex flex-col gap-4">
       <VolverAjustesLink />
       {user.rol !== "DUENO" ? (
-        <p className="text-sm text-admin-ink-soft">Solo el dueño del negocio puede editar los ajustes.</p>
+        <p className="text-sm text-admin-ink-soft">{mensajeSinAcceso(user.rol)}</p>
       ) : (
         <ConexionWhatsAppLoader token={token} />
       )}
