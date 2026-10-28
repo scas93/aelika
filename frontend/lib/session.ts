@@ -1,4 +1,5 @@
 import type { Session } from "./api";
+import { urlLoginConDestino } from "./destino-login";
 
 const STORAGE_KEY = "aelika_session";
 
@@ -33,7 +34,9 @@ export function avisarSesionInvalida() {
   } catch {
     // sin sessionStorage el login simplemente no muestra aviso
   }
-  if (window.location.pathname !== "/login") window.location.replace("/login");
+  if (window.location.pathname !== "/login") {
+    window.location.replace(urlLoginConDestino(window.location.pathname, window.location.search));
+  }
 }
 
 export function consumirAvisoLogin(): string | null {

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchCurrentUser, type CurrentUser } from "./api";
+import { urlLoginConDestino } from "./destino-login";
 import { clearSession, loadSession } from "./session";
 
 interface SessionContextValue {
@@ -21,8 +22,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const session = loadSession();
+    // Sin sesión o con sesión inválida: al login recordando a dónde iba. El cierre voluntario (logout) va a /login a secas.
+    const aLogin = () => router.replace(urlLoginConDestino(window.location.pathname, window.location.search));
     if (!session) {
-      router.replace("/login");
+      aLogin();
       return;
     }
 
@@ -39,7 +42,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         clearSession();
-        router.replace("/login");
+        aLogin();
       });
   }, [router]);
 
