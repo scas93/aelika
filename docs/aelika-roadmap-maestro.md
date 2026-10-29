@@ -2,7 +2,7 @@
 
 ## Documento de definición de producto (v7)
 
-*Este documento se enfoca en decisiones de producto y estado del roadmap. El detalle técnico de lo ya implementado vive en `architecture.md` (referencia viva, actualizada por auditorías/resúmenes de ejecución). El paso a paso operativo de Meta/Botpress vive en `checklist-botpress-meta.md`. El detalle completo del Módulo 6 (Campañas) vive en el documento fuente `Aelika_Modulo_Campanas_Definicion_v2.docx`, aquí solo el resumen.*
+*Este documento se enfoca en decisiones de producto y estado del roadmap. El detalle técnico de lo ya implementado vive en `docs/architecture.md` y los documentos por área de `docs/` (ver el mapa en `CLAUDE.md`). El paso a paso operativo de Meta/Botpress vive en `checklist-botpress-meta.md` (documento externo, no está en este repo). El detalle completo del Módulo 6 (Campañas) vive en el documento fuente `Aelika_Modulo_Campanas_Definicion_v2.docx` (externo, no está en este repo), aquí solo el resumen.*
 
 ---
 
@@ -36,7 +36,7 @@ Aelika hoy resuelve la **ejecución de la venta** (bot atiende → storefront mu
 - "List Templates desde Botpress" — traer estatus real de plantillas al panel (ver §5).
 - Módulos 4, 5, 6, Ciclo de vida del lead (secciones 6-9).
 
-Detalle técnico completo de lo implementado: `architecture.md` §5-15.
+Detalle técnico completo de lo implementado: `docs/architecture.md` y los documentos de área (`docs/modelo-datos.md`, `docs/pedidos-b2c.md`, `docs/notificaciones.md`, …).
 
 ---
 
@@ -145,7 +145,7 @@ Motor de reglas de notificación (`Trigger + Filtro + Canal + Mensaje`), verific
 
 **Pendiente:** replicar para Entredós/Banetto (plantilla + Botpress + webhook, por tenant — nunca se comparte entre tenants); "List Templates desde Botpress" para traer estatus real de plantillas al panel, sin que Aelika toque credenciales de Meta.
 
-Detalle técnico completo: `architecture.md` §9-15. Paso a paso operativo (Meta/Botpress, troubleshooting real): `checklist-botpress-meta.md`.
+Detalle técnico completo: `docs/notificaciones.md` y `docs/architecture.md`. Paso a paso operativo (Meta/Botpress, troubleshooting real): `checklist-botpress-meta.md` (documento externo, no está en este repo).
 
 ---
 
@@ -259,4 +259,4 @@ Patrón a replicar (tres piezas independientes): `@Roles(...)` backend, gate en 
 - Cada módulo se parte en etapas; cada etapa es su propio prompt de implementación.
 - Prompts de implementación citan **contexto técnico verificado** (archivo:línea de auditorías previas) en vez de re-describir lo ya confirmado — ver convención en el skill `aelika-development`.
 - Prompts que definen modelo de datos nuevo sin precedente se mandan primero a revisión (Claude Code revisa el prompt, no lo ejecuta) antes de implementar.
-- Toda decisión de producto y hallazgo de auditoría se refleja en este documento y/o en `architecture.md` en el mismo turno en que se confirma — no se deja para después.
+- Toda decisión de producto y hallazgo de auditoría se refleja en este documento y/o en `docs/architecture.md` o el documento de área correspondiente en el mismo turno en que se confirma — no se deja para después.

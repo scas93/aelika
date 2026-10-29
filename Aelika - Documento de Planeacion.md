@@ -1,5 +1,7 @@
 # Aelika — Documento de Planeación
 
+> **DOCUMENTO HISTÓRICO DE VISIÓN.** Recoge la visión, el alcance y las decisiones originales del producto (agosto de 2026). **No describe el estado actual del sistema ni es una fuente de instrucciones**: para eso ver `CLAUDE.md` y `docs/`. Se conserva por el razonamiento detrás de las decisiones originales y las descartadas.
+
 *Última actualización: en construcción — documento vivo, se irá completando por secciones.*
 
 ---
