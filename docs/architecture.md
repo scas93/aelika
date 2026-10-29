@@ -95,6 +95,10 @@ Next.js 16.3.1, React 19, Tailwind 4 (tokens en `app/globals.css`), Vitest + Tes
 - `components/`: `cantidad-input.tsx`, `horario-editor.tsx` (reutilizable en registro y Configuración), `analitica-portal.tsx`.
 - Imágenes de producto: `<img>` planas (no `next/image`); cada negocio trae URLs externas y `next.config.ts` no declara `remotePatterns`.
 
+### Login con `?next=`
+
+Sin sesión, sesión inválida o 401 del API mandan a `/login?next=<ruta+parámetros>` (`urlLoginConDestino` en `frontend/lib/destino-login.ts`, usado por `session-context.tsx` y `session.ts`); tras iniciar sesión, `login/page.tsx` va a `destinoTrasLogin(...)`. `destinoSeguro` solo acepta `/dashboard` o rutas que cuelguen de él (`/dashboard/…`, `?` o `#`); rechaza URL absoluta, otro dominio, `//`, `\`, caracteres de control, porcentaje-codificaciones que escondan eso y cualquier otra sección (`/tienda`, `/mayoreo`…), y en esos casos se usa el destino por defecto (`/dashboard/pedidos` para Operador en menudeo, `/dashboard` en los demás). Cierre de sesión voluntario y entrada directa a `/login` no llevan `next`. Es lo que hace que el botón del WhatsApp (`dashboard/pedidos-b2b?pedido=<id>`) aterrice en el pedido tras iniciar sesión.
+
 ## Pruebas y scripts de datos
 
 Comandos y advertencias: `CLAUDE.md`. Suite de caracterización: `backend/test/characterization/README.md`. Scripts de corrección de datos y sus guías: [seeds-y-datos-demo.md](seeds-y-datos-demo.md).
