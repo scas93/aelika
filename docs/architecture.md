@@ -36,6 +36,7 @@ docker-compose.yml  Postgres + Redis locales
 | `tenant/` | Configuración del negocio (`/tenant/me` solo Admin, `/tenant/negocio` Admin y Gerente), llave del bot, Stripe, modalidades | pedidos-b2c.md, stripe-pagos.md |
 | `users/` | Equipo del negocio (Admin y Gerente) | este documento |
 | `categories/`, `products/`, `promotions/`, `modifier-groups/`, `puntos-envio/` | Catálogo y entrega | pedidos-b2c.md |
+| `dias-sin-entrega/` | Festivos B2B (lista por negocio; Gerente/Dueño escriben) | diseno-operacion.md |
 | `public/` | Storefront B2C sin JWT: info, catálogo, checkout, puntos de envío | pedidos-b2c.md |
 | `orders/` | Pedidos B2C: panel, Kanban, histórico, reembolsos, métricas | pedidos-b2c.md, stripe-pagos.md |
 | `pedidos-b2b/` | Pedidos B2B, entregas, estados derivados, exportes Excel, códigos de descuento | diseno-operacion.md |

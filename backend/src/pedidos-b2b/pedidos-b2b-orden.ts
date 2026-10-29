@@ -65,6 +65,38 @@ export function diaDeFecha(fecha: Date, semanaInicio: Date) {
   ];
 }
 
+/**
+ * Días sin entrega (festivos): ÚNICA regla del backend que rechaza escribir una entrega B2B en una de esas fechas. La llaman
+ * los dos puntos de escritura de fechas (`crearOrdenB2b` y `sincronizarOrdenB2b`), así que panel y portal quedan cubiertos
+ * aunque la interfaz falle. Las fechas son `@db.Date` (medianoche UTC), igual que `DiaSinEntrega.fecha`: no hay conversión
+ * de zona horaria que pueda recorrer el día. Siempre filtra por `tenantId`.
+ */
+export async function validarFechasSinEntrega(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  fechas: Date[],
+): Promise<void> {
+  if (fechas.length === 0) return;
+  const bloqueados = await tx.diaSinEntrega.findMany({
+    where: { tenantId, fecha: { in: fechas } },
+    orderBy: { fecha: 'asc' },
+    select: { fecha: true, nota: true },
+  });
+  if (bloqueados.length === 0) return;
+  const problemas = bloqueados.map((b) => ({
+    fecha: b.fecha.toISOString().slice(0, 10),
+    motivo: 'SIN_ENTREGA',
+    mensaje: `El ${fechaLegible(b.fecha)} es un día sin entrega${b.nota ? ` (${b.nota})` : ''}`,
+  }));
+  throw new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: 'DIA_SIN_ENTREGA',
+    message: `${problemas.map((p) => p.mensaje).join('. ')}. Si quieres entregar ese día, quítalo de Ajustes → Días sin entrega`,
+    fechas: problemas,
+  });
+}
+
 export interface DatosOrdenB2b {
   /** Quién captura el pedido; obligatorio para que ningún camino de creación lo olvide. */
   origen: OrigenPedidoB2b;
@@ -160,6 +192,7 @@ export async function crearOrdenB2b(
         DIAS_EN_ORDEN.indexOf(dia.dia),
         fechaDeDia(d.semanaInicio, dia.dia),
       );
+  await validarFechasSinEntrega(tx, d.tenantId, [...fechas.values()]);
   const idEntregaPorDia = new Map<number, string>();
   for (const idx of [...fechas.keys()].sort((a, b) => a - b)) {
     const entrega = await tx.entrega.create({
@@ -294,6 +327,16 @@ export async function sincronizarOrdenB2b(
     if (cerrada(e)) noPendiente(e);
     await tx.entrega.delete({ where: { id: e.id } });
   }
+
+  // Solo las fechas NUEVAS (sin entrega existente) pasan por la regla: una entrega que ya estaba en un día que después se
+  // marcó sin entrega se conserva y se puede seguir editando o quitando.
+  await validarFechasSinEntrega(
+    tx,
+    tenantId,
+    [...deseadas.keys()]
+      .filter((ms) => !entregaPorFecha.has(ms))
+      .map((ms) => new Date(ms)),
+  );
 
   for (const ms of [...deseadas.keys()].sort((a, b) => a - b)) {
     const existente = entregaPorFecha.get(ms);

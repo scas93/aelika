@@ -14,6 +14,7 @@ import { OrdersModule } from './orders/orders.module';
 import { TenantModule } from './tenant/tenant.module';
 import { InternalModule } from './internal/internal.module';
 import { PuntosEnvioModule } from './puntos-envio/puntos-envio.module';
+import { DiasSinEntregaModule } from './dias-sin-entrega/dias-sin-entrega.module';
 import { ModifierGroupsModule } from './modifier-groups/modifier-groups.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -42,6 +43,7 @@ import { ReservasModule } from './reservas/reservas.module';
     TenantModule,
     InternalModule,
     PuntosEnvioModule,
+    DiasSinEntregaModule,
     ModifierGroupsModule,
     WebhooksModule,
     PaymentsModule,

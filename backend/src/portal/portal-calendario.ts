@@ -15,6 +15,9 @@ import {
  *  - Modificar o quitar una entrega existente: a >= horasModificar de ahora (borde válido).
  *  - Horizonte: la semana en curso (lunes–domingo) y `horizonteSemanas` semanas después.
  *  - Pedido Pagado: todo su semana queda CERRADO (agregar un día también modifica el pedido pagado).
+ *  - Día sin entrega (festivo del negocio): no se puede crear ni agregar una entrega (NO_DISPONIBLE, motivo SIN_ENTREGA). Se
+ *    combina con las demás reglas. Si el cliente ya tenía una entrega ese día (se marcó después) se conserva y puede quitarla.
+ *    La comparación es por fecha de calendario "YYYY-MM-DD" (la del negocio), nunca por instantes UTC.
  */
 
 export const ZONA_HORARIA = 'America/Mexico_City';
@@ -26,7 +29,8 @@ export type MotivoDiaPortal =
   | 'ANTICIPACION_AGREGAR'
   | 'ANTICIPACION_MODIFICAR'
   | 'ENTREGA_CERRADA'
-  | 'PEDIDO_PAGADO';
+  | 'PEDIDO_PAGADO'
+  | 'SIN_ENTREGA';
 export type AccionDiaPortal = 'CREAR_PEDIDO' | 'AGREGAR_A_PEDIDO';
 
 export interface ParametrosCalendario {
@@ -57,7 +61,12 @@ export interface DiaCalendario {
   accion: AccionDiaPortal | null;
   /** Estado de la entrega del cliente ese día, si tiene una. */
   entrega: { estado: EstadoEntrega } | null;
+  /** Presente si el negocio marcó este día como sin entrega (con su nota, si la tiene). */
+  sinEntrega: { nota: string | null } | null;
 }
+
+/** Días sin entrega del negocio: "YYYY-MM-DD" → nota (o null). */
+export type DiasSinEntrega = ReadonlyMap<string, string | null>;
 
 export interface SemanaCalendario {
   semanaInicio: string;
@@ -159,6 +168,7 @@ function calcularDia(
   ahora: Date,
   p: ParametrosCalendario,
   pedido: PedidoSemanaCalendario | null,
+  diasSinEntrega: DiasSinEntrega,
 ): DiaCalendario {
   const entregaAt = instanteEnMexico(fecha, p.horaEntrega);
   const limiteAgregar = new Date(
@@ -173,6 +183,9 @@ function calcularDia(
     diaSemana: DIAS_EN_ORDEN[indice],
     entregaAt: iso(entregaAt),
     entrega: entrega ? { estado: entrega.estado } : null,
+    sinEntrega: diasSinEntrega.has(fecha)
+      ? { nota: diasSinEntrega.get(fecha) ?? null }
+      : null,
   };
 
   // Pedido Pagado: el cliente no lo modifica (ni quita ni agrega días): toda su semana queda cerrada.
@@ -215,6 +228,15 @@ function calcularDia(
     };
   }
 
+  if (base.sinEntrega) {
+    return {
+      ...base,
+      estado: 'NO_DISPONIBLE',
+      motivo: 'SIN_ENTREGA',
+      limiteAt: null,
+      accion: null,
+    };
+  }
   if (entregaAt.getTime() < ahora.getTime()) {
     return {
       ...base,
@@ -246,12 +268,20 @@ export function calcularCalendario(
   ahora: Date,
   p: ParametrosCalendario,
   pedidosPorSemana: Map<string, PedidoSemanaCalendario>,
+  diasSinEntrega: DiasSinEntrega = new Map(),
 ): SemanaCalendario[] {
   const semanas = semanasDelHorizonte(ahora, p.horizonteSemanas);
   return semanas.map((semanaInicio, i) => {
     const pedido = pedidosPorSemana.get(semanaInicio) ?? null;
     const dias = DIAS_EN_ORDEN.map((_, idx) =>
-      calcularDia(sumarDiasISO(semanaInicio, idx), idx, ahora, p, pedido),
+      calcularDia(
+        sumarDiasISO(semanaInicio, idx),
+        idx,
+        ahora,
+        p,
+        pedido,
+        diasSinEntrega,
+      ),
     );
     return {
       semanaInicio,

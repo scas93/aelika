@@ -29,16 +29,21 @@ export default function CuadriculaDias({
   distribucion,
   onChange,
   cerrados,
+  sinEntrega,
 }: {
   nombreProducto: string;
   distribucion: DistribucionDias;
   onChange: (dia: DiaSemanaPedidoB2b, cantidad: Cantidad) => void;
   cerrados?: Map<DiaSemanaPedidoB2b, "ENTREGADA" | "NO_RECOGIDA">;
+  /** Días que el negocio marcó sin entrega (con su nota): no se pueden capturar; no hay excepción desde el panel. */
+  sinEntrega?: Map<DiaSemanaPedidoB2b, string | null>;
 }) {
   return (
     <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
       {DIAS_SEMANA_PEDIDO_B2B.map(({ value, label }) => {
         const cerrado = cerrados?.get(value);
+        const bloqueadoSinEntrega = !cerrado && sinEntrega?.has(value) === true;
+        const notaSinEntrega = sinEntrega?.get(value);
         const cantidad = distribucion[value];
         return (
           <label key={value} className="flex min-w-0 flex-col items-center gap-1">
@@ -46,15 +51,21 @@ export default function CuadriculaDias({
             <CantidadInput
               value={cantidad}
               onChange={(v) => onChange(value, v)}
-              disabled={cerrado !== undefined}
+              disabled={cerrado !== undefined || bloqueadoSinEntrega}
               aria-label={`${nombreProducto}, ${label}`}
-              title={cerrado ? `Entrega ${cerrado === "ENTREGADA" ? "entregada" : "no recogida"}: se cambia con «Corregir»` : undefined}
+              title={
+                cerrado
+                  ? `Entrega ${cerrado === "ENTREGADA" ? "entregada" : "no recogida"}: se cambia con «Corregir»`
+                  : bloqueadoSinEntrega
+                    ? `Día sin entrega${notaSinEntrega ? ` (${notaSinEntrega})` : ""}: quítalo de Ajustes → Días sin entrega para poder capturarlo`
+                    : undefined
+              }
               className={`admin-input w-full min-w-0 h-tabla! px-0! py-0! text-center text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-admin-ink-soft/40 ${
-                cerrado ? "cursor-not-allowed opacity-60" : ""
+                cerrado || bloqueadoSinEntrega ? "cursor-not-allowed opacity-60" : ""
               } ${cantidadNumero(cantidad) > 0 ? "font-semibold text-admin-ink!" : "text-admin-ink-soft/40!"}`}
             />
             <span className="h-3 text-[9px] leading-3 text-admin-ink-soft">
-              {cerrado === "ENTREGADA" ? "Entregada" : cerrado === "NO_RECOGIDA" ? "No rec." : ""}
+              {cerrado === "ENTREGADA" ? "Entregada" : cerrado === "NO_RECOGIDA" ? "No rec." : bloqueadoSinEntrega ? "Sin entrega" : ""}
             </span>
           </label>
         );

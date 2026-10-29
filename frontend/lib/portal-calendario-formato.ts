@@ -20,7 +20,13 @@ export const ETIQUETA_MOTIVO: Record<MotivoDiaPortal, string> = {
   ANTICIPACION_MODIFICAR: "Ya no hay tiempo para modificarlo",
   ENTREGA_CERRADA: "Entrega cerrada",
   PEDIDO_PAGADO: "Pedido pagado",
+  SIN_ENTREGA: "Sin entrega",
 };
+
+/** «Sin entrega» (o «Sin entrega · Navidad» si el negocio puso nota) para un día que el negocio marcó sin entrega. */
+export function textoSinEntrega(nota: string | null | undefined): string {
+  return nota ? `Sin entrega · ${nota}` : "Sin entrega";
+}
 
 const DIA = new Intl.DateTimeFormat("es-MX", {
   weekday: "short",

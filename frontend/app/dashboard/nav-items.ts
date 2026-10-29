@@ -4,6 +4,7 @@ import {
   IconBell,
   IconBuildingStore,
   IconChartBar,
+  IconCalendarOff,
   IconClipboardList,
   IconClock,
   IconCreditCard,
@@ -103,6 +104,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/ajustes/conexion-whatsapp", label: "Conexión WhatsApp", icon: IconRobot },
   { href: "/dashboard/ajustes/envios", label: "Puntos de envío", icon: IconTruckDelivery },
   { href: "/dashboard/ajustes/pedidos-b2b", label: "Pedidos de mayoreo", icon: IconClock },
+  { href: "/dashboard/ajustes/dias-sin-entrega", label: "Días sin entrega", icon: IconCalendarOff },
   { href: "/dashboard/ajustes/codigos-descuento", label: "Códigos de descuento", icon: IconTag },
   { href: "/dashboard/ajustes/notificaciones", label: "Canales de notificación", icon: IconBell },
 
@@ -150,6 +152,7 @@ const HREFS_OCULTOS_DEL_SIDEBAR = new Set([
   "/dashboard/ajustes/conexion-whatsapp",
   "/dashboard/ajustes/envios",
   "/dashboard/ajustes/pedidos-b2b",
+  "/dashboard/ajustes/dias-sin-entrega",
   "/dashboard/ajustes/codigos-descuento",
   "/dashboard/ajustes/notificaciones",
   "/dashboard/notificaciones/recontacto/nueva",

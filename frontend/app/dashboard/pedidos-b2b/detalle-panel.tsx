@@ -37,6 +37,7 @@ import {
   puedeCerrarEntregas,
 } from "./estado";
 import EntregasLista from "./entregas-lista";
+import { diasBloqueadosDeSemana, useDiasSinEntrega } from "./dias-sin-entrega";
 import SidePanel from "../_components/SidePanel";
 import Aviso from "../_components/Aviso";
 import Modal from "../_components/Modal";
@@ -338,6 +339,16 @@ export default function DetallePanel({
       diasCerrados.set(e.dia, e.estado);
   }
 
+  // Días sin entrega: bloqueados en la edición, salvo donde el pedido ya tiene entrega (esa se puede seguir editando o quitando).
+  const diasSinEntrega = useDiasSinEntrega(token, editMode);
+  const diasBloqueados = pedido
+    ? diasBloqueadosDeSemana(
+        pedido.semanaInicio,
+        diasSinEntrega,
+        new Set((pedido.entregas ?? []).filter((e) => e.estado !== "CANCELADA").map((e) => e.dia)),
+      )
+    : new Map();
+
   // Pago (solo Gerente/Dueño), en cualquier estado del pedido, incluso Cancelado. No mueve el estado del pedido.
   async function handlePago(marcar: boolean) {
     if (!pedido) return;
@@ -604,6 +615,7 @@ export default function DetallePanel({
                         setCantidadDia(item.localId, dia, cantidad)
                       }
                       cerrados={diasCerrados}
+                      sinEntrega={diasBloqueados}
                     />
                   </div>
                 );

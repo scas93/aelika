@@ -7,7 +7,7 @@ Fuente de verdad: `backend/prisma/schema.prisma` (34 modelos, 68 migraciones en 
 | Dominio | Modelos |
 |---|---|
 | Negocio y usuarios | `Tenant`, `User` |
-| Catálogo y entrega | `Category`, `Product`, `Promotion`, `PuntoEnvio`, `ModifierGroup`, `ModifierOption`, `ProductModifierGroup` |
+| Catálogo y entrega | `Category`, `Product`, `Promotion`, `PuntoEnvio`, `DiaSinEntrega` (festivos B2B), `ModifierGroup`, `ModifierOption`, `ProductModifierGroup` |
 | Orden base y detalles | `Order`, `DetalleB2C`, `DetalleB2B`, `DetalleReserva`, `Entrega`, `EntregaItem`, `OrderItem`, `OrderItemModifier`, `Payment` |
 | Pedidos B2B legados | `PedidoB2b`, `PedidoB2bItem`, `PedidoB2bItemDia`, `PedidoB2bCodigoDescuento` |
 | Clientes | `Cliente`, `ClienteTelefono` |

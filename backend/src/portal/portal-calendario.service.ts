@@ -72,6 +72,22 @@ export async function cargarPedidosCalendario(
   return { porSemana, activos };
 }
 
+/**
+ * Días sin entrega del negocio desde `desdeISO` en adelante (solo de ESTE negocio). Alimenta el calendario y su revalidación
+ * dentro de la transacción de creación/modificación.
+ */
+export async function cargarDiasSinEntrega(
+  db: PrismaService | Prisma.TransactionClient,
+  tenantId: string,
+  desdeISO: string,
+): Promise<Map<string, string | null>> {
+  const filas = await db.diaSinEntrega.findMany({
+    where: { tenantId, fecha: { gte: new Date(`${desdeISO}T00:00:00.000Z`) } },
+    select: { fecha: true, nota: true },
+  });
+  return new Map(filas.map((f) => [aFecha(f.fecha), f.nota]));
+}
+
 /** GET /portal/calendario: qué puede hacer el cliente activo con cada día de entrega (solo lectura). */
 @Injectable()
 export class PortalCalendarioService {
@@ -97,6 +113,12 @@ export class PortalCalendarioService {
       inicios,
     );
 
+    const diasSinEntrega = await cargarDiasSinEntrega(
+      this.prisma,
+      t.id,
+      inicios[0],
+    );
+
     return {
       ahora: ahora.toISOString(),
       zonaHoraria: ZONA_HORARIA,
@@ -112,7 +134,7 @@ export class PortalCalendarioService {
       pedidosActivos: activos,
       // Sin tope aparte: una semana por pedido, así que el máximo es el número de semanas del horizonte.
       maximoActivos: inicios.length,
-      semanas: calcularCalendario(ahora, parametros, porSemana),
+      semanas: calcularCalendario(ahora, parametros, porSemana, diasSinEntrega),
     };
   }
 }

@@ -117,7 +117,11 @@ export type MotivoDiaPortal =
   | "ANTICIPACION_AGREGAR"
   | "ANTICIPACION_MODIFICAR"
   | "ENTREGA_CERRADA"
-  | "PEDIDO_PAGADO";
+  | "PEDIDO_PAGADO"
+  | "SIN_ENTREGA";
+
+/** Día que el negocio marcó como sin entrega (con su nota, si la tiene). */
+export type SinEntregaPortal = { nota: string | null } | null;
 
 export interface DiaCalendarioPortal {
   fecha: string;
@@ -128,6 +132,7 @@ export interface DiaCalendarioPortal {
   limiteAt: string | null;
   accion: "CREAR_PEDIDO" | "AGREGAR_A_PEDIDO" | null;
   entrega: { estado: string } | null;
+  sinEntrega?: SinEntregaPortal;
 }
 
 export interface SemanaCalendarioPortal {
@@ -361,6 +366,7 @@ export interface DiaModificarPortal {
   estado: EstadoDiaPortal;
   motivo: MotivoDiaPortal | null;
   limiteAt: string | null;
+  sinEntrega?: SinEntregaPortal;
   entrega: {
     estado: string;
     productos: {

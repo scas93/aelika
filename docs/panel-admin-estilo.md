@@ -8,7 +8,7 @@ Aplica a `/dashboard/*` y `/login`. **No aplica a `/tienda/[slug]`** (tiene su p
 - Tokens `admin-*` en `frontend/app/globals.css` (`--color-admin-green`, `--color-admin-green-dark`, `--color-admin-bg`, `--color-admin-ink`, `--color-admin-sidebar`). **Nombres deliberadamente separados** de los tokens `whatsapp`/`chat-*` del storefront aunque el verde sea el mismo hex; pueden divergir. `.input` (compartida con `/tienda`) no se tocó.
 - Paleta clara fija con sidebar oscura: **no hay modo oscuro** en el panel (sin variantes `dark:`).
 - `GET /auth/me` incluye `tenant: { nombre }` para que el sidebar muestre el nombre del negocio sin otra llamada.
-- Rol "Dueño" = "Admin" en pantalla (`frontend/lib/roles.ts`, `ROLE_LABEL`). **Ajustes:** el Gerente ve solo Información del negocio y Equipo; `frontend/app/dashboard/ajustes/acceso.ts` centraliza quién ve qué y el mensaje por rol.
+- Rol "Dueño" = "Admin" en pantalla (`frontend/lib/roles.ts`, `ROLE_LABEL`). **Ajustes:** el Gerente ve solo Información del negocio, Equipo y Días sin entrega (mayoreo); `frontend/app/dashboard/ajustes/acceso.ts` centraliza quién ve qué y el mensaje por rol.
 - Catálogo: categorías/productos son cards individuales por fila; "Marcar (no) disponible" es un `ToggleSwitch` que llama al mismo `updateProduct(token, id, {disponible: !disponible})`.
 - Badges de pedido B2C: pills sólidos con texto blanco; `LISTO_ENTREGA` usa `admin-green-dark` (el verde brillante no pasa contraste con texto blanco a ese tamaño); `DESPACHADO` usa `admin-ink`.
 

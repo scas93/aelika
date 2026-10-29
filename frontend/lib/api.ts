@@ -1222,6 +1222,43 @@ export function deletePuntoEnvio(token: string, id: string) {
   });
 }
 
+// ---- Días sin entrega (festivos) de mayoreo. Fechas "YYYY-MM-DD" (calendario del negocio, sin hora). ----
+
+export interface DiaSinEntrega {
+  id: string;
+  fecha: string;
+  nota: string | null;
+}
+
+export interface EntregaAfectadaPorDiaSinEntrega {
+  folio: string;
+  cliente: string;
+  estadoPedido: string;
+  pagado: boolean;
+}
+
+export interface MarcarDiaSinEntregaResultado {
+  dia: DiaSinEntrega;
+  /** Entregas vigentes ya programadas ese día: no se tocan, el equipo las resuelve con cada cliente. */
+  afectadas: { total: number; entregas: EntregaAfectadaPorDiaSinEntrega[] };
+}
+
+export function fetchDiasSinEntrega(token: string) {
+  return request<DiaSinEntrega[]>("/dias-sin-entrega", { headers: authHeaders(token) });
+}
+
+export function marcarDiaSinEntrega(token: string, payload: { fecha: string; nota?: string }) {
+  return request<MarcarDiaSinEntregaResultado>("/dias-sin-entrega", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function quitarDiaSinEntrega(token: string, id: string) {
+  return request<void>(`/dias-sin-entrega/${id}`, { method: "DELETE", headers: authHeaders(token) });
+}
+
 export function fetchNotificacionCanales(token: string) {
   return request<NotificacionCanalConfig[]>("/notificaciones/canales", { headers: authHeaders(token) });
 }
