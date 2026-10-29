@@ -21,8 +21,9 @@ export interface UpdateNotificacionEventoConfigInput {
 
 /**
  * CRUD for NotificacionEventoConfig — which channel(s) get notified for a
- * given (evento, audiencia) pair. Nothing reads or triggers these rows yet
- * (Fase A is data-model only, see CLAUDE.md) — this is purely config.
+ * given (evento, audiencia) pair. This service is only config CRUD; the rows
+ * are read elsewhere: NotificacionesProcessor for the order lifecycle events
+ * and AvisoPedidoModificadoService for PEDIDO_MODIFICADO_CLIENTE (mayoreo).
  */
 @Injectable()
 export class NotificacionEventoConfigService {
