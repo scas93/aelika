@@ -16,7 +16,8 @@ Este archivo es el índice: solo lo que se necesita en casi cualquier tarea. El 
 | Notificaciones: canales, motor de reglas, avisos internos, bot-config | Operativo | docs/notificaciones.md |
 | Lealtad (tarjeta de sellos + pase de wallet) | Operativo | docs/lealtad.md |
 | Aelika Scan Lite | Existe; producto sin definir | docs/architecture.md |
-| **No construido:** configurador de bot y OAuth de canales (Meta), resolución de tenant por canal (`CHANNEL_CONNECTION`), cobro de la suscripción a los negocios, impresión automática en red, Dashboard "mejorado", días no laborables B2B | — | docs/historial.md, docs/aelika-roadmap-maestro.md |
+| **No construido:** configurador de bot y OAuth de canales (Meta), resolución de tenant por canal (`CHANNEL_CONNECTION`), cobro de la suscripción a los negocios, impresión automática en red, Dashboard "mejorado" | — | docs/historial.md, docs/aelika-roadmap-maestro.md |
+| **En construcción / diferido (B2B):** días sin entrega (festivos), en un cambio aparte; fecha de completado del pedido, diferida | En construcción | docs/diseno-operacion.md |
 | **Pendiente de migración:** Etapa 1b-b (borrar columnas B2C deprecadas de `Order`) y retirar `PedidoB2b*` | Pendiente | docs/modelo-datos.md |
 
 ## Stack
@@ -29,7 +30,7 @@ Este archivo es el índice: solo lo que se necesita en casi cualquier tarea. El 
 
 ## Roles
 
-Enum `Role`: `OPERADOR`, `GERENTE`, `DUENO`. **"Admin" es solo la etiqueta visible de `DUENO`** (`frontend/lib/roles.ts`, `ROLE_LABEL`); el valor interno (enum, JWT, base de datos, `@Roles`) sigue siendo `DUENO`. Operador: ver/recibir pedidos y avanzar estatus; Gerente: lo del Operador + catálogo y gestión; Dueño/Admin: todo lo anterior + configuración del negocio. Ajustes: el Gerente ve solo Información del negocio y Equipo (`/tenant/negocio`, `/users`); `/tenant/me` es solo Admin. Un Gerente no puede crear/ascender a Admin ni editar a un Admin (403). `GET`/`PATCH /orders` están abiertos a los 3 roles a propósito. El detalle por endpoint está en el documento de cada área.
+Enum `Role`: `OPERADOR`, `GERENTE`, `DUENO`. **"Admin" es solo la etiqueta visible de `DUENO`** (`frontend/lib/roles.ts`, `ROLE_LABEL`); el valor interno (enum, JWT, base de datos, `@Roles`) sigue siendo `DUENO`. Operador: ver/recibir pedidos y avanzar estatus; Gerente: lo del Operador + catálogo y gestión; Dueño/Admin: todo lo anterior + configuración del negocio. Ajustes: el Gerente ve solo Información del negocio y Equipo (`/tenant/negocio`, `/users`); `/tenant/me` es solo Admin. Un Gerente no puede crear/ascender a Admin ni editar a un Admin (403). En B2B, **confirmar y cancelar pedidos es solo de Gerente/Admin**; el Operador captura, edita y cierra entregas. `GET`/`PATCH /orders` están abiertos a los 3 roles a propósito. El detalle por endpoint está en el documento de cada área.
 
 ## Multi-tenancy y convenciones núcleo
 
@@ -104,7 +105,7 @@ Lee el documento que corresponda al área que vas a tocar (no hace falta leerlos
 ## Precedencia cuando dos documentos difieren
 
 1. **El código y las migraciones** dicen qué existe hoy; si un documento afirma otra cosa, el documento está desactualizado: corrígelo.
-2. **Para el comportamiento funcional de B2B** (reglas de pedido, estados, roles, notificaciones) manda `docs/diseno-operacion.md` Parte I; si choca con el código o es ambiguo, repórtalo antes de implementar. Sus divergencias aprobadas están en la sección 9 de ese documento.
+2. **Para el comportamiento funcional de B2B** (reglas de pedido, estados, roles, notificaciones) manda `docs/diseno-operacion.md` Parte I; si choca con el código o es ambiguo, repórtalo antes de implementar. Sus divergencias abiertas están en la sección 9 de ese documento.
 3. Un documento de área manda sobre el roadmap y sobre `docs/historial.md`; este archivo manda solo en lo que cubre (índice y convenciones núcleo). `docs/historial.md` y `Aelika - Documento de Planeacion.md` son históricos y nunca prevalecen.
 4. Lo que no se pueda verificar desde el repo (producción, staging, plantillas de Meta, entorno de Railway/Vercel) no se afirma: se registra como "por confirmar".
 

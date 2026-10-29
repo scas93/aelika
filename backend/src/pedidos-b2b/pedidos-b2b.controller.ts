@@ -28,8 +28,8 @@ import { TenantB2bPanelGuard } from './tenant-b2b.guard';
 import { XLSX_CONTENT_TYPE } from '../common/xlsx';
 import { fechaMexicoYMD } from './pedidos-b2b-logica';
 
-// Crear: los 3 roles. Pagar y corregir entregas cerradas: solo Gerente/Dueño. Editar, confirmar, cancelar y cerrar entregas: los 3
-// roles (el Operador no puede editar ni cancelar un pedido Pagado). GET abierto a los 3 roles.
+// Crear, editar y cerrar entregas: los 3 roles (el Operador no puede editar un pedido Pagado). Confirmar (avanzar), cancelar, pagar y
+// corregir entregas cerradas: solo Gerente/Dueño. GET y marcar-revisado: los 3 roles.
 @UseGuards(TenantB2bPanelGuard)
 @Controller('pedidos-b2b')
 export class PedidosB2bController {

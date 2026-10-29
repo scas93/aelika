@@ -2,13 +2,15 @@
 
 Oct 7, 2026 · @santiago
 
+*Actualizado el 29 oct 2026: la Parte I refleja las decisiones de producto tomadas sobre las divergencias con el código (sección 9 de la Parte II).*
+
 ## Principios y alcance
 
 La operación se diseña para ser lo más simple posible: reglas claras para el cliente y libertad para el equipo. Hoy todo se pide por WhatsApp sin sistema; el objetivo es que un sistema controle la recepción y operación de los pedidos.
 
 - **Clientes:** cafeterías con entregas programadas. Hoy son \~30; la operación debe soportar 4X (\~120 clientes).
 - **Regla de oro:** las restricciones de tiempo aplican solo al cliente. El equipo puede crear y modificar libremente.
-- **Fuera de alcance en esta versión:** cobranza en sistema, facturación, cupo de capacidad por día, pedidos recurrentes automáticos, disponibilidad de productos por día, registro de cambios de pedidos, mínimo de piezas.
+- **Fuera de alcance en esta versión:** cobranza en sistema, facturación, cupo de capacidad por día, pedidos recurrentes automáticos, disponibilidad de productos por día, registro de cambios de pedidos.
 
 ## Datos
 
@@ -21,7 +23,6 @@ Estos son los datos que guarda el sistema. El **negocio** es el tenant (Banetto)
 | Nombre comercial | Sí |  |
 | Código de negocio | Sí | Slug del nombre comercial (ej. banetto), único. Es el prefijo de los códigos de sus clientes |
 | Dirección | Sí | Instalaciones donde está el mostrador |
-| Puntos de envío | No | Cada uno con nombre, dirección y monto mínimo para domicilio. Sin puntos de envío, no se puede pedir a domicilio |
 | Parámetros de operación | Sí | Ver Parámetros configurables por negocio |
 
 ### Producto
@@ -40,8 +41,8 @@ Estos son los datos que guarda el sistema. El **negocio** es el tenant (Banetto)
 | Campo | Obligatorio | Notas |
 | --- | --- | --- |
 | Nombre comercial | Sí |  |
-| Dirección | Sí | Donde se entrega si el pedido es a domicilio |
-| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. Identificador interno: se usa en el panel y en el Excel; el cliente no lo escribe al entrar al portal. No se puede editar después de crearlo, por ahora |
+| Dirección | Sí | Dirección fija de entrega: cada cuenta de cliente es una sucursal |
+| Código de cliente | Sí | Código del negocio + slug del cliente (ej. banetto-matriz, banetto-americas, banetto-providencia). Único. **Dato heredado, ya no se usa en la operación.** Se genera solo, a partir del nombre comercial, y se conserva por compatibilidad (columna del Excel, seeds y scripts). El panel no lo muestra ni lo captura, no se busca por él y el cliente no lo escribe al entrar al portal. No se puede editar |
 | Descuento | No | % sobre el total del pedido. Aplica solo dentro de su negocio |
 | Modalidad de pago | No | Si no se define, usa la del negocio |
 | Teléfonos autorizados y número principal | Sí, al menos 1 | Un mismo teléfono puede estar registrado en varios clientes, del mismo negocio o de negocios distintos |
@@ -58,15 +59,14 @@ Un cliente está **activo** mientras no esté dado de baja. La baja es lógica: 
 | Folio | P- + consecutivo de 6 dígitos por negocio (ej. P-000001). Aplica solo a pedidos B2B nuevos; los pedidos B2C conservan su consecutivo simple |
 | Cliente | Uno por pedido |
 | Semana | Fecha de inicio (lunes) y fin (domingo) |
-| Método de entrega | Mostrador o a domicilio. Uno por pedido |
-| Punto de envío | Uno por pedido, solo si el negocio tiene puntos de envío |
 | Estado operativo | Por confirmar, Confirmado, En proceso, Completado, Cancelado |
 | Estado de pago | Pendiente o Pagado, con la fecha en que se marcó |
 | Nota del cliente | Opcional, texto libre. Visible en el panel lateral y en el Excel |
-| Modificado por el cliente | Marca que se enciende cuando el cliente modifica el pedido en el portal y se apaga cuando el equipo lo vuelve a confirmar |
+| Modificado por el cliente | Marca que se enciende cuando el cliente modifica el pedido en el portal y se apaga cuando el equipo lo vuelve a confirmar o lo marca como revisado |
+| Origen | Se guarda quién creó el pedido: el cliente en el portal o el equipo en el panel. No se muestra. Uso futuro: medir la adopción del portal frente al panel |
 | Descuento aplicado | % que tenía el cliente al crear el pedido. Si después cambia, no afecta este pedido |
 | Subtotal, descuento y total | En pesos, IVA incluido |
-| Fechas | Creación, confirmación y completado |
+| Fechas | Creación y confirmación (la confirmación solo se guarda en pedidos creados desde el corte `CONFIRMADO_AT_DESDE`). **Fecha de completado: diferida**, todavía no se guarda |
 
 ### Entrega
 
@@ -147,21 +147,9 @@ El catálogo tiene un solo precio para todos los clientes.
 - El descuento es un % fijo que se configura en el detalle del cliente (módulo Clientes), no un código que el cliente escribe. Los códigos de descuento que hoy existen en el storefront no se usan para Banetto. Se aplica solo al total del pedido, incluyendo todos los productos.
 - Cada sucursal de una cafetería es un cliente distinto, con su propio descuento. El descuento se aplica al crear el pedido; si después cambia, no afecta pedidos ya creados.
 
-## Métodos de entrega y puntos de envío
+## Entrega
 
-Cada pedido tiene un método de entrega y, si el negocio tiene puntos de envío, un punto de envío; lo único que cambia de una entrega a otra es su fecha y su distribución (productos y cantidades). Banetto arranca con solo mostrador.
-
-| Nivel | Qué contiene |
-| --- | --- |
-| Negocio | Métodos de entrega habilitados, dirección del mostrador y sus puntos de envío (opcionales) |
-| Punto de envío | Sucursal del negocio desde donde se hace el envío a domicilio; monto mínimo para envío a domicilio |
-| Cliente | Datos, teléfonos autorizados, descuento y dirección de entrega |
-| Pedido | Cliente, semana, método de entrega, punto de envío, estado y total |
-| Entrega | Fecha y hora, distribución (productos y cantidades) y estado |
-
-- **Mostrador:** el cliente recoge en las instalaciones del negocio. Los puntos de envío no aplican al mostrador.
-- **A domicilio:** requiere que el negocio tenga al menos un punto de envío; sin puntos, la opción no aparece. El punto de envío entrega en la dirección del cliente. Cada punto puede tener un monto mínimo, que se valida sobre el total del pedido.
-- Si el negocio tiene más de un método o más de un punto de envío, el cliente elige al crear el pedido. Si solo hay una opción, el sistema la asigna sin preguntar.
+Cada cuenta de cliente B2B es una **sucursal con dirección fija**, así que el pedido B2B no lleva método de entrega ni punto de envío: lo único que cambia de una entrega a otra es su fecha y su distribución (productos y cantidades). La entrega a domicilio con puntos de envío y pedido mínimo es una función del menudeo (B2C), no de este diseño.
 
 ## Reglas de pedido
 
@@ -180,8 +168,9 @@ Un pedido es una semana (lunes a domingo) con hasta 7 entregas. Todas las entreg
 - Fecha mínima: ahora + 36h. Fecha máxima: domingo de la semana siguiente.
 - Si el cliente elige días de las dos semanas, el sistema genera automáticamente dos pedidos, uno por semana, en un solo checkout.
 - Un cliente no puede tener dos pedidos en la misma semana. Un pedido cancelado no cuenta: el cliente puede crear otro para esa misma semana. Si ya tiene uno, ve el mensaje "Ya tienes pedido para esta semana. Para agregar o cambiar entregas, usa Modificar pedido activo". El equipo tampoco crea un segundo pedido: modifica el existente. Como máximo un cliente tiene dos pedidos activos a la vez (semana en curso y siguiente).
-- **Modificación por el cliente:** las entregas a menos de 18h y las ya cerradas quedan bloqueadas en el portal. Si el pedido estaba Confirmado y el cliente lo modifica, regresa a Por confirmar y se marca "Modificado por el cliente" en Pedidos activos y en el panel lateral hasta que el equipo lo vuelva a confirmar. El pago no cambia por la modificación.
-- Sin mínimo de piezas por pedido ni por entrega.
+- **Modificación por el cliente:** las entregas a menos de 18h y las ya cerradas quedan bloqueadas en el portal. Si el pedido estaba Confirmado y el cliente lo modifica, regresa a Por confirmar y se marca "Modificado por el cliente" en Pedidos activos y en el panel lateral hasta que el equipo lo vuelva a confirmar o lo marque como revisado. El pago no cambia por la modificación.
+- **Marcar como revisado:** acción vigente, de los 3 roles, que solo apaga la marca «Modificado por el cliente» (no cambia el estado ni el pago). Existe porque un pedido En proceso o Completado nunca se vuelve a confirmar y su marca no tendría otra forma de apagarse.
+- **Mínimo de piezas:** configurable por negocio, por pedido (semana). **0 significa sin mínimo**, y es el valor con el que nace un negocio nuevo (Banetto: sin mínimo). Se edita en Ajustes → Pedidos de mayoreo.
 
 **Incentivo para pedir antes del sábado 8pm:** sábado 8pm es exactamente 36h antes del lunes 8am. Quien pide después pierde la entrega del lunes; después del domingo 8pm, también la del martes. Los recordatorios lo dicen explícitamente.
 
@@ -191,7 +180,7 @@ Un pedido es una semana (lunes a domingo) con hasta 7 entregas. Todas las entreg
 | Sábado 7pm | Lunes a domingo de la siguiente semana |
 | Domingo 10am | Martes a domingo de la siguiente semana |
 
-**Días no laborables:** el admin marca en un calendario las fechas sin entrega. El negocio decide cuáles son; si no producir un día afecta la entrega del día siguiente, también marca ese día.
+**Días sin entrega (festivos; antes «días no laborables») — EN CONSTRUCCIÓN: se implementan en un cambio aparte y hoy no existen en el sistema.** El admin marca en un calendario las fechas sin entrega. El negocio decide cuáles son; si no producir un día afecta la entrega del día siguiente, también marca ese día.
 
 - Solo bloquean la selección del cliente: esas fechas no aparecen en su calendario. El equipo puede programar entregas en cualquier fecha, sin límite de horizonte.
 - Al marcar una fecha, el sistema muestra las entregas ya programadas para ese día. El equipo decide con cada cliente si la mueve a otro día o la quita editando el pedido. El sistema no mueve nada en automático.
@@ -213,9 +202,9 @@ Un pedido tiene dos estados independientes: el operativo, que solo requiere una 
 &#91;embedded content: estados del pedido y de cada entrega\]
 
 1. El cliente o el equipo crea el pedido; queda **Por confirmar**.
-2. El equipo revisa las entregas y los productos de cada entrega, y lo marca **Confirmado**. Se notifica al cliente. Un pedido se puede cancelar en Por confirmar, Confirmado o En proceso: las entregas ya cerradas se quedan como están y se cobran; las pendientes pasan a Canceladas y no se cobran. No existe cancelar una entrega suelta: quitar un día se hace editando el pedido (el equipo en el panel; el cliente en el portal, hasta 18h antes). El cliente no cancela el pedido completo. Si el cliente modifica un pedido Confirmado, vuelve a Por confirmar hasta que el equipo lo confirme de nuevo.
+2. El equipo (Gerente o Admin; el Operador no confirma ni cancela, y esto se reevalúa según lo que pida la operación) revisa las entregas y los productos de cada entrega, y lo marca **Confirmado**. Se notifica al cliente. Un pedido se puede cancelar en Por confirmar, Confirmado o En proceso: las entregas ya cerradas se quedan como están y se cobran; las pendientes pasan a Canceladas y no se cobran. No existe cancelar una entrega suelta: quitar un día se hace editando el pedido (el equipo en el panel; el cliente en el portal, hasta 18h antes). El cliente no cancela el pedido completo. Si el cliente modifica un pedido Confirmado, vuelve a Por confirmar hasta que el equipo lo confirme de nuevo.
 3. Cada entrega nace **Pendiente** y se cierra como:
-   - **Entregada:** el cliente la recoge en mostrador o la recibe a domicilio. Se cobra y se envía la relación de lo entregado.
+   - **Entregada:** el cliente la recibió o la recogió. Se cobra.
    - **No recogida:** el cliente no pasó por ella. Solo queda registrada; se cobra igual.
    - **Cancelada:** solo ocurre al cancelar el pedido, y aplica a las entregas que seguían pendientes. No se cobra.
 4. El pedido pasa solo a **En proceso** cuando tiene al menos una entrega cerrada y quedan pendientes, y a **Completado** cuando todas están cerradas. Con una sola entrega, pasa directo de Confirmado a Completado. Se pueden agregar entregas a un pedido En proceso o Completado; como el estado se calcula de las entregas, el pedido vuelve solo a En proceso y a Pedidos activos. Una entrega de un día pasado que sigue Pendiente se muestra como atrasada; no se cierra en automático, el equipo decide si fue Entregada o No recogida.
@@ -242,20 +231,19 @@ El módulo de notificaciones ya existe y es requisito del día uno. Lo que esta 
 | Evento | Tipo | Cuándo se dispara | Filtros que debe permitir | Configuración Banetto |
 | --- | --- | --- | --- | --- |
 | Recordatorio programado | Programado | Día y hora configurables | Todos los clientes activos; clientes sin pedido para la siguiente semana | Viernes 12pm a todos; sábado 12pm a clientes sin pedido |
-| Pedido confirmado | Por evento | Cuando el pedido cambia a Confirmado, incluido cuando el equipo lo reconfirma tras una modificación del cliente | Cliente del pedido | Activo. Resumen: entregas por día, productos y total con descuento |
-| Entrega entregada | Por evento | Cuando una entrega cambia a Entregada | Cliente del pedido | Activo. Relación de lo entregado en esa entrega |
+| Pedido confirmado | Por evento | Cuando el pedido cambia a Confirmado. Se dispara de nuevo cada vez que el equipo lo reconfirma tras una modificación del cliente, sin deduplicación | Cliente del pedido | Activo. Resumen: entregas por día, productos y total con descuento |
 
-- Si el admin corrige una entrega ya entregada, no se reenvía la relación. La versión corregida se ve en el portal.
+- No existe un evento «Entrega entregada» (decisión de producto): al cerrar o corregir una entrega no se envía nada; la versión corregida se ve en el portal.
 - Todos los mensajes salen fuera de la ventana de 24h de WhatsApp, así que cada uno necesita una plantilla aprobada por Meta. Los recordatorios son categoría marketing; las operativas son utilidad; el código de acceso es autenticación.
 
 ## Roles y permisos
 
-Se usan los tres roles que ya existen en el panel. Dueño y Gerente funcionan como admin: gestionan clientes, catálogo, correcciones y pagos. Operador es el rol operativo: pedidos y entregas del día.
+Se usan los tres roles que ya existen en el panel (el Dueño se muestra como «Admin»). Dueño y Gerente funcionan como admin: gestionan clientes, catálogo, correcciones y pagos. Operador es el rol operativo: pedidos y entregas del día.
 
 | Rol en el panel | Función | Quién | Puede |
 | --- | --- | --- | --- |
-| Dueño / Gerente | Admin | Matías, Anahí | Todo lo del operador. Gestionar clientes: alta y baja, teléfonos autorizados, número principal, descuentos. Catálogo. Corregir pedidos ya entregados, incluso si ya están marcados como Pagados. Marcar y desmarcar Pagado. Configuración y usuarios del equipo (solo Dueño en Ajustes, como hoy) |
-| Operador (usuario individual) | Operativo | Mariana, Fernanda | Crear, modificar y confirmar pedidos sin límite de tiempo antes de la entrega. Gestionar entregas del día. Exportar Excel. No tiene acceso al Catálogo (solo ve los productos al capturar un pedido). Un pedido marcado como Pagado queda bloqueado para él |
+| Dueño / Gerente | Admin | Matías, Anahí | Todo lo del operador. Gestionar clientes: alta y baja, teléfonos autorizados, número principal, descuentos. Catálogo. Corregir pedidos ya entregados, incluso si ya están marcados como Pagados. Marcar y desmarcar Pagado. Confirmar y cancelar pedidos. Configuración y usuarios del equipo (en Ajustes, el Gerente ve Información del negocio y Equipo; el resto de Ajustes es solo del Dueño/Admin) |
+| Operador (usuario individual) | Operativo | Mariana, Fernanda | Crear y modificar pedidos sin límite de tiempo antes de la entrega (no confirma ni cancela: se reevalúa según lo que pida la operación). Cerrar entregas y gestionar las entregas del día. Exportar Excel. No tiene acceso al Catálogo (solo ve los productos al capturar un pedido). Un pedido marcado como Pagado queda bloqueado para él |
 | Operador (usuario compartido) | Operativo | Resto del equipo | Lo mismo que el operador individual |
 
 En esta versión no hay registro de cambios de los pedidos ni se guarda qué usuario capturó, confirmó, cerró una entrega o marcó como pagado.
@@ -267,17 +255,17 @@ El equipo opera desde los módulos del sidebar B2B actual, ajustados. Los detall
 | Módulo | Para qué sirve | Quién |
 | --- | --- | --- |
 | 1. Inicio (dashboard operativo) | Resumen del día: entregas de hoy por estado, entregas atrasadas, pedidos por confirmar, clientes sin pedido para la siguiente semana, consolidado de producción de mañana. Parte del Inicio B2B actual. Requisito del día uno | Todos |
-| 2. Pedidos activos | Ver, crear, modificar, confirmar, cancelar y gestionar pedidos. Marcar como pagado (solo admin). Vista semanal (Semana en curso / Próxima semana) | Todos |
+| 2. Pedidos activos | Ver, crear, modificar y gestionar pedidos. Confirmar, cancelar y marcar como pagado (solo admin). Vista semanal (Semana en curso / Próxima semana) | Todos |
 | 3. Entregas del día | Listado de entregas de un día, navegando entre días. Marcar cada entrega como Entregada o No recogida. Imprimir comanda. Exportar Excel | Todos |
 | 4. Históricos | Todos los pedidos completados y cancelados, con filtros por estado, estado de pago, semana, total y cliente. Marcar como pagado y corregir entregas ya entregadas (solo admin). Exportar Excel | Todos consultan; solo admin corrige y marca pagado |
 | 5. Catálogo | Ver, crear, modificar, activar y desactivar productos y sus categorías. Bloqueado del todo para el Operador, que solo ve los productos en la captura de pedidos | Solo admin |
 | 6. Clientes | Ver, crear, modificar y dar de baja clientes: código de cliente, teléfonos autorizados, número principal, descuento, dirección | Solo admin |
 | 7. Notificaciones | Reglas de los eventos de la sección Notificaciones: activación, horario, filtro y plantilla | Solo admin |
-| 8. Ajustes | Parámetros del negocio, número de atención del negocio, días sin entrega, métodos de entrega y puntos de envío, usuarios del equipo (alta, baja y rol) | Solo admin |
+| 8. Ajustes | Parámetros del negocio, número de atención del negocio, días sin entrega (en construcción), usuarios del equipo (alta, baja y rol) | Admin; el Gerente ve Información del negocio y Equipo |
 
 **Detalle por módulo:**
 
-- **Pedidos activos:** como la vista actual. Muestra los pedidos que aún no están completados ni cancelados. Todos los cambios del equipo a un pedido se hacen desde aquí, en el panel lateral. Al completarse o cancelarse, el pedido pasa a Históricos. Si a un pedido Completado se le agregan entregas, vuelve solo a En proceso y a Pedidos activos. Un pedido que el cliente modificó desde el portal regresa a Por confirmar y lleva la marca "Modificado por el cliente" en la lista y en el panel lateral hasta que el equipo lo confirme.
+- **Pedidos activos:** como la vista actual. Muestra los pedidos que aún no están completados ni cancelados. Todos los cambios del equipo a un pedido se hacen desde aquí, en el panel lateral. Al completarse o cancelarse, el pedido pasa a Históricos. Si a un pedido Completado se le agregan entregas, vuelve solo a En proceso y a Pedidos activos. Un pedido que el cliente modificó desde el portal regresa a Por confirmar y lleva la marca "Modificado por el cliente" en la lista y en el panel lateral hasta que el equipo lo confirme o lo marque como revisado.
 - **Entregas del día:** cada entrega se marca una por una (Entregada o No recogida); no hay cambio de estado en bloque. Una entrega de un día pasado que sigue Pendiente se muestra como atrasada; no se cierra en automático.
 - **Los pedidos no se borran:** solo se cancelan.
 
@@ -285,14 +273,14 @@ El equipo opera desde los módulos del sidebar B2B actual, ajustados. Los detall
 
 | Hoja | Columnas |
 | --- | --- |
-| Entregas | Fecha de entrega, folio, cliente, método de entrega, punto de envío, estado de la entrega, categoría, producto, ID ERP, cantidad, precio unitario, subtotal, nota del cliente |
+| Entregas | Fecha de entrega, folio, cliente, estado de la entrega, categoría, producto, ID ERP, cantidad, precio unitario, subtotal, nota del cliente |
 | Consolidado | Fecha, categoría, producto, ID ERP, cantidad total, número de clientes |
 
 **Excel de Históricos** (una fila por pedido, con los filtros aplicados):
 
 | Columnas |
 | --- |
-| Folio, cliente, método de entrega, punto de envío, semana (inicio y fin), fecha de creación, estado del pedido, estado de pago, fecha de pago, entregas totales, entregadas, no recogidas, canceladas, subtotal, descuento %, descuento $, total (IVA incluido) |
+| Folio, cliente, semana (inicio y fin), fecha de creación, estado del pedido, estado de pago, fecha de pago, entregas totales, entregadas, no recogidas, canceladas, subtotal, descuento %, descuento $, total (IVA incluido) |
 
 ## Parámetros configurables por negocio
 
@@ -314,15 +302,12 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Anticipación para que el cliente modifique | 18h | Otra, o no permitir |
 | Modificación por el cliente | Directa en el portal | Solo solicitándola por teléfono |
 | Horizonte máximo de selección | Fin de la semana siguiente | 1 día, 1 mes |
-| Mínimo por pedido o por entrega | Ninguno | Piezas o monto mínimo |
+| Mínimo de piezas por pedido | 0 (sin mínimo; valor de un negocio nuevo) | Un mínimo de piezas |
 
 ### Catálogo, clientes y operación
 
 | Parámetro | Valor Banetto | Otro negocio podría… |
 | --- | --- | --- |
-| Métodos de entrega | Mostrador | Mostrador y a domicilio |
-| Puntos de envío | Opcionales; sin puntos no hay domicilio | Varios, el cliente elige por pedido |
-| Monto mínimo para domicilio (por punto de envío) | No aplica | Un monto por punto, sobre el total del pedido |
 | Descuento por cliente | % fijo sobre el total, aplicado al crear el pedido | Sin descuentos |
 | Módulo de pagos | Apagado (el admin marca el pago a mano) | Cobrar en línea |
 | Modalidad de pago (con excepción por cliente) | Crédito | Anticipado |
@@ -331,7 +316,7 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Duración de sesión | 60–90 días | Más corta |
 | Confirmación manual del pedido | Sí | Confirmación automática |
 | Estados de entrega en uso | Pendiente, Entregada, No recogida, Cancelada | Con "Lista"; sin "No recogida" |
-| Notificaciones | Los 3 eventos de la sección Notificaciones (4 envíos) | Cada una con su activación, horario, filtro y plantilla |
+| Notificaciones | Los eventos de la sección Notificaciones (3 envíos: recordatorio del viernes, recordatorio del sábado y pedido confirmado) | Cada una con su activación, horario, filtro y plantilla |
 | Menú del bot | 3 opciones | Opciones propias |
 | Número de atención del negocio | Configurado en Ajustes; el portal lo usa en el botón de contacto de las entregas bloqueadas | — |
 
@@ -351,7 +336,7 @@ Estas no se configuran, porque son las que hacen confiable al sistema:
 - Anticipación distinta por producto.
 - Listas de precio por cliente.
 - Estados personalizados (cada negocio solo apaga los que no usa).
-- Registro de cambios de los pedidos, de qué usuario hizo cada acción y del origen del pedido.
+- Registro de cambios de los pedidos y de qué usuario hizo cada acción (el origen del pedido sí se guarda; ver Pedido).
 - Zona horaria y moneda configurables por negocio (en esta versión son fijas: Ciudad de México y pesos).
 - Recuperación de contraseña por correo para el equipo del negocio (hoy no existe ni hay proveedor de correo).
 - Modo de cliente configurable por negocio: storefront B2B sin cuenta (formulario por pedido) o mixto (el cliente elige entrar con su cuenta o pedir sin cuenta).
@@ -397,9 +382,9 @@ Se hacen al inicio del plan de trabajo, antes de construir.
 
 # Parte II — Implementación vigente del módulo B2B
 
-*Agregada al consolidar el contexto del repo. La Parte I (arriba) es el diseño funcional original, sin cambios de texto: define el QUÉ. Esta parte recoge cómo está implementado hoy el módulo B2B (antes vivía en `CLAUDE.md`) y las divergencias conocidas respecto al diseño.*
+*Agregada al consolidar el contexto del repo. La Parte I (arriba) es el diseño funcional: define el QUÉ y se actualizó el 29 oct 2026 con las decisiones de producto sobre las divergencias que había con el código. Esta parte recoge cómo está implementado hoy el módulo B2B (antes vivía en `CLAUDE.md`) y las divergencias conocidas respecto al diseño.*
 
-**Precedencia:** ante una duda de comportamiento B2B manda la Parte I sobre el código y sobre suposiciones. Si la Parte I choca con el código o es ambigua, repórtalo antes de implementar. La sección "Divergencias" al final lista los choques ya conocidos y aprobados; para esos casos manda lo que dice esa lista. No modifiques la Parte I salvo que el cambio lo pida explícitamente.
+**Precedencia:** ante una duda de comportamiento B2B manda la Parte I sobre el código y sobre suposiciones. Si la Parte I choca con el código o es ambigua, repórtalo antes de implementar. La sección 9 lista solo las divergencias que siguen abiertas; para esos casos manda lo que dice esa lista. No modifiques la Parte I salvo que el cambio lo pida explícitamente (decisión de producto).
 
 **Estado de despliegue (verificado con git):** todo lo descrito aquí está en `main` (portal 4b–4g y estados por entrega: merge `fdc0b69`, 2026-10-14; clientes B2B, Entregas del día, Adopción y observabilidad: `e192ca6` y `dc7e0f8`, 2026-10-19; modalidades de cobro: `44fe3dd`, 2026-10-26; avisos internos: `533a119`, 2026-10-28). Que las migraciones y los **scripts de datos** (Etapa 2, estados B2B, modalidades) ya se hayan corrido en producción, y los valores de entorno como `CONFIRMADO_AT_DESDE`, no se pueden verificar desde el repo: ver "Por confirmar" al final.
 
@@ -441,8 +426,8 @@ Un cliente B2B es un `Cliente` con `canal = B2B`, dado de alta por un admin (`cr
 - **Crear pedido desde el panel:** `POST /pedidos-b2b` (los 3 roles) recibe `clienteId` + `semanaInicio` + `items` + `notaCliente?` y ya NO crea ni actualiza clientes (`sincronizarDesdePedido` solo queda en B2C). Del cliente toma, como snapshot: nombre comercial (`negocioNombre`), contacto (nombre + teléfono principal), `descuentoPorcentajeAplicado` (el % vigente; sin código, `codigoDescuentoId/Texto` null) y la modalidad de cobro (la del cliente o, si no tiene, la del negocio); editar el pedido usa siempre el % guardado. Rechaza con 404 al cliente de otro negocio/no B2B, 409 al de baja y 409 (con `folio` y `pedidoId` en el cuerpo) si ya tiene un pedido no cancelado esa semana — seguro ante capturas simultáneas (`FOR UPDATE` del cliente, luego folio). Lo comparten el panel y el portal (`pedidos-b2b/pedidos-b2b-crear.ts`, `crearPedidoB2bDeCliente`).
 - `POST /public/pedidos-b2b/tenants/:slug/pedidos` está CERRADO: siempre 409 «Los pedidos en línea de mayoreo se habilitan con tu cuenta de cliente. Contáctanos.».
 - **Panel** (`/dashboard/clientes`, solo Gerente/Dueño; el Operador no lo ve): en un negocio RETAIL_B2B es el módulo de clientes de mayoreo (`clientes-b2b.tsx`, `cliente-b2b-form.tsx` alta, `cliente-b2b-panel.tsx` detalle/teléfonos/baja); en menudeo, el directorio de siempre (`clientes-menudeo.tsx`). «Nuevo pedido» en Pedidos activos (`nuevo-pedido-panel.tsx`, los 3 roles) usa `GET /clientes-b2b/selector`, `GET /pedidos-b2b/existente?clienteId&semanaInicio` (aviso previo de «ya tiene pedido esa semana», con enlace) y la cuadrícula compartida `cuadricula-dias.tsx`. `GET /pedidos-b2b/:id` suma `notaCliente` y `clienteCodigo` (excepción 9 de los dorados).
-- **Código del cliente: interno, ya no se ve ni se captura.** Se sigue generando (único por negocio) y se usa en el Excel y en seeds/scripts, pero el panel no lo muestra y ya no se busca por él.
-- **Mínimo de piezas:** el negocio acepta 0 (`PATCH /tenant/me`, `@Min(0)`) y se edita en Ajustes → «Pedidos de mayoreo» (solo Admin, `minimo-piezas-b2b-section.tsx`); con mínimo 0 no se muestra barra/leyenda de mínimo. El pedido guarda el mínimo vigente al crearlo (`minimoPiezasAplicado`).
+- **Código del cliente: dato heredado.** Se sigue generando (único por negocio) y se usa en el Excel y en seeds/scripts, pero ya no se usa en la operación: el panel no lo muestra ni lo captura y no se busca por él.
+- **Mínimo de piezas:** el negocio acepta 0 (`PATCH /tenant/me`, `@Min(0)`) y se edita en Ajustes → «Pedidos de mayoreo» (solo Admin, `minimo-piezas-b2b-section.tsx`); con mínimo 0 no se muestra barra/leyenda de mínimo. **Un negocio nuevo nace con mínimo 0** (`@default(0)` en `Tenant.pedidoB2bMinimoPiezas`, migración `20261029120000_minimo_piezas_b2b_default_cero`, que solo cambia el DEFAULT: los negocios existentes conservaron su valor). El pedido guarda el mínimo vigente al crearlo (`minimoPiezasAplicado`).
 - **Historial de pedidos y entregas del cliente** (solo lectura): en el `SidePanel` del cliente (`cliente-b2b-panel.tsx`), la sección «Pedidos» (`clientes/historial-pedidos-cliente.tsx`) lista TODOS los pedidos B2B del cliente —cancelados y completados incluidos, cualquier estado de pago, también si está de baja— y, al expandir uno, sus entregas. Sin botones de cerrar/corregir/editar. `GET /clientes-b2b/:id/pedidos?page&limit` (default 20, máx. 100; lista ligera: `id`, `folio`, `semanaInicio`, `estado` con `estadoB2bVisible`, `estadoPago`, `cancelado`, `canceladoAt`, `totalPiezas`, `total`, `createdAt`; orden `semanaInicio desc, createdAt desc, id desc`; «Cargar más») y `GET /clientes-b2b/:id/pedidos/:pedidoId/entregas` (solo las del pedido expandido; 404 si el pedido no es de ese cliente; `fecha`, `dia`, `estado`, `cerradaAt`, `atrasada` y `productos[{nombreProducto, cantidad, precioUnitario}]`, sin nota/hora/destino). Consulta `Order` (tipo B2B, por `clienteId`), nunca `Cliente.pedidosB2b`. El total de un pedido cancelado se muestra tal cual (recalculado solo con lo entregado antes de cancelar). La lista NO se cuadra con `totalPedidos`/`pedidosActivos`/`ultimoPedidoAt` (incluye cancelados). Pruebas: `clientes-b2b-historial.char-spec.ts`.
 - Datos B2B de prueba: se limpian con `src/scripts/limpiar-b2b-prueba.ts` (ver [seeds-y-datos-demo.md](seeds-y-datos-demo.md)).
 
@@ -463,7 +448,7 @@ Convenciones visuales compartidas: [panel-admin-estilo.md](panel-admin-estilo.md
 Entregas del día (`GET /pedidos-b2b/dia/:fecha/export-xlsx`: hojas «Entregas» —una fila por producto de cada entrega del día, sin canceladas— y «Consolidado» —por categoría+producto, clientes = negocios distintos—), Históricos y Pedidos activos (`GET /pedidos-b2b/export-xlsx`, mismos filtros que el listado; una fila por pedido, subtotal/descuento/total tal como están guardados). Abiertas a los 3 roles. Todo en español, cantidades y montos numéricos (moneda `$#,##0.00`), fechas como fechas (hora de pared de CDMX), encabezado en negritas, fijo y con autofiltro (`common/xlsx.ts`, `pedidos-b2b/pedidos-b2b-excel.ts`).
 
 - Históricos y Pedidos activos llevan dos hojas, «Pedidos» y «Entregas» (siempre presente, vacía y con encabezados si no hay pedidos): una fila por entrega NO cancelada de los pedidos de la hoja «Pedidos» (las cerradas de un pedido cancelado sí salen), con Folio, Código del cliente, Negocio, Fecha de entrega, Día, Estado de la entrega («Atrasada» = Pendiente con fecha < hoy CDMX), Piezas, Importe antes de descuento, Cerrada el y Nota de la entrega; orden fecha, negocio, folio. Pedidos activos manda al export sus filtros de estado (`estados=[ese estado]`; sin estado, los 3 activos), pago y negocio; «De semanas anteriores» no entra.
-- Hoy sí salen el código del cliente, la nota del cliente y el ID del ERP del producto (hojas Entregas y Consolidado). **Columnas del diseño que aún no tienen dato y NO se exportan:** método de entrega y punto de envío.
+- Hoy sí salen el código del cliente, la nota del cliente y el ID del ERP del producto (hojas Entregas y Consolidado). Método de entrega y punto de envío no existen en pedidos B2B (decisión de producto: cada cliente es una sucursal con dirección fija) y se quitaron de la especificación del Excel.
 - **Los CSV de B2B** (`GET /pedidos-b2b/export` y `/dia/:fecha/export`) quedan SIN USO (el panel ya no los llama); se conservan solo porque los dorados de la Etapa 2 los cubren. Los CSV de B2C no cambian.
 
 ## 7. Portal del cliente B2B (`/mayoreo/[slug]`)
@@ -533,7 +518,7 @@ Solo lectura, siempre del cliente de la sesión. `GET /portal/pedidos?slug=&curs
 `PATCH /portal/pedidos/:folio` (`PortalModificarPedidoService`, con `x-portal-request`), `GET /portal/pedidos/:folio/modificar` (estado de cada día) y `GET /portal/pedidos-modificables`. Siempre el pedido del cliente de la sesión (404 uniforme). Todo se revalida DENTRO de la transacción con el cliente y el pedido bloqueados (cliente → pedido, mismo orden que crear): pago, versión, calendario (cambiar o quitar una entrega ≥ `portalHorasModificar` antes, agregar un día ≥ `portalHorasAgregar`, bordes exactos válidos), mínimo de piezas del pedido, productos no disponibles (no se pueden agregar ni aumentar, sí reducir). Cuerpo: `{slug, version, entregas: [{fecha, items}], notaCliente?}`: cada elemento es el estado deseado de esa fecha, `items: []` la quita, las fechas no mencionadas no cambian; un día no modificable con contenido distinto → 409 con `fechas[{fecha,motivo,mensaje}]` y `codigo`. `version` es el `updatedAt` del pedido (409 `PEDIDO_CAMBIO` si cambió).
 
 - Quitar una entrega la BORRA (no queda Cancelada); no se puede dejar el pedido sin entregas (409 `ULTIMA_ENTREGA`, el cliente no cancela el pedido completo; si quedan entregas cerradas y se quitan todas las pendientes el estado se recalcula solo → Completado); Confirmado → Por confirmar SOLO si cambiaron entregas; En proceso conserva su estado (salvo el recálculo por entregas); Pagado y Cancelado no se modifican (409 `PEDIDO_PAGADO`/`PEDIDO_CANCELADO`); el pago nunca cambia; todas las líneas toman el precio actual del catálogo y el % de descuento es el guardado (`recalcularTotalesB2b`); un pedido con una línea de producto borrado no se modifica desde el portal (409 `PRODUCTO_FUERA_DE_CATALOGO`). **La nota sola también enciende la marca**, sin regresar el estado; un PATCH sin cambios reales responde 200 `cambio:false` sin marca ni tocar `updatedAt`.
-- **Marca «Modificado por el cliente»:** `Order.modificadoPorClienteAt` (null = sin marca). La enciende el portal; la apagan `avanzar`, `marcarPagado` cuando confirma (AL_INICIO) y la acción de abajo; editar desde el panel NO la apaga. El portal la ve como `modificadoPorCliente` y el panel como `modificadoPorClienteAt` en Pedidos activos (lista y panel lateral). `PATCH /pedidos-b2b/:id/marcar-revisado` (los 3 roles, idempotente, solo apaga la marca) y el botón «Marcar como revisado» existen porque un pedido En proceso o Completado nunca se vuelve a confirmar. **Adición NO incluida en la Parte I** (aprobada por el producto).
+- **Marca «Modificado por el cliente»:** `Order.modificadoPorClienteAt` (null = sin marca). La enciende el portal; la apagan `avanzar`, `marcarPagado` cuando confirma (AL_INICIO) y la acción de abajo; editar desde el panel NO la apaga. El portal la ve como `modificadoPorCliente` y el panel como `modificadoPorClienteAt` en Pedidos activos (lista y panel lateral). `PATCH /pedidos-b2b/:id/marcar-revisado` (los 3 roles, idempotente, solo apaga la marca) y el botón «Marcar como revisado» existen porque un pedido En proceso o Completado nunca se vuelve a confirmar. Documentada en la Parte I como acción vigente (decisión de producto del 2026-10-29).
 - Un aviso interno por WhatsApp sale al equipo cuando se enciende la marca (ver [notificaciones.md](notificaciones.md)); el aviso «Pedido confirmado» al cliente sale cuando el equipo reconfirma.
 - **Concurrencia panel/portal:** `PATCH /pedidos-b2b/:id/items` acepta `version` OPCIONAL (el `updatedAt` que cargó el panel); si no coincide → 409 «El cliente modificó este pedido mientras lo editabas, recárgalo». El panel lo manda siempre y, tras un 409, recarga el pedido y sale de la edición. Nota de pruebas: el reloj de la suite está congelado, así que `updatedAt` no cambia solo; los tests de versión adelantan el reloj con `jest.setSystemTime`.
 - **Frontend:** una tarjeta por día (editable lo que el servidor permite; lo cerrado en solo lectura con el botón de WhatsApp de contexto `dia`), totales estimados (`frontend/lib/portal-modificar-modelo.ts`; el servidor calcula el real), aviso de que se recalculan todos los precios con los de hoy, y confirmación antes de guardar. El detalle del pedido suma `modificable` y `version`.
@@ -545,28 +530,18 @@ Solo lectura, siempre del cliente de la sesión. `GET /portal/pedidos?slug=&curs
 ## 8. Observabilidad, origen y modalidades de cobro
 
 - **Datos base de observabilidad (sin exponer en la API).** `DetalleB2B.confirmadoAt`: primera confirmación del pedido B2B (`avanzar` y `marcarPagado` en `AL_INICIO`; helper `confirmadoAtAlConfirmar`). Solo se guarda para pedidos con `createdAt >=` el corte de la variable de entorno `CONFIRMADO_AT_DESDE` (ISO; fijarla al instante del despliegue en cada entorno; sin variable o inválida no se guarda nada), nunca se sobrescribe; null = sin dato. `Cliente.ultimoAccesoAt`: último acceso al portal del cliente ACTIVO — se escribe al verificar el OTP (solo si el teléfono tiene un único cliente), al elegir/cambiar de cliente, y al reanudar sesión a lo más una vez por hora; está en `OMITIR_CAMPOS_B2B` y no sale en ninguna respuesta; escribirlo mueve `Cliente.updatedAt` (nada lo usa para ordenar ni filtrar). Migración `20261019120000_observabilidad_confirmado_ultimo_acceso`. Ningún camino de creación de pedido B2B nace confirmado.
-- **Origen del pedido** (`DetalleB2B.origen`, enum `OrigenPedidoB2b`: `PORTAL_CLIENTE` | `PANEL_EQUIPO`): lo fija `crearOrdenB2b` a partir del parámetro obligatorio `origen` de `crearPedidoB2bDeCliente` (el panel pasa `PANEL_EQUIPO`, el portal `PORTAL_CLIENTE`; no hay otro camino de creación). Columna NULL sin relleno: los anteriores quedan «sin dato». No sale en ninguna respuesta. `Order.canalOrigen` NO sirve para esto (es el canal del chat y siempre es `WEB`). Migración `20261019210000_origen_pedido_b2b`.
+- **Origen del pedido** (`DetalleB2B.origen`, enum `OrigenPedidoB2b`: `PORTAL_CLIENTE` | `PANEL_EQUIPO`): lo fija `crearOrdenB2b` a partir del parámetro obligatorio `origen` de `crearPedidoB2bDeCliente` (el panel pasa `PANEL_EQUIPO`, el portal `PORTAL_CLIENTE`; no hay otro camino de creación). Columna NULL sin relleno: los anteriores quedan «sin dato». No sale en ninguna respuesta. Uso futuro: medir la adopción del portal frente al panel (la sección Adopción hoy ya muestra porcentajes de origen). `Order.canalOrigen` NO sirve para esto (es el canal del chat y siempre es `WEB`). Migración `20261019210000_origen_pedido_b2b`.
 - **Modalidades de cobro configurables** (Ajustes → Pagos, solo Admin): cada negocio tiene activas una o dos: «A crédito» (`AL_FINAL`) y «Pago por adelantado» (`AL_INICIO`); los valores internos del enum `PedidoB2bModoCobro` no cambian y los nombres salen de un solo mapa (`frontend/lib/modalidades-cobro.ts`, `backend/src/common/modalidades-cobro.ts`). Se guardan en `Tenant.modalidadesCobroB2b`; al menos una (`validarModalidadesActivas`, también para `PATCH /tenant/me`). **`Cliente.modalidadPago` es obligatoria** en todo alta/edición de cliente B2B (`validarModalidadCliente`): solo se elige entre las activas, pero una edición acepta conservar la actual aunque se haya desactivado; `null` se rechaza. **El pedido usa siempre la modalidad del cliente** (`crearPedidoB2bDeCliente`; sin modalidad → 409 claro + log). `Tenant.pedidoB2bModoCobro` DEJÓ de ser fuente de verdad (no se edita ni se expone). `GET /clientes-b2b/:id` suma `modalidadInactiva`; `GET /tenant/me/modalidades-cobro/uso` cuenta clientes activos por modalidad para el aviso al desactivar. El CSV B2B muestra el nombre (excepción 12 de los dorados). Migración de datos: `src/scripts/modalidades-cobro-b2b.ts` (guía: `backend/scripts/modalidades-cobro/README.md`); el backend endurecido solo funciona bien después de correrla.
 - **Módulo Adopción** (`/dashboard/adopcion`, `backend/src/adopcion/`; solo lectura, solo Admin, solo mayoreo): `GET /adopcion/clientes?semana=<lunes>` y `GET /adopcion/interno`, `@Roles(DUENO)` + `TenantB2bPanelGuard`, consultas agregadas por `TenantPrismaService` (sin consulta por cliente); cálculos puros en `adopcion-calculo.ts`. Semana: lunes–domingo en America/Mexico_City; por defecto la PRÓXIMA; el selector va de lunes a lunes. **Tab Clientes:** estado en la semana (`Pidió` = pedido no cancelado y no por confirmar; `Pedido sin confirmar` = no cancelado en `PENDIENTE_CONFIRMACION`; `Cancelado` = solo hay pedidos cancelados; un cancelado que vuelve a pedir cuenta como Pidió; `No ha pedido (habitual)` = pidió sin cancelar en ≥2 de las 4 semanas anteriores); etapa = la más alta alcanzada (`Sin actividad` < `Accedió` [`ultimoAccesoAt`] < `Hizo pedido` [algún pedido no cancelado] < `Pide con regularidad` [≥3 de las 4 semanas anteriores]); los clientes de baja se excluyen salvo que tengan pedido en la semana; origen = porcentajes solo sobre pedidos con `DetalleB2B.origen`, mostrando los casos; «Cancelados después de confirmar» = pedidos de la semana con `cancelado` y `confirmadoAt`. **Tab Interno:** pedidos sin confirmar (todas las semanas), entregas atrasadas, pedidos de semanas anteriores sin completar, recibido→confirmado (mediana y máximo sobre pedidos creados en los últimos 28 días con `confirmadoAt`), puntualidad (solo `ENTREGADA` con `estadoCambiadoAt`: a tiempo = fecha de cierre en CDMX ≤ fecha programada) y no recogidas (aparte). Las listas muestran máximo 100 filas con el total real. Enlaces directos con `?pedido=<id>` en Pedidos activos e Históricos. No se mide «Lista → Entregada» ni quién hizo cada cambio.
 
-## 9. Divergencias conocidas entre la Parte I y el código
+## 9. Divergencias abiertas entre la Parte I y el código
 
-Para estos casos manda lo implementado (aprobado) salvo indicación en contra; confirmar con Santiago antes de "corregir" cualquiera hacia el diseño.
+El 2026-10-29 Santiago decidió las divergencias que había: la Parte I se actualizó para reflejar el comportamiento actual (confirmar y cancelar solo Gerente/Admin, Ajustes del Gerente, mínimo de piezas configurable con 0 = sin mínimo y default 0, origen del pedido, código del cliente como dato heredado, reconfirmación sin deduplicación, «Marcar como revisado») o se quitó del diseño (evento «Entrega entregada», método de entrega y punto de envío en B2B y sus columnas del Excel). Quedan solo estas diferencias abiertas, que son trabajo pendiente respecto al diseño, no decisiones de producto en contra:
 
-| Tema | Parte I (diseño) | Implementación |
-|---|---|---|
-| Quién confirma/cancela | El Operador puede «confirmar pedidos» (Roles y permisos) | Confirmar y cancelar son solo Gerente/Dueño; el Operador captura, edita (no un Pagado) y cierra entregas |
-| Ajustes | «Solo Dueño en Ajustes, como hoy» | El Gerente ve Información del negocio y Equipo (Ajustes) |
-| Mínimo de piezas | «Sin mínimo de piezas» / fuera de alcance | Mínimo configurable por negocio (acepta 0; Banetto en 0) |
-| Origen del pedido | «Registro … del origen del pedido» fuera de esta versión | `DetalleB2B.origen` se guarda (no sale en la API) |
-| Código del cliente | «Se usa en el panel y en el Excel» | Interno: ya no se muestra ni se captura en el panel; sigue en el Excel |
-| Fechas del pedido | Creación, confirmación y completado | `confirmadoAt` solo para pedidos posteriores al corte `CONFIRMADO_AT_DESDE`; no hay fecha de completado |
-| Eventos de notificación | «Entrega entregada» como evento activo | El único evento B2B de reglas es Confirmado; el «Entrega entregada» no está implementado; recordatorios por reglas `FECHA_PROGRAMADA` |
-| Excel | Columnas método de entrega y punto de envío | No se exportan (aún sin dato en B2B) |
-| Días no laborables | Calendario del admin que bloquea fechas al cliente (prioridad baja) | No implementado (sin modelo ni código) |
-| Entrega a domicilio B2B | Método de entrega y punto de envío por pedido | No existen aún en pedidos B2B |
-| Notificación al reconfirmar | «Pedido confirmado» se dispara también al reconfirmar | Igual; sin deduplicación |
-| Marcar como revisado | — | Acción agregada (4f) fuera de la Parte I |
+| Tema | Parte I (diseño) | Estado en el código | Situación |
+|---|---|---|---|
+| Días sin entrega (festivos) | El admin marca fechas sin entrega que bloquean la selección del cliente (prioridad baja) | No existe (sin modelo ni código) | **En construcción**, se implementa en un cambio aparte |
+| Fecha de completado del pedido | El pedido guarda su fecha de completado | No se guarda; solo hay `confirmadoAt` (y solo desde el corte `CONFIRMADO_AT_DESDE`) | **Diferido** |
 
 ## 10. Por confirmar con Santiago (no verificable desde el repo)
 
@@ -575,3 +550,4 @@ Para estos casos manda lo implementado (aprobado) salvo indicación en contra; c
 - El valor de `CONFIRMADO_AT_DESDE` en cada entorno.
 - Estado de las plantillas de Meta (`auth`, `pedido_modificado_cliente`, recordatorios y reservas) y de los workflows de Botpress que consumen los contratos de 7.2.
 - El resto de validaciones de la lista «Validaciones técnicas y pendientes» de la Parte I.
+- Valor actual de `pedidoB2bMinimoPiezas` en cada negocio B2B de staging y producción (la migración de default 0 no cambia a ninguno; ver el reporte del cambio del 2026-10-29).

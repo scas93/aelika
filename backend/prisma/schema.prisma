@@ -156,7 +156,9 @@ model Tenant {
   // PedidoB2bModoCobro, p. ej. ["AL_FINAL"]. Json (no un arreglo de enum de Postgres) para poder sumar modalidades nuevas
   // sin otra migración de este campo. Al menos una; lo valida la capa de aplicación (common/modalidades-cobro.ts).
   modalidadesCobroB2b          Json               @default("[\"AL_FINAL\"]")
-  pedidoB2bMinimoPiezas        Int                @default(100)
+  // 0 = sin mínimo. Un negocio nuevo nace sin mínimo (antes 100; la migración 20261029120000 solo cambia el DEFAULT,
+  // los negocios existentes conservan su valor).
+  pedidoB2bMinimoPiezas        Int                @default(0)
   // Ventana semanal recurrente en la que el storefront público de mayoreo
   // acepta pedidos nuevos — reemplaza a horarioAtencion/isAbiertoAhora para
   // este módulo (ver PublicPedidosB2bService.createPedido). Los 4 campos
