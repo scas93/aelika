@@ -14,6 +14,7 @@ import {
 } from "@/lib/portal-api";
 import {
   ETIQUETA_MOTIVO,
+  textoSinEntrega,
   etiquetaFechaCorta,
   rangoSemanaCorto,
   textoAgregaAntes,
@@ -413,6 +414,24 @@ export default function ModificarPedidoPage() {
             </>
           )}
 
+          {estado?.dias.some((d) => d.motivo === "SIN_ENTREGA" && !d.entrega) && (
+            <section className="flex flex-col gap-1 rounded-xl border border-mayoreo-border bg-mayoreo-card p-4">
+              <h2 className="text-sm font-semibold text-mayoreo-ink-soft">
+                Días sin entrega
+              </h2>
+              <ul className="flex flex-col gap-0.5">
+                {estado.dias
+                  .filter((d) => d.motivo === "SIN_ENTREGA" && !d.entrega)
+                  .map((d) => (
+                    <li key={d.fecha} className="text-sm text-mayoreo-ink-soft">
+                      {etiquetaFechaCorta(d.fecha)} ·{" "}
+                      {textoSinEntrega(d.sinEntrega?.nota)}
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          )}
+
           {diasEditables.length > 0 && (
             <h2 className="text-sm font-semibold text-mayoreo-ink-soft">
               Puedes modificar
@@ -434,7 +453,9 @@ export default function ModificarPedidoPage() {
                     {etiquetaFechaCorta(d.fecha)}
                   </h2>
                   <span className="text-xs text-mayoreo-ink-soft">
-                    {d.estado === "MODIFICABLE"
+                    {d.sinEntrega
+                      ? textoSinEntrega(d.sinEntrega.nota)
+                      : d.estado === "MODIFICABLE"
                       ? ""
                       : d.estado === "AGREGABLE" && d.limiteAt
                         ? textoAgregaAntes(d.limiteAt)

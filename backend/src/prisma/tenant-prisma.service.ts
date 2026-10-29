@@ -103,6 +103,9 @@ export class TenantPrismaService {
           puntoEnvio: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          diaSinEntrega: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           modifierGroup: {
             $allOperations: tenantScopedQuery(tenantId),
           },

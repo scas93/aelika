@@ -25,7 +25,10 @@ import {
   semanaModificable,
 } from './portal-modificable';
 import { calcularCalendario, semanasDelHorizonte } from './portal-calendario';
-import { cargarPedidosCalendario } from './portal-calendario.service';
+import {
+  cargarDiasSinEntrega,
+  cargarPedidosCalendario,
+} from './portal-calendario.service';
 import { PortalMisPedidosService } from './portal-mis-pedidos.service';
 import { AvisoPedidoModificadoService } from '../notificaciones/avisos-internos/aviso-pedido-modificado.service';
 
@@ -131,7 +134,17 @@ export class PortalModificarPedidoService {
       c.id,
       inicios,
     );
-    const folios = calcularCalendario(ahora, parametros, porSemana)
+    const diasSinEntrega = await cargarDiasSinEntrega(
+      this.prisma,
+      t.id,
+      inicios[0],
+    );
+    const folios = calcularCalendario(
+      ahora,
+      parametros,
+      porSemana,
+      diasSinEntrega,
+    )
       .filter(semanaModificable)
       .map((s) => s.pedido!.folio);
     return { pedidos: await this.misPedidos.resumenesPorFolio(sesion, folios) };
@@ -209,6 +222,7 @@ export class PortalModificarPedidoService {
         estado: calendario?.estado ?? 'CERRADO',
         motivo: calendario?.motivo ?? null,
         limiteAt: calendario?.limiteAt ?? null,
+        sinEntrega: calendario?.sinEntrega ?? null,
         entrega: entrega
           ? {
               estado: entrega.estado,
@@ -526,6 +540,12 @@ export class PortalModificarPedidoService {
           fecha,
           motivo: 'ANTICIPACION_AGREGAR',
           mensaje: `El ${f} ya no se puede agregar: se necesitan al menos ${t.portalHorasAgregarDia} horas de anticipación`,
+        };
+      case 'SIN_ENTREGA':
+        return {
+          fecha,
+          motivo: 'SIN_ENTREGA',
+          mensaje: `El ${f} es un día sin entrega`,
         };
       case 'PASADO':
         return { fecha, motivo: 'PASADO', mensaje: `El ${f} ya pasó` };

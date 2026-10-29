@@ -2,7 +2,10 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { Tenant } from '../../generated/prisma/client';
 import { calcularCalendario, type SemanaCalendario } from './portal-calendario';
-import { cargarPedidosCalendario } from './portal-calendario.service';
+import {
+  cargarDiasSinEntrega,
+  cargarPedidosCalendario,
+} from './portal-calendario.service';
 
 /** Parámetros del calendario del negocio (los mismos de la 4c). */
 export function parametrosDe(t: Tenant) {
@@ -29,8 +32,9 @@ export async function calendarioDeSemana(
   const { porSemana } = await cargarPedidosCalendario(db, t.id, clienteId, [
     semanaISO,
   ]);
+  const diasSinEntrega = await cargarDiasSinEntrega(db, t.id, semanaISO);
   return (
-    calcularCalendario(ahora, parametrosDe(t), porSemana).find(
+    calcularCalendario(ahora, parametrosDe(t), porSemana, diasSinEntrega).find(
       (s) => s.semanaInicio === semanaISO && s.pedido !== null,
     ) ?? null
   );

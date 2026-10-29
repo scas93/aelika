@@ -156,7 +156,9 @@ model Tenant {
   // PedidoB2bModoCobro, p. ej. ["AL_FINAL"]. Json (no un arreglo de enum de Postgres) para poder sumar modalidades nuevas
   // sin otra migración de este campo. Al menos una; lo valida la capa de aplicación (common/modalidades-cobro.ts).
   modalidadesCobroB2b          Json               @default("[\"AL_FINAL\"]")
-  pedidoB2bMinimoPiezas        Int                @default(100)
+  // 0 = sin mínimo. Un negocio nuevo nace sin mínimo (antes 100; la migración 20261029120000 solo cambia el DEFAULT,
+  // los negocios existentes conservan su valor).
+  pedidoB2bMinimoPiezas        Int                @default(0)
   // Ventana semanal recurrente en la que el storefront público de mayoreo
   // acepta pedidos nuevos — reemplaza a horarioAtencion/isAbiertoAhora para
   // este módulo (ver PublicPedidosB2bService.createPedido). Los 4 campos
@@ -184,6 +186,7 @@ model Tenant {
   entregas                  Entrega[]
   entregaItems              EntregaItem[]
   puntosEnvio               PuntoEnvio[]
+  diasSinEntrega            DiaSinEntrega[]
   modifierGroups            ModifierGroup[]
   modifierOptions           ModifierOption[]
   orderItemModifiers        OrderItemModifier[]
@@ -358,6 +361,21 @@ enum MetodoEntrega {
 // Simple named delivery zones — NOT real multi-branch/store logic (no own
 // catalog, hours, or inventory). Just a name + address a customer picks for
 // DOMICILIO orders, with an optional minimum order amount.
+// Fecha en que el negocio no entrega pedidos B2B (festivos). Una fila por (negocio, fecha); la nota es opcional.
+// Bloquea crear o mover una entrega a esa fecha, en el portal y en el panel; las entregas ya programadas no se tocan.
+model DiaSinEntrega {
+  id        String   @id @default(uuid())
+  tenantId  String
+  fecha     DateTime @db.Date
+  nota      String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, fecha])
+  @@map("dias_sin_entrega")
+}
+
 model PuntoEnvio {
   id           String   @id @default(uuid())
   tenantId     String

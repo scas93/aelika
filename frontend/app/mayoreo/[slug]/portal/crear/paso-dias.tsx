@@ -6,6 +6,7 @@ import type {
 } from "@/lib/portal-api";
 import {
   ETIQUETA_MOTIVO,
+  textoSinEntrega,
   etiquetaFecha,
   rangoSemanaCorto,
   textoLimite,
@@ -81,7 +82,9 @@ export default function PasoDias({
                     </span>
                     {!elegible && (
                       <span className="text-xs text-mayoreo-ink-soft">
-                        {d.motivo === "ANTICIPACION_AGREGAR"
+                        {d.motivo === "SIN_ENTREGA"
+                          ? textoSinEntrega(d.sinEntrega?.nota)
+                          : d.motivo === "ANTICIPACION_AGREGAR"
                           ? "Ya no hay tiempo para hacer pedido"
                           : [
                               d.motivo ? ETIQUETA_MOTIVO[d.motivo] : null,

@@ -1,8 +1,13 @@
 import type { Role } from "@/lib/api";
 
-// Quién entra a cada parte de Ajustes. El backend aplica lo mismo (la UI solo es la cara del gate): Información del negocio
-// y Equipo son de Admin y Gerente; todo lo demás, solo del Admin (rol interno DUENO). El Operador no tiene acceso a Ajustes.
-export const SUBMODULOS_DE_GERENTE = ["/dashboard/ajustes/negocio", "/dashboard/ajustes/equipo"];
+// Quién entra a cada parte de Ajustes. El backend aplica lo mismo (la UI solo es la cara del gate): Información del negocio,
+// Equipo y Días sin entrega (solo mayoreo) son de Admin y Gerente; todo lo demás, solo del Admin (rol interno DUENO). El
+// Operador no tiene acceso a Ajustes.
+export const SUBMODULOS_DE_GERENTE = [
+  "/dashboard/ajustes/negocio",
+  "/dashboard/ajustes/equipo",
+  "/dashboard/ajustes/dias-sin-entrega",
+];
 
 export function puedeVerAjustes(rol: Role): boolean {
   return rol === "DUENO" || rol === "GERENTE";

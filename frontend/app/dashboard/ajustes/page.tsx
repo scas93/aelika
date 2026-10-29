@@ -16,6 +16,7 @@ const DESCRIPCIONES: Record<string, string> = {
   "/dashboard/ajustes/conexion-whatsapp": "Llave del bot, webhook de Botpress y candado de frecuencia",
   "/dashboard/ajustes/envios": "Zonas de entrega a domicilio y pedido mínimo",
   "/dashboard/ajustes/pedidos-b2b": "Mínimo de piezas por pedido y rango semanal en el que aceptas pedidos",
+  "/dashboard/ajustes/dias-sin-entrega": "Festivos y fechas en las que no entregas pedidos de mayoreo",
   "/dashboard/ajustes/codigos-descuento": "Códigos con % de descuento para tus pedidos de mayoreo",
   "/dashboard/ajustes/notificaciones": "Avisos por Telegram y correo cuando algo pasa con un pedido",
 };
@@ -49,7 +50,11 @@ const GRUPOS: Grupo[] = [
 // sección de ventana de recepción dentro de la página vieja de Configuración.
 const GRUPO_PEDIDOS_B2B: Grupo = {
   titulo: "Pedidos B2B",
-  hrefs: ["/dashboard/ajustes/pedidos-b2b", "/dashboard/ajustes/codigos-descuento"],
+  hrefs: [
+    "/dashboard/ajustes/pedidos-b2b",
+    "/dashboard/ajustes/dias-sin-entrega",
+    "/dashboard/ajustes/codigos-descuento",
+  ],
 };
 
 export default function AjustesPage() {

@@ -12,6 +12,7 @@ import { CODIGOS_STORE } from './codigos-store';
 import type { CodigosStore } from './codigos-store';
 import type { SesionValida } from './portal-acceso.service';
 import { calcularCalendario } from './portal-calendario';
+import { cargarDiasSinEntrega } from './portal-calendario.service';
 import { cargarPedidosCalendario } from './portal-calendario.service';
 import {
   bloquearClienteB2b,
@@ -209,7 +210,13 @@ export class PortalPedidosService {
         clienteId,
         inicios,
       );
-      const calendario = calcularCalendario(ahora, parametros, porSemana);
+      const diasSinEntrega = await cargarDiasSinEntrega(tx, t.id, inicios[0]);
+      const calendario = calcularCalendario(
+        ahora,
+        parametros,
+        porSemana,
+        diasSinEntrega,
+      );
       const diasCalendario = new Map(
         calendario.flatMap((s) =>
           s.dias.map((d) => [d.fecha, { dia: d, semana: s }]),
@@ -234,6 +241,12 @@ export class PortalPedidosService {
             fecha,
             motivo: 'SEMANA_CON_PEDIDO',
             mensaje: MENSAJE_YA_TIENE_PEDIDO,
+          });
+        } else if (dia.motivo === 'SIN_ENTREGA') {
+          problemas.push({
+            fecha,
+            motivo: 'SIN_ENTREGA',
+            mensaje: `El ${etiqueta(fecha)} es un día sin entrega${dia.sinEntrega?.nota ? ` (${dia.sinEntrega.nota})` : ''}`,
           });
         } else if (dia.estado === 'NO_DISPONIBLE' && dia.motivo === 'PASADO') {
           problemas.push({

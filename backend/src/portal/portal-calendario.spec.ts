@@ -270,3 +270,124 @@ describe('calcularCalendario · parámetros distintos', () => {
     expect(dia(s, '2026-10-01').estado).toBe('AGREGABLE');
   });
 });
+
+describe('días sin entrega (festivos)', () => {
+  const nav = new Map<string, string | null>([['2026-10-09', 'Festivo']]);
+
+  it('una fecha que sería AGREGABLE queda NO_DISPONIBLE con motivo SIN_ENTREGA y su nota', () => {
+    const sin = dia(calcularCalendario(MIE_10, P, sinPedidos), '2026-10-09');
+    expect(sin.estado).toBe('AGREGABLE');
+    const d = dia(calcularCalendario(MIE_10, P, sinPedidos, nav), '2026-10-09');
+    expect(d).toMatchObject({
+      estado: 'NO_DISPONIBLE',
+      motivo: 'SIN_ENTREGA',
+      accion: null,
+      limiteAt: null,
+      sinEntrega: { nota: 'Festivo' },
+    });
+  });
+
+  it('sin nota: sinEntrega.nota es null; los demás días no cambian', () => {
+    const semanas = calcularCalendario(
+      MIE_10,
+      P,
+      sinPedidos,
+      new Map([['2026-10-09', null]]),
+    );
+    expect(dia(semanas, '2026-10-09').sinEntrega).toEqual({ nota: null });
+    expect(dia(semanas, '2026-10-10')).toMatchObject({
+      estado: 'AGREGABLE',
+      sinEntrega: null,
+    });
+  });
+
+  it('se combina con la anticipación y el horizonte: un día ya fuera de plazo no se vuelve agregable', () => {
+    const semanas = calcularCalendario(
+      MIE_10,
+      P,
+      sinPedidos,
+      new Map([['2026-10-01', null]]), // jueves 08:00: a menos de 36 h
+    );
+    expect(dia(semanas, '2026-10-01')).toMatchObject({
+      estado: 'NO_DISPONIBLE',
+      motivo: 'SIN_ENTREGA',
+    });
+    // fuera del horizonte: el día ni aparece
+    expect(() => dia(semanas, '2026-10-20')).toThrow();
+  });
+
+  it('el festivo solo marca su fecha, no las vecinas ni la misma fecha de otra semana', () => {
+    const semanas = calcularCalendario(MIE_10, P, sinPedidos, nav);
+    expect(dia(semanas, '2026-10-08').sinEntrega).toBeNull();
+    expect(dia(semanas, '2026-10-02').sinEntrega).toBeNull();
+  });
+
+  it('una entrega que el cliente ya tenía en un día marcado después se conserva y sigue modificable', () => {
+    const pedido: PedidoSemanaCalendario = {
+      folio: 'B2B-1',
+      estadoPedido: EstadoPedido.CONFIRMADO_SURTIENDO,
+      pagado: false,
+      entregas: [{ fecha: '2026-10-09', estado: EstadoEntrega.PENDIENTE }],
+    };
+    const d = dia(
+      calcularCalendario(
+        MIE_10,
+        P,
+        new Map([['2026-10-05', pedido]]),
+        nav,
+      ),
+      '2026-10-09',
+    );
+    expect(d).toMatchObject({
+      estado: 'MODIFICABLE',
+      sinEntrega: { nota: 'Festivo' },
+    });
+  });
+
+  it('un cliente con pedido en la semana no puede AGREGAR un día sin entrega', () => {
+    const pedido: PedidoSemanaCalendario = {
+      folio: 'B2B-1',
+      estadoPedido: EstadoPedido.CONFIRMADO_SURTIENDO,
+      pagado: false,
+      entregas: [{ fecha: '2026-10-08', estado: EstadoEntrega.PENDIENTE }],
+    };
+    const d = dia(
+      calcularCalendario(MIE_10, P, new Map([['2026-10-05', pedido]]), nav),
+      '2026-10-09',
+    );
+    expect(d).toMatchObject({ estado: 'NO_DISPONIBLE', motivo: 'SIN_ENTREGA' });
+  });
+
+  describe('zona horaria: el día bloqueado es el de la fecha en México, sin recorrerse por UTC', () => {
+    // 24-dic 21:00 en CDMX = 25-dic 03:00 UTC: el calendario UTC ya estaría en el 25.
+    const NOCHE_24 = new Date('2026-12-25T03:00:00.000Z');
+    const D = (f: string) => new Map<string, string | null>([[f, 'Navidad']]);
+
+    it('festivo el 25: bloquea el 25 y no el 24, aunque en UTC ya sea 25', () => {
+      const semanas = calcularCalendario(NOCHE_24, P, sinPedidos, D('2026-12-25'));
+      expect(dia(semanas, '2026-12-25')).toMatchObject({
+        motivo: 'SIN_ENTREGA',
+        sinEntrega: { nota: 'Navidad' },
+      });
+      expect(dia(semanas, '2026-12-24').sinEntrega).toBeNull();
+      expect(dia(semanas, '2026-12-26').sinEntrega).toBeNull();
+    });
+
+    it('festivo el 24: bloquea el 24 (hoy en México), no se recorre al 25', () => {
+      const semanas = calcularCalendario(NOCHE_24, P, sinPedidos, D('2026-12-24'));
+      expect(dia(semanas, '2026-12-24').sinEntrega).toEqual({ nota: 'Navidad' });
+      expect(dia(semanas, '2026-12-25').sinEntrega).toBeNull();
+    });
+
+    it('a las 18:00 del 31-dic en México (00:00Z del 1-ene) el 1-ene sigue bloqueado y el 31 no', () => {
+      const semanas = calcularCalendario(
+        new Date('2027-01-01T00:00:00.000Z'),
+        P,
+        sinPedidos,
+        D('2027-01-01'),
+      );
+      expect(dia(semanas, '2027-01-01').motivo).toBe('SIN_ENTREGA');
+      expect(dia(semanas, '2026-12-31').sinEntrega).toBeNull();
+    });
+  });
+});

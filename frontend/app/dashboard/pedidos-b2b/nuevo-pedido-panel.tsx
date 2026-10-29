@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
+import { diasBloqueadosDeSemana, useDiasSinEntrega } from "./dias-sin-entrega";
 import CuadriculaDias, { distribucionVacia, totalDistribucion, type DistribucionDias } from "./cuadricula-dias";
 import SidePanel from "../_components/SidePanel";
 import Aviso from "../_components/Aviso";
@@ -73,6 +74,11 @@ export default function NuevoPedidoPanel({
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const diasSinEntrega = useDiasSinEntrega(token, open);
+  const diasBloqueados = useMemo(
+    () => (semana ? diasBloqueadosDeSemana(semana, diasSinEntrega) : new Map()),
+    [semana, diasSinEntrega],
+  );
 
   // Al abrir: estado limpio y listas frescas (un cliente nuevo o dado de baja desde la última vez debe reflejarse).
   useEffect(() => {
@@ -306,6 +312,7 @@ export default function NuevoPedidoPanel({
                     nombreProducto={l.nombre}
                     distribucion={l.distribucion}
                     onChange={(dia, cantidad) => setCantidad(l.productId, dia, cantidad)}
+                    sinEntrega={diasBloqueados}
                   />
                 </div>
               );
