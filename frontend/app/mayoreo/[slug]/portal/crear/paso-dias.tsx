@@ -11,14 +11,10 @@ import {
   rangoSemanaCorto,
   textoLimite,
 } from "@/lib/portal-calendario-formato";
-import { diasCerrados } from "@/lib/portal-pedido-modelo";
 import { BTN_PRIMARIO, CARD } from "../estilos";
-import BotonWhatsApp from "../boton-whatsapp";
 import BarraAccionFija from "./barra-accion-fija";
 
 interface Props {
-  /** Nombre del cliente de la sesión (va en el mensaje precargado de WhatsApp). */
-  cliente: string;
   calendario: CalendarioPortal;
   /** Semana elegida en el paso anterior: solo se muestran sus días. */
   semana: SemanaCalendarioPortal;
@@ -29,19 +25,12 @@ interface Props {
 
 // Paso 2: elegir los días de entrega de la semana elegida. Solo se pueden elegir los días `AGREGABLE` (el servidor decide).
 export default function PasoDias({
-  cliente,
   calendario,
   semana,
   fechas,
   onToggle,
   onContinuar,
 }: Props) {
-  // Contacto con el negocio (solo si hay número de atención). Un solo día cerrado → botón junto a ese día con su mensaje;
-  // varios días cerrados → UN solo botón con el mensaje genérico, para no repetirlo.
-  const cerrados = diasCerrados({ ...calendario, semanas: [semana] });
-  const diaUnico = cerrados.length === 1 ? cerrados[0] : null;
-  const hayContactoGeneral =
-    calendario.numeroAtencion !== null && cerrados.length > 1;
   const rango = rangoSemanaCorto(semana.semanaInicio, semana.semanaFin);
   return (
     <div className="flex flex-col gap-4">
@@ -106,33 +95,11 @@ export default function PasoDias({
                     ✓
                   </span>
                 </button>
-                {diaUnico?.fecha === d.fecha && (
-                  <div className="pb-2.5">
-                    <BotonWhatsApp
-                      compacto
-                      numeroAtencion={calendario.numeroAtencion}
-                      contexto={{ tipo: "dia", cliente, fecha: d.fecha }}
-                    />
-                  </div>
-                )}
               </li>
             );
           })}
         </ul>
       </section>
-
-      {hayContactoGeneral && (
-        <div className={CARD + " gap-2"}>
-          <p className="text-sm text-mayoreo-ink-soft">
-            ¿Necesitas pedir o cambiar una entrega que ya no se puede elegir
-            aquí? Escríbenos.
-          </p>
-          <BotonWhatsApp
-            numeroAtencion={calendario.numeroAtencion}
-            contexto={{ tipo: "general", cliente }}
-          />
-        </div>
-      )}
 
       <BarraAccionFija>
         <button

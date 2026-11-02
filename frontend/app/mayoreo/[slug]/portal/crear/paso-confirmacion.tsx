@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import type { ResultadoPedidoPortal } from "@/lib/portal-api";
 import { etiquetaFechaCorta, hora12 } from "@/lib/portal-calendario-formato";
 import { BTN_PRIMARIO, CARD, dinero } from "../estilos";
-import BotonWhatsApp from "../boton-whatsapp";
 import BarraAccionFija from "./barra-accion-fija";
 import { BloqueRecoge } from "./bloques-pedido";
 
@@ -12,16 +11,11 @@ import { BloqueRecoge } from "./bloques-pedido";
 // negocio. El detalle de productos y precios vive en «Ver mis pedidos».
 export default function PasoConfirmacion({
   resultado,
-  cliente,
-  numeroAtencion,
   horaEntrega,
   ubicacion,
   onVolver,
 }: {
   resultado: ResultadoPedidoPortal;
-  /** Nombre del cliente de la sesión (mensaje precargado de WhatsApp). */
-  cliente: string;
-  numeroAtencion: string | null;
   /** Hora de recolección del negocio, "HH:mm". */
   horaEntrega: string;
   /** Dirección del negocio; null/vacía = no se muestra «Recoge en». */
@@ -105,17 +99,6 @@ export default function PasoConfirmacion({
           <button className={BTN_PRIMARIO} onClick={onVolver}>
             Volver al menú
           </button>
-          {numeroAtencion && (
-            <BotonWhatsApp
-              secundario
-              numeroAtencion={numeroAtencion}
-              contexto={{
-                tipo: "pedido",
-                cliente,
-                folios: [pedido.folio],
-              }}
-            />
-          )}
         </div>
       </BarraAccionFija>
     </div>

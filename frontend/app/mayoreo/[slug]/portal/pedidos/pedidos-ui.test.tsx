@@ -144,8 +144,8 @@ describe("lista de pedidos", () => {
         ),
     ).toBe(true);
     expect(
-      screen.getByRole("link", { name: /Escribir por WhatsApp/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: /Escribir por WhatsApp/ }),
+    ).toBeNull();
   });
 
   it("la tarjeta de la lista no muestra la marca «Modificado por el cliente» (es para el negocio)", async () => {
@@ -247,10 +247,7 @@ describe("detalle del pedido", () => {
     expect(screen.queryByText(/favorito/i)).toBeNull();
     // Sin acciones de modificar ni cancelar (4f).
     expect(screen.queryByText(/Modificar|Cancelar pedido/i)).toBeNull();
-    const wa = screen.getByRole("link", { name: /Escribir por WhatsApp/ });
-    expect(decodeURIComponent(wa.getAttribute("href") ?? "")).toContain(
-      "sobre mi pedido P-000001",
-    );
+    expect(screen.queryByRole("link", { name: /Escribir por WhatsApp/ })).toBeNull();
   });
 
   it("pedido modificable: «Modificar pedido» en la barra fija, hacia la pantalla de modificar con origen «detalle»", async () => {

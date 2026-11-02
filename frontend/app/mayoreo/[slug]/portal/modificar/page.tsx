@@ -8,7 +8,6 @@ import {
   type ResumenPedidoPortal,
 } from "@/lib/portal-api";
 import { porSemanaAscendente } from "@/lib/portal-pedidos-formato";
-import BotonWhatsApp from "../boton-whatsapp";
 import { CARD, ERROR, WRAPPER } from "../estilos";
 import EncabezadoPantalla from "../encabezado-pantalla";
 import TarjetaPedido from "../pedidos/tarjeta-pedido";
@@ -17,7 +16,7 @@ import { useSesionPortal } from "../pedidos/usar-sesion-portal";
 // «Modificar pedido activo»: muestra solo los pedidos en los que hoy se puede cambiar algo. Con uno solo entra directo.
 export default function ElegirPedidoModificarPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
+  const { sesion, base, router } = useSesionPortal(slug);
   const [pedidos, setPedidos] = useState<ResumenPedidoPortal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Al volver desde «Modificar pedido» (`?lista=1`) se muestra la lista aunque quede un solo pedido, sin volver a entrar.
@@ -68,12 +67,6 @@ export default function ElegirPedidoModificarPage() {
             No tienes pedidos que se puedan modificar ahora. Si necesitas un
             cambio, contáctanos.
           </p>
-          {sesion?.cliente && (
-            <BotonWhatsApp
-              numeroAtencion={numeroAtencion}
-              contexto={{ tipo: "general", cliente: sesion.cliente.nombre }}
-            />
-          )}
         </div>
       )}
       {pedidos &&

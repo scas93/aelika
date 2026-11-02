@@ -27,7 +27,6 @@ import {
   totalesEstimados,
   type Borrador,
 } from "@/lib/portal-modificar-modelo";
-import BotonWhatsApp from "../../../boton-whatsapp";
 import ControlCantidad from "../../../control-cantidad";
 import IconoBasura from "../../../icono-basura";
 import EncabezadoPantalla from "../../../encabezado-pantalla";
@@ -56,7 +55,7 @@ interface ProductoCatalogo {
 export default function ModificarPedidoPage() {
   const { slug, folio } = useParams<{ slug: string; folio: string }>();
   const folioReal = decodeURIComponent(folio);
-  const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
+  const { sesion, base, router } = useSesionPortal(slug);
   // «Atrás» regresa a donde vino el cliente (`?desde=`): la lista de pedidos modificables, el detalle del pedido, el paso de días de «Crear pedido» o, sin
   // origen conocido (URL directa) o desde el menú, el menú.
   const desde = useSearchParams().get("desde");
@@ -220,8 +219,6 @@ export default function ModificarPedidoPage() {
     );
   }
 
-  const cliente = sesion?.cliente?.nombre ?? "";
-
   if (guardado) {
     return (
       <main className={WRAPPER}>
@@ -364,14 +361,6 @@ export default function ModificarPedidoPage() {
       {estado && bloqueado && (
         <div className={CARD}>
           <p className="text-sm">{estado.bloqueo!.mensaje}</p>
-          <BotonWhatsApp
-            numeroAtencion={numeroAtencion ?? estado.numeroAtencion}
-            contexto={{
-              tipo: "pedido",
-              cliente,
-              folios: [estado.folio],
-            }}
-          />
         </div>
       )}
 
@@ -588,16 +577,6 @@ export default function ModificarPedidoPage() {
             <div className={ERROR}>
               Un pedido debe conservar al menos una entrega. Si quieres
               cancelarlo, contáctanos.
-              <div className="mt-2">
-                <BotonWhatsApp
-                  numeroAtencion={numeroAtencion ?? estado.numeroAtencion}
-                  contexto={{
-                    tipo: "pedido",
-                    cliente,
-                    folios: [estado.folio],
-                  }}
-                />
-              </div>
             </div>
           )}
           {bajoMinimo && (

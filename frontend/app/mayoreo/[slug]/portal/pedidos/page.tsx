@@ -9,7 +9,6 @@ import {
   type ResumenPedidoPortal,
 } from "@/lib/portal-api";
 import { porSemanaAscendente } from "@/lib/portal-pedidos-formato";
-import BotonWhatsApp from "../boton-whatsapp";
 import { BTN_SECUNDARIO, CARD, ERROR, WRAPPER } from "../estilos";
 import EncabezadoPantalla from "../encabezado-pantalla";
 import TarjetaPedido from "./tarjeta-pedido";
@@ -18,7 +17,7 @@ import { useSesionPortal } from "./usar-sesion-portal";
 // Ver mis pedidos (4e): activos arriba, anteriores paginados abajo. Cada tarjeta lleva al detalle (folio en la URL).
 export default function MisPedidosPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { sesion, numeroAtencion, base, router } = useSesionPortal(slug);
+  const { sesion, base, router } = useSesionPortal(slug);
   const [lista, setLista] = useState<ListaPedidosPortal | null>(null);
   const [anteriores, setAnteriores] = useState<ResumenPedidoPortal[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -120,13 +119,6 @@ export default function MisPedidosPage() {
               </button>
             )}
           </section>
-
-          {sesion?.cliente && (
-            <BotonWhatsApp
-              numeroAtencion={numeroAtencion}
-              contexto={{ tipo: "general", cliente: sesion.cliente.nombre }}
-            />
-          )}
         </>
       )}
     </main>

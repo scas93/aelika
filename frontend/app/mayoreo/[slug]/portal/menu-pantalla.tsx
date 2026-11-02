@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  cerrarSesion,
-  fetchCalendario,
-  type PortalSesion,
-} from "@/lib/portal-api";
-import BotonWhatsApp from "./boton-whatsapp";
+import { cerrarSesion, type PortalSesion } from "@/lib/portal-api";
 import { CLASE_BOTON_CIRCULAR } from "./encabezado-pantalla";
 import { OPCION, WRAPPER } from "./estilos";
 
@@ -37,22 +32,6 @@ export default function MenuPantalla({
   // Menú de la cuenta (cambiar de cliente / cerrar sesión): se cierra al tocar fuera, con Escape o al elegir una opción.
   const [menuAbierto, setMenuAbierto] = useState(false);
   const cuentaRef = useRef<HTMLDivElement>(null);
-  const [numeroAtencion, setNumeroAtencion] = useState<string | null>(null);
-  const clienteId = sesion.cliente?.id;
-
-  useEffect(() => {
-    let activo = true;
-    // Solo para el número de atención: si falla, el botón de contacto simplemente no aparece.
-    fetchCalendario(slug)
-      .then((c) => {
-        if (activo) setNumeroAtencion(c.numeroAtencion);
-      })
-      .catch(() => undefined);
-    return () => {
-      activo = false;
-    };
-  }, [slug, clienteId]);
-
   useEffect(() => {
     if (!menuAbierto) return;
     const fuera = (e: MouseEvent | TouchEvent) => {
@@ -194,11 +173,6 @@ export default function MenuPantalla({
           </span>
         </button>
       </div>
-
-      <BotonWhatsApp
-        numeroAtencion={numeroAtencion}
-        contexto={{ tipo: "general", cliente: sesion.cliente?.nombre ?? "" }}
-      />
     </main>
   );
 }

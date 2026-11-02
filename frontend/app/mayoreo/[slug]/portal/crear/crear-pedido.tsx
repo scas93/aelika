@@ -385,7 +385,6 @@ export default function CrearPedido({
     }
   }
 
-  const nombreCliente = sesion.cliente?.nombre ?? "";
   // «Atrás» de un día lleva a la pantalla de días (única forma de quitar o agregar días); el del resumen, al último día.
   const atras =
     paso === "semana" || paso === "confirmacion"
@@ -419,14 +418,12 @@ export default function CrearPedido({
       )}
       {paso === "semana" && (
         <PasoSemana
-          cliente={nombreCliente}
           calendario={calendario}
           onElegir={(x) => elegirSemana(x.semanaInicio)}
         />
       )}
       {paso === "dias" && semana && (
         <PasoDias
-          cliente={nombreCliente}
           calendario={calendario}
           semana={semana}
           fechas={fechas}
@@ -488,8 +485,6 @@ export default function CrearPedido({
       {paso === "confirmacion" && resultado && (
         <PasoConfirmacion
           resultado={resultado}
-          cliente={nombreCliente}
-          numeroAtencion={calendario.numeroAtencion}
           horaEntrega={calendario.horaEntrega}
           ubicacion={calendario.ubicacion ?? null}
           onVolver={onSalir}
