@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ApiError, altaClienteLealtadPublico, fetchPublicTenant, type LealtadRespuesta, type PublicTenantInfo } from "@/lib/api";
+import { linkTarjeta } from "@/lib/lealtad-pase";
 
 // Página angosta de un solo formulario — mismo molde de resolución de
 // tenant por slug que /tienda y /mayoreo (useParams + fetch en useEffect +
@@ -25,6 +26,7 @@ export default function LealtadPublicoPage() {
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [resultado, setResultado] = useState<LealtadRespuesta | null>(null);
+  const link = resultado ? linkTarjeta(resultado.pase) : null;
 
   useEffect(() => {
     async function load() {
@@ -46,10 +48,10 @@ export default function LealtadPublicoPage() {
   // no tiene nada más que hacer en esta página una vez que su tarjeta ya
   // existe.
   useEffect(() => {
-    if (resultado?.pase?.shareUrl) {
-      window.location.href = resultado.pase.shareUrl;
+    if (link) {
+      window.location.href = link;
     }
-  }, [resultado]);
+  }, [link]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,22 +91,21 @@ export default function LealtadPublicoPage() {
     );
   }
 
-  // pase === null: el Cliente y su LoyaltyCard sí quedaron registrados del
-  // lado de Aelika, solo falló la generación del pase visual — nunca se
-  // redirige en este caso (ver el useEffect de arriba).
-  if (resultado && !resultado.pase) {
+  // Sin link válido: el Cliente y su LoyaltyCard sí quedaron registrados del
+  // lado de Aelika, pero no hay a dónde llevarlo — nunca se deja la pantalla
+  // esperando una redirección que no va a ocurrir (ver el useEffect de arriba).
+  if (resultado && !link) {
     return (
       <div className={`${WRAPPER} justify-center gap-3 text-center`}>
         <h1 className="text-lg font-semibold">{tenant.nombre}</h1>
         <p className="text-black/70">
-          Tu registro se completó, pero no pudimos generar tu tarjeta en este momento. Intenta registrarte de nuevo
-          con el mismo teléfono en unos minutos para conseguir el link.
+          Tu registro se completó, pero no pudimos mostrarte tu tarjeta. Pídele al negocio que te comparta tu link.
         </p>
       </div>
     );
   }
 
-  if (resultado?.pase) {
+  if (link) {
     return (
       <div className={`${WRAPPER} justify-center gap-3 text-center`}>
         <p className="text-black/60">Te estamos llevando a tu tarjeta...</p>

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientesService } from '../clientes/clientes.service';
-import { WalletPassService, DatosPaseInput, WalletPassResultado } from './wallet-pass.service';
+import { WalletPassService, DatosPaseInput, WalletPassEntregable } from './wallet-pass.service';
 import { generateApiKey } from '../common/api-key';
 import { Cliente, LoyaltyCard } from '../../generated/prisma/client';
 
@@ -17,7 +17,7 @@ import { Cliente, LoyaltyCard } from '../../generated/prisma/client';
  *
  * Porta las 3 ramas de LealtadService.altaCliente (ver ese método): cliente
  * nuevo, tarjeta existente sin pase (reintento) y tarjeta existente con
- * pase (solo refresca shareUrl) — la tercera es la que garantiza que un
+ * pase (entrega el link de su misma tarjeta) — la tercera es la que garantiza que un
  * mismo teléfono que vuelve a esta página pública reciba su link de nuevo
  * en vez de un error o una tarjeta duplicada.
  */
@@ -55,8 +55,9 @@ export class PublicLealtadService {
     }
 
     if (loyaltyCard.serialNumber) {
-      const { loyaltyCard: conPaseActualizado, pase } = await this.actualizarPaseYPersistir(loyaltyCard, cliente, tenant);
-      return { loyaltyCard: conPaseActualizado, pase };
+      const datosPase = await this.construirDatosPase(loyaltyCard, cliente, tenant);
+      const pase: WalletPassEntregable = await this.walletPassService.refrescarYObtenerLink(datosPase);
+      return { loyaltyCard, pase };
     }
 
     const datosPase = await this.construirDatosPase(loyaltyCard, cliente, tenant);
@@ -68,30 +69,6 @@ export class PublicLealtadService {
     });
 
     return { loyaltyCard, pase };
-  }
-
-  /**
-   * Mismo criterio que LealtadService.actualizarPaseYPersistir: nunca tira
-   * excepción (ver WalletPassService.actualizarPase) — si WalletWallet falla,
-   * la LoyaltyCard ya resuelta se regresa tal cual, con pase: null.
-   */
-  private async actualizarPaseYPersistir(
-    loyaltyCard: LoyaltyCard,
-    cliente: Cliente,
-    tenant: { id: string; nombre: string },
-  ): Promise<{ loyaltyCard: LoyaltyCard; pase: WalletPassResultado | null }> {
-    const datosPase = await this.construirDatosPase(loyaltyCard, cliente, tenant);
-    const pase = await this.walletPassService.actualizarPase(datosPase);
-
-    if (!pase || pase.serialNumber === loyaltyCard.serialNumber) {
-      return { loyaltyCard, pase };
-    }
-
-    const actualizada = await this.prisma.loyaltyCard.update({
-      where: { id: loyaltyCard.id },
-      data: { serialNumber: pase.serialNumber },
-    });
-    return { loyaltyCard: actualizada, pase };
   }
 
   // A diferencia de LealtadService.construirDatosPase (que a veces necesita

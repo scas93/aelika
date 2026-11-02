@@ -6,6 +6,7 @@ import { ApiError, altaClienteLealtad, type LealtadRespuesta } from "@/lib/api";
 import Card from "../_components/Card";
 import Button from "../_components/Button";
 import Aviso from "../_components/Aviso";
+import { linkTarjeta } from "@/lib/lealtad-pase";
 
 // Sección fija (link + QR de /lealtad/[slug]) — siempre visible, independiente
 // de si el formulario de abajo está en su estado inicial o mostrando el
@@ -60,6 +61,7 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<LealtadRespuesta | null>(null);
+  const link = resultado ? linkTarjeta(resultado.pase) : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -94,17 +96,17 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
             </p>
           </div>
 
-          {resultado.pase ? (
+          {link ? (
             <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border bg-admin-bg p-3">
               <p className="text-sm font-semibold text-admin-ink">Link para agregar la tarjeta al wallet</p>
               <div className="flex items-center gap-2">
                 <code className="flex flex-1 overflow-x-auto rounded-[var(--radius-admin-control)] border border-admin-border bg-white px-3 h-barra items-center text-xs text-admin-ink">
-                  {resultado.pase.shareUrl}
+                  {link}
                 </code>
                 <Button
                   variant="secondary"
                   size="barra"
-                  onClick={() => navigator.clipboard.writeText(resultado.pase!.shareUrl)}
+                  onClick={() => navigator.clipboard.writeText(link)}
                   className="shrink-0"
                 >
                   Copiar
@@ -116,8 +118,8 @@ export default function RegistrarClienteTab({ token, slug }: { token: string; sl
               </p>
             </div>
           ) : (
-            <Aviso tono="ambar">
-              El cliente y su tarjeta ya quedaron registrados, pero no se pudo generar el link del wallet en este momento. Intenta registrarlo de nuevo con el mismo teléfono en unos minutos para conseguir el link.
+            <Aviso tono="rojo">
+              El cliente y su tarjeta quedaron registrados, pero no recibimos el link de la tarjeta del wallet. Registrarlo de nuevo no lo resuelve: avisa a soporte.
             </Aviso>
           )}
 

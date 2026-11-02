@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LoyaltyCard } from '../../generated/prisma/client';
 
@@ -8,6 +8,23 @@ export interface WalletPassResultado {
   applePass: string;
   shareUrl: string;
 }
+
+// Lo que regresa un PUT exitoso: WalletWallet solo confirma la actualización
+// ({ serialNumber, lastUpdated, notifiedDevices, unchanged }) y NO trae
+// shareUrl/googleSaveUrl/applePass — por eso todo lo demás es opcional. El
+// auto-sanado (crearPase) sí regresa el WalletPassResultado completo, que
+// también cabe aquí.
+export type WalletPassActualizado = Pick<WalletPassResultado, 'serialNumber'> &
+  Partial<Omit<WalletPassResultado, 'serialNumber'>>;
+
+// Lo que se le entrega al frontend cuando el teléfono ya tiene pase: el link
+// de su misma tarjeta (ver WalletPassService.refrescarYObtenerLink).
+export interface WalletPassEntregable {
+  serialNumber: string;
+  shareUrl: string;
+}
+
+type ResultadoPut = { ok: true; pase: WalletPassActualizado } | { ok: false; status?: number };
 
 export interface DatosPaseInput {
   loyaltyCard: LoyaltyCard;
@@ -24,6 +41,12 @@ export interface DatosPaseInput {
 }
 
 const WALLETWALLET_BASE_URL = 'https://api.walletwallet.dev/api/passes';
+// Página de «Share a Pass» de WalletWallet: `<base>/p/<serial>`, vive mientras
+// exista el pase y no es de un solo uso (documentación de WalletWallet). El
+// PUT no devuelve shareUrl y GET /passes/:serial tampoco, así que el link de
+// una tarjeta existente se arma con el serial. Base configurable por si el
+// dominio cambia.
+const WALLETWALLET_SHARE_BASE_URL_DEFAULT = 'https://pass.walletwallet.dev';
 const TIMEOUT_MS = 8000;
 const SELLOS_TOTAL = 10;
 
@@ -101,7 +124,7 @@ export class WalletPassService {
    * mecanismo de reintento automático (colas/jobs) en esta fase — decisión
    * consciente de mantenerlo simple por ahora.
    */
-  async actualizarPase(input: DatosPaseInput): Promise<WalletPassResultado | null> {
+  async actualizarPase(input: DatosPaseInput): Promise<WalletPassActualizado | null> {
     if (!input.loyaltyCard.serialNumber) {
       this.logger.warn(
         `LoyaltyCard ${input.loyaltyCard.id} (tenant=${input.loyaltyCard.tenantId}) no tiene serialNumber — auto-sanación: creando el pase en vez de actualizarlo.`,
@@ -116,7 +139,53 @@ export class WalletPassService {
       }
     }
 
-    const url = `${WALLETWALLET_BASE_URL}/${input.loyaltyCard.serialNumber}`;
+    const resultado = await this.enviarActualizacion(input, input.loyaltyCard.serialNumber);
+    return resultado.ok ? resultado.pase : null;
+  }
+
+  /**
+   * Alta de un teléfono que ya tiene pase (LoyaltyCard.serialNumber no nulo):
+   * entrega el link de SU MISMA tarjeta, sin crear otra. El link se deriva
+   * del serial (urlCompartir), así que no depende de que el PUT salga bien:
+   * el PUT es best-effort (re-sincroniza nombre/contador si una actualización
+   * anterior falló) y cualquier fallo suyo (4xx/5xx/429/timeout) solo queda en
+   * logs, nunca bloquea la entrega.
+   *
+   * Excepción: 404 del PUT = WalletWallet no conoce ese serial (pase borrado
+   * o cuenta distinta). Ahí el link derivado llevaría a una tarjeta que no
+   * existe, así que NO se entrega y se tira un error explícito.
+   */
+  async refrescarYObtenerLink(input: DatosPaseInput): Promise<WalletPassEntregable> {
+    const serialNumber = input.loyaltyCard.serialNumber;
+    if (!serialNumber) {
+      throw new ServiceUnavailableException('Esta tarjeta todavía no tiene pase de wallet.');
+    }
+
+    const resultado = await this.enviarActualizacion(input, serialNumber);
+    if (!resultado.ok && resultado.status === 404) {
+      throw new BadGatewayException(
+        'No se encontró el pase de esta tarjeta en el wallet — avisa al negocio para que lo regeneren.',
+      );
+    }
+    if (!resultado.ok) {
+      this.logger.warn(
+        `El PUT del pase ${serialNumber} (LoyaltyCard ${input.loyaltyCard.id}) falló${resultado.status ? ` con HTTP ${resultado.status}` : ''} — se entrega el link de todas formas.`,
+      );
+    }
+
+    return { serialNumber, shareUrl: this.urlCompartir(serialNumber) };
+  }
+
+  /** `<base>/p/<serial>` — ver WALLETWALLET_SHARE_BASE_URL_DEFAULT. */
+  urlCompartir(serialNumber: string): string {
+    const base =
+      this.configService.get<string>('WALLETWALLET_SHARE_BASE_URL')?.trim() || WALLETWALLET_SHARE_BASE_URL_DEFAULT;
+    return `${base.replace(/\/+$/, '')}/p/${encodeURIComponent(serialNumber)}`;
+  }
+
+  /** PUT del pase. Nunca tira: devuelve `ok:false` (con el status HTTP, si hubo respuesta). */
+  private async enviarActualizacion(input: DatosPaseInput, serialNumber: string): Promise<ResultadoPut> {
+    const url = `${WALLETWALLET_BASE_URL}/${serialNumber}`;
 
     try {
       const body = this.construirBody(input, input.loyaltyCard.contador);
@@ -130,17 +199,17 @@ export class WalletPassService {
       if (!response.ok) {
         const detalle = await response.text().catch(() => `HTTP ${response.status}`);
         this.logger.error(
-          `WalletWallet rechazó la actualización del pase ${input.loyaltyCard.serialNumber} (LoyaltyCard ${input.loyaltyCard.id}): ${detalle}`,
+          `WalletWallet rechazó la actualización del pase ${serialNumber} (LoyaltyCard ${input.loyaltyCard.id}): ${detalle}`,
         );
-        return null;
+        return { ok: false, status: response.status };
       }
 
-      return (await response.json()) as WalletPassResultado;
+      return { ok: true, pase: (await response.json()) as WalletPassActualizado };
     } catch (error: any) {
       this.logger.error(
-        `Error actualizando el pase ${input.loyaltyCard.serialNumber} (LoyaltyCard ${input.loyaltyCard.id}): ${error?.message ?? error}`,
+        `Error actualizando el pase ${serialNumber} (LoyaltyCard ${input.loyaltyCard.id}): ${error?.message ?? error}`,
       );
-      return null;
+      return { ok: false };
     }
   }
 
