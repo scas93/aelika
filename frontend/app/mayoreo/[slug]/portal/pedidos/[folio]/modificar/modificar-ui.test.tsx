@@ -267,8 +267,8 @@ describe("modificar pedido", () => {
       screen.queryByRole("button", { name: "Guardar cambios" }),
     ).toBeNull();
     expect(
-      screen.getByRole("link", { name: /Escribir por WhatsApp/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: /Escribir por WhatsApp/ }),
+    ).toBeNull();
   });
 
   it("si el servidor rechaza (409), muestra el motivo y vuelve a leer el pedido", async () => {

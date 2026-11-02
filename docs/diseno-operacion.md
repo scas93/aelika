@@ -105,7 +105,7 @@ El negocio se identifica por la dirección del portal (/mayoreo/[slug]); el clie
 3. Escribe el código.
 4. Si su teléfono está en un solo cliente, entra directo. Si está en varios, elige con cuál entrar, y puede cambiar de cliente dentro del portal.
 
-Al escribir su teléfono, el cliente ve **siempre el mismo mensaje**, esté o no autorizado: "Si tu número está dado de alta, recibirás un código por WhatsApp. Si no te llega en unos minutos, contáctanos", con el botón para contactar al negocio cuando el número de atención esté configurado. El portal nunca revela qué teléfonos son clientes del negocio; quien no está autorizado no recibe código y no puede seguir.
+Al escribir su teléfono, el cliente ve **siempre el mismo mensaje**, esté o no autorizado: "Si tu número está dado de alta, recibirás un código por WhatsApp. Si no te llega en unos minutos, contáctanos". El portal nunca revela qué teléfonos son clientes del negocio; quien no está autorizado no recibe código y no puede seguir.
 
 **Límite de envíos:** cada envío de código cuesta un mensaje de WhatsApp, así que los envíos tienen límite: 3 por hora y 10 por día por teléfono, 10 por día por dispositivo, 30 por día por conexión (IP) y un tope diario por negocio. El código es de 6 dígitos, vale 10 minutos, se usa una sola vez y admite 5 intentos. Los teléfonos que no son clientes cuentan igual contra los límites. Si el servicio de límites no responde, nadie puede pedir código.
 
@@ -133,7 +133,7 @@ Al entrar, el portal muestra el menú: **Crear pedido · Modificar pedido activo
 
 - **Crear pedido:** pantalla por pantalla, muy parecido al storefront B2B actual. Los datos del cliente vienen precargados y el descuento ya aplicado. Al terminar, el cliente ve una pantalla de confirmación con el folio y el resumen; no se envía WhatsApp hasta que el equipo lo marca Confirmado. Ver la pestaña Pantallas actuales. Un pedido es de una sola semana: el cliente elige la semana, los días de entrega de esa semana y captura lo que recibe cada día (un paso por día, con catálogo completo). Los precios son siempre los actuales.
   - **Favorito por día de la semana.** En el paso de cada día, una barra de acciones arriba del catálogo ofrece el favorito de ese día de la semana. Con el día **vacío**: «Tu [día] favorito — Usar» llena el día con un toque con las cantidades guardadas; si además aplica «Copiar» (día que no es el primero y el primer día ya tiene productos), «Copiar» es la acción principal y «Usar favorito» la secundaria. Con el día **con productos**: si coincide exactamente con el favorito de ese día de la semana, la barra dice «Tu [día] favorito ✓»; si no, ofrece «¿Siempre pides así los [día]? — Guardar favorito», y si ya había un favorito para ese día pide confirmación antes de reemplazarlo. Guardar el favorito de un día no toca los de los demás días. Al usar un favorito, los productos que ya no están disponibles se omiten y se avisa con su nombre. Si el favorito no carga, el flujo sigue sin esas acciones. Un favorito se aplica a cualquier fecha de ese día de la semana, en la semana que sea.
-- **Modificar pedido activo:** muestra solo los pedidos con alguna entrega todavía modificable; si hay dos, el cliente elige. Reglas en la sección Reglas de pedido. Las entregas a menos de 18h y las ya cerradas se ven bloqueadas, con un botón para contactar al negocio (número de atención configurado en Ajustes).
+- **Modificar pedido activo:** muestra solo los pedidos con alguna entrega todavía modificable; si hay dos, el cliente elige. Reglas en la sección Reglas de pedido. Las entregas a menos de 18h y las ya cerradas se ven bloqueadas.
 - **Ver mis pedidos:** pedidos activos e historial, con estado, entregas y estado de pago. Al abrir uno se ve el detalle: información básica del pedido, sus productos, sus entregas con su estado y el estado del pago.
 - El cliente **no cancela el pedido completo**: eso se pide por teléfono al negocio.
 
@@ -321,7 +321,7 @@ Esta operación debe servir a cualquier negocio parecido a Banetto, no solo a Ba
 | Estados de entrega en uso | Pendiente, Entregada, No recogida, Cancelada | Con "Lista"; sin "No recogida" |
 | Notificaciones | Los eventos de la sección Notificaciones (3 envíos: recordatorio del viernes, recordatorio del sábado y pedido confirmado) | Cada una con su activación, horario, filtro y plantilla |
 | Menú del bot | 3 opciones | Opciones propias |
-| Número de atención del negocio | Configurado en Ajustes; el portal lo usa en el botón de contacto de las entregas bloqueadas | — |
+| Número de atención del negocio | Configurado en Ajustes; el portal **ya no muestra ningún botón «Escribir por WhatsApp»** (se quitó de todas las pantallas), así que hoy el dato solo se conserva | — |
 
 ### Reglas fijas del producto
 
@@ -524,7 +524,7 @@ Solo lectura, siempre del cliente de la sesión. `GET /portal/pedidos?slug=&curs
 - **Marca «Modificado por el cliente»:** `Order.modificadoPorClienteAt` (null = sin marca). La enciende el portal; la apagan `avanzar`, `marcarPagado` cuando confirma (AL_INICIO) y la acción de abajo; editar desde el panel NO la apaga. El portal la ve como `modificadoPorCliente` y el panel como `modificadoPorClienteAt` en Pedidos activos (lista y panel lateral). `PATCH /pedidos-b2b/:id/marcar-revisado` (los 3 roles, idempotente, solo apaga la marca) y el botón «Marcar como revisado» existen porque un pedido En proceso o Completado nunca se vuelve a confirmar. Documentada en la Parte I como acción vigente (decisión de producto del 2026-10-29).
 - Un aviso interno por WhatsApp sale al equipo cuando se enciende la marca (ver [notificaciones.md](notificaciones.md)); el aviso «Pedido confirmado» al cliente sale cuando el equipo reconfirma.
 - **Concurrencia panel/portal:** `PATCH /pedidos-b2b/:id/items` acepta `version` OPCIONAL (el `updatedAt` que cargó el panel); si no coincide → 409 «El cliente modificó este pedido mientras lo editabas, recárgalo». El panel lo manda siempre y, tras un 409, recarga el pedido y sale de la edición. Nota de pruebas: el reloj de la suite está congelado, así que `updatedAt` no cambia solo; los tests de versión adelantan el reloj con `jest.setSystemTime`.
-- **Frontend:** una tarjeta por día (editable lo que el servidor permite; lo cerrado en solo lectura con el botón de WhatsApp de contexto `dia`), totales estimados (`frontend/lib/portal-modificar-modelo.ts`; el servidor calcula el real), aviso de que se recalculan todos los precios con los de hoy, y confirmación antes de guardar. El detalle del pedido suma `modificable` y `version`.
+- **Frontend:** una tarjeta por día (editable lo que el servidor permite; lo cerrado en solo lectura, sin botón de contacto), totales estimados (`frontend/lib/portal-modificar-modelo.ts`; el servidor calcula el real), aviso de que se recalculan todos los precios con los de hoy, y confirmación antes de guardar. El detalle del pedido suma `modificable` y `version`.
 
 ### 7.7 Analítica (PostHog, solo frontend)
 

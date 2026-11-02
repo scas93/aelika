@@ -14,7 +14,7 @@ import type {
   SemanaCalendarioPortal,
 } from "@/lib/portal-api";
 
-// Ajustes de interfaz del portal (después de la 4d): scroll de la confirmación, botón de WhatsApp con mensaje por contexto
+// Ajustes de interfaz del portal (después de la 4d): scroll de la confirmación, que ya no haya botón de WhatsApp
 // y alerta flotante del favorito.
 
 const fetchCalendario = vi.fn();
@@ -145,9 +145,6 @@ const resultado: ResultadoPedidoPortal = {
   total: 650,
 };
 
-/** Mensaje decodificado del enlace de WhatsApp. */
-const mensajeDe = (a: HTMLElement) =>
-  decodeURIComponent((a.getAttribute("href") ?? "").split("?text=")[1] ?? "");
 const botones = () =>
   screen.queryAllByRole("link", { name: /Escribir por WhatsApp/ });
 
@@ -169,8 +166,6 @@ describe("confirmación del pedido", () => {
     render(
       <PasoConfirmacion
         resultado={resultado}
-        cliente="Cafe Entredos"
-        numeroAtencion="3331006915"
         horaEntrega="08:00"
         ubicacion={null}
         onVolver={() => {}}
@@ -179,33 +174,10 @@ describe("confirmación del pedido", () => {
     expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
   });
 
-  it("botón de WhatsApp con el mensaje del pedido (folio) y el nombre del cliente", () => {
+  it("no ofrece el botón de WhatsApp", () => {
     render(
       <PasoConfirmacion
         resultado={resultado}
-        cliente="Cafe Entredos"
-        numeroAtencion="3331006915"
-        horaEntrega="08:00"
-        ubicacion={null}
-        onVolver={() => {}}
-      />,
-    );
-    const [boton] = botones();
-    expect(boton).toBeInTheDocument();
-    expect(boton.getAttribute("href")).toMatch(
-      /^https:\/\/wa\.me\/523331006915\?text=/,
-    );
-    expect(mensajeDe(boton)).toBe(
-      "Hola, soy Cafe Entredos, sobre mi pedido P-000004.",
-    );
-  });
-
-  it("sin número de atención no hay botón", () => {
-    render(
-      <PasoConfirmacion
-        resultado={resultado}
-        cliente="Cafe Entredos"
-        numeroAtencion={null}
         horaEntrega="08:00"
         ubicacion={null}
         onVolver={() => {}}
@@ -221,8 +193,6 @@ describe("confirmación: cuándo y dónde recojo", () => {
     render(
       <PasoConfirmacion
         resultado={resultado}
-        cliente="Cafe Entredos"
-        numeroAtencion={null}
         horaEntrega="08:00"
         ubicacion="Justo Sierra 2117, Guadalajara"
         onVolver={() => {}}
@@ -245,8 +215,6 @@ describe("confirmación: cuándo y dónde recojo", () => {
     render(
       <PasoConfirmacion
         resultado={resultado}
-        cliente="Cafe Entredos"
-        numeroAtencion={null}
         horaEntrega="08:00"
         ubicacion="  "
         onVolver={() => {}}
@@ -256,10 +224,9 @@ describe("confirmación: cuándo y dónde recojo", () => {
   });
 });
 
-describe("días: botón de WhatsApp", () => {
+describe("días: lista de la semana", () => {
   // El paso de días muestra una sola semana: la primera sin pedido.
   const props = (cal: CalendarioPortal) => ({
-    cliente: "Cafe Entredos",
     calendario: cal,
     semana: cal.semanas.find((x) => !x.pedido)!,
     fechas: [] as string[],
@@ -267,43 +234,20 @@ describe("días: botón de WhatsApp", () => {
     onContinuar: () => {},
   });
 
-  it("un solo día cerrado: el botón va junto a ese día con el mensaje del día", () => {
-    // Lunes y martes pasados; miércoles dejó de cumplir el tiempo para pedir; el resto elegible.
+  it("con días cerrados no hay botón de WhatsApp, ni junto al día ni general", () => {
     render(
       <PasoDias
         {...props(
           calendario([
-            semana("2026-10-05", { pasados: [0, 1], noDisponibles: [2] }),
+            semana("2026-10-05", { pasados: [0], noDisponibles: [1, 2] }),
           ]),
         )}
       />,
     );
-    const bs = botones();
-    expect(bs).toHaveLength(1);
-    expect(mensajeDe(bs[0])).toBe(
-      "Hola, soy Cafe Entredos. Quiero cambiar mi entrega del miércoles 7 de octubre.",
-    );
-    // Está dentro del renglón de ese día, no en otro.
-    expect(bs[0].closest("li")).toHaveTextContent(/mié/i);
-    // Los días que solo "ya pasaron" no llevan botón.
-    expect(screen.getAllByText(/Ya pasó/).length).toBe(2);
-  });
-
-  it("varios días cerrados: un solo botón con el mensaje genérico", () => {
-    render(
-      <PasoDias
-        {...props(
-          calendario([semana("2026-10-05", { noDisponibles: [0, 1] })]),
-        )}
-      />,
-    );
-    const bs = botones();
-    expect(bs).toHaveLength(1);
-    expect(mensajeDe(bs[0])).toBe(
-      "Hola, soy Cafe Entredos, necesito ayuda con mi pedido.",
-    );
-    // El botón general no está pegado a un día.
-    expect(bs[0].closest("li")).toBeNull();
+    expect(botones()).toHaveLength(0);
+    expect(screen.queryByText(/WhatsApp|Escríbenos/i)).toBeNull();
+    // Los días cerrados siguen explicando su motivo.
+    expect(screen.getAllByText("Ya no hay tiempo para hacer pedido")).toHaveLength(2);
   });
 
   it("solo muestra los días de la semana elegida", () => {
@@ -312,22 +256,6 @@ describe("días: botón de WhatsApp", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(7);
     expect(screen.getByText(/Semana 5/)).toBeInTheDocument();
     expect(screen.queryByText(/Semana 12/)).toBeNull();
-  });
-
-  it("sin número de atención no hay ningún botón, aunque haya días cerrados", () => {
-    render(
-      <PasoDias
-        {...props(
-          calendario([semana("2026-10-05", { noDisponibles: [0] })], null),
-        )}
-      />,
-    );
-    expect(botones()).toHaveLength(0);
-  });
-
-  it("sin días cerrados ni pedidos no hay botón", () => {
-    render(<PasoDias {...props(calendario([semana("2026-10-05")]))} />);
-    expect(botones()).toHaveLength(0);
   });
 
   it("cada día cerrado explica el motivo en una línea", () => {
@@ -349,7 +277,6 @@ describe("días: filas de la lista", () => {
     ]);
     render(
       <PasoDias
-        cliente="Cafe Entredos"
         calendario={cal}
         semana={cal.semanas[0]}
         fechas={[]}
@@ -376,7 +303,6 @@ describe("selector de semana", () => {
   const montarSemanas = (cal: CalendarioPortal, onElegir = vi.fn()) => {
     render(
       <PasoSemana
-        cliente="Cafe Entredos"
         calendario={cal}
         onElegir={onElegir}
       />,
@@ -446,22 +372,19 @@ describe("selector de semana", () => {
     );
   });
 
-  it("con una semana con pedido y número de atención: un solo botón de WhatsApp genérico", () => {
+  it("con una semana con pedido no hay botón de WhatsApp", () => {
     montarSemanas(
       calendario([
         semana("2026-09-28", { pedido: true }),
         semana("2026-10-05"),
       ]),
     );
-    const bs = botones();
-    expect(bs).toHaveLength(1);
-    expect(mensajeDe(bs[0])).toBe(
-      "Hola, soy Cafe Entredos, necesito ayuda con mi pedido.",
-    );
+    expect(botones()).toHaveLength(0);
+    expect(screen.queryByText(/Escríbenos/)).toBeNull();
   });
 });
 
-describe("menú: botón de WhatsApp", () => {
+describe("menú", () => {
   const sesion = {
     negocio: { nombre: "Banetto" },
     telefonoTerminacion: "6915",
@@ -470,8 +393,7 @@ describe("menú: botón de WhatsApp", () => {
     requiereSeleccion: false,
   };
 
-  it("con número de atención: mensaje genérico con el nombre del cliente", async () => {
-    fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")]));
+  it("no hay botón de WhatsApp ni se consulta el calendario", () => {
     render(
       <MenuPantalla
         slug="banetto"
@@ -483,16 +405,11 @@ describe("menú: botón de WhatsApp", () => {
         onCerrada={() => {}}
       />,
     );
-    const boton = await screen.findByRole("link", {
-      name: /Escribir por WhatsApp/,
-    });
-    expect(mensajeDe(boton)).toBe(
-      "Hola, soy Cafe Entredos, necesito ayuda con mi pedido.",
-    );
+    expect(botones()).toHaveLength(0);
+    expect(fetchCalendario).not.toHaveBeenCalled();
   });
 
-  it("Ver mis pedidos y Modificar pedido activo están habilitados", async () => {
-    fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")]));
+  it("Ver mis pedidos y Modificar pedido activo están habilitados", () => {
     const onVerPedidos = vi.fn();
     render(
       <MenuPantalla
@@ -510,24 +427,6 @@ describe("menú: botón de WhatsApp", () => {
     expect(
       screen.getByRole("button", { name: /Modificar pedido activo/ }),
     ).toBeEnabled();
-    await waitFor(() => expect(fetchCalendario).toHaveBeenCalled());
-  });
-
-  it("sin número de atención: no hay botón", async () => {
-    fetchCalendario.mockResolvedValue(calendario([semana("2026-10-05")], null));
-    render(
-      <MenuPantalla
-        slug="banetto"
-        sesion={sesion}
-        onCrear={() => {}}
-        onVerPedidos={() => {}}
-        onModificar={() => {}}
-        onCambiarCliente={() => {}}
-        onCerrada={() => {}}
-      />,
-    );
-    await waitFor(() => expect(fetchCalendario).toHaveBeenCalled());
-    expect(botones()).toHaveLength(0);
   });
 });
 

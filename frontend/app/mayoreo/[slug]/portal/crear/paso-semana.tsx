@@ -9,11 +9,9 @@ import type {
 import { rangoSemanaCorto } from "@/lib/portal-calendario-formato";
 import { rutaBasePortal } from "@/lib/portal-pedidos-formato";
 import { BTN_PRIMARIO, BTN_SECUNDARIO, CARD } from "../estilos";
-import BotonWhatsApp from "../boton-whatsapp";
 
 interface Props {
   /** Nombre del cliente de la sesión (va en el mensaje precargado de WhatsApp). */
-  cliente: string;
   calendario: CalendarioPortal;
   onElegir: (semana: SemanaCalendarioPortal) => void;
 }
@@ -21,11 +19,10 @@ interface Props {
 // Primer paso: una tarjeta por cada semana del horizonte (incluida la en curso). Un pedido = una semana. El estado de cada
 // semana lo decide el calendario del servidor (`pedido`, `puedeCrear`); una semana cuyo pedido está cancelado llega con
 // `pedido: null`, así que se trata como una semana sin pedido.
-export default function PasoSemana({ cliente, calendario, onElegir }: Props) {
+export default function PasoSemana({ calendario, onElegir }: Props) {
   const pathname = usePathname() ?? "";
   const { slug } = useParams<{ slug: string }>() ?? { slug: "" };
   const base = rutaBasePortal(pathname, slug);
-  const hayPedido = calendario.semanas.some((s) => s.pedido);
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-mayoreo-ink-soft">
@@ -96,19 +93,6 @@ export default function PasoSemana({ cliente, calendario, onElegir }: Props) {
           </section>
         );
       })}
-
-      {hayPedido && calendario.numeroAtencion !== null && (
-        <div className={CARD + " gap-2"}>
-          <p className="text-sm text-mayoreo-ink-soft">
-            ¿Necesitas pedir o cambiar una entrega que ya no se puede elegir
-            aquí? Escríbenos.
-          </p>
-          <BotonWhatsApp
-            numeroAtencion={calendario.numeroAtencion}
-            contexto={{ tipo: "general", cliente }}
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -2071,11 +2071,14 @@ export interface LoyaltyCard {
 // que solo refresca un pase ya existente): el LoyaltyCard siempre se
 // actualiza igual del lado de Aelika, el pase visual puede quedarse
 // desactualizado hasta el siguiente sello si WalletWallet falló.
+// `shareUrl` solo viene en las altas (y en la entrega del link de un teléfono ya
+// inscrito); la respuesta de un sello/canje no lo trae, y un `pase` puede
+// llegar sin link — siempre validar con linkTarjeta() antes de usarlo.
 export interface WalletPassResultado {
   serialNumber: string;
-  googleSaveUrl: string;
-  applePass: string;
-  shareUrl: string;
+  shareUrl?: string;
+  googleSaveUrl?: string;
+  applePass?: string;
 }
 
 export interface LealtadRespuesta {

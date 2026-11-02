@@ -56,7 +56,7 @@ describe("Portal · crear pedido · días sin entrega", () => {
     const onToggle = vi.fn();
     const s = semana({ 4: "Navidad" }); // viernes 25-dic
     render(
-      <PasoDias cliente="Cafe Entredos" calendario={calendario(s)} semana={s} fechas={[]} onToggle={onToggle} onContinuar={vi.fn()} />,
+      <PasoDias calendario={calendario(s)} semana={s} fechas={[]} onToggle={onToggle} onContinuar={vi.fn()} />,
     );
     expect(screen.getByText("Sin entrega · Navidad")).toBeTruthy();
     const filaFestivo = screen.getByText("Sin entrega · Navidad").closest("button")!;
@@ -73,7 +73,7 @@ describe("Portal · crear pedido · días sin entrega", () => {
   it("sin nota solo dice «Sin entrega»", () => {
     const s = semana({ 3: null });
     render(
-      <PasoDias cliente="Cafe Entredos" calendario={calendario(s)} semana={s} fechas={[]} onToggle={vi.fn()} onContinuar={vi.fn()} />,
+      <PasoDias calendario={calendario(s)} semana={s} fechas={[]} onToggle={vi.fn()} onContinuar={vi.fn()} />,
     );
     expect(screen.getByText("Sin entrega")).toBeTruthy();
   });

@@ -1,7 +1,12 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { ClientesService } from '../clientes/clientes.service';
-import { WalletPassService, DatosPaseInput, WalletPassResultado } from './wallet-pass.service';
+import {
+  WalletPassService,
+  DatosPaseInput,
+  WalletPassActualizado,
+  WalletPassEntregable,
+} from './wallet-pass.service';
 import { generateApiKey } from '../common/api-key';
 import { fechaEnMexico } from '../common/horario';
 import { Cliente, LoyaltyCard, LoyaltyCardEstado, Prisma } from '../../generated/prisma/client';
@@ -32,12 +37,11 @@ export class LealtadService {
    * pero cuya creación de pase falló la vez anterior (ver
    * WalletPassService.crearPase). Si el LoyaltyCard ya tiene un pase
    * (serialNumber no nulo), NO se vuelve a crear — se llama a
-   * `actualizarPase` (PUT, con el contador actual, sin incrementarlo ni
-   * crear un `LoyaltyVisit`) solo para conseguir un `shareUrl` fresco que
-   * reenviarle a un cliente que perdió su link. Best-effort, igual que
-   * cualquier otro uso de `actualizarPase` (ver actualizarPaseYPersistir):
-   * un fallo de WalletWallet aquí no rompe la respuesta del endpoint,
-   * solo regresa `pase: null`.
+   * `refrescarYObtenerLink`: devuelve el link de su misma tarjeta (derivado
+   * del serial — el PUT de WalletWallet no trae `shareUrl`) y hace un PUT
+   * best-effort con el contador actual, sin incrementarlo ni crear un
+   * `LoyaltyVisit`. Un fallo del PUT no impide entregar el link; solo un 404
+   * (WalletWallet no conoce el serial) tira error.
    */
   async altaCliente(nombre: string, telefono: string) {
     const cliente = await this.clientesService.buscarOCrearParaLealtad(nombre, telefono);
@@ -59,8 +63,9 @@ export class LealtadService {
     }
 
     if (loyaltyCard.serialNumber) {
-      const { loyaltyCard: conPaseActualizado, pase } = await this.actualizarPaseYPersistir(loyaltyCard);
-      return { loyaltyCard: conPaseActualizado, pase };
+      const datosPase = await this.construirDatosPase(loyaltyCard, cliente);
+      const pase: WalletPassEntregable = await this.walletPassService.refrescarYObtenerLink(datosPase);
+      return { loyaltyCard, pase };
     }
 
     const datosPase = await this.construirDatosPase(loyaltyCard, cliente);
@@ -233,7 +238,7 @@ export class LealtadService {
    */
   private async actualizarPaseYPersistir(
     loyaltyCard: LoyaltyCard,
-  ): Promise<{ loyaltyCard: LoyaltyCard; pase: WalletPassResultado | null }> {
+  ): Promise<{ loyaltyCard: LoyaltyCard; pase: WalletPassActualizado | null }> {
     const datosPase = await this.construirDatosPase(loyaltyCard);
     const pase = await this.walletPassService.actualizarPase(datosPase);
 

@@ -9,7 +9,6 @@ import {
   type DetallePedidoPortal,
 } from "@/lib/portal-api";
 import { hora12, rangoSemanaCorto } from "@/lib/portal-calendario-formato";
-import BotonWhatsApp from "../../boton-whatsapp";
 import { BTN_PRIMARIO, CARD, ERROR, WRAPPER } from "../../estilos";
 import EncabezadoPantalla from "../../encabezado-pantalla";
 import BarraAccionFija from "../../crear/barra-accion-fija";
@@ -25,7 +24,7 @@ import { useSesionPortal } from "../usar-sesion-portal";
 // recolección. Solo lectura; «Modificar pedido» va en la barra fija cuando el pedido se puede modificar.
 export default function DetallePedidoPage() {
   const { slug, folio } = useParams<{ slug: string; folio: string }>();
-  const { sesion, numeroAtencion, ubicacion, horaEntrega, base, router } =
+  const { sesion, ubicacion, horaEntrega, base, router } =
     useSesionPortal(slug);
   const [pedido, setPedido] = useState<DetallePedidoPortal | null>(null);
   const [noEncontrado, setNoEncontrado] = useState(false);
@@ -113,20 +112,6 @@ export default function DetallePedidoPage() {
               Tu nota: {pedido.notaCliente}
             </p>
           )}
-
-          <div className="flex flex-col items-start gap-3">
-            {sesion?.cliente && (
-              <BotonWhatsApp
-                discreto
-                numeroAtencion={numeroAtencion}
-                contexto={{
-                  tipo: "pedido",
-                  cliente: sesion.cliente.nombre,
-                  folios: [pedido.folio],
-                }}
-              />
-            )}
-          </div>
 
           {pedido.modificable && (
             <BarraAccionFija>
