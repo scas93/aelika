@@ -7,7 +7,7 @@ import {
   disponibleParaTrigger,
   ResolverContexto,
 } from './plantilla-variable-catalogo';
-import { PedidoContexto, PedidoContextoOrder, PedidoContextoPedidoB2b } from './plantilla-variable.type';
+import { PedidoContexto, PedidoContextoOrder, PedidoContextoPedidoB2b, PedidoContextoReserva } from './plantilla-variable.type';
 
 const AHORA = new Date('2026-09-24T12:00:00.000Z');
 
@@ -198,5 +198,56 @@ describe('CATALOGO_VARIABLES — cada entrada tiene fallback no vacío', () => {
 
   it.each(casos)('%s', (_nombre, def) => {
     expect(def.fallback.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe('CAMPO_RESERVA/nombreHuespedMayusculas', () => {
+  const def = buscarEnCatalogo(F.CAMPO_RESERVA, 'nombreHuespedMayusculas')!;
+  const reservaCon = (nombreHuesped?: string | null): PedidoContextoReserva => ({
+    origen: 'RESERVA',
+    folio: '9641816459',
+    total: '100',
+    estatus: '',
+    createdAt: AHORA,
+    items: [],
+    checkIn: new Date('2026-12-25T00:00:00.000Z'),
+    checkOut: new Date('2026-12-29T00:00:00.000Z'),
+    adultos: 2,
+    ninos: 0,
+    habitaciones: null,
+    enlaceCheckin: null,
+    ...(nombreHuesped === undefined ? {} : { nombreHuesped }),
+  });
+  const resolverReserva = (contexto: PedidoContexto | undefined, idiomaPlantilla?: string) =>
+    def.resolver({ tenant, cliente, contexto, ahora: AHORA, storefrontUrl: '', idiomaPlantilla });
+
+  it('está en el grupo Reserva, con su etiqueta, solo para reservas', () => {
+    expect(def.grupo).toBe('RESERVA');
+    expect(def.label).toBe('Nombre del huésped (mayúsculas)');
+    expect(disponibleParaTrigger(def.restriccion, ReglaTriggerTipo.RESERVA_AUTOMATICA, undefined)).toBe(true);
+    for (const t of [ReglaTriggerTipo.ESTADO_CLIENTE, ReglaTriggerTipo.MANUAL, ReglaTriggerTipo.FECHA_PROGRAMADA]) {
+      expect(disponibleParaTrigger(def.restriccion, t, undefined)).toBe(false);
+    }
+    expect(disponibleParaTrigger(def.restriccion, ReglaTriggerTipo.EVENTO_PEDIDO, ReglaTriggerOrigenPedido.ORDER)).toBe(false);
+    expect(disponibleParaContexto(def.restriccion, contextoOrderRecoger)).toBe(false);
+    expect(disponibleParaContexto(def.restriccion, undefined)).toBe(false);
+  });
+
+  it('usa el nombre de la reserva, no el del Cliente', () => {
+    expect(cliente.nombre).toBe('Ana López');
+    expect(resolverReserva(reservaCon('maría gonzález'), 'es')).toBe('MARÍA GONZÁLEZ');
+  });
+
+  it('sin nombre o con «Huésped»: texto neutro según el idioma de la plantilla', () => {
+    for (const nombre of [undefined, null, '', 'Huésped']) {
+      expect(resolverReserva(reservaCon(nombre), 'es')).toBe('HUÉSPED');
+      expect(resolverReserva(reservaCon(nombre), 'en_US')).toBe('GUEST');
+      expect(resolverReserva(reservaCon(nombre))).toBe('HUÉSPED'); // sin idioma, mismo default que las fechas
+    }
+  });
+
+  it('fuera de una reserva no resuelve (lo rechaza la restricción antes de enviar)', () => {
+    expect(resolverReserva(undefined, 'es')).toBeNull();
+    expect(resolverReserva(contextoOrderRecoger, 'es')).toBeNull();
   });
 });

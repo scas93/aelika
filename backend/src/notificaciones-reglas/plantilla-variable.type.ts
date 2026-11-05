@@ -76,6 +76,11 @@ export interface PedidoContextoReserva extends PedidoContextoBase {
   ninos: number;
   habitaciones: string | null;
   enlaceCheckin: string | null;
+  /**
+   * Nombre guardado en la propia reserva (`Order.clienteNombre`), no el del Cliente (que se sobrescribe por teléfono).
+   * Opcional para no obligar a otros constructores del contexto; ausente = sin nombre. Nunca se escribe en logs.
+   */
+  nombreHuesped?: string | null;
 }
 
 export type PedidoContexto = PedidoContextoOrder | PedidoContextoPedidoB2b | PedidoContextoReserva;

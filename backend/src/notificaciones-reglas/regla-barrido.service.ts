@@ -229,6 +229,7 @@ export class ReglaBarridoService {
         ninos: det.ninos,
         habitaciones: det.habitaciones,
         enlaceCheckin: det.onlineCheckinUrl,
+        nombreHuesped: reserva.clienteNombre,
       };
       await this.intentarEnviar(regla, reserva.cliente, stats, contexto, reserva.id);
     }

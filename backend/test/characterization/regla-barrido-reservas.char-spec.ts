@@ -324,10 +324,18 @@ describe('Reglas RESERVA_AUTOMATICA · barrido sobre reservas de hotel', () => {
       const manual = { trigger: 'MANUAL', triggerConfig: undefined, filtro: [], plantillaVariables: vars('CAMPO_RESERVA', 'checkIn') };
       expect((await dueno().post('/reglas', body(manual))).status).toBe(400);
     });
+    it('variable «Nombre del huésped (mayúsculas)»: solo en reglas de reservas (en otros triggers se rechaza)', async () => {
+      const vars = [{ posicion: 1, fuente: 'CAMPO_RESERVA', valor: 'nombreHuespedMayusculas' }];
+      expect((await dueno().post('/reglas', body({ plantillaVariables: vars }))).status).toBe(201);
+      const manual = { trigger: 'MANUAL', triggerConfig: undefined, filtro: [], plantillaVariables: vars };
+      expect((await dueno().post('/reglas', body(manual))).status).toBe(400);
+      const estadoCliente = { trigger: 'ESTADO_CLIENTE', triggerConfig: undefined, filtro: [], plantillaVariables: vars };
+      expect((await dueno().post('/reglas', body(estadoCliente))).status).toBe(400);
+    });
     it('el catálogo de variables incluye las de reserva', async () => {
       const cat = (await dueno().get('/reglas/catalogo-variables')).body as { fuente: string; valor: string }[];
       expect(cat.filter((v) => v.fuente === 'CAMPO_RESERVA').map((v) => v.valor).sort()).toEqual(
-        ['adultos', 'checkIn', 'checkOut', 'enlaceCheckin', 'habitaciones', 'huespedes', 'ninos', 'noches', 'numeroReserva'].sort(),
+        ['adultos', 'checkIn', 'checkOut', 'enlaceCheckin', 'habitaciones', 'huespedes', 'ninos', 'nombreHuespedMayusculas', 'noches', 'numeroReserva'].sort(),
       );
     });
   });
@@ -404,6 +412,49 @@ describe('Reglas RESERVA_AUTOMATICA · barrido sobre reservas de hotel', () => {
       const mala = await crearRegla({ nombre: 'mala', plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_PEDIDO', valor: 'folio' }] });
       await expect(envioReal().enviar(tenant, cliente, mala, contexto(b))).rejects.toThrow(/no aplica a este envío/);
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('nombre del huésped en mayúsculas: dos reservas con el mismo teléfono llevan cada una el nombre de SU reserva', async () => {
+      const cuerpos: any[] = [];
+      global.fetch = jest.fn(async (_u: any, init: any) => {
+        cuerpos.push(JSON.parse(init.body));
+        return { ok: true } as Response;
+      }) as any;
+      const tel = '+52 33 1485 0000';
+      const a = reserva(3, 5, { phone: tel });
+      a.booker = { ...a.booker, first_name: 'María', last_name: 'González' };
+      const b = reserva(4, 6, { phone: tel });
+      b.booker = { ...b.booker, first_name: '  josé   luis ', last_name: 'PEÑA  Núñez' };
+      await ingestar(a);
+      await ingestar(b); // el Cliente (mismo teléfono) queda con el nombre de la segunda reserva
+      expect((await s.h.prisma.cliente.findFirstOrThrow()).nombre).toBe('josé   luis PEÑA  Núñez'); // la ingesta no normaliza espacios internos
+
+      await crearRegla({ plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_RESERVA', valor: 'nombreHuespedMayusculas' }] });
+      const real = new ReglaBarridoService(s.h.prisma, new ReglasFiltroService(s.h.prisma), new ReglaCandadoService(s.h.prisma), envioReal());
+      await real.ejecutarBarrido();
+
+      expect(cuerpos.map((c) => c.variables)).toEqual([['MARÍA GONZÁLEZ'], ['JOSÉ LUIS PEÑA NÚÑEZ']]);
+    });
+
+    it.each([
+      ['es', 'HUÉSPED'],
+      ['en_US', 'GUEST'],
+    ])('reserva sin nombre (se guarda «Huésped») en plantilla %s: texto neutro, nunca el genérico como nombre', async (idioma, esperado) => {
+      const cuerpos: any[] = [];
+      global.fetch = jest.fn(async (_u: any, init: any) => {
+        cuerpos.push(JSON.parse(init.body));
+        return { ok: true } as Response;
+      }) as any;
+      const sinNombre = reserva(3, 5);
+      sinNombre.booker = { ...sinNombre.booker, first_name: '', last_name: '' };
+      await ingestar(sinNombre);
+      expect((await s.h.prisma.order.findFirstOrThrow({ where: { tipo: 'RESERVA' } })).clienteNombre).toBe('Huésped');
+
+      await crearRegla({ plantillaIdioma: idioma, plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_RESERVA', valor: 'nombreHuespedMayusculas' }] });
+      const real = new ReglaBarridoService(s.h.prisma, new ReglasFiltroService(s.h.prisma), new ReglaCandadoService(s.h.prisma), envioReal());
+      await real.ejecutarBarrido();
+
+      expect(cuerpos.map((c) => c.variables)).toEqual([[esperado]]);
     });
 
     it('tiempo límite: el POST lleva una señal de 10 s y un vencimiento deja el envío en FALLO', async () => {
