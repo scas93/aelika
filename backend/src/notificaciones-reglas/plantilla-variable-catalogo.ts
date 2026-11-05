@@ -9,6 +9,7 @@ import {
   formatFechaLarga,
   formatMesAnio,
   formatFechaCompleta,
+  nombreHuespedMayusculas,
   nochesEntre,
   METODO_ENTREGA_LABEL,
   METODO_PAGO_LABEL,
@@ -326,6 +327,15 @@ const VARIABLES_RESERVA: CatalogoVariableDef[] = [
     },
   },
   { valor: 'habitaciones', label: 'Habitaciones', ejemplo: 'Habitación Superior #5, Estándar #15', resolver: (c) => reserva(c)?.habitaciones ?? null },
+  {
+    valor: 'nombreHuespedMayusculas',
+    label: 'Nombre del huésped (mayúsculas)',
+    ejemplo: 'MARÍA GONZÁLEZ',
+    resolver: (c) => {
+      const r = reserva(c);
+      return r ? nombreHuespedMayusculas(r.nombreHuesped, c.idiomaPlantilla ?? 'es') : null;
+    },
+  },
   { valor: 'enlaceCheckin', label: 'Enlace de check-in en línea', ejemplo: 'https://…/online-check-in', resolver: (c) => reserva(c)?.enlaceCheckin ?? null },
 ].map((v) => ({
   fuente: ReglaPlantillaVariableFuente.CAMPO_RESERVA,

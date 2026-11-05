@@ -41,6 +41,23 @@ export function formatFechaCompleta(fecha: Date, idiomaPlantilla: string): strin
   }).format(fecha);
 }
 
+/** Valor genérico que se guarda en la reserva cuando Amenitiz no manda nombre (reservas.service.ts, NOMBRE_SIN_DATO). */
+const NOMBRE_GENERICO = 'huesped';
+
+/**
+ * Nombre del huésped de una reserva en mayúsculas: espacios internos repetidos reducidos a uno, sin espacios en los
+ * extremos, respetando ñ y acentos. Sin nombre real (vacío o el genérico «Huésped», sin distinguir mayúsculas ni acentos)
+ * devuelve un texto neutro según el idioma de la plantilla: «HUÉSPED» (es) / «GUEST» (otros).
+ */
+export function nombreHuespedMayusculas(nombre: string | null | undefined, idiomaPlantilla: string): string {
+  const limpio = (nombre ?? '').replace(/\s+/g, ' ').trim();
+  const comparable = limpio.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (limpio === '' || comparable === NOMBRE_GENERICO) {
+    return esPlantillaEspanol(idiomaPlantilla) ? 'HUÉSPED' : 'GUEST';
+  }
+  return limpio.toUpperCase();
+}
+
 /** Noches entre dos fechas de calendario. */
 export function nochesEntre(checkIn: Date, checkOut: Date): number {
   return Math.max(0, Math.round((checkOut.getTime() - checkIn.getTime()) / MILISEGUNDOS_POR_DIA));

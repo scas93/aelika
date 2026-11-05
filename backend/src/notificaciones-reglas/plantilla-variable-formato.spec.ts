@@ -5,6 +5,7 @@ import {
   formatFechaLarga,
   formatMesAnio,
   resumenProductos,
+  nombreHuespedMayusculas,
   sanitizarParaMeta,
 } from './plantilla-variable-formato';
 
@@ -96,5 +97,33 @@ describe('plantilla-variable-formato', () => {
     it('conserva hasta 4 espacios seguidos sin tocarlos', () => {
       expect(sanitizarParaMeta('a    b', 'fallback')).toBe('a    b');
     });
+  });
+});
+
+describe('nombreHuespedMayusculas', () => {
+  it.each([
+    ['maría gonzález', 'MARÍA GONZÁLEZ'],
+    ['MARÍA GONZÁLEZ', 'MARÍA GONZÁLEZ'],
+    ['María González', 'MARÍA GONZÁLEZ'],
+    ['  josé    luis   peña  ', 'JOSÉ LUIS PEÑA'],
+    ['Núñez Ibáñez', 'NÚÑEZ IBÁÑEZ'],
+    ['Zaida', 'ZAIDA'],
+  ])('%j → %j', (entrada, esperado) => {
+    expect(nombreHuespedMayusculas(entrada, 'es')).toBe(esperado);
+    expect(nombreHuespedMayusculas(entrada, 'en_US')).toBe(esperado);
+  });
+
+  it.each([null, undefined, '', '   ', 'Huésped', 'huesped', 'HUÉSPED', '  Huésped  '])('sin nombre real (%j): HUÉSPED en español', (entrada) => {
+    expect(nombreHuespedMayusculas(entrada, 'es')).toBe('HUÉSPED');
+    expect(nombreHuespedMayusculas(entrada, 'es_MX')).toBe('HUÉSPED');
+  });
+
+  it.each([null, undefined, '', '   ', 'Huésped', 'huesped'])('sin nombre real (%j): GUEST en los demás idiomas', (entrada) => {
+    expect(nombreHuespedMayusculas(entrada, 'en')).toBe('GUEST');
+    expect(nombreHuespedMayusculas(entrada, 'de')).toBe('GUEST');
+  });
+
+  it('un nombre que solo contiene «Huésped» como parte no se trata como genérico', () => {
+    expect(nombreHuespedMayusculas('Huésped Ilustre', 'en')).toBe('HUÉSPED ILUSTRE');
   });
 });
