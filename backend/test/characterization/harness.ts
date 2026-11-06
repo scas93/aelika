@@ -15,7 +15,10 @@ import { WalletPassService } from '../../src/lealtad/wallet-pass.service';
 import { ReglaBarridoService } from '../../src/notificaciones-reglas/regla-barrido.service';
 import { ResumenSemanalCronService } from '../../src/resumen-semanal/resumen-semanal-cron.service';
 import { CorreoProvider } from '../../src/notificaciones/providers/correo.provider';
-import { CODIGOS_STORE, MemoriaCodigosStore } from '../../src/portal/codigos-store';
+import {
+  CODIGOS_STORE,
+  MemoriaCodigosStore,
+} from '../../src/portal/codigos-store';
 import { EnviarCodigoAccesoService } from '../../src/portal/enviar-codigo-acceso.service';
 import { AvisoWebhookClient } from '../../src/notificaciones/avisos-internos/aviso-webhook.client';
 import { AvisoPedidoModificadoService } from '../../src/notificaciones/avisos-internos/aviso-pedido-modificado.service';
@@ -103,7 +106,9 @@ export function restoreClock() {
   jest.useRealTimers();
 }
 
-export async function createHarness(opts: { reglasReales?: boolean } = {}): Promise<Harness> {
+export async function createHarness(
+  opts: { reglasReales?: boolean } = {},
+): Promise<Harness> {
   const stripe = new Stripe('sk_test_characterization');
   const paymentIntentsCreate = jest.fn();
   const paymentIntentsRetrieve = jest.fn();
@@ -147,41 +152,64 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
       correoEnviar.mockReset().mockResolvedValue({ exito: true });
       correoEnviarConAdjuntos.mockReset().mockResolvedValue({ exito: true });
       codigos.reset();
-      enviarCodigoAcceso.mockReset().mockResolvedValue({ enviado: true, correlacionId: 'envio-codigo-char' });
+      enviarCodigoAcceso
+        .mockReset()
+        .mockResolvedValue({
+          enviado: true,
+          correlacionId: 'envio-codigo-char',
+        });
       queueAdd.mockReset().mockResolvedValue(undefined);
       dispararSeguro.mockReset().mockResolvedValue(undefined);
       let n = 0;
       piStore.clear();
       const porLlave = new Map<string, string>();
-      paymentIntentsCreate.mockReset().mockImplementation(async (params: any, opts?: { idempotencyKey?: string }) => {
-        const llave = opts?.idempotencyKey;
-        if (llave && porLlave.has(llave)) return piStore.get(porLlave.get(llave)!);
-        n += 1;
-        const pi = {
-          id: `pi_char_${n}`,
-          client_secret: `pi_char_${n}_secret_x`,
-          status: 'requires_payment_method',
-          amount: params?.amount,
-          transfer_data: params?.transfer_data,
-        };
-        piStore.set(pi.id, pi);
-        if (llave) porLlave.set(llave, pi.id);
-        return pi;
-      });
-      paymentIntentsRetrieve.mockReset().mockImplementation(async (id: string) => {
-        const pi = piStore.get(id);
-        if (!pi) throw Object.assign(new Error(`No such payment_intent: ${id}`), { code: 'resource_missing' });
-        return pi;
-      });
-      paymentIntentsCancel.mockReset().mockImplementation(async (id: string) => {
-        const pi = piStore.get(id);
-        if (!pi) throw Object.assign(new Error(`No such payment_intent: ${id}`), { code: 'resource_missing' });
-        if (pi.status === 'succeeded' || pi.status === 'canceled') {
-          throw Object.assign(new Error(`cannot cancel a ${pi.status} payment_intent`), { code: 'payment_intent_unexpected_state' });
-        }
-        pi.status = 'canceled';
-        return pi;
-      });
+      paymentIntentsCreate
+        .mockReset()
+        .mockImplementation(
+          async (params: any, opts?: { idempotencyKey?: string }) => {
+            const llave = opts?.idempotencyKey;
+            if (llave && porLlave.has(llave))
+              return piStore.get(porLlave.get(llave)!);
+            n += 1;
+            const pi = {
+              id: `pi_char_${n}`,
+              client_secret: `pi_char_${n}_secret_x`,
+              status: 'requires_payment_method',
+              amount: params?.amount,
+              transfer_data: params?.transfer_data,
+            };
+            piStore.set(pi.id, pi);
+            if (llave) porLlave.set(llave, pi.id);
+            return pi;
+          },
+        );
+      paymentIntentsRetrieve
+        .mockReset()
+        .mockImplementation(async (id: string) => {
+          const pi = piStore.get(id);
+          if (!pi)
+            throw Object.assign(new Error(`No such payment_intent: ${id}`), {
+              code: 'resource_missing',
+            });
+          return pi;
+        });
+      paymentIntentsCancel
+        .mockReset()
+        .mockImplementation(async (id: string) => {
+          const pi = piStore.get(id);
+          if (!pi)
+            throw Object.assign(new Error(`No such payment_intent: ${id}`), {
+              code: 'resource_missing',
+            });
+          if (pi.status === 'succeeded' || pi.status === 'canceled') {
+            throw Object.assign(
+              new Error(`cannot cancel a ${pi.status} payment_intent`),
+              { code: 'payment_intent_unexpected_state' },
+            );
+          }
+          pi.status = 'canceled';
+          return pi;
+        });
       refundsCreate.mockReset().mockResolvedValue({ id: 're_char_1' });
       reglaEnvio.mockReset().mockResolvedValue({ id: 'envio-char' });
       let w = 0;
@@ -213,7 +241,10 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .overrideProvider(ReglaEnvioService)
     .useValue({ enviar: reglaEnvio })
     .overrideProvider(WalletPassService)
-    .useValue({ crearPase: walletCrearPase, actualizarPase: walletActualizarPase })
+    .useValue({
+      crearPase: walletCrearPase,
+      actualizarPase: walletActualizarPase,
+    })
     .overrideProvider(ReglaBarridoService)
     .useValue({})
     // El disparador (@Cron + arranque) del resumen semanal no corre solo en la suite; las pruebas llaman al barrido a mano.
@@ -221,7 +252,10 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .useValue({})
     // Resend nunca se contacta: el correo del resumen semanal va a este fake (recibe el objeto de `enviarConAdjuntos`).
     .overrideProvider(CorreoProvider)
-    .useValue({ enviar: correoEnviar, enviarConAdjuntos: correoEnviarConAdjuntos })
+    .useValue({
+      enviar: correoEnviar,
+      enviarConAdjuntos: correoEnviarConAdjuntos,
+    })
     .overrideProvider(CODIGOS_STORE)
     .useValue(codigos)
     .overrideProvider(EnviarCodigoAccesoService)
@@ -229,7 +263,9 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .overrideProvider(AvisoWebhookClient)
     .useValue({ post: avisoWebhook });
   if (!opts.reglasReales) {
-    builder = builder.overrideProvider(ReglaEventoPedidoService).useValue({ dispararSeguro });
+    builder = builder
+      .overrideProvider(ReglaEventoPedidoService)
+      .useValue({ dispararSeguro });
   }
   const moduleRef = await builder.compile();
 
@@ -251,7 +287,8 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     jwt: app.get(JwtService),
     stripe,
     fakes,
-    esperarAvisos: () => app.get(AvisoPedidoModificadoService).esperarPendientes(),
+    esperarAvisos: () =>
+      app.get(AvisoPedidoModificadoService).esperarPendientes(),
     close: async () => {
       await app.get(AvisoPedidoModificadoService).esperarPendientes();
       await app.close();
@@ -264,11 +301,17 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
  * haya recibido `veces` llamadas. Para lo fire-and-forget (`void ...`) que
  * termina después de la respuesta HTTP.
  */
-export async function waitForCalls(mock: jest.Mock, veces = 1, timeoutMs = 5000) {
+export async function waitForCalls(
+  mock: jest.Mock,
+  veces = 1,
+  timeoutMs = 5000,
+) {
   const inicio = process.hrtime.bigint();
   while (mock.mock.calls.length < veces) {
     if (Number(process.hrtime.bigint() - inicio) / 1e6 > timeoutMs) {
-      throw new Error(`waitForCalls: se esperaban ${veces} llamada(s), hubo ${mock.mock.calls.length}`);
+      throw new Error(
+        `waitForCalls: se esperaban ${veces} llamada(s), hubo ${mock.mock.calls.length}`,
+      );
     }
     await new Promise<void>((resolve) => setImmediate(resolve));
   }

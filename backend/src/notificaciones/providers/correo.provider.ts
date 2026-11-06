@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
-import type { NotificacionEnvioResultado, NotificacionMensaje, NotificacionProvider } from './notificacion-provider.interface';
+import type {
+  NotificacionEnvioResultado,
+  NotificacionMensaje,
+  NotificacionProvider,
+} from './notificacion-provider.interface';
 
 // Dominio fijo del lado de Aelika, ya verificado en Resend (Fase C) — cada
 // tenant ya NO trae su propio dominio (ver el hallazgo de la Fase B en
@@ -42,15 +46,25 @@ export class CorreoProvider implements NotificacionProvider {
   ): Promise<NotificacionEnvioResultado> {
     const client = this.getClient();
     if (!client) {
-      return { exito: false, error: 'RESEND_API_KEY no está configurado en este ambiente' };
+      return {
+        exito: false,
+        error: 'RESEND_API_KEY no está configurado en este ambiente',
+      };
     }
 
     const nombreRemitente = canalConfig?.nombreRemitente;
     if (typeof nombreRemitente !== 'string' || !nombreRemitente) {
-      return { exito: false, error: 'La configuración del canal de correo no tiene un nombreRemitente válido' };
+      return {
+        exito: false,
+        error:
+          'La configuración del canal de correo no tiene un nombreRemitente válido',
+      };
     }
 
-    const fromAddress = this.configService.get<string>('RESEND_FROM_ADDRESS', RESEND_FROM_ADDRESS_DEFAULT);
+    const fromAddress = this.configService.get<string>(
+      'RESEND_FROM_ADDRESS',
+      RESEND_FROM_ADDRESS_DEFAULT,
+    );
     const from = `${nombreRemitente} <${fromAddress}>`;
 
     try {
@@ -63,14 +77,21 @@ export class CorreoProvider implements NotificacionProvider {
       });
 
       if (error) {
-        this.logger.warn(`Resend rechazó el envío a ${destinatario} desde "${from}": ${error.message}`);
+        this.logger.warn(
+          `Resend rechazó el envío a ${destinatario} desde "${from}": ${error.message}`,
+        );
         return { exito: false, error: `Resend: ${error.message}` };
       }
 
       return { exito: true };
     } catch (error: any) {
-      this.logger.error(`Error enviando correo vía Resend a ${destinatario}: ${error?.message ?? error}`);
-      return { exito: false, error: `Resend: error inesperado — ${error?.message ?? 'desconocido'}` };
+      this.logger.error(
+        `Error enviando correo vía Resend a ${destinatario}: ${error?.message ?? error}`,
+      );
+      return {
+        exito: false,
+        error: `Resend: error inesperado — ${error?.message ?? 'desconocido'}`,
+      };
     }
   }
 
@@ -87,15 +108,28 @@ export class CorreoProvider implements NotificacionProvider {
   }): Promise<NotificacionEnvioResultado> {
     const client = this.getClient();
     if (!client) {
-      return { exito: false, error: 'RESEND_API_KEY no está configurado en este ambiente' };
+      return {
+        exito: false,
+        error: 'RESEND_API_KEY no está configurado en este ambiente',
+      };
     }
     if (params.destinatarios.length === 0) {
-      return { exito: false, error: 'No hay direcciones de correo a las que enviar' };
+      return {
+        exito: false,
+        error: 'No hay direcciones de correo a las que enviar',
+      };
     }
     if (!params.nombreRemitente) {
-      return { exito: false, error: 'La configuración del canal de correo no tiene un nombreRemitente válido' };
+      return {
+        exito: false,
+        error:
+          'La configuración del canal de correo no tiene un nombreRemitente válido',
+      };
     }
-    const fromAddress = this.configService.get<string>('RESEND_FROM_ADDRESS', RESEND_FROM_ADDRESS_DEFAULT);
+    const fromAddress = this.configService.get<string>(
+      'RESEND_FROM_ADDRESS',
+      RESEND_FROM_ADDRESS_DEFAULT,
+    );
     const from = `${params.nombreRemitente} <${fromAddress}>`;
 
     try {
@@ -105,16 +139,26 @@ export class CorreoProvider implements NotificacionProvider {
         subject: params.mensaje.asunto ?? 'Notificación de Aelika',
         text: params.mensaje.texto,
         html: params.mensaje.html,
-        attachments: params.adjuntos?.map((a) => ({ filename: a.nombreArchivo, content: a.contenido })),
+        attachments: params.adjuntos?.map((a) => ({
+          filename: a.nombreArchivo,
+          content: a.contenido,
+        })),
       });
       if (error) {
-        this.logger.warn(`Resend rechazó un correo con adjuntos a ${params.destinatarios.length} destinatario(s): ${error.message}`);
+        this.logger.warn(
+          `Resend rechazó un correo con adjuntos a ${params.destinatarios.length} destinatario(s): ${error.message}`,
+        );
         return { exito: false, error: `Resend: ${error.message}` };
       }
       return { exito: true };
     } catch (error: any) {
-      this.logger.error(`Error enviando correo con adjuntos vía Resend (${params.destinatarios.length} destinatario(s)): ${error?.message ?? error}`);
-      return { exito: false, error: `Resend: error inesperado — ${error?.message ?? 'desconocido'}` };
+      this.logger.error(
+        `Error enviando correo con adjuntos vía Resend (${params.destinatarios.length} destinatario(s)): ${error?.message ?? error}`,
+      );
+      return {
+        exito: false,
+        error: `Resend: error inesperado — ${error?.message ?? 'desconocido'}`,
+      };
     }
   }
 }
