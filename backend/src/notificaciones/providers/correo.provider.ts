@@ -105,6 +105,8 @@ export class CorreoProvider implements NotificacionProvider {
     nombreRemitente: string;
     mensaje: NotificacionMensaje;
     adjuntos?: { nombreArchivo: string; contenido: Buffer }[];
+    /** Reply-To opcional (resumen para clientes: el correo de respuestas del negocio). Sin él, el envío no lleva Reply-To. */
+    replyTo?: string;
   }): Promise<NotificacionEnvioResultado> {
     const client = this.getClient();
     if (!client) {
@@ -133,12 +135,13 @@ export class CorreoProvider implements NotificacionProvider {
     const from = `${params.nombreRemitente} <${fromAddress}>`;
 
     try {
-      const { error } = await client.emails.send({
+      const { error, headers } = await client.emails.send({
         from,
         to: params.destinatarios,
         subject: params.mensaje.asunto ?? 'Notificación de Aelika',
         text: params.mensaje.texto,
         html: params.mensaje.html,
+        ...(params.replyTo ? { reply_to: params.replyTo } : {}),
         attachments: params.adjuntos?.map((a) => ({
           filename: a.nombreArchivo,
           content: a.contenido,
@@ -148,6 +151,17 @@ export class CorreoProvider implements NotificacionProvider {
         this.logger.warn(
           `Resend rechazó un correo con adjuntos a ${params.destinatarios.length} destinatario(s): ${error.message}`,
         );
+        if (error.name === 'rate_limit_exceeded' || error.statusCode === 429) {
+          const espera = Number(headers?.['retry-after']);
+          return {
+            exito: false,
+            error: `Resend: ${error.message}`,
+            limitadoPorTasa: true,
+            ...(Number.isFinite(espera) && espera > 0
+              ? { reintentarEnSeg: espera }
+              : {}),
+          };
+        }
         return { exito: false, error: `Resend: ${error.message}` };
       }
       return { exito: true };

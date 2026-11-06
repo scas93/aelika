@@ -95,6 +95,29 @@ describe('CorreoProvider', () => {
       expect(send).not.toHaveBeenCalled();
     });
 
+    it('Reply-To: solo se manda si viene (el correo sin replyTo queda idéntico)', async () => {
+      await proveedor().enviarConAdjuntos(base);
+      expect(primerEnvio()).not.toHaveProperty('reply_to');
+      send.mockClear();
+      await proveedor().enviarConAdjuntos({ ...base, replyTo: 'ventas@banetto.mx' });
+      expect(primerEnvio().reply_to).toBe('ventas@banetto.mx');
+      expect(primerEnvio().from).toBe('Banetto <notificaciones@aelika.com>');
+    });
+
+    it('exceso de tasa (429): lo marca como limitadoPorTasa y trae la espera que pidió Resend', async () => {
+      send.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'Too many requests', name: 'rate_limit_exceeded', statusCode: 429 },
+        headers: { 'retry-after': '3' },
+      });
+      expect(await proveedor().enviarConAdjuntos(base)).toEqual({
+        exito: false,
+        error: 'Resend: Too many requests',
+        limitadoPorTasa: true,
+        reintentarEnSeg: 3,
+      });
+    });
+
     it('si Resend rechaza o lanza, devuelve exito:false (nunca lanza)', async () => {
       send.mockResolvedValueOnce({
         data: null,

@@ -48,6 +48,8 @@ export function buildWherePedidosB2b(query: {
   operador?: FiltroImporteOperador;
   valor?: number;
   valorHasta?: number;
+  /** Solo los pedidos de ESTE cliente (por id, no por nombre comercial). Lo usa el resumen semanal por cliente; el export del panel no lo manda. */
+  clienteId?: string;
 }): Prisma.OrderWhereInput {
   const detalle: Prisma.DetalleB2BWhereInput = {
     semanaInicio:
@@ -101,6 +103,7 @@ export function buildWherePedidosB2b(query: {
     pagos.length > 0 && pagos.length < ESTADOS_PAGO_B2B_FILTRO.length;
   return {
     tipo: TipoOrden.B2B,
+    ...(query.clienteId ? { clienteId: query.clienteId } : {}),
     // `estados` (multi-valor) tiene prioridad si llega — ver ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
     // estatus a la vez, sin pestaña por estatus).
     estadoPedido: combinado ? undefined : porEstado?.estadoPedido,

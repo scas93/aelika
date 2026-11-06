@@ -115,7 +115,7 @@ export function repartirDescuento(
 }
 
 /** Qué pantalla pide el Excel: Históricos conserva sus columnas de siempre; Pedidos activos tiene las suyas. */
-export type VistaExcelPedidos = 'HISTORICOS' | 'ACTIVOS';
+export type VistaExcelPedidos = 'HISTORICOS' | 'ACTIVOS' | 'CLIENTE';
 
 const DIA_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
@@ -320,6 +320,14 @@ const COL_ENT = {
     ancho: 14,
     valor: (f) => round2(f.importe - f.descuento),
   },
+  // Vista CLIENTE: el importe ya con la parte del descuento que le toca a la entrega, para que las entregas sumen el Total del
+  // pedido sin mostrar el descuento (porcentaje ni monto).
+  importeNeto: {
+    encabezado: 'Importe',
+    tipo: 'moneda',
+    ancho: 14,
+    valor: (f) => round2(f.importe - f.descuento),
+  },
   cerradaAt: {
     encabezado: 'Cerrada el',
     tipo: 'fechaHora',
@@ -354,6 +362,21 @@ const COLUMNAS_PEDIDOS: Record<VistaExcelPedidos, ColumnaPedidos[]> = {
     COL_PED.total,
     COL_PED.nota,
   ],
+  // Resumen semanal que recibe el CLIENTE: las columnas de Históricos sin pago, fecha de pago, subtotal ni descuento (más el folio).
+  CLIENTE: [
+    COL_PED.folio,
+    COL_PED.negocio,
+    COL_PED.semanaInicio,
+    COL_PED.semanaFin,
+    COL_PED.creacion,
+    COL_PED.estado,
+    COL_PED.entregasTotales,
+    COL_PED.entregadas,
+    COL_PED.noRecogidas,
+    COL_PED.canceladas,
+    COL_PED.total,
+    COL_PED.nota,
+  ],
   ACTIVOS: [
     COL_PED.negocio,
     COL_PED.semanaInicio,
@@ -382,6 +405,16 @@ const COLUMNAS_ENTREGAS_PEDIDOS: Record<
     COL_ENT.estado,
     COL_ENT.piezas,
     COL_ENT.importe,
+    COL_ENT.nota,
+  ],
+  CLIENTE: [
+    COL_ENT.folio,
+    COL_ENT.negocio,
+    COL_ENT.fecha,
+    COL_ENT.dia,
+    COL_ENT.estado,
+    COL_ENT.piezas,
+    COL_ENT.importeNeto,
     COL_ENT.nota,
   ],
   ACTIVOS: [
