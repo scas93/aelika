@@ -70,7 +70,13 @@ export class NotificacionEventoConfigService {
           evento: dto.evento,
           audiencia: dto.audiencia,
           canalConfigId: dto.canalConfigId,
-          activo: dto.activo ?? true,
+          // El resumen semanal para clientes nace APAGADO (lo enciende el Dueño a propósito); los demás eventos, como siempre.
+          activo:
+            dto.activo ??
+            !(
+              dto.evento === NotificacionEvento.RESUMEN_SEMANAL &&
+              dto.audiencia === NotificacionAudiencia.CLIENTE
+            ),
         } as any,
       });
     } catch (error: any) {

@@ -169,17 +169,59 @@ describe('Resumen semanal · configuración en mayoreo', () => {
       );
     });
 
-    it('combinaciones inválidas: audiencia CLIENTE 400; con canal WhatsApp 400; «Pedido modificado» con Correo 400; evento de menudeo 403', async () => {
+    // CAMBIO A PROPÓSITO: antes la audiencia CLIENTE estaba bloqueada para todo el mayoreo. Ahora RESUMEN_SEMANAL + CLIENTE + Correo es
+    // el interruptor general del «Resumen semanal para clientes»; las demás combinaciones con CLIENTE siguen bloqueadas.
+    it('interruptor general del resumen para clientes: RESUMEN_SEMANAL + CLIENTE + Correo nace APAGADO y convive con el del negocio', async () => {
       const c = await canalCorreo();
-      expect(
-        (
-          await dueno().post('/notificaciones/eventos', {
+      const cliente = (
+        await dueno()
+          .post('/notificaciones/eventos', {
             evento: EVENTO,
             audiencia: 'CLIENTE',
             canalConfigId: c.id,
           })
-        ).status,
-      ).toBe(400);
+          .expect(201)
+      ).body;
+      expect(cliente).toMatchObject({ audiencia: 'CLIENTE', activo: false });
+      const negocio = (
+        await dueno()
+          .post('/notificaciones/eventos', {
+            evento: EVENTO,
+            audiencia: 'NEGOCIO',
+            canalConfigId: c.id,
+          })
+          .expect(201)
+      ).body;
+      expect(negocio.activo).toBe(true);
+      const encendido = (
+        await dueno()
+          .patch(`/notificaciones/eventos/${cliente.id}`)
+          .send({ activo: true })
+          .expect(200)
+      ).body;
+      expect(encendido.activo).toBe(true);
+      // El del negocio no se tocó.
+      const lista = (await dueno().get('/notificaciones/eventos').expect(200)).body;
+      expect(
+        lista.map((e: { audiencia: string; activo: boolean }) => [e.audiencia, e.activo]).sort(),
+      ).toStrictEqual([
+        ['CLIENTE', true],
+        ['NEGOCIO', true],
+      ]);
+      expect((await apiRol(s.h, s.base, 'GERENTE').post('/notificaciones/eventos', { evento: EVENTO, audiencia: 'CLIENTE', canalConfigId: c.id })).status).toBe(403);
+    });
+
+    it('combinaciones inválidas: «Pedido modificado» con audiencia CLIENTE 400; con canal WhatsApp 400; «Pedido modificado» con Correo 400; evento de menudeo 403', async () => {
+      const c = await canalCorreo();
+      expectError(
+        await dueno().post('/notificaciones/eventos', {
+          evento: 'PEDIDO_MODIFICADO_CLIENTE',
+          audiencia: 'CLIENTE',
+          canalConfigId: c.id,
+        }),
+        400,
+        'Este evento solo avisa al negocio',
+      );
       expectError(
         await dueno().post('/notificaciones/eventos', {
           evento: 'PEDIDO_MODIFICADO_CLIENTE',
@@ -207,6 +249,15 @@ describe('Resumen semanal · configuración en mayoreo', () => {
         await dueno().post('/notificaciones/eventos', {
           evento: EVENTO,
           audiencia: 'NEGOCIO',
+          canalConfigId: wa.id,
+        }),
+        400,
+        'Este evento solo puede avisar por Correo',
+      );
+      expectError(
+        await dueno().post('/notificaciones/eventos', {
+          evento: EVENTO,
+          audiencia: 'CLIENTE',
           canalConfigId: wa.id,
         }),
         400,

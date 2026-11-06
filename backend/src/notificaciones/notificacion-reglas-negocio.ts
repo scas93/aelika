@@ -83,7 +83,13 @@ export function exigirEventoPermitido(
     );
   }
   if (eventoDeMayoreo) {
-    if (audiencia !== NotificacionAudiencia.NEGOCIO) {
+    // El resumen semanal tiene dos audiencias: NEGOCIO (su equipo) y CLIENTE (cada cliente B2B, a su correo propio). Es la única
+    // excepción a «la audiencia CLIENTE está bloqueada en mayoreo»; el resto de eventos solo avisa al negocio.
+    const audienciasPermitidas =
+      evento === NotificacionEvento.RESUMEN_SEMANAL
+        ? [NotificacionAudiencia.NEGOCIO, NotificacionAudiencia.CLIENTE]
+        : [NotificacionAudiencia.NEGOCIO];
+    if (!audienciasPermitidas.includes(audiencia)) {
       throw new BadRequestException('Este evento solo avisa al negocio');
     }
     const canalEsperado = CANAL_DEL_EVENTO[evento]!;
