@@ -13,6 +13,8 @@ import { TelegramTokenService } from '../../src/notificaciones/telegram/telegram
 import { ReglaEnvioService } from '../../src/notificaciones-reglas/regla-envio.service';
 import { WalletPassService } from '../../src/lealtad/wallet-pass.service';
 import { ReglaBarridoService } from '../../src/notificaciones-reglas/regla-barrido.service';
+import { ResumenSemanalCronService } from '../../src/resumen-semanal/resumen-semanal-cron.service';
+import { CorreoProvider } from '../../src/notificaciones/providers/correo.provider';
 import { CODIGOS_STORE, MemoriaCodigosStore } from '../../src/portal/codigos-store';
 import { EnviarCodigoAccesoService } from '../../src/portal/enviar-codigo-acceso.service';
 import { AvisoWebhookClient } from '../../src/notificaciones/avisos-internos/aviso-webhook.client';
@@ -38,6 +40,8 @@ export const WEBHOOK_SECRET_V1 = 'whsec_char_v1';
  *  - codigos: almacén de códigos y contadores del acceso al portal (Fase 4) en memoria (sin Redis); `codigos.caido = true`
  *    simula Redis caído. enviarCodigoAcceso: envío del código por WhatsApp (Botpress nunca se contacta); recibe los datos
  *    del envío ({ telefono, codigo, plantillaNombre, ... }).
+ *  - correoEnviarConAdjuntos / correoEnviar: Resend (CorreoProvider) — nunca se contacta. El resumen semanal llama a
+ *    `enviarConAdjuntos({ destinatarios, nombreRemitente, mensaje, adjuntos })`; por defecto resuelve `{ exito: true }`.
  *  - avisoWebhook: el POST del aviso interno (Cambio C) a Botpress; recibe `{ url, secreto, cuerpo }`. Por defecto resuelve 2xx.
  *    Los avisos corren en segundo plano: `esperarAvisos()` los espera (la suite lo llama antes de cada TRUNCATE).
  */
@@ -56,6 +60,8 @@ export interface Fakes {
   codigos: MemoriaCodigosStore;
   enviarCodigoAcceso: jest.Mock;
   avisoWebhook: jest.Mock;
+  correoEnviar: jest.Mock;
+  correoEnviarConAdjuntos: jest.Mock;
   reset(): void;
 }
 
@@ -117,6 +123,8 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
   const codigos = new MemoriaCodigosStore();
   const enviarCodigoAcceso = jest.fn();
   const avisoWebhook = jest.fn();
+  const correoEnviar = jest.fn();
+  const correoEnviarConAdjuntos = jest.fn();
 
   const fakes: Fakes = {
     queueAdd,
@@ -132,8 +140,12 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     codigos,
     enviarCodigoAcceso,
     avisoWebhook,
+    correoEnviar,
+    correoEnviarConAdjuntos,
     reset() {
       avisoWebhook.mockReset().mockResolvedValue({ ok: true, status: 200 });
+      correoEnviar.mockReset().mockResolvedValue({ exito: true });
+      correoEnviarConAdjuntos.mockReset().mockResolvedValue({ exito: true });
       codigos.reset();
       enviarCodigoAcceso.mockReset().mockResolvedValue({ enviado: true, correlacionId: 'envio-codigo-char' });
       queueAdd.mockReset().mockResolvedValue(undefined);
@@ -204,6 +216,12 @@ export async function createHarness(opts: { reglasReales?: boolean } = {}): Prom
     .useValue({ crearPase: walletCrearPase, actualizarPase: walletActualizarPase })
     .overrideProvider(ReglaBarridoService)
     .useValue({})
+    // El disparador (@Cron + arranque) del resumen semanal no corre solo en la suite; las pruebas llaman al barrido a mano.
+    .overrideProvider(ResumenSemanalCronService)
+    .useValue({})
+    // Resend nunca se contacta: el correo del resumen semanal va a este fake (recibe el objeto de `enviarConAdjuntos`).
+    .overrideProvider(CorreoProvider)
+    .useValue({ enviar: correoEnviar, enviarConAdjuntos: correoEnviarConAdjuntos })
     .overrideProvider(CODIGOS_STORE)
     .useValue(codigos)
     .overrideProvider(EnviarCodigoAccesoService)

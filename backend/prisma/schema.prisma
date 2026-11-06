@@ -203,6 +203,7 @@ model Tenant {
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
   avisosInternosEnvios      AvisoInternoEnvio[]
+  resumenSemanalEnvios      ResumenSemanalEnvio[]
   reglaClienteEstados       ReglaClienteEstado[]
   detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
@@ -1717,4 +1718,48 @@ model AvisoInternoEnvio {
   @@index([tenantId, orderId])
   @@index([tenantId, createdAt])
   @@map("avisos_internos_envios")
+}
+
+// ---------------------------------------------------------------------------
+// Resumen semanal por correo (mayoreo). Un registro por intento de envío del resumen de un negocio: la semana que resume
+// (`semanaInicio`, el lunes), si fue el envío programado del lunes o una prueba del botón, cuántas direcciones recibieron y cómo
+// terminó. NUNCA guarda direcciones de correo (solo cuántas): ante un «no me llegó» se ve si salió, cuándo y por qué falló.
+// Estado final inmutable; un EN_CURSO que nunca se resolvió (el proceso murió a media operación) se queda así: no hay reintentos.
+// ---------------------------------------------------------------------------
+enum ResumenSemanalTipo {
+  PROGRAMADO
+  PRUEBA
+}
+
+enum ResumenSemanalEstado {
+  EN_CURSO
+  EXITO
+  FALLO
+}
+
+model ResumenSemanalEnvio {
+  id               String               @id @default(uuid())
+  tenantId         String
+  // Lunes de la semana que resume el correo.
+  semanaInicio     DateTime             @db.Date
+  // Solo PROGRAMADO: copia de `semanaInicio`. Con @@unique([tenantId, semanaProgramada]) hay UN resumen programado por negocio y
+  // semana (la fila se crea ANTES de enviar, así que el índice es la reserva: dos instancias o un reinicio no duplican). En las
+  // pruebas es NULL y Postgres trata los NULL como distintos, así que las pruebas nunca chocan ni bloquean el envío del lunes.
+  semanaProgramada DateTime?            @db.Date
+  tipo             ResumenSemanalTipo
+  estado           ResumenSemanalEstado @default(EN_CURSO)
+  // Motivo del fallo (sin direcciones de correo).
+  motivo           String?
+  // Cuántas direcciones tenía la lista al enviar.
+  destinatarios    Int
+  // false = «Sin pedidos esta semana» (correo corto, sin Excel).
+  conPedidos       Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  resueltoAt       DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, semanaProgramada])
+  @@index([tenantId, createdAt])
+  @@map("resumen_semanal_envios")
 }

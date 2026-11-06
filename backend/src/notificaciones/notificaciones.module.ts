@@ -44,6 +44,6 @@ import { NotificacionEventoConfigController } from './notificacion-evento-config
     TelegramConexionService,
     TelegramWebhookSecretGuard,
   ],
-  exports: [NotificacionCanalConfigService, NotificacionEventoConfigService, NotificacionesQueueService],
+  exports: [NotificacionCanalConfigService, NotificacionEventoConfigService, NotificacionesQueueService, CorreoProvider],
 })
 export class NotificacionesModule {}
