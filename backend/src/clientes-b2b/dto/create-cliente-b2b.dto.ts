@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   ArrayMinSize,
   IsArray,
   IsEnum,
@@ -56,4 +57,15 @@ export class CreateClienteB2bDto {
   @ValidateNested({ each: true })
   @Type(() => TelefonoClienteB2bDto)
   telefonos: TelefonoClienteB2bDto[];
+
+  // Resumen semanal por correo (dato PROPIO del cliente; no se prellena ni se toma de Cliente.correo). El interruptor solo puede
+  // encenderse con correo capturado; `null` o vacío en el correo lo borra (y apaga el interruptor).
+  @IsOptional()
+  @IsBoolean()
+  resumenSemanalActivo?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(254)
+  resumenSemanalCorreo?: string | null;
 }

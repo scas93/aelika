@@ -19,6 +19,7 @@ import {
   estadoB2bVisible,
 } from '../pedidos-b2b/pedidos-b2b-estados';
 import { diaDeFecha } from '../pedidos-b2b/pedidos-b2b-orden';
+import { normalizarCorreo } from '../notificaciones/notificacion-correo-resumen';
 import { CreateClienteB2bDto } from './dto/create-cliente-b2b.dto';
 import { UpdateClienteB2bDto } from './dto/update-cliente-b2b.dto';
 import { ListClientesB2bQueryDto } from './dto/list-clientes-b2b-query.dto';
@@ -31,6 +32,39 @@ import {
 type Tx = Prisma.TransactionClient;
 
 const num = (d: Prisma.Decimal | null) => (d === null ? null : Number(d));
+
+/**
+ * Resumen semanal del cliente: valida el correo (propio, no Cliente.correo) y fija el estado final del interruptor.
+ * - Correo vacío/null = sin correo, y entonces el interruptor queda APAGADO (si se pidió encenderlo con el correo vacío, 400).
+ * - El interruptor no puede estar encendido sin correo.
+ * - `activadoAt` se renueva SOLO cuando pasa de apagado a encendido (la activación no es retroactiva).
+ */
+export function resolverResumenSemanal(
+  actual: { activo: boolean; correo: string | null },
+  dto: { resumenSemanalActivo?: boolean; resumenSemanalCorreo?: string | null },
+): { activo: boolean; correo: string | null; activadoAt?: Date } | null {
+  if (dto.resumenSemanalActivo === undefined && dto.resumenSemanalCorreo === undefined)
+    return null;
+  let correo = actual.correo;
+  if (dto.resumenSemanalCorreo !== undefined) {
+    const crudo = dto.resumenSemanalCorreo;
+    correo =
+      crudo === null || crudo.trim() === '' ? null : normalizarCorreo(crudo);
+  }
+  let activo = dto.resumenSemanalActivo ?? actual.activo;
+  if (activo && !correo) {
+    if (dto.resumenSemanalActivo === true)
+      throw new BadRequestException(
+        'Captura el correo del resumen para poder encender el envío',
+      );
+    activo = false; // se borró el correo con el envío encendido: se apaga solo
+  }
+  return {
+    activo,
+    correo,
+    ...(activo && !actual.activo ? { activadoAt: new Date() } : {}),
+  };
+}
 
 /**
  * Clientes B2B (Cliente con canal = B2B): alta solo por admin, teléfonos autorizados con un principal, baja lógica.
@@ -115,6 +149,8 @@ export class ClientesB2bService {
         modalidadPago: c.modalidadPago,
         activo: c.bajaAt === null,
         bajaAt: c.bajaAt,
+        resumenSemanalActivo: c.resumenSemanalActivo,
+        resumenSemanalCorreo: c.resumenSemanalCorreo,
         telefonoPrincipal: c.telefonos[0]?.telefono ?? null,
         nombreContactoPrincipal: c.telefonos[0]?.nombreContacto ?? null,
         pedidosActivos: activos.get(c.id) ?? 0,
@@ -150,6 +186,8 @@ export class ClientesB2bService {
         c.modalidadPago !== null && !modalidadesActivas.includes(c.modalidadPago),
       activo: c.bajaAt === null,
       bajaAt: c.bajaAt,
+      resumenSemanalActivo: c.resumenSemanalActivo,
+      resumenSemanalCorreo: c.resumenSemanalCorreo,
       pedidosActivos: activos.get(c.id) ?? 0,
       incompleto: !c.direccion?.trim(),
       totalPedidos: c.totalPedidos,
@@ -323,9 +361,14 @@ export class ClientesB2bService {
       select: { id: true, slug: true },
     });
     const modalidadesActivas = await this.modalidadesActivas(tenant.id);
+    // Se valida antes de consumir un código: un correo inválido no deja nada a medias.
+    const resumen = resolverResumenSemanal(
+      { activo: false, correo: null },
+      dto,
+    );
     try {
-      const cliente = await this.db.$transaction((tx) =>
-        crearClienteB2b(tx as unknown as ClienteB2bDb, {
+      const cliente = await this.db.$transaction(async (tx) => {
+        const creado = await crearClienteB2b(tx as unknown as ClienteB2bDb, {
           tenantId: tenant.id,
           tenantSlug: tenant.slug,
           sufijo: dto.sufijo,
@@ -335,8 +378,19 @@ export class ClientesB2bService {
           modalidadPago: dto.modalidadPago,
           modalidadesActivas,
           telefonos: dto.telefonos,
-        }),
-      );
+        });
+        if (resumen) {
+          await tx.cliente.update({
+            where: { id: creado.id },
+            data: {
+              resumenSemanalActivo: resumen.activo,
+              resumenSemanalCorreo: resumen.correo,
+              resumenSemanalActivadoAt: resumen.activadoAt ?? null,
+            },
+          });
+        }
+        return creado;
+      });
       return this.findOne(cliente.id);
     } catch (error) {
       // Carrera de dos altas con el mismo código: el unique [tenantId, codigo] rechaza la segunda.
@@ -369,6 +423,18 @@ export class ClientesB2bService {
         await this.modalidadesActivas(actual.tenantId),
         actual.modalidadPago,
       );
+    }
+    const resumen = resolverResumenSemanal(
+      {
+        activo: actual.resumenSemanalActivo,
+        correo: actual.resumenSemanalCorreo,
+      },
+      dto,
+    );
+    if (resumen) {
+      data.resumenSemanalActivo = resumen.activo;
+      data.resumenSemanalCorreo = resumen.correo;
+      if (resumen.activadoAt) data.resumenSemanalActivadoAt = resumen.activadoAt;
     }
     if (Object.keys(data).length > 0) {
       await this.db.cliente.update({ where: { id }, data });
