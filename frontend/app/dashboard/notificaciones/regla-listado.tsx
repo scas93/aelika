@@ -6,12 +6,14 @@ import { useSession } from "@/lib/session-context";
 import {
   ApiError,
   dispararReglaManual,
+  ejecutarReglaRecordatorioAhora,
   ejecutarReglaReservaAhora,
   fetchReglas,
   updateRegla,
   type Regla,
   type ReglaMensajeCategoria,
   type ResumenDisparoManual,
+  type ResumenEjecucionRecordatorio,
   type ResumenEjecucionReserva,
 } from "@/lib/api";
 import Card from "../_components/Card";
@@ -20,13 +22,19 @@ import Badge from "../_components/Badge";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import Modal from "../_components/Modal";
 import Table, { type TableColumn } from "../_components/Table";
-import { TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
+import { programacionRecordatorio, TRIGGER_BADGE_COLOR, TRIGGER_LABEL } from "./labels";
 import { puedeVerNotificaciones } from "../nav-items";
 
 interface ReglaListadoProps {
   categoria: ReglaMensajeCategoria;
   basePath: string;
   descripcion: string;
+}
+
+/** "2026-11-09" → "9 de noviembre" (fecha de calendario, sin corrimiento por zona horaria). */
+function formatFechaCorta(iso: string): string {
+  const [anio, mes, dia] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(anio, mes - 1, dia)));
 }
 
 // Compartido por Recontacto (MARKETING) y Seguimiento (UTILITY) — ver esos
@@ -44,6 +52,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
   const [errorDisparo, setErrorDisparo] = useState<string | null>(null);
   const [ejecutando, setEjecutando] = useState<string | null>(null);
   const [resumenEjecucion, setResumenEjecucion] = useState<{ regla: Regla; resumen: ResumenEjecucionReserva } | null>(null);
+  const [resumenRecordatorio, setResumenRecordatorio] = useState<{ regla: Regla; resumen: ResumenEjecucionRecordatorio } | null>(null);
 
   async function load() {
     try {
@@ -86,8 +95,13 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
     setEjecutando(regla.id);
     setErrorDisparo(null);
     try {
-      const resumen = await ejecutarReglaReservaAhora(token, regla.id);
-      setResumenEjecucion({ regla, resumen });
+      if (regla.trigger === "RECORDATORIO_SEMANAL_PEDIDO") {
+        const resumen = await ejecutarReglaRecordatorioAhora(token, regla.id);
+        setResumenRecordatorio({ regla, resumen });
+      } else {
+        const resumen = await ejecutarReglaReservaAhora(token, regla.id);
+        setResumenEjecucion({ regla, resumen });
+      }
     } catch (err) {
       setErrorDisparo(err instanceof ApiError ? err.message : "No se pudo ejecutar la regla");
     } finally {
@@ -103,7 +117,15 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
   // migra a variante semántica; "Trigger" sigue con el prop `color`
   // categórico de Badge (ya excluido de la migración a variantes).
   const columns: TableColumn<Regla>[] = [
-    { key: "nombre", header: "Nombre", movil: true, truncate: true, render: (regla) => <span className="block truncate font-bold">{regla.nombre}</span> },
+    { key: "nombre", header: "Nombre", movil: true, truncate: true, render: (regla) => (
+        <>
+          <span className="block truncate font-bold">{regla.nombre}</span>
+          {regla.trigger === "RECORDATORIO_SEMANAL_PEDIDO" && programacionRecordatorio(regla.triggerConfig) && (
+            <span className="block truncate text-xs font-normal text-admin-ink-soft">{programacionRecordatorio(regla.triggerConfig)}</span>
+          )}
+        </>
+      ),
+    },
     {
       key: "trigger",
       header: "Trigger",
@@ -140,7 +162,7 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
               {disparando === regla.id ? "Disparando..." : "Disparar ahora"}
             </Button>
           )}
-          {regla.trigger === "RESERVA_AUTOMATICA" && (
+          {(regla.trigger === "RESERVA_AUTOMATICA" || regla.trigger === "RECORDATORIO_SEMANAL_PEDIDO") && (
             <Button
               variant="secondary"
               size="tabla"
@@ -163,7 +185,11 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-admin-ink-soft">{descripcion}</p>
+        <p className="text-sm text-admin-ink-soft">
+          {descripcion}
+          {user.tenant.tipoStorefront === "RETAIL_B2B" && categoria === "UTILITY" &&
+            " También puedes crear el recordatorio semanal para que tus clientes pidan la semana siguiente."}
+        </p>
         <Link href={`${basePath}/nueva`}>
           <Button variant="primary">+ Nueva regla</Button>
         </Link>
@@ -199,6 +225,32 @@ export default function ReglaListado({ categoria, basePath, descripcion }: Regla
             <li>{resumenDisparo.resumen.bloqueadosPorCandado} bloqueado(s) por el candado de frecuencia</li>
             {resumenDisparo.resumen.conError > 0 && (
               <li className="text-red-600">{resumenDisparo.resumen.conError} con error (revisa los logs del servidor)</li>
+            )}
+          </ul>
+        )}
+      </Modal>
+
+      <Modal
+        open={resumenRecordatorio !== null}
+        onClose={() => setResumenRecordatorio(null)}
+        title={`"${resumenRecordatorio?.regla.nombre ?? ""}" ejecutada`}
+        footer={
+          <Button variant="primary" onClick={() => setResumenRecordatorio(null)}>
+            Cerrar
+          </Button>
+        }
+      >
+        {resumenRecordatorio && (
+          <ul className="flex flex-col gap-1.5 text-sm text-admin-ink">
+            <li>
+              Semana del {formatFechaCorta(resumenRecordatorio.resumen.semanaInicio)} al {formatFechaCorta(resumenRecordatorio.resumen.semanaFin)}
+            </li>
+            <li>{resumenRecordatorio.resumen.evaluadas} cliente(s) evaluados</li>
+            <li>{resumenRecordatorio.resumen.enviadas} enviado(s) ahora</li>
+            <li>{resumenRecordatorio.resumen.yaEnviadasPorSemana} ya recibieron el aviso esa semana</li>
+            <li>{resumenRecordatorio.resumen.omitidasPorPedido} omitido(s) por tener ya un pedido para esa semana</li>
+            {resumenRecordatorio.resumen.fallidas > 0 && (
+              <li className="text-red-600">{resumenRecordatorio.resumen.fallidas} fallido(s) (no se reintentan)</li>
             )}
           </ul>
         )}

@@ -6,7 +6,14 @@ import { ReglasFiltroService } from './reglas-filtro.service';
 import { ReglaCandadoService } from './regla-candado.service';
 import { ReglaEnvioService } from './regla-envio.service';
 import { FiltroCondicion } from './filtro-condicion.type';
-import { PedidoContextoReserva } from './plantilla-variable.type';
+import { PedidoContexto, PedidoContextoReserva } from './plantilla-variable.type';
+import {
+  TriggerConfigRecordatorio,
+  destinatariosRecordatorio,
+  fechaDeSemana,
+  semanaSiguiente,
+  ventanaActivaRecordatorio,
+} from './recordatorio-semanal';
 import {
   TriggerConfigReserva,
   CondicionReserva,
@@ -28,7 +35,26 @@ interface EstadisticasBarrido {
   clientesBaseRegistrados: number;
 }
 
-type ResultadoEnvio = 'enviado' | 'bloqueado' | 'error';
+type ResultadoEnvio = 'enviado' | 'bloqueado' | 'error' | 'duplicado';
+
+const PRISMA_UNIQUE = 'P2002';
+
+/** Resumen de «Ejecutar ahora» sobre una regla RECORDATORIO_SEMANAL_PEDIDO (ver `ReglaBarridoService.ejecutarRecordatorioAhora`). */
+export interface ResumenEjecucionRecordatorio {
+  /** Lunes y domingo de la semana siguiente que evaluó, "YYYY-MM-DD". */
+  semanaInicio: string;
+  semanaFin: string;
+  /** Clientes activos con teléfono principal válido. */
+  evaluadas: number;
+  /** Envíos hechos en esta ejecución que Botpress aceptó (quedan EN_CURSO hasta su callback). */
+  enviadas: number;
+  /** Ya recibieron esta regla por esa semana (EN_CURSO, EXITO o FALLO): no se reenvían. */
+  yaEnviadasPorSemana: number;
+  /** Envíos de esta ejecución que fallaron (Botpress rechazó o no respondió, o el envío no pudo ni intentarse). */
+  fallidas: number;
+  /** Ya tienen un pedido no cancelado de esa semana: no se les recuerda. */
+  omitidasPorPedido: number;
+}
 
 /** Resultado de «Ejecutar ahora» sobre una regla RESERVA_AUTOMATICA (ver `ReglaBarridoService.ejecutarReservaAhora`). */
 export interface ResumenEjecucionReserva {
@@ -104,7 +130,7 @@ export class ReglaBarridoService {
     };
 
     const reglas = (await this.prisma.regla.findMany({
-      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA', 'RESERVA_AUTOMATICA'] } },
+      where: { activa: true, trigger: { in: ['ESTADO_CLIENTE', 'FECHA_PROGRAMADA', 'RESERVA_AUTOMATICA', 'RECORDATORIO_SEMANAL_PEDIDO'] } },
       include: { tenant: true },
     })) as ReglaConTenant[];
 
@@ -123,6 +149,8 @@ export class ReglaBarridoService {
           await this.procesarEstadoCliente(regla, stats);
         } else if (regla.trigger === 'RESERVA_AUTOMATICA') {
           await this.procesarReservas(regla, ahora, stats);
+        } else if (regla.trigger === 'RECORDATORIO_SEMANAL_PEDIDO') {
+          await this.procesarRecordatorio(regla, ahora, stats);
         } else {
           await this.procesarFechaProgramada(regla, ahora, stats);
         }
@@ -329,6 +357,113 @@ export class ReglaBarridoService {
     }
   }
 
+  /**
+   * RECORDATORIO_SEMANAL_PEDIDO (solo mayoreo): ese día de la semana (CDMX), desde su hora hasta el fin del día, avisa a los
+   * clientes activos con teléfono válido que NO tienen pedido (no cancelado) de la semana siguiente y a quienes esta regla no
+   * les ha enviado ya por esa semana. Un envío por (regla, cliente, semana): la fila de ReglaEnvioLog con `semanaInicio` se crea
+   * antes del POST y su índice único es la reserva, así que ni un barrido solapado ni «Ejecutar ahora» pueden duplicar. Un
+   * envío en FALLO también queda registrado (definitivo para esa semana). Sin webhook / sin teléfono / variable inválida no
+   * deja registro y se reevalúa en el siguiente barrido. Sin candado: la categoría es siempre UTILITY.
+   */
+  private async procesarRecordatorio(regla: ReglaConTenant, ahora: Date, stats: EstadisticasBarrido): Promise<void> {
+    if (regla.tenant.tipoStorefront !== 'RETAIL_B2B') return;
+    const config = regla.triggerConfig as unknown as TriggerConfigRecordatorio;
+    if (!ventanaActivaRecordatorio(config, ahora)) return;
+
+    const semana = semanaSiguiente(ahora);
+    const destinatarios = await destinatariosRecordatorio(this.prisma, regla.tenantId, regla.id, semana);
+    stats.omitidosYaEnviado += destinatarios.yaEnviados + destinatarios.omitidosPorPedido;
+
+    const contexto: PedidoContexto = {
+      origen: 'SEMANA',
+      semanaInicio: fechaDeSemana(semana.inicio),
+      semanaFin: fechaDeSemana(semana.fin),
+    };
+    for (const cliente of destinatarios.pendientes) {
+      await this.intentarEnviar(regla, cliente, stats, contexto, undefined, fechaDeSemana(semana.inicio));
+    }
+  }
+
+  /**
+   * «Ejecutar ahora» de una regla RECORDATORIO_SEMANAL_PEDIDO (solo Dueño, solo mayoreo): misma evaluación que el barrido
+   * (semana siguiente, destinatarios, deduplicación por semana) pero SIN la ventana de día y hora: se ejecuta a mano cuando
+   * se quiere. Lo que se envía cuenta para esa semana: la ejecución programada no se lo reenvía. Mismo candado en memoria por
+   * regla que «Ejecutar ahora» de reservas; contra el barrido la garantía es el índice único de la base.
+   */
+  async ejecutarRecordatorioAhora(reglaId: string, tenantId: string): Promise<ResumenEjecucionRecordatorio> {
+    const regla = (await this.prisma.regla.findFirst({
+      where: { id: reglaId, tenantId },
+      include: { tenant: true },
+    })) as ReglaConTenant | null;
+    if (!regla) throw new NotFoundException('Regla no encontrada');
+    if (regla.trigger !== 'RECORDATORIO_SEMANAL_PEDIDO') {
+      throw new BadRequestException('Solo se puede ejecutar ahora una regla de recordatorio semanal (RECORDATORIO_SEMANAL_PEDIDO).');
+    }
+    if (regla.tenant.tipoStorefront !== 'RETAIL_B2B') {
+      throw new BadRequestException('El recordatorio semanal de pedido solo está disponible para negocios de mayoreo.');
+    }
+    if (!regla.activa) throw new BadRequestException('Esta Regla está inactiva.');
+    if (this.reglasEjecutandoAhora.has(regla.id)) {
+      throw new ConflictException('Esta regla ya se está ejecutando, espera a que termine.');
+    }
+
+    this.reglasEjecutandoAhora.add(regla.id);
+    try {
+      const ahora = new Date();
+      const semana = semanaSiguiente(ahora);
+      const lunes = fechaDeSemana(semana.inicio);
+      const destinatarios = await destinatariosRecordatorio(this.prisma, regla.tenantId, regla.id, semana);
+
+      const stats: EstadisticasBarrido = {
+        reglasProcesadas: 0,
+        reglasConError: 0,
+        enviosDisparados: 0,
+        enviosBloqueadosPorCandado: 0,
+        enviosConError: 0,
+        omitidosYaEnviado: 0,
+        clientesBaseRegistrados: 0,
+      };
+      const contexto: PedidoContexto = { origen: 'SEMANA', semanaInicio: lunes, semanaFin: fechaDeSemana(semana.fin) };
+      for (const cliente of destinatarios.pendientes) {
+        await this.intentarEnviar(regla, cliente, stats, contexto, undefined, lunes);
+      }
+
+      // Un envío que Botpress rechaza o que vence no lanza: deja su registro en FALLO. Se lee de ahí, no de `stats`.
+      const registros = await this.prisma.reglaEnvioLog.findMany({
+        where: { reglaId: regla.id, semanaInicio: lunes, clienteId: { in: destinatarios.pendientes.map((c) => c.id) } },
+        select: { estado: true },
+      });
+      const fallosRegistrados = registros.filter((r) => r.estado === 'FALLO').length;
+      const resumen: ResumenEjecucionRecordatorio = {
+        semanaInicio: semana.inicio,
+        semanaFin: semana.fin,
+        evaluadas: destinatarios.evaluados,
+        enviadas: registros.length - fallosRegistrados,
+        yaEnviadasPorSemana: destinatarios.yaEnviados + stats.omitidosYaEnviado,
+        fallidas: fallosRegistrados + stats.enviosConError,
+        omitidasPorPedido: destinatarios.omitidosPorPedido,
+      };
+      this.logger.log(
+        `Ejecución manual de Regla ${regla.id} (tenant=${regla.tenantId}, semana ${semana.inicio}): ${resumen.evaluadas} evaluada(s), ` +
+          `${resumen.enviadas} enviada(s), ${resumen.yaEnviadasPorSemana} ya enviada(s), ${resumen.fallidas} fallida(s), ` +
+          `${resumen.omitidasPorPedido} con pedido.`,
+      );
+      return resumen;
+    } finally {
+      this.reglasEjecutandoAhora.delete(regla.id);
+    }
+  }
+
+  /**
+   * «Ejecutar ahora» según el tipo de regla: recordatorio semanal (mayoreo) o reservas (hotel). Cualquier otro tipo, o una regla
+   * que no existe, lo resuelve `ejecutarReservaAhora` con su mismo error de siempre.
+   */
+  async ejecutarAhora(reglaId: string, tenantId: string): Promise<ResumenEjecucionReserva | ResumenEjecucionRecordatorio> {
+    const regla = await this.prisma.regla.findFirst({ where: { id: reglaId, tenantId }, select: { trigger: true } });
+    if (regla?.trigger === 'RECORDATORIO_SEMANAL_PEDIDO') return this.ejecutarRecordatorioAhora(reglaId, tenantId);
+    return this.ejecutarReservaAhora(reglaId, tenantId);
+  }
+
   private async registrar(regla: ReglaConTenant, clienteIds: string[]): Promise<void> {
     if (clienteIds.length === 0) return;
     await this.prisma.reglaClienteEstado.createMany({
@@ -376,8 +511,9 @@ export class ReglaBarridoService {
     regla: ReglaConTenant,
     cliente: Cliente,
     stats: EstadisticasBarrido,
-    contexto?: PedidoContextoReserva,
+    contexto?: PedidoContexto,
     orderId?: string,
+    semanaInicio?: Date,
   ): Promise<ResultadoEnvio> {
     try {
       const bloqueado = await this.candadoService.estaBloqueado(regla.tenant, cliente.id, regla.plantillaCategoria);
@@ -386,10 +522,15 @@ export class ReglaBarridoService {
         return 'bloqueado';
       }
 
-      await this.envioService.enviar(regla.tenant, cliente, regla, contexto, orderId);
+      await this.envioService.enviar(regla.tenant, cliente, regla, contexto, orderId, semanaInicio);
       stats.enviosDisparados++;
       return 'enviado';
     } catch (error: any) {
+      // Otro proceso ya reservó el envío de esta (regla, cliente, semana): no es un error, ya está enviado (o en camino).
+      if (semanaInicio && error?.code === PRISMA_UNIQUE) {
+        stats.omitidosYaEnviado++;
+        return 'duplicado';
+      }
       // Aislamiento por Cliente: un envío que falla (ej. tenant sin
       // botWebhookUrl) no debe impedir que se intente con el resto de los
       // clientes que matchearon esta Regla, ni con las demás Reglas de la

@@ -50,9 +50,10 @@ export class ReglasController {
     return this.reglasService.dispararManual(id, user.tenantId);
   }
 
-  // «Ejecutar ahora» de una regla RESERVA_AUTOMATICA (solo Dueño y solo Hotel, ver ReglaBarridoService.ejecutarReservaAhora).
+  // «Ejecutar ahora» de una regla RESERVA_AUTOMATICA (solo Hotel) o RECORDATORIO_SEMANAL_PEDIDO (solo mayoreo); solo Dueño.
+  // Ver ReglaBarridoService.ejecutarAhora.
   @Post(':id/ejecutar-ahora')
   ejecutarAhora(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.barridoService.ejecutarReservaAhora(id, user.tenantId);
+    return this.barridoService.ejecutarAhora(id, user.tenantId);
   }
 }

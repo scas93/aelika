@@ -41,6 +41,15 @@ export function formatFechaCompleta(fecha: Date, idiomaPlantilla: string): strin
   }).format(fecha);
 }
 
+/** Día y mes de una fecha de calendario (UTC a medianoche): "9 de noviembre" / "November 9". */
+export function formatDiaMes(fecha: Date, idiomaPlantilla: string): string {
+  return new Intl.DateTimeFormat(esPlantillaEspanol(idiomaPlantilla) ? 'es-MX' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(fecha);
+}
+
 /** Valor genérico que se guarda en la reserva cuando Amenitiz no manda nombre (reservas.service.ts, NOMBRE_SIN_DATO). */
 const NOMBRE_GENERICO = 'huesped';
 

@@ -83,4 +83,14 @@ export interface PedidoContextoReserva extends PedidoContextoBase {
   nombreHuesped?: string | null;
 }
 
-export type PedidoContexto = PedidoContextoOrder | PedidoContextoPedidoB2b | PedidoContextoReserva;
+/**
+ * Semana siguiente a la que se refiere un recordatorio semanal de pedido (trigger RECORDATORIO_SEMANAL_PEDIDO). Fechas de
+ * calendario (UTC a medianoche, como las columnas @db.Date): lunes y domingo. No hereda de PedidoContextoBase: no hay pedido.
+ */
+export interface PedidoContextoSemana {
+  origen: 'SEMANA';
+  semanaInicio: Date;
+  semanaFin: Date;
+}
+
+export type PedidoContexto = PedidoContextoOrder | PedidoContextoPedidoB2b | PedidoContextoReserva | PedidoContextoSemana;

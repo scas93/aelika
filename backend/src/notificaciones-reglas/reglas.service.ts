@@ -5,11 +5,13 @@ import { validate, ValidationError } from 'class-validator';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { validarFiltroReserva, validarTriggerConfigReserva } from './reserva-trigger';
+import { validarTriggerConfigRecordatorio } from './recordatorio-semanal';
 import {
   EstadoPedido,
   PedidoB2bEstado,
   ReglaFiltroCampo,
   ReglaFiltroOperador,
+  ReglaMensajeCategoria,
   ReglaPlantillaVariableFuente,
   ReglaTriggerOrigenPedido,
   ReglaTriggerTipo,
@@ -42,6 +44,21 @@ export interface ResumenDisparoManual {
   enviosDisparados: number;
   bloqueadosPorCandado: number;
   conError: number;
+}
+
+/**
+ * Valor del botón de URL dinámica: solo la parte dinámica (el dominio va fijo en la plantilla de Meta), sin esquema, sin «/»
+ * inicial ni espacios. null / vacío = sin botón.
+ */
+export function validarBotonUrlValor(valor: string | null | undefined): string | null {
+  const limpio = (valor ?? '').trim();
+  if (limpio === '') return null;
+  if (limpio.length > 200 || /\s/.test(limpio) || limpio.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(limpio)) {
+    throw new BadRequestException(
+      'El valor del botón debe ser solo la parte dinámica de la URL (por ejemplo el slug del negocio): sin dominio, sin «/» inicial y sin espacios.',
+    );
+  }
+  return limpio;
 }
 
 /**
@@ -98,7 +115,9 @@ export class ReglasService {
       triggerConfigRaw: dto.triggerConfig,
       filtroRaw: dto.filtro ?? [],
       plantillaVariablesRaw: dto.plantillaVariables ?? [],
+      plantillaCategoria: dto.plantillaCategoria,
     });
+    const botonUrlValor = validarBotonUrlValor(dto.botonUrlValor);
 
     return this.tenantPrisma.client.regla.create({
       data: {
@@ -112,6 +131,7 @@ export class ReglasService {
         plantillaCategoria: dto.plantillaCategoria,
         plantillaTexto: dto.plantillaTexto,
         plantillaVariables,
+        botonUrlValor,
         activa: dto.activa ?? true,
       } as any,
       omit: SIN_CAMPOS_INTERNOS,
@@ -145,7 +165,10 @@ export class ReglasService {
       filtroRaw,
       plantillaVariablesRaw,
       permitirDespachadoB2bObsoleto: soloDesactiva,
+      plantillaCategoria: dto.plantillaCategoria ?? existente.plantillaCategoria,
     });
+    // undefined = no tocar el botón; null o cadena vacía = quitarlo.
+    const botonUrlValor = dto.botonUrlValor === undefined ? undefined : validarBotonUrlValor(dto.botonUrlValor);
 
     // Caso borde declarado explícitamente en el prompt: una FECHA_PROGRAMADA
     // que ya se disparó (`disparadaEn` no nulo) se vuelve a armar (se
@@ -181,6 +204,7 @@ export class ReglasService {
           plantillaCategoria: dto.plantillaCategoria,
           plantillaTexto: dto.plantillaTexto,
           plantillaVariables,
+          botonUrlValor,
           activa: dto.activa,
           disparadaEn,
         } as any,
@@ -259,8 +283,20 @@ export class ReglasService {
     filtroRaw: unknown[];
     plantillaVariablesRaw: unknown[];
     permitirDespachadoB2bObsoleto?: boolean;
+    plantillaCategoria: ReglaMensajeCategoria;
   }): Promise<PayloadValidado> {
     const { trigger } = input;
+
+    // RECORDATORIO_SEMANAL_PEDIDO solo existe para negocios de mayoreo y siempre es Utility (sin candado de frecuencia).
+    if (trigger === ReglaTriggerTipo.RECORDATORIO_SEMANAL_PEDIDO) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: input.tenantId }, select: { tipoStorefront: true } });
+      if (tenant?.tipoStorefront !== 'RETAIL_B2B') {
+        throw new BadRequestException('El recordatorio semanal de pedido solo está disponible para negocios de mayoreo.');
+      }
+      if (input.plantillaCategoria !== ReglaMensajeCategoria.UTILITY) {
+        throw new BadRequestException('El recordatorio semanal de pedido es siempre de categoría Utility (créalo desde Seguimiento).');
+      }
+    }
 
     // RESERVA_AUTOMATICA solo existe para negocios Hotel.
     if (trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA) {
@@ -276,7 +312,7 @@ export class ReglasService {
     // se limpia en vez de rechazar, mismo criterio que triggerConfig al
     // cambiar de tipo (ver casos borde del prompt de esta etapa).
     const filtro =
-      trigger === ReglaTriggerTipo.EVENTO_PEDIDO
+      trigger === ReglaTriggerTipo.EVENTO_PEDIDO || trigger === ReglaTriggerTipo.RECORDATORIO_SEMANAL_PEDIDO
         ? []
         : trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA
           ? validarFiltroReserva(input.filtroRaw)
@@ -317,6 +353,10 @@ export class ReglasService {
 
     if (trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA) {
       return { ...validarTriggerConfigReserva(raw) };
+    }
+
+    if (trigger === ReglaTriggerTipo.RECORDATORIO_SEMANAL_PEDIDO) {
+      return { ...validarTriggerConfigRecordatorio(raw) };
     }
 
     if (trigger === ReglaTriggerTipo.FECHA_PROGRAMADA) {

@@ -9,6 +9,7 @@ import {
   type CatalogoVariableGrupo,
   type CondicionReserva,
   type CreateReglaPayload,
+  type DiaSemanaRegla,
   type FiltroCondicion,
   type PlantillaVariable,
   type Regla,
@@ -23,6 +24,7 @@ import Button from "../_components/Button";
 import ToggleSwitch from "../_components/ToggleSwitch";
 import {
   CATEGORIA_LABEL,
+  DIA_SEMANA_REGLA,
   ESTATUS_B2B_DESPACHADO_OBSOLETO,
   ESTATUS_POR_ORIGEN,
   FILTRO_CAMPO_LABEL,
@@ -41,13 +43,16 @@ const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-a
 const TRIGGERS: ReglaTriggerTipo[] = ["EVENTO_PEDIDO", "ESTADO_CLIENTE", "FECHA_PROGRAMADA", "MANUAL"];
 // Solo los negocios Hotel ven el trigger de reservas (el backend lo rechaza para cualquier otro tipo).
 const TRIGGERS_HOTEL: ReglaTriggerTipo[] = ["RESERVA_AUTOMATICA", ...TRIGGERS];
+// Solo mayoreo, y solo desde Seguimiento (Utility): el backend también lo rechaza en cualquier otro negocio o categoría.
+const TRIGGERS_MAYOREO_SEGUIMIENTO: ReglaTriggerTipo[] = ["RECORDATORIO_SEMANAL_PEDIDO", ...TRIGGERS];
 const HORAS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 
-const GRUPO_ORDEN: CatalogoVariableGrupo[] = ["CLIENTE", "PEDIDO", "RESERVA", "NEGOCIO"];
+const GRUPO_ORDEN: CatalogoVariableGrupo[] = ["CLIENTE", "PEDIDO", "RESERVA", "SEMANA", "NEGOCIO"];
 const GRUPO_LABEL: Record<CatalogoVariableGrupo, string> = {
   CLIENTE: "Cliente",
   PEDIDO: "Pedido",
   RESERVA: "Reserva",
+  SEMANA: "Semana siguiente",
   NEGOCIO: "Negocio",
 };
 const CLAVE_VALOR_FIJO = "VALOR_FIJO";
@@ -80,6 +85,7 @@ function disponibilidad(
 ): { ok: boolean; motivo?: string } {
   if (restriccion.tipo === "ninguna") return { ok: true };
   if (restriccion.tipo === "reserva") return trigger === "RESERVA_AUTOMATICA" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
+  if (restriccion.tipo === "semana") return trigger === "RECORDATORIO_SEMANAL_PEDIDO" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
   if (trigger !== "EVENTO_PEDIDO") return { ok: false, motivo: restriccion.motivo };
   if (restriccion.tipo === "evento_pedido") return { ok: true };
   return origen === "ORDER" ? { ok: true } : { ok: false, motivo: restriccion.motivo };
@@ -129,6 +135,10 @@ interface ReglaFormProps {
 export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }: ReglaFormProps) {
   const { token, user } = useSession();
   const esHotel = user.tenant.tipoStorefront === "HOTEL";
+  const esMayoreo = user.tenant.tipoStorefront === "RETAIL_B2B";
+  // El recordatorio semanal se ofrece solo en mayoreo y solo en Seguimiento (Utility); una regla ya guardada de ese tipo
+  // se sigue mostrando aunque el negocio cambiara de tipo.
+  const ofreceRecordatorio = (esMayoreo && categoriaFija === "UTILITY") || initial?.trigger === "RECORDATORIO_SEMANAL_PEDIDO";
   const triggerConfigInicial = (initial?.triggerConfig ?? {}) as Record<string, unknown>;
   const fechaInicial = esFechaProgramadaConValor(initial)
     ? isoAFechaLocal(String(triggerConfigInicial.fechaHora))
@@ -143,6 +153,13 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   const [filtroReserva, setFiltroReserva] = useState<CondicionReserva[]>(
     initial?.trigger === "RESERVA_AUTOMATICA" ? (initial.filtro as CondicionReserva[]) : [{ campo: "DIAS_PARA_CHECKIN", operador: "MAYOR_IGUAL", valor: 0 }],
   );
+  const [diaRecordatorio, setDiaRecordatorio] = useState<DiaSemanaRegla>(
+    (triggerConfigInicial.diaSemana as DiaSemanaRegla | undefined) ?? "viernes",
+  );
+  const [horaRecordatorio, setHoraRecordatorio] = useState(
+    String(typeof triggerConfigInicial.hora === "number" && initial?.trigger === "RECORDATORIO_SEMANAL_PEDIDO" ? triggerConfigInicial.hora : 13).padStart(2, "0"),
+  );
+  const [botonUrlValor, setBotonUrlValor] = useState(initial?.botonUrlValor ?? "");
   const [origen, setOrigen] = useState<ReglaTriggerOrigenPedido>(
     (triggerConfigInicial.origen as ReglaTriggerOrigenPedido) ?? "ORDER",
   );
@@ -190,7 +207,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
   function handleTriggerChange(nuevo: ReglaTriggerTipo) {
     setTrigger(nuevo);
     // El Filtro no aplica a EVENTO_PEDIDO (decisión de producto ya tomada).
-    if (nuevo === "EVENTO_PEDIDO") {
+    if (nuevo === "EVENTO_PEDIDO" || nuevo === "RECORDATORIO_SEMANAL_PEDIDO") {
       setFiltro([]);
     }
     limpiarVariablesInvalidas(nuevo, origen);
@@ -283,19 +300,23 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
             ? frecuencia === "DIARIA"
               ? { frecuencia, hora: Number(horaDiaria) }
               : { frecuencia }
-            : undefined;
+            : trigger === "RECORDATORIO_SEMANAL_PEDIDO"
+              ? { diaSemana: diaRecordatorio, hora: Number(horaRecordatorio) }
+              : undefined;
 
     return {
       nombre: nombre.trim(),
       trigger,
       triggerConfig,
-      filtro: trigger === "EVENTO_PEDIDO" ? [] : trigger === "RESERVA_AUTOMATICA" ? filtroReserva : filtro,
+      filtro: trigger === "EVENTO_PEDIDO" || trigger === "RECORDATORIO_SEMANAL_PEDIDO" ? [] : trigger === "RESERVA_AUTOMATICA" ? filtroReserva : filtro,
       canal: "WHATSAPP",
       plantillaNombre: plantillaNombre.trim(),
       plantillaIdioma,
       plantillaCategoria: categoriaFija,
       plantillaTexto: plantillaTexto.trim() || undefined,
       plantillaVariables: variables,
+      // Solo el recordatorio semanal edita el botón desde este formulario; en los demás tipos no se toca (null lo quitaría).
+      ...(trigger === "RECORDATORIO_SEMANAL_PEDIDO" ? { botonUrlValor: botonUrlValor.trim() || null } : {}),
       activa,
     };
   }
@@ -307,6 +328,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
     filtroReserva.every((c) => (c.campo === "IDIOMA_HUESPED" ? typeof c.valor === "string" && c.valor !== "" : Number.isInteger(c.valor)));
   const filtroValido =
     trigger === "EVENTO_PEDIDO" ||
+    trigger === "RECORDATORIO_SEMANAL_PEDIDO" ||
     (trigger === "RESERVA_AUTOMATICA" ? filtroReservaValido : filtro.every((c) => Number.isFinite(c.valor)));
   const variablesValidas = variables.every((v) => {
     if (v.fuente === "VALOR_FIJO") return v.valor.trim() !== "";
@@ -361,7 +383,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
               onChange={(e) => handleTriggerChange(e.target.value as ReglaTriggerTipo)}
               className="admin-input"
             >
-              {(esHotel ? TRIGGERS_HOTEL : TRIGGERS).map((t) => (
+              {(esHotel ? TRIGGERS_HOTEL : ofreceRecordatorio ? TRIGGERS_MAYOREO_SEGUIMIENTO : TRIGGERS).map((t) => (
                 <option key={t} value={t}>
                   {TRIGGER_LABEL[t]}
                 </option>
@@ -399,6 +421,43 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
                   ))}
                 </select>
               </label>
+            </div>
+          )}
+
+          {trigger === "RECORDATORIO_SEMANAL_PEDIDO" && (
+            <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+              <p className="text-sm text-admin-ink">
+                Recuerda por WhatsApp a tus clientes que hagan su pedido de la <strong>semana siguiente</strong> (de lunes a domingo, la que
+                sigue a la semana en curso). Solo se envía a los clientes activos con teléfono que todavía no tienen un pedido para esa semana
+                (un pedido cancelado no cuenta), y a cada cliente se le avisa una sola vez por semana y por regla.
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                  Día de la semana
+                  <select value={diaRecordatorio} onChange={(e) => setDiaRecordatorio(e.target.value as DiaSemanaRegla)} className="admin-input">
+                    {DIA_SEMANA_REGLA.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                  Hora (en punto, CDMX)
+                  <select value={horaRecordatorio} onChange={(e) => setHoraRecordatorio(e.target.value)} className="admin-input">
+                    {HORAS.map((h) => (
+                      <option key={h} value={h}>
+                        {h}:00
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="text-sm text-admin-ink-soft">
+                Se evalúa desde esa hora hasta el fin de ese mismo día (hora de CDMX): si activas la regla más tarde ese día, todavía envía ese
+                día; nunca al día siguiente. Puedes crear más de una regla (por ejemplo viernes y sábado): cada una avisa una vez por semana a
+                quien siga sin pedir.
+              </p>
             </div>
           )}
 
@@ -467,13 +526,15 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
         </Card>
 
         {/* --- Filtro --- */}
-        <Card className={`flex flex-col gap-3 ${trigger === "EVENTO_PEDIDO" ? "opacity-50" : ""}`}>
+        <Card className={`flex flex-col gap-3 ${trigger === "EVENTO_PEDIDO" || trigger === "RECORDATORIO_SEMANAL_PEDIDO" ? "opacity-50" : ""}`}>
           <div>
             <h2 className={SECTION_HEADER}>Filtro</h2>
             <p className="text-sm text-admin-ink-soft">
               {trigger === "EVENTO_PEDIDO"
                 ? "No aplica — el destinatario es siempre el cliente dueño del pedido."
-                : trigger === "RESERVA_AUTOMATICA"
+                : trigger === "RECORDATORIO_SEMANAL_PEDIDO"
+                  ? "No aplica — reciben el recordatorio los clientes activos con teléfono que aún no tienen pedido para la semana siguiente."
+                  : trigger === "RESERVA_AUTOMATICA"
                   ? "Condiciones combinadas con Y, sobre reservas no canceladas. Debe haber al menos una de días. Cada reserva recibe el mensaje una sola vez."
                   : "Condiciones combinadas con Y. Sin condiciones, aplica a todos los clientes."}
             </p>
@@ -541,7 +602,7 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
             </div>
           )}
 
-          {trigger !== "EVENTO_PEDIDO" && trigger !== "RESERVA_AUTOMATICA" && (
+          {trigger !== "EVENTO_PEDIDO" && trigger !== "RESERVA_AUTOMATICA" && trigger !== "RECORDATORIO_SEMANAL_PEDIDO" && (
             <div className="flex flex-col gap-2">
               {filtro.map((condicion, index) => (
                 <div key={index}>
@@ -622,6 +683,21 @@ export default function ReglaForm({ initial, categoriaFija, onSubmit, onCancel }
               </select>
             </label>
           </div>
+          {trigger === "RECORDATORIO_SEMANAL_PEDIDO" && (
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+              Botón de URL dinámica (opcional)
+              <input
+                value={botonUrlValor}
+                onChange={(e) => setBotonUrlValor(e.target.value)}
+                placeholder="mi-negocio"
+                className="admin-input"
+              />
+              <span className="text-xs font-normal text-admin-ink-soft">
+                Solo la parte que cambia de la URL (por ejemplo el slug de tu negocio), sin dominio, sin «/» inicial y sin espacios: el
+                dominio va fijo en la plantilla de Meta. Déjalo vacío si la plantilla no tiene botón.
+              </span>
+            </label>
+          )}
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
             Texto del cuerpo (solo para tu referencia — no se manda a Botpress)
             <textarea
