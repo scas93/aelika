@@ -34,7 +34,14 @@ export class ResumenSemanalBarridoService {
   ) {}
 
   async ejecutar(ahora = new Date()): Promise<EstadisticasResumenSemanal> {
-    const stats: EstadisticasResumenSemanal = { enVentana: ventanaActivaResumen(ahora), negocios: 0, enviados: 0, fallidos: 0, duplicados: 0, conError: 0 };
+    const stats: EstadisticasResumenSemanal = {
+      enVentana: ventanaActivaResumen(ahora),
+      negocios: 0,
+      enviados: 0,
+      fallidos: 0,
+      duplicados: 0,
+      conError: 0,
+    };
     if (!stats.enVentana) return stats;
     const semana = semanaAnterior(ahora);
 
@@ -55,18 +62,19 @@ export class ResumenSemanalBarridoService {
     for (const c of configs) {
       try {
         const cfg = c.canalConfig.config as { nombreRemitente?: unknown };
-        const r = await this.envio.enviar(
-          c.tenantId,
-          semana,
-          'PROGRAMADO',
-          { nombreRemitente: typeof cfg.nombreRemitente === 'string' ? cfg.nombreRemitente : '', correos: correosDeConfig(c.canalConfig.config) },
-        );
+        const r = await this.envio.enviar(c.tenantId, semana, 'PROGRAMADO', {
+          nombreRemitente:
+            typeof cfg.nombreRemitente === 'string' ? cfg.nombreRemitente : '',
+          correos: correosDeConfig(c.canalConfig.config),
+        });
         if (r.resultado === 'EXITO') stats.enviados += 1;
         else if (r.resultado === 'FALLO') stats.fallidos += 1;
         else stats.duplicados += 1;
-      } catch (error: any) {
+      } catch (error: unknown) {
         stats.conError += 1;
-        this.logger.error(`Resumen semanal: error inesperado (tenant=${c.tenantId}): ${error?.message ?? error}`);
+        this.logger.error(
+          `Resumen semanal: error inesperado (tenant=${c.tenantId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     this.logger.log(

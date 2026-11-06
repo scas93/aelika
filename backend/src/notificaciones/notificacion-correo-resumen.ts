@@ -21,7 +21,9 @@ export interface ConfigCorreoResumen {
 export function normalizarCorreo(crudo: unknown): string {
   const texto = typeof crudo === 'string' ? crudo.trim().toLowerCase() : '';
   if (!texto || texto.length > MAX_LARGO_CORREO || !CORREO.test(texto)) {
-    throw new BadRequestException(`«${typeof crudo === 'string' ? crudo.trim().slice(0, 60) : ''}» no es una dirección de correo válida`);
+    throw new BadRequestException(
+      `«${typeof crudo === 'string' ? crudo.trim().slice(0, 60) : ''}» no es una dirección de correo válida`,
+    );
   }
   return texto;
 }
@@ -31,22 +33,39 @@ export function normalizarCorreo(crudo: unknown): string {
  * `{ nombreRemitente, correos }`; cualquier otra llave se descarta. Acepta de 0 a 10 direcciones (una lista vacía solo es válida
  * mientras el canal esté inactivo: esa regla es del servicio), sin repetidos. El CORREO de menudeo y hotel NO pasa por aquí.
  */
-export function validarConfigCorreoResumen(config: unknown): ConfigCorreoResumen {
+export function validarConfigCorreoResumen(
+  config: unknown,
+): ConfigCorreoResumen {
   const c = (config ?? {}) as { nombreRemitente?: unknown; correos?: unknown };
-  const nombreRemitente = typeof c.nombreRemitente === 'string' ? c.nombreRemitente.trim() : '';
-  if (!nombreRemitente) throw new BadRequestException('El canal de correo necesita el nombre del remitente');
+  const nombreRemitente =
+    typeof c.nombreRemitente === 'string' ? c.nombreRemitente.trim() : '';
+  if (!nombreRemitente)
+    throw new BadRequestException(
+      'El canal de correo necesita el nombre del remitente',
+    );
   if (nombreRemitente.length > MAX_NOMBRE_REMITENTE) {
-    throw new BadRequestException(`El nombre del remitente no puede pasar de ${MAX_NOMBRE_REMITENTE} caracteres`);
+    throw new BadRequestException(
+      `El nombre del remitente no puede pasar de ${MAX_NOMBRE_REMITENTE} caracteres`,
+    );
   }
   if (NOMBRE_INVALIDO.test(nombreRemitente)) {
-    throw new BadRequestException('El nombre del remitente tiene caracteres no permitidos');
+    throw new BadRequestException(
+      'El nombre del remitente tiene caracteres no permitidos',
+    );
   }
-  if (!Array.isArray(c.correos)) throw new BadRequestException('El canal de correo necesita la lista de direcciones');
-  if (c.correos.length > MAX_CORREOS_RESUMEN) throw new BadRequestException(`Máximo ${MAX_CORREOS_RESUMEN} direcciones de correo`);
+  if (!Array.isArray(c.correos))
+    throw new BadRequestException(
+      'El canal de correo necesita la lista de direcciones',
+    );
+  if (c.correos.length > MAX_CORREOS_RESUMEN)
+    throw new BadRequestException(
+      `Máximo ${MAX_CORREOS_RESUMEN} direcciones de correo`,
+    );
   const vistos = new Set<string>();
   const correos = c.correos.map((raw) => {
     const correo = normalizarCorreo(raw);
-    if (vistos.has(correo)) throw new BadRequestException(`La dirección ${correo} está repetida`);
+    if (vistos.has(correo))
+      throw new BadRequestException(`La dirección ${correo} está repetida`);
     vistos.add(correo);
     return correo;
   });
@@ -56,5 +75,7 @@ export function validarConfigCorreoResumen(config: unknown): ConfigCorreoResumen
 /** Direcciones guardadas en el `config` de un canal CORREO de mayoreo (lectura tolerante: filas viejas sin lista dan []). */
 export function correosDeConfig(config: unknown): string[] {
   const lista = (config as { correos?: unknown } | null)?.correos;
-  return Array.isArray(lista) ? lista.filter((c): c is string => typeof c === 'string' && c.length > 0) : [];
+  return Array.isArray(lista)
+    ? lista.filter((c): c is string => typeof c === 'string' && c.length > 0)
+    : [];
 }

@@ -25,8 +25,10 @@ export class ResumenSemanalCronService implements OnApplicationBootstrap {
   private async correr(origen: string) {
     try {
       await this.barrido.ejecutar();
-    } catch (error: any) {
-      this.logger.error(`Resumen semanal (${origen}) falló: ${error?.message ?? error}`);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Resumen semanal (${origen}) falló: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 }

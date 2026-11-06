@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { libroPedidos } from '../pedidos-b2b/pedidos-b2b-excel';
-import { buildWherePedidosB2b, filasExcelDePedidos, PEDIDOS_EXPORT_ORDEN, PEDIDOS_EXPORT_SELECT } from '../pedidos-b2b/pedidos-b2b-export';
+import {
+  buildWherePedidosB2b,
+  filasExcelDePedidos,
+  PEDIDOS_EXPORT_ORDEN,
+  PEDIDOS_EXPORT_SELECT,
+} from '../pedidos-b2b/pedidos-b2b-export';
 import {
   calcularTotales,
   construirCorreoResumen,
@@ -27,11 +32,18 @@ export interface ResumenArmado {
 export class ResumenSemanalArmadoService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async armar(tenantId: string, negocioNombre: string, semana: SemanaResumen): Promise<ResumenArmado> {
+  async armar(
+    tenantId: string,
+    negocioNombre: string,
+    semana: SemanaResumen,
+  ): Promise<ResumenArmado> {
     const pedidos = await this.prisma.order.findMany({
       // Pedidos cuya semana (lunes) es la semana pedida, con TODAS sus entregas (caigan en el día que caigan) y sin filtrar
       // cancelados (salen marcados «Cancelado», como en Históricos). `tenantId` siempre explícito.
-      where: { ...buildWherePedidosB2b({ desde: semana.inicio, hasta: semana.inicio }), tenantId },
+      where: {
+        ...buildWherePedidosB2b({ desde: semana.inicio, hasta: semana.inicio }),
+        tenantId,
+      },
       orderBy: PEDIDOS_EXPORT_ORDEN,
       select: PEDIDOS_EXPORT_SELECT,
     });
@@ -40,6 +52,13 @@ export class ResumenSemanalArmadoService {
     const correo = construirCorreoResumen(negocioNombre, semana, totales);
     if (!totales.hayPedidos) return { correo, totales };
     const contenido = await libroPedidos(filas, entregas, 'HISTORICOS');
-    return { correo, totales, adjunto: { nombreArchivo: nombreArchivoResumen(negocioNombre, semana), contenido } };
+    return {
+      correo,
+      totales,
+      adjunto: {
+        nombreArchivo: nombreArchivoResumen(negocioNombre, semana),
+        contenido,
+      },
+    };
   }
 }

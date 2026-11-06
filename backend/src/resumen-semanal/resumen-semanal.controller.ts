@@ -24,9 +24,14 @@ export class ResumenSemanalController {
   @Post('prueba')
   @HttpCode(200)
   async prueba(@CurrentUser() user: JwtPayload) {
-    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { tipoStorefront: true } });
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: user.tenantId },
+      select: { tipoStorefront: true },
+    });
     if (tenant.tipoStorefront !== TipoStorefront.RETAIL_B2B) {
-      throw new ForbiddenException('El resumen semanal solo está disponible para negocios de mayoreo');
+      throw new ForbiddenException(
+        'El resumen semanal solo está disponible para negocios de mayoreo',
+      );
     }
     const config = await this.envio.configDelNegocio(user.tenantId);
     const semana = semanaAnterior(new Date());

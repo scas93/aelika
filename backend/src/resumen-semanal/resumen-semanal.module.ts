@@ -13,7 +13,12 @@ import { ResumenSemanalEnvioService } from './resumen-semanal-envio.service';
 @Module({
   imports: [NotificacionesModule],
   controllers: [ResumenSemanalController],
-  providers: [ResumenSemanalArmadoService, ResumenSemanalEnvioService, ResumenSemanalBarridoService, ResumenSemanalCronService],
+  providers: [
+    ResumenSemanalArmadoService,
+    ResumenSemanalEnvioService,
+    ResumenSemanalBarridoService,
+    ResumenSemanalCronService,
+  ],
   exports: [ResumenSemanalEnvioService],
 })
 export class ResumenSemanalModule {}

@@ -7,8 +7,15 @@ import {
 } from './pedidos-b2b-excel';
 import { fechaExcel } from '../common/xlsx';
 import { round2 } from '../common/money';
-import { EstadoEntrega, Prisma, TipoOrden } from '../../generated/prisma/client';
-import { filtroImporteWhere, type FiltroImporteOperador } from '../common/filtro-importe';
+import {
+  EstadoEntrega,
+  Prisma,
+  TipoOrden,
+} from '../../generated/prisma/client';
+import {
+  filtroImporteWhere,
+  type FiltroImporteOperador,
+} from '../common/filtro-importe';
 import {
   entregaAtrasada,
   ESTADOS_B2B_COMPLETADOS,
@@ -49,9 +56,7 @@ export function buildWherePedidosB2b(query: {
             gte: query.desde ? new Date(query.desde) : undefined,
             lte: query.hasta ? new Date(query.hasta) : undefined,
             // semanaInicio estrictamente anterior (pedidos activos de semanas pasadas)
-            lt: query.semanaAntesDe
-              ? new Date(query.semanaAntesDe)
-              : undefined,
+            lt: query.semanaAntesDe ? new Date(query.semanaAntesDe) : undefined,
           }
         : undefined,
     // Coincidencia parcial, case-insensitive — usado por "Históricos"
@@ -62,7 +67,8 @@ export function buildWherePedidosB2b(query: {
       ? { contains: query.negocioNombre, mode: 'insensitive' }
       : undefined,
   };
-  const estadosSel = query.estados ?? (query.estado ? [query.estado] : undefined);
+  const estadosSel =
+    query.estados ?? (query.estado ? [query.estado] : undefined);
   const porEstado: Prisma.OrderWhereInput | undefined = estadosSel
     ? {
         // COMPLETADO también abarca el DESPACHADO heredado (antes de migrar los datos).
@@ -75,24 +81,32 @@ export function buildWherePedidosB2b(query: {
   // Estado con "Cancelado" marcado: (estados Y no cancelado) O cancelado. Si no hay estados, solo los cancelados.
   const conCancelados = query.conCancelados;
   if (conCancelados && porEstado && estadosSel!.length > 0) {
-    y.push({ OR: [{ AND: [porEstado, { cancelado: false }] }, { cancelado: true }] });
+    y.push({
+      OR: [{ AND: [porEstado, { cancelado: false }] }, { cancelado: true }],
+    });
   }
   // Históricos: solo Completados (incluye el DESPACHADO heredado) y Cancelados.
   if (query.soloHistorico) {
     y.push({
-      OR: [{ cancelado: true }, { estadoPedido: { in: ESTADOS_B2B_COMPLETADOS } }],
+      OR: [
+        { cancelado: true },
+        { estadoPedido: { in: ESTADOS_B2B_COMPLETADOS } },
+      ],
     });
   }
   const combinado = conCancelados && porEstado && estadosSel!.length > 0;
   // Marcar todos los estados de pago equivale a no filtrar por pago.
   const pagos = [...new Set(query.estadoPago ?? [])];
-  const filtraPago = pagos.length > 0 && pagos.length < ESTADOS_PAGO_B2B_FILTRO.length;
+  const filtraPago =
+    pagos.length > 0 && pagos.length < ESTADOS_PAGO_B2B_FILTRO.length;
   return {
     tipo: TipoOrden.B2B,
     // `estados` (multi-valor) tiene prioridad si llega — ver ExportPedidosB2bQueryDto para el motivo (vista "activos" con dos
     // estatus a la vez, sin pestaña por estatus).
     estadoPedido: combinado ? undefined : porEstado?.estadoPedido,
-    cancelado: combinado ? undefined : (query.cancelado ?? (conCancelados ? true : undefined)),
+    cancelado: combinado
+      ? undefined
+      : (query.cancelado ?? (conCancelados ? true : undefined)),
     estadoPago: filtraPago ? { in: pagos } : undefined,
     ...(y.length > 0 ? { AND: y } : {}),
     total: filtroImporteWhere(query.operador, query.valor, query.valorHasta),
@@ -105,46 +119,54 @@ export function buildWherePedidosB2b(query: {
 
 /** Qué se lee de cada pedido para armar el Excel (y el resumen semanal). */
 export const PEDIDOS_EXPORT_SELECT = {
-    folio: true,
-    estadoPedido: true,
-    estadoPago: true,
-    cancelado: true,
-    total: true,
-    descuentoTotal: true,
-    createdAt: true,
-    cliente: { select: { codigo: true } },
-    detalleB2b: {
-      select: {
-        negocioNombre: true,
-        semanaInicio: true,
-        subtotal: true,
-        descuentoPorcentajeAplicado: true,
-        pagadoAt: true,
-        notaCliente: true,
-      },
+  folio: true,
+  estadoPedido: true,
+  estadoPago: true,
+  cancelado: true,
+  total: true,
+  descuentoTotal: true,
+  createdAt: true,
+  cliente: { select: { codigo: true } },
+  detalleB2b: {
+    select: {
+      negocioNombre: true,
+      semanaInicio: true,
+      subtotal: true,
+      descuentoPorcentajeAplicado: true,
+      pagadoAt: true,
+      notaCliente: true,
     },
-    entregas: {
-      select: {
-        estado: true,
-        fecha: true,
-        nota: true,
-        estadoCambiadoAt: true,
-        items: {
-          select: {
-            cantidad: true,
-            orderItem: { select: { precioUnitario: true } },
-          },
+  },
+  entregas: {
+    select: {
+      estado: true,
+      fecha: true,
+      nota: true,
+      estadoCambiadoAt: true,
+      items: {
+        select: {
+          cantidad: true,
+          orderItem: { select: { precioUnitario: true } },
         },
       },
     },
-  } satisfies Prisma.OrderSelect;
+  },
+} satisfies Prisma.OrderSelect;
 
-export type PedidoExport = Prisma.OrderGetPayload<{ select: typeof PEDIDOS_EXPORT_SELECT }>;
+export type PedidoExport = Prisma.OrderGetPayload<{
+  select: typeof PEDIDOS_EXPORT_SELECT;
+}>;
 
-export const PEDIDOS_EXPORT_ORDEN: Prisma.OrderOrderByWithRelationInput[] = [{ detalleB2b: { semanaInicio: 'desc' } }, { createdAt: 'asc' }];
+export const PEDIDOS_EXPORT_ORDEN: Prisma.OrderOrderByWithRelationInput[] = [
+  { detalleB2b: { semanaInicio: 'desc' } },
+  { createdAt: 'asc' },
+];
 
 /** Filas de las hojas «Pedidos» y «Entregas» (una por pedido y una por entrega no cancelada). */
-export function filasExcelDePedidos(pedidos: PedidoExport[]): { filas: FilaPedidoExcel[]; entregas: FilaEntregaPedidoExcel[] } {
+export function filasExcelDePedidos(pedidos: PedidoExport[]): {
+  filas: FilaPedidoExcel[];
+  entregas: FilaEntregaPedidoExcel[];
+} {
   const filas: FilaPedidoExcel[] = pedidos.map((o) => ({
     folio: o.folio,
     clienteCodigo: o.cliente.codigo,
@@ -163,9 +185,7 @@ export function filasExcelDePedidos(pedidos: PedidoExport[]): { filas: FilaPedid
       .filter((e) => e.estado !== EstadoEntrega.CANCELADA)
       .reduce((n, e) => n + e.items.reduce((m, i) => m + i.cantidad, 0), 0),
     subtotal: Number(o.detalleB2b!.subtotal),
-    descuentoPorcentaje: Number(
-      o.detalleB2b!.descuentoPorcentajeAplicado ?? 0,
-    ),
+    descuentoPorcentaje: Number(o.detalleB2b!.descuentoPorcentajeAplicado ?? 0),
     descuentoTotal: Number(o.descuentoTotal),
     total: Number(o.total),
   }));
@@ -199,7 +219,10 @@ export function filasExcelDePedidos(pedidos: PedidoExport[]): { filas: FilaPedid
   return { filas, entregas };
 }
 
-export function libroDePedidosExport(pedidos: PedidoExport[], vista: VistaExcelPedidos): Promise<Buffer> {
+export function libroDePedidosExport(
+  pedidos: PedidoExport[],
+  vista: VistaExcelPedidos,
+): Promise<Buffer> {
   const { filas, entregas } = filasExcelDePedidos(pedidos);
   return libroPedidos(filas, entregas, vista);
 }
