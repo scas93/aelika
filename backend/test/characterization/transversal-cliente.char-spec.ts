@@ -190,6 +190,10 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
       codigo: null,
       descuentoPorcentaje: null,
       favoritoB2b: null,
+      // Resumen semanal por cliente (columnas nuevas del Cliente B2B; en B2C siempre apagadas): cambia a propósito la fila cruda.
+      resumenSemanalActivo: false,
+      resumenSemanalCorreo: null,
+      resumenSemanalActivadoAt: null,
       ultimoAccesoAt: null,
       direccion: null,
       modalidadPago: null,
@@ -244,6 +248,10 @@ describe('Transversal · Cliente dado de alta por Lealtad y su primer pedido', (
       codigo: null,
       descuentoPorcentaje: null,
       favoritoB2b: null,
+      // Resumen semanal por cliente (columnas nuevas del Cliente B2B; en B2C siempre apagadas): cambia a propósito la fila cruda.
+      resumenSemanalActivo: false,
+      resumenSemanalCorreo: null,
+      resumenSemanalActivadoAt: null,
       ultimoAccesoAt: null,
       direccion: null,
       modalidadPago: null,

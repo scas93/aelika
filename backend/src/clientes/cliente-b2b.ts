@@ -261,6 +261,10 @@ export const OMITIR_CAMPOS_B2B = {
   bajaAt: true,
   favoritoB2b: true,
   ultimoAccesoAt: true,
+  // Resumen semanal por correo del cliente B2B: lo expone solo la API /clientes-b2b.
+  resumenSemanalActivo: true,
+  resumenSemanalCorreo: true,
+  resumenSemanalActivadoAt: true,
 } as const;
 
 /**
