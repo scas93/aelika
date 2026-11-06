@@ -22,6 +22,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 const { default: Pagina } = await import("./page");
+
+// CAMBIO A PROPÓSITO (resumen semanal por cliente): la página de mayoreo ahora trae selectores de semana y de cliente de los botones de
+// prueba. Los selectores de EVENTO son los que empiezan en «Ninguno»; estas pruebas solo hablan de esos.
+const selectoresDeEvento = () =>
+  screen.getAllByRole("combobox").filter((c) => (c as HTMLSelectElement).options[0]?.text === "Ninguno") as HTMLSelectElement[];
 const { ApiError } = await import("@/lib/api");
 
 const canalCorreo = (extra: Partial<NotificacionCanalConfig> = {}): NotificacionCanalConfig => ({
@@ -183,7 +188,7 @@ describe("Tarjeta de WhatsApp", () => {
     createNotificacionEvento.mockResolvedValue({});
     render(<Pagina />);
     await screen.findByRole("option", { name: "WhatsApp" });
-    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "c1" } });
+    fireEvent.change(selectoresDeEvento()[0], { target: { value: "c1" } });
     await waitFor(() =>
       expect(createNotificacionEvento).toHaveBeenCalledWith("t", {
         evento: "PEDIDO_MODIFICADO_CLIENTE",
@@ -250,7 +255,10 @@ describe("Tarjeta de Correo (resumen semanal, mayoreo)", () => {
     render(<Pagina />);
     fireEvent.click(await screen.findByRole("button", { name: "Enviar resumen de prueba" }));
     expect(await screen.findByText(/Resumen de prueba enviado a 1 dirección/)).toBeTruthy();
-    expect(enviarResumenSemanalPrueba).toHaveBeenCalledWith("t");
+    // CAMBIO A PROPÓSITO: el botón ahora manda la semana elegida (por defecto la anterior, la primera del selector).
+    const semanaDefault = (screen.getByLabelText("Semana de la prueba") as HTMLSelectElement).value;
+    expect(semanaDefault).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(enviarResumenSemanalPrueba).toHaveBeenCalledWith("t", semanaDefault);
 
     enviarResumenSemanalPrueba.mockResolvedValueOnce({ resultado: "FALLO", motivo: "Resend: dominio no verificado", destinatarios: 1, conPedidos: false, semanaInicio: "2026-10-26", semanaFin: "2026-11-01" });
     fireEvent.click(screen.getByRole("button", { name: "Enviar resumen de prueba" }));
@@ -269,7 +277,7 @@ describe("Tarjeta de Correo (resumen semanal, mayoreo)", () => {
     createNotificacionEvento.mockResolvedValue({});
     render(<Pagina />);
     await screen.findByRole("option", { name: "Correo" });
-    const selects = screen.getAllByRole("combobox");
+    const selects = selectoresDeEvento();
     // El evento «Pedido modificado» sigue ofreciendo solo WhatsApp; el resumen solo Correo.
     expect(Array.from((selects[0] as HTMLSelectElement).options).map((o) => o.text)).toEqual(["Ninguno", "WhatsApp"]);
     expect(Array.from((selects[1] as HTMLSelectElement).options).map((o) => o.text)).toEqual(["Ninguno", "Correo"]);

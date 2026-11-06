@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 
 vi.mock("@/lib/session-context", () => ({ useSession: () => ({ token: "t", user: { rol: "GERENTE", tenant: { slug: "banetto" } } }) }));
 vi.mock("./historial-pedidos-cliente", () => ({ default: () => null }));
 const fetchClienteB2b = vi.fn();
 const fetchClientesB2bConfig = vi.fn();
+const updateClienteB2b = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, fetchClienteB2b, fetchClientesB2bConfig };
+  return { ...actual, fetchClienteB2b, fetchClientesB2bConfig, updateClienteB2b };
 });
 const { default: Panel } = await import("./cliente-b2b-panel");
 
@@ -23,6 +24,8 @@ const cliente = (extra = {}) => ({
   bajaAt: null,
   pedidosActivos: 0,
   incompleto: false,
+  resumenSemanalActivo: false,
+  resumenSemanalCorreo: null,
   totalPedidos: 0,
   ultimoPedidoAt: null,
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -55,5 +58,35 @@ describe("ficha del cliente B2B · modalidad de pago", () => {
     render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
     await screen.findByLabelText("Modalidad de pago");
     expect(screen.queryByText(/ya no está activa/)).toBeNull();
+  });
+});
+
+describe("ficha del cliente B2B · resumen semanal por correo", () => {
+  it("apagado y sin correo: el interruptor no se puede encender hasta capturar un correo; el heredado no se prellena", async () => {
+    fetchClientesB2bConfig.mockResolvedValue({ modalidadesActivas: ["AL_FINAL"] });
+    fetchClienteB2b.mockResolvedValue(cliente());
+    render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
+    const interruptor = await screen.findByRole("switch", { name: /Encender el resumen semanal/ });
+    const correo = screen.getByLabelText("Correo del resumen") as HTMLInputElement;
+    expect(correo.value).toBe("");
+    fireEvent.click(interruptor);
+    expect(interruptor.getAttribute("aria-checked")).toBe("false");
+    fireEvent.change(correo, { target: { value: "compras@aurora.com" } });
+    fireEvent.click(interruptor);
+    expect(interruptor.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("guardar manda el correo y el interruptor; borrar el correo apaga el interruptor", async () => {
+    fetchClientesB2bConfig.mockResolvedValue({ modalidadesActivas: ["AL_FINAL"] });
+    fetchClienteB2b.mockResolvedValue(cliente({ resumenSemanalActivo: true, resumenSemanalCorreo: "a@b.com" }));
+    updateClienteB2b.mockResolvedValue(cliente({ resumenSemanalActivo: false, resumenSemanalCorreo: null }));
+    render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
+    const correo = (await screen.findByLabelText("Correo del resumen")) as HTMLInputElement;
+    await waitFor(() => expect(correo.value).toBe("a@b.com"));
+    fireEvent.change(correo, { target: { value: "" } });
+    expect(screen.getByRole("switch", { name: /resumen semanal de este cliente/ }).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(updateClienteB2b).toHaveBeenCalled());
+    expect(updateClienteB2b.mock.calls[0][2]).toMatchObject({ resumenSemanalCorreo: null, resumenSemanalActivo: false });
   });
 });

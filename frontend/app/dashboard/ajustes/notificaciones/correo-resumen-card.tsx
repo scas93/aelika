@@ -14,6 +14,7 @@ import Badge from "../../_components/Badge";
 import Button from "../../_components/Button";
 import ToggleSwitch from "../../_components/ToggleSwitch";
 import { CanalCardShell } from "./canal-card-shell";
+import { ultimasSemanas } from "@/lib/semanas-resumen";
 
 const MAX_CORREOS = 10;
 const MAX_NOMBRE = 60;
@@ -56,6 +57,8 @@ export default function CorreoResumenCard({
   const [probando, setProbando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prueba, setPrueba] = useState<ResumenPruebaResultado | null>(null);
+  const semanas = ultimasSemanas();
+  const [semanaPrueba, setSemanaPrueba] = useState(semanas[0].inicio);
 
   const activo = canal?.activo ?? false;
   const sucio = JSON.stringify([nombre.trim(), correos.map((c) => c.trim())]) !== JSON.stringify([nombreGuardado, guardados]);
@@ -100,7 +103,7 @@ export default function CorreoResumenCard({
     setError(null);
     setPrueba(null);
     try {
-      setPrueba(await enviarResumenSemanalPrueba(token));
+      setPrueba(await enviarResumenSemanalPrueba(token, semanaPrueba));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo enviar el resumen de prueba");
     } finally {
@@ -198,11 +201,21 @@ export default function CorreoResumenCard({
         )}
 
         <div className="flex flex-col gap-1 border-t border-admin-border pt-3">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-admin-ink-soft">
+            Semana de la prueba
+            <select value={semanaPrueba} onChange={(e) => setSemanaPrueba(e.target.value)} className="admin-input w-full font-normal">
+              {semanas.map((w) => (
+                <option key={w.inicio} value={w.inicio}>
+                  {w.etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button type="button" variant="secondary" size="barra" disabled={probando || !canal || guardados.length === 0 || sucio} onClick={() => void handlePrueba()}>
             {probando ? "Enviando..." : "Enviar resumen de prueba"}
           </Button>
           <p className="text-xs text-admin-ink-soft">
-            Manda ahora el resumen de la semana anterior a las direcciones guardadas. No cuenta como el envío del lunes.
+            Manda ahora el resumen de la semana elegida a las direcciones guardadas. No cuenta como el envío del lunes.
           </p>
         </div>
       </form>
