@@ -1349,14 +1349,20 @@ export function deleteCodigoDescuentoB2b(token: string, id: string) {
 
 // --- Motor de reglas de notificación (/dashboard/notificaciones/{recontacto,seguimiento}, Módulo 3) ---
 
-export type ReglaTriggerTipo = "EVENTO_PEDIDO" | "ESTADO_CLIENTE" | "FECHA_PROGRAMADA" | "MANUAL" | "RESERVA_AUTOMATICA";
+export type ReglaTriggerTipo =
+  | "EVENTO_PEDIDO"
+  | "ESTADO_CLIENTE"
+  | "FECHA_PROGRAMADA"
+  | "MANUAL"
+  | "RESERVA_AUTOMATICA"
+  | "RECORDATORIO_SEMANAL_PEDIDO";
 export type ReglaCanal = "WHATSAPP";
 export type ReglaMensajeCategoria = "UTILITY" | "MARKETING";
 export type ReglaFiltroCampo = "TOTAL_PEDIDOS" | "ULTIMO_PEDIDO_ANTIGUEDAD_DIAS" | "PRIMER_PEDIDO_ANTIGUEDAD_DIAS";
 // IGUAL solo tiene sentido para TOTAL_PEDIDOS — el backend lo rechaza para
 // los dos campos de antigüedad (ver ReglasService.validarFiltro).
 export type ReglaFiltroOperador = "MAYOR_IGUAL" | "MENOR_IGUAL" | "IGUAL";
-export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO" | "CAMPO_RESERVA";
+export type ReglaPlantillaVariableFuente = "CAMPO_CLIENTE" | "VALOR_FIJO" | "CAMPO_PEDIDO" | "NOMBRE_NEGOCIO" | "CAMPO_RESERVA" | "SEMANA_SIGUIENTE";
 export type ReglaTriggerOrigenPedido = "ORDER" | "PEDIDO_B2B";
 
 export interface FiltroCondicion {
@@ -1391,13 +1397,14 @@ export interface PlantillaVariable {
 // backend/src/notificaciones-reglas/plantilla-variable-catalogo.ts).
 // Agregar una variable nueva al catálogo es agregar una entrada ahí — este
 // archivo no necesita ningún cambio para que aparezca en el dropdown.
-export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO" | "RESERVA";
+export type CatalogoVariableGrupo = "CLIENTE" | "PEDIDO" | "NEGOCIO" | "RESERVA" | "SEMANA";
 
 export type CatalogoVariableRestriccion =
   | { tipo: "ninguna" }
   | { tipo: "evento_pedido"; motivo: string }
   | { tipo: "evento_pedido_menudeo"; motivo: string }
-  | { tipo: "reserva"; motivo: string };
+  | { tipo: "reserva"; motivo: string }
+  | { tipo: "semana"; motivo: string };
 
 export interface CatalogoVariableDef {
   fuente: ReglaPlantillaVariableFuente;
@@ -1426,6 +1433,14 @@ export interface FechaProgramadaTriggerConfig {
   fechaHora: string;
 }
 
+// triggerConfig de RECORDATORIO_SEMANAL_PEDIDO (solo mayoreo): se evalúa ese día de la semana desde `hora` (0-23, CDMX)
+// hasta el fin del mismo día.
+export type DiaSemanaRegla = "lunes" | "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
+export interface RecordatorioSemanalTriggerConfig {
+  diaSemana: DiaSemanaRegla;
+  hora: number;
+}
+
 export interface Regla {
   id: string;
   tenantId: string;
@@ -1444,6 +1459,8 @@ export interface Regla {
   // Solo para la vista previa en este panel — nunca se manda a Botpress.
   plantillaTexto: string | null;
   plantillaVariables: PlantillaVariable[];
+  // Parte dinámica del botón de URL de la plantilla (el dominio va fijo en la plantilla de Meta); null = sin botón.
+  botonUrlValor: string | null;
   activa: boolean;
   // Solo aplica a FECHA_PROGRAMADA — null hasta que el job la dispara.
   disparadaEn: string | null;
@@ -1462,6 +1479,8 @@ export interface CreateReglaPayload {
   plantillaCategoria: ReglaMensajeCategoria;
   plantillaTexto?: string;
   plantillaVariables?: PlantillaVariable[];
+  // null o vacío quita el botón; sin enviar la clave no se toca.
+  botonUrlValor?: string | null;
   activa?: boolean;
 }
 
@@ -1520,6 +1539,24 @@ export interface ResumenEjecucionReserva {
 
 export function ejecutarReglaReservaAhora(token: string, id: string) {
   return request<ResumenEjecucionReserva>(`/reglas/${id}/ejecutar-ahora`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+// «Ejecutar ahora» de un recordatorio semanal de pedido (mayoreo): mismo endpoint, distinto resumen.
+export interface ResumenEjecucionRecordatorio {
+  semanaInicio: string;
+  semanaFin: string;
+  evaluadas: number;
+  enviadas: number;
+  yaEnviadasPorSemana: number;
+  fallidas: number;
+  omitidasPorPedido: number;
+}
+
+export function ejecutarReglaRecordatorioAhora(token: string, id: string) {
+  return request<ResumenEjecucionRecordatorio>(`/reglas/${id}/ejecutar-ahora`, {
     method: "POST",
     headers: authHeaders(token),
   });

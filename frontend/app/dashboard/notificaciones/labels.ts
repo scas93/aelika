@@ -1,4 +1,5 @@
 import type {
+  DiaSemanaRegla,
   ReservaFiltroCampo,
   ReglaFiltroCampo,
   ReglaFiltroOperador,
@@ -31,6 +32,7 @@ export const TRIGGER_LABEL: Record<ReglaTriggerTipo, string> = {
   FECHA_PROGRAMADA: "Fecha programada",
   MANUAL: "Manual",
   RESERVA_AUTOMATICA: "Reservas (automático)",
+  RECORDATORIO_SEMANAL_PEDIDO: "Recordatorio semanal de pedido",
 };
 
 // Reusa pares de acento ya existentes en nav-items.ts (mismo criterio que
@@ -43,7 +45,26 @@ export const TRIGGER_BADGE_COLOR: Record<ReglaTriggerTipo, string> = {
   FECHA_PROGRAMADA: "bg-[#DBEAFE] text-[#3B82F6]",
   MANUAL: "bg-[#EDE9FE] text-[#8B5CF6]",
   RESERVA_AUTOMATICA: "bg-[#D1FAE5] text-[#047857]",
+  RECORDATORIO_SEMANAL_PEDIDO: "bg-[#CFFAFE] text-[#0E7490]",
 };
+
+// Día de la semana de las reglas de recordatorio semanal (el valor es el que guarda el backend, sin acentos).
+export const DIA_SEMANA_REGLA: { value: DiaSemanaRegla; label: string }[] = [
+  { value: "lunes", label: "Lunes" },
+  { value: "martes", label: "Martes" },
+  { value: "miercoles", label: "Miércoles" },
+  { value: "jueves", label: "Jueves" },
+  { value: "viernes", label: "Viernes" },
+  { value: "sabado", label: "Sábado" },
+  { value: "domingo", label: "Domingo" },
+];
+
+/** "Viernes · 13:00 (CDMX)". */
+export function programacionRecordatorio(config: Record<string, unknown> | null): string | null {
+  const dia = DIA_SEMANA_REGLA.find((d) => d.value === config?.diaSemana);
+  if (!dia || typeof config?.hora !== "number") return null;
+  return `${dia.label} · ${String(config.hora).padStart(2, "0")}:00 (CDMX)`;
+}
 
 export const CATEGORIA_LABEL: Record<ReglaMensajeCategoria, string> = {
   UTILITY: "Utility",
