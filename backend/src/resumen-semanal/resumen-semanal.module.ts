@@ -3,6 +3,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ResumenSemanalArmadoService } from './resumen-semanal-armado.service';
 import { ResumenSemanalBarridoService } from './resumen-semanal-barrido.service';
 import { ResumenSemanalCronService } from './resumen-semanal-cron.service';
+import { ResumenSemanalController } from './resumen-semanal.controller';
 import { ResumenSemanalEnvioService } from './resumen-semanal-envio.service';
 
 /**
@@ -11,6 +12,7 @@ import { ResumenSemanalEnvioService } from './resumen-semanal-envio.service';
  */
 @Module({
   imports: [NotificacionesModule],
+  controllers: [ResumenSemanalController],
   providers: [ResumenSemanalArmadoService, ResumenSemanalEnvioService, ResumenSemanalBarridoService, ResumenSemanalCronService],
   exports: [ResumenSemanalEnvioService],
 })
