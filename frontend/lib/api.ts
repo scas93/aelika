@@ -643,12 +643,13 @@ export type NotificacionEvento =
   | "PEDIDO_EN_CAMINO"
   | "PEDIDO_ENTREGADO"
   | "PAGO_CONFIRMADO"
-  | "PEDIDO_MODIFICADO_CLIENTE";
+  | "PEDIDO_MODIFICADO_CLIENTE"
+  | "RESUMEN_SEMANAL";
 export type NotificacionAudiencia = "CLIENTE" | "NEGOCIO";
 
 // `config` shape depende de `tipo` — ver comentario en schema.prisma:
 //   TELEGRAM -> { chatId: string } (lo captura el webhook de conexión)
-//   CORREO   -> { nombreRemitente: string, correoDestino?: string }
+//   CORREO   -> { nombreRemitente: string, correoDestino?: string }; en MAYOREO es { nombreRemitente: string, correos: string[] } (resumen semanal)
 //   WHATSAPP -> { destinatarios: DestinatarioWhatsapp[] } (solo mayoreo; el backend normaliza los teléfonos)
 export interface DestinatarioWhatsapp {
   id: string;
@@ -1309,6 +1310,23 @@ export function updateNotificacionEvento(token: string, id: string, payload: Upd
 export function deleteNotificacionEvento(token: string, id: string) {
   return request<void>(`/notificaciones/eventos/${id}`, {
     method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export interface ResumenPruebaResultado {
+  resultado: "EXITO" | "FALLO";
+  motivo: string | null;
+  destinatarios: number;
+  conPedidos: boolean;
+  semanaInicio: string;
+  semanaFin: string;
+}
+
+/** «Enviar resumen de prueba» (solo Dueño, mayoreo): manda ahora el resumen de la semana anterior a la lista del canal Correo. */
+export function enviarResumenSemanalPrueba(token: string) {
+  return request<ResumenPruebaResultado>("/notificaciones/resumen-semanal/prueba", {
+    method: "POST",
     headers: authHeaders(token),
   });
 }

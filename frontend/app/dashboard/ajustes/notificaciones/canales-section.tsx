@@ -13,6 +13,7 @@ import Button from "../../_components/Button";
 import Badge from "../../_components/Badge";
 import Modal from "../../_components/Modal";
 import WhatsappCard from "./whatsapp-card";
+import CorreoResumenCard from "./correo-resumen-card";
 import { CanalCardShell } from "./canal-card-shell";
 
 const SECTION_HEADER = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
@@ -34,13 +35,15 @@ export default function NotificacionesCanalesSection({
   const correo = canales?.find((c) => c.tipo === "CORREO") ?? null;
   const whatsapp = canales?.find((c) => c.tipo === "WHATSAPP") ?? null;
 
-  // Mayoreo solo usa WhatsApp (avisos internos); menudeo y Hotel siguen con Telegram y Correo, sin WhatsApp.
+  // Mayoreo usa WhatsApp (avisos internos) y Correo (resumen semanal, con su lista de direcciones); menudeo y Hotel siguen con
+  // Telegram y Correo, sin WhatsApp.
   if (esMayoreo) {
     return (
       <section id="canales" className="flex flex-col gap-3 scroll-mt-6">
         <h2 className={SECTION_HEADER}>Canales</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <WhatsappCard token={token} canal={whatsapp} tieneWebhook={tieneWebhook} cargado={canales !== null} onChange={onChange} />
+          <CorreoResumenCard token={token} canal={correo} onChange={onChange} />
         </div>
       </section>
     );
