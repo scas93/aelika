@@ -28,6 +28,7 @@ import { LealtadModule } from './lealtad/lealtad.module';
 import { PortalModule } from './portal/portal.module';
 import { AdopcionModule } from './adopcion/adopcion.module';
 import { ReservasModule } from './reservas/reservas.module';
+import { ResumenSemanalModule } from './resumen-semanal/resumen-semanal.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { ReservasModule } from './reservas/reservas.module';
     PortalModule,
     AdopcionModule,
     ReservasModule,
+    ResumenSemanalModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],
