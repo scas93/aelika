@@ -121,3 +121,107 @@ describe('ReglaEnvioService.resolverVariables', () => {
     expect(resolver(service, variables)).toEqual(['Ana López', 'Masa Madre']);
   });
 });
+
+describe('ReglaEnvioService · variables de la semana siguiente (recordatorio semanal)', () => {
+  const contextoSemana = {
+    origen: 'SEMANA' as const,
+    semanaInicio: new Date('2026-11-09T00:00:00.000Z'),
+    semanaFin: new Date('2026-11-15T00:00:00.000Z'),
+  };
+  const variables: PlantillaVariable[] = [
+    { posicion: 1, fuente: 'CAMPO_CLIENTE', valor: 'nombre' },
+    { posicion: 2, fuente: 'SEMANA_SIGUIENTE', valor: 'inicio' },
+    { posicion: 3, fuente: 'SEMANA_SIGUIENTE', valor: 'fin' },
+  ];
+
+  it('nombre del cliente y rango legible en español, sin correrse un día por la zona horaria', () => {
+    const service = crearServicio();
+    expect((service as any).resolverVariables(variables, tenant, cliente, contextoSemana, 'es_MX')).toEqual([
+      'Ana López',
+      '9 de noviembre',
+      '15 de noviembre',
+    ]);
+  });
+
+  it('semana que cruza de mes', () => {
+    const service = crearServicio();
+    const cruce = { ...contextoSemana, semanaInicio: new Date('2026-11-30T00:00:00.000Z'), semanaFin: new Date('2026-12-06T00:00:00.000Z') };
+    expect((service as any).resolverVariables(variables.slice(1), tenant, cliente, cruce, 'es_MX')).toEqual(['30 de noviembre', '6 de diciembre']);
+  });
+
+  it('se rechazan sin contexto de semana, y las de pedido se rechazan con contexto de semana', () => {
+    const service = crearServicio();
+    expect(() => (service as any).resolverVariables(variables.slice(1), tenant, cliente, undefined, 'es_MX')).toThrow(BadRequestException);
+    expect(() =>
+      (service as any).resolverVariables([{ posicion: 1, fuente: 'CAMPO_PEDIDO', valor: 'folio' }], tenant, cliente, contextoSemana, 'es_MX'),
+    ).toThrow(BadRequestException);
+    // Las de siempre (cliente, negocio) siguen funcionando con ese contexto.
+    expect((service as any).resolverVariables([{ posicion: 1, fuente: 'NOMBRE_NEGOCIO', valor: 'nombre' }], tenant, cliente, contextoSemana, 'es_MX')).toEqual(['Masa Madre']);
+  });
+});
+
+describe('ReglaEnvioService.enviar · payload hacia Botpress', () => {
+  const tenantEnvio = { ...tenant, botWebhookUrl: 'http://localhost:9/hook', botWebhookSecret: null } as Tenant;
+  const clienteB2c = { ...cliente, canal: 'B2C', telefono: '5512345678' } as Cliente;
+  const reglaBase = {
+    id: 'regla-1',
+    plantillaNombre: 'pedido_confirmado',
+    plantillaIdioma: 'es_MX',
+    plantillaCategoria: 'UTILITY',
+    plantillaVariables: [{ posicion: 1, fuente: 'CAMPO_CLIENTE', valor: 'nombre' }],
+    botonUrlValor: null,
+  } as any;
+
+  function servicioConFetch() {
+    const crear = jest.fn().mockResolvedValue({ id: 'log-1', estado: 'EN_CURSO' });
+    const prisma = { reglaEnvioLog: { create: crear, update: jest.fn() } };
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200 } as Response);
+    const service = new ReglaEnvioService(prisma as any, { get: jest.fn().mockReturnValue(undefined) } as any);
+    const cuerpo = () => JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    return { service, crear, fetchMock, cuerpo };
+  }
+  afterEach(() => jest.restoreAllMocks());
+
+  it('una regla sin botón manda exactamente el mismo contenido de siempre (sin la clave «boton»)', async () => {
+    const { service, cuerpo } = servicioConFetch();
+    await service.enviar(tenantEnvio, clienteB2c, reglaBase);
+    expect(cuerpo()).toEqual({
+      correlacionId: 'log-1',
+      telefono: '+525512345678',
+      plantilla: { nombre: 'pedido_confirmado', idioma: 'es_MX' },
+      variables: ['Ana López'],
+    });
+    expect(Object.keys(cuerpo())).not.toContain('boton');
+  });
+
+  it('una regla con botón agrega boton { URL_DINAMICA, indice 0, valor } y nada más cambia', async () => {
+    const { service, cuerpo } = servicioConFetch();
+    await service.enviar(tenantEnvio, clienteB2c, { ...reglaBase, botonUrlValor: 'panaderia-banetto' });
+    expect(cuerpo()).toEqual({
+      correlacionId: 'log-1',
+      telefono: '+525512345678',
+      plantilla: { nombre: 'pedido_confirmado', idioma: 'es_MX' },
+      variables: ['Ana López'],
+      boton: { tipo: 'URL_DINAMICA', indice: 0, valor: 'panaderia-banetto' },
+    });
+  });
+
+  it('la semana del recordatorio viaja al registro del envío (reserva por índice único) y solo ahí', async () => {
+    const { service, crear } = servicioConFetch();
+    const semana = new Date('2026-11-09T00:00:00.000Z');
+    await service.enviar(tenantEnvio, clienteB2c, reglaBase, undefined, undefined, semana);
+    expect(crear.mock.calls[0][0].data).toMatchObject({ reglaId: 'regla-1', clienteId: 'cliente-1', semanaInicio: semana });
+    crear.mockClear();
+    await service.enviar(tenantEnvio, clienteB2c, reglaBase);
+    expect(Object.keys(crear.mock.calls[0][0].data)).not.toContain('semanaInicio');
+  });
+
+  it('si la reserva ya la tomó otro proceso (P2002) lanza antes del POST: no se envía nada', async () => {
+    const { service, crear, fetchMock } = servicioConFetch();
+    crear.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
+    await expect(service.enviar(tenantEnvio, clienteB2c, reglaBase, undefined, undefined, new Date('2026-11-09T00:00:00.000Z'))).rejects.toMatchObject({
+      code: 'P2002',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

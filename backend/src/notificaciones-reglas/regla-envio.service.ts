@@ -61,6 +61,7 @@ export class ReglaEnvioService {
     regla: Regla,
     contexto?: PedidoContexto,
     orderId?: string,
+    semanaInicio?: Date,
   ): Promise<ReglaEnvioLog> {
     if (!tenant.botWebhookUrl) {
       throw new BadRequestException(
@@ -99,6 +100,9 @@ export class ReglaEnvioService {
         categoria: regla.plantillaCategoria,
         // Reserva que originó el envío (trigger RESERVA_AUTOMATICA); null en el resto.
         ...(orderId ? { orderId } : {}),
+        // Semana del recordatorio semanal: con el índice único (regla, cliente, semana) la creación es la reserva del envío;
+        // si otro proceso ya la tomó, lanza P2002 y NO se hace el POST (lo atiende el llamador).
+        ...(semanaInicio ? { semanaInicio } : {}),
       },
     });
 
@@ -111,6 +115,8 @@ export class ReglaEnvioService {
         idioma: regla.plantillaIdioma,
       },
       variables,
+      // Solo las reglas con botón de URL dinámica lo mandan (mismo contrato que los avisos internos); el resto, idéntico a antes.
+      ...(regla.botonUrlValor ? { boton: { tipo: 'URL_DINAMICA', indice: 0, valor: regla.botonUrlValor } } : {}),
     };
 
     try {

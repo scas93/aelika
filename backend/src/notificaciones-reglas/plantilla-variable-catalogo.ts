@@ -4,6 +4,7 @@ import { PedidoContexto } from './plantilla-variable.type';
 import {
   diasDesde,
   ESTADO_PEDIDO_LABEL,
+  formatDiaMes,
   formatDinero,
   formatFechaHoraCorta,
   formatFechaLarga,
@@ -47,7 +48,8 @@ export type RestriccionVariable =
   // Además de EVENTO_PEDIDO, solo aplica si el pedido es de menudeo (Order)
   // — PedidoB2b no tiene tipo de entrega/dirección/método de pago propio.
   | { tipo: 'evento_pedido_menudeo'; motivo: string }
-  | { tipo: 'reserva'; motivo: string };
+  | { tipo: 'reserva'; motivo: string }
+  | { tipo: 'semana'; motivo: string };
 
 export interface ResolverContexto {
   tenant: Tenant;
@@ -62,7 +64,7 @@ export interface ResolverContexto {
 export interface CatalogoVariableDef {
   fuente: ReglaPlantillaVariableFuente;
   valor: string;
-  grupo: 'CLIENTE' | 'PEDIDO' | 'NEGOCIO' | 'RESERVA';
+  grupo: 'CLIENTE' | 'PEDIDO' | 'NEGOCIO' | 'RESERVA' | 'SEMANA';
   label: string;
   ejemplo: string;
   restriccion: RestriccionVariable;
@@ -77,10 +79,16 @@ const SOLO_EVENTO_PEDIDO: RestriccionVariable = {
   motivo: 'Solo en reglas de evento de pedido',
 };
 const SOLO_RESERVA: RestriccionVariable = { tipo: 'reserva', motivo: 'Solo en reglas de reservas de hotel' };
+const SOLO_SEMANA: RestriccionVariable = { tipo: 'semana', motivo: 'Solo en el recordatorio semanal de pedido (mayoreo)' };
 const SOLO_EVENTO_PEDIDO_MENUDEO: RestriccionVariable = {
   tipo: 'evento_pedido_menudeo',
   motivo: 'Solo pedidos de menudeo',
 };
+
+/** Contexto de pedido/reserva (todo menos el de semana, que no tiene pedido). */
+function deP(contexto: PedidoContexto | undefined): Exclude<PedidoContexto, { origen: 'SEMANA' }> | null {
+  return contexto && contexto.origen !== 'SEMANA' ? contexto : null;
+}
 
 function direccionEntrega(ctx: PedidoContexto & { origen: 'ORDER' }): string | null {
   const partes = [ctx.direccionCalle && ctx.direccionNumero ? `${ctx.direccionCalle} ${ctx.direccionNumero}` : null, ctx.direccionColonia].filter(
@@ -161,7 +169,7 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
     ejemplo: 'A-1043',
     restriccion: SOLO_EVENTO_PEDIDO,
     fallback: '—',
-    resolver: ({ contexto }) => contexto?.folio ?? null,
+    resolver: ({ contexto }) => deP(contexto)?.folio ?? null,
   },
   {
     fuente: ReglaPlantillaVariableFuente.CAMPO_PEDIDO,
@@ -171,7 +179,7 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
     ejemplo: '$1,245.50',
     restriccion: SOLO_EVENTO_PEDIDO,
     fallback: '—',
-    resolver: ({ contexto }) => (contexto ? formatDinero(contexto.total) : null),
+    resolver: ({ contexto }) => { const c = deP(contexto); return c ? formatDinero(c.total) : null; },
   },
   {
     fuente: ReglaPlantillaVariableFuente.CAMPO_PEDIDO,
@@ -181,7 +189,8 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
     ejemplo: 'Listo para entrega',
     restriccion: SOLO_EVENTO_PEDIDO,
     fallback: '—',
-    resolver: ({ contexto }) => {
+    resolver: ({ contexto: ctx }) => {
+      const contexto = deP(ctx);
       if (!contexto) return null;
       return contexto.origen === 'ORDER'
         ? (ESTADO_PEDIDO_LABEL as Record<string, string>)[contexto.estatus]
@@ -196,7 +205,7 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
     ejemplo: '24 sep, 12:30',
     restriccion: SOLO_EVENTO_PEDIDO,
     fallback: '—',
-    resolver: ({ contexto }) => (contexto ? formatFechaHoraCorta(contexto.createdAt) : null),
+    resolver: ({ contexto }) => { const c = deP(contexto); return c ? formatFechaHoraCorta(c.createdAt) : null; },
   },
   {
     fuente: ReglaPlantillaVariableFuente.CAMPO_PEDIDO,
@@ -206,7 +215,7 @@ export const CATALOGO_VARIABLES: CatalogoVariableDef[] = [
     ejemplo: '2x Concha, 1x Café americano y 3 más',
     restriccion: SOLO_EVENTO_PEDIDO,
     fallback: '—',
-    resolver: ({ contexto }) => (contexto ? resumenProductos(contexto.items) : null),
+    resolver: ({ contexto }) => { const c = deP(contexto); return c ? resumenProductos(c.items) : null; },
   },
 
   // --- Pedido, solo menudeo (Order) ---
@@ -346,6 +355,38 @@ const VARIABLES_RESERVA: CatalogoVariableDef[] = [
 }));
 CATALOGO_VARIABLES.push(...VARIABLES_RESERVA);
 
+function semana(ctx: ResolverContexto) {
+  return ctx.contexto?.origen === 'SEMANA' ? ctx.contexto : null;
+}
+
+const VARIABLES_SEMANA: CatalogoVariableDef[] = [
+  {
+    valor: 'inicio',
+    label: 'Semana siguiente: inicio (lunes)',
+    ejemplo: '9 de noviembre',
+    resolver: (c) => {
+      const s = semana(c);
+      return s ? formatDiaMes(s.semanaInicio, c.idiomaPlantilla ?? 'es') : null;
+    },
+  },
+  {
+    valor: 'fin',
+    label: 'Semana siguiente: fin (domingo)',
+    ejemplo: '15 de noviembre',
+    resolver: (c) => {
+      const s = semana(c);
+      return s ? formatDiaMes(s.semanaFin, c.idiomaPlantilla ?? 'es') : null;
+    },
+  },
+].map((v) => ({
+  fuente: ReglaPlantillaVariableFuente.SEMANA_SIGUIENTE,
+  grupo: 'SEMANA' as const,
+  restriccion: SOLO_SEMANA,
+  fallback: '—',
+  ...v,
+}));
+CATALOGO_VARIABLES.push(...VARIABLES_SEMANA);
+
 export function buscarEnCatalogo(fuente: ReglaPlantillaVariableFuente, valor: string): CatalogoVariableDef | undefined {
   return CATALOGO_VARIABLES.find((def) => def.fuente === fuente && def.valor === valor);
 }
@@ -358,6 +399,7 @@ export function disponibleParaTrigger(
 ): boolean {
   if (restriccion.tipo === 'ninguna') return true;
   if (restriccion.tipo === 'reserva') return trigger === ReglaTriggerTipo.RESERVA_AUTOMATICA;
+  if (restriccion.tipo === 'semana') return trigger === ReglaTriggerTipo.RECORDATORIO_SEMANAL_PEDIDO;
   if (trigger !== ReglaTriggerTipo.EVENTO_PEDIDO) return false;
   if (restriccion.tipo === 'evento_pedido') return true;
   return origen === ReglaTriggerOrigenPedido.ORDER;
@@ -368,7 +410,8 @@ export function disponibleParaContexto(restriccion: RestriccionVariable, context
   if (restriccion.tipo === 'ninguna') return true;
   if (!contexto) return false;
   if (restriccion.tipo === 'reserva') return contexto.origen === 'RESERVA';
-  if (contexto.origen === 'RESERVA') return false; // las variables de pedido B2C/B2B no aplican a una reserva
+  if (restriccion.tipo === 'semana') return contexto.origen === 'SEMANA';
+  if (contexto.origen === 'RESERVA' || contexto.origen === 'SEMANA') return false; // las variables de pedido B2C/B2B no aplican a una reserva
   if (restriccion.tipo === 'evento_pedido') return true;
   return contexto.origen === 'ORDER';
 }

@@ -50,6 +50,7 @@ describe('Transversal · Reglas de notificación', () => {
     plantillaCategoria: 'UTILITY',
     plantillaTexto: null,
     plantillaVariables: [],
+    botonUrlValor: null,
     activa: true,
     disparadaEn: null,
     createdAt: '<iso>',

@@ -219,9 +219,12 @@ describe('Reglas RESERVA_AUTOMATICA · «Ejecutar ahora»', () => {
     beforeEach(() => {
       stub = s.h.app.get(ReglaBarridoService);
       stub.ejecutarReservaAhora = (id: string, tenantId: string) => barrido.ejecutarReservaAhora(id, tenantId);
+      // El controlador llama a ejecutarAhora, que despacha por tipo de regla (reservas o recordatorio semanal).
+      stub.ejecutarAhora = (id: string, tenantId: string) => barrido.ejecutarAhora(id, tenantId);
     });
     afterEach(() => {
       delete stub.ejecutarReservaAhora;
+      delete stub.ejecutarAhora;
     });
 
     it('el Dueño la ejecuta y recibe el resumen', async () => {

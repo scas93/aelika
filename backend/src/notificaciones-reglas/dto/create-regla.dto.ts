@@ -49,6 +49,11 @@ export class CreateReglaDto {
   @IsArray()
   plantillaVariables?: unknown[];
 
+  // Parte dinámica del botón de URL de la plantilla (p. ej. el slug del negocio); null o vacío = sin botón.
+  @IsOptional()
+  @IsString()
+  botonUrlValor?: string | null;
+
   @IsOptional()
   @IsBoolean()
   activa?: boolean;
