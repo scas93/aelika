@@ -1,11 +1,12 @@
 # Notificaciones, motor de reglas, bot y avisos internos
 
-Cuatro piezas que comparten infraestructura de envío:
+Cinco piezas que comparten infraestructura de envío:
 
-1. **Canales y eventos de pedido** (`backend/src/notificaciones/`): Telegram, correo (Resend) y WhatsApp, con cola BullMQ (`notificaciones/queue/`) y proveedores en `notificaciones/providers/`. API: `/notificaciones/canales`, `/notificaciones/eventos`, `/notificaciones/telegram`. `NotificacionEvento` (`PEDIDO_RECIBIDO`, `PEDIDO_CONFIRMADO`, `PEDIDO_EN_CAMINO`, `PEDIDO_ENTREGADO`, `PAGO_CONFIRMADO`, `PEDIDO_MODIFICADO_CLIENTE`) con audiencia `CLIENTE` o `NEGOCIO`. El recibo de Telegram sale de la salida de `aRespuestaOrder`.
+1. **Canales y eventos de pedido** (`backend/src/notificaciones/`): Telegram, correo (Resend) y WhatsApp, con cola BullMQ (`notificaciones/queue/`) y proveedores en `notificaciones/providers/`. API: `/notificaciones/canales`, `/notificaciones/eventos`, `/notificaciones/telegram`. `NotificacionEvento` (`PEDIDO_RECIBIDO`, `PEDIDO_CONFIRMADO`, `PEDIDO_EN_CAMINO`, `PEDIDO_ENTREGADO`, `PAGO_CONFIRMADO`, `PEDIDO_MODIFICADO_CLIENTE`, `RESUMEN_SEMANAL`) con audiencia `CLIENTE` o `NEGOCIO`. El recibo de Telegram sale de la salida de `aRespuestaOrder`.
 2. **Motor de reglas** (`backend/src/notificaciones-reglas/`): Trigger + Filtro + Canal + Mensaje, por WhatsApp vía Botpress. Panel: `/dashboard/notificaciones` (submódulos Seguimiento = categoría Utility y Recontacto = Marketing).
 3. **Avisos internos** (`notificaciones/avisos-internos/`): avisos al equipo por WhatsApp (hoy un solo evento).
 4. **Bot de Botpress** (`internal/`): config viva del negocio para el bot compartido.
+5. **Resumen semanal por correo** (`backend/src/resumen-semanal/`, solo mayoreo): correo con el resumen de los pedidos de la semana anterior y su Excel.
 
 **Estado de despliegue:** todo lo descrito está en `main` (último merge `533a119`, 2026-10-28). La plantilla de Meta de cada flujo y el workflow de Botpress se configuran fuera del repo: ver "Por confirmar" al final de este documento.
 
@@ -111,8 +112,27 @@ Callback: `PATCH /internal/avisos-pedido/:correlacionId/estado`, `@Public()` + `
 
 **Pruebas.** Suite de caracterización `backend/test/characterization/avisos-internos-pedido.char-spec.ts` (disparo, condiciones, fallos del webhook, 10 destinatarios con tope de concurrencia, privacidad del registro, callback, aislamiento entre negocios) y `notificaciones-whatsapp.char-spec.ts` (canal y evento por tipo de negocio, 409/403/400); `notificaciones-config-base.char-spec.ts` congela el contrato previo de `/notificaciones/canales` y `/eventos`. Unitarias: `aviso-pedido-modificado.spec.ts` y `notificacion-whatsapp.spec.ts`; frontend: `lib/destino-login.test.ts`, `lib/session-login.test.tsx` y `ajustes/notificaciones/notificaciones.test.tsx`. En `harness.ts`, `AvisoWebhookClient` se sustituye por un falso (`fakes.avisoWebhook`, recibe `{ url, secreto, cuerpo }`, por defecto resuelve `{ ok: true, status: 200 }`; ningún test hace fetch real). Como los avisos corren en segundo plano, **hay que llamar `h.esperarAvisos()` antes de leer `avisos_internos_envios` o de cualquier TRUNCATE** (la suite lo hace en cada limpieza y `close()` también espera los pendientes); si no, un aviso en vuelo escribe sobre una base ya truncada.
 
+## Resumen semanal por correo (`resumen-semanal/`, solo mayoreo)
+
+Cada lunes a las 10:00 (hora CDMX) cada negocio de mayoreo que lo tenga activado manda un correo a su lista de direcciones con el resumen de los pedidos de la semana anterior (lunes a domingo) y un Excel adjunto. Menudeo y Hotel no lo ven ni pueden usarlo (403).
+
+**Configuración (Ajustes → Notificaciones, solo Dueño).** Canal `CORREO` con `config = { nombreRemitente, correos: string[] }` (de 1 a 10 direcciones, validadas, en minúsculas y sin repetidos; `notificacion-correo-resumen.ts` es el único lugar donde se valida) y evento `RESUMEN_SEMANAL` + audiencia `NEGOCIO` + canal Correo. Las reglas de canal y evento de mayoreo están en `notificaciones/notificacion-reglas-negocio.ts`: WhatsApp solo con «Pedido modificado por el cliente», Correo solo con «Resumen semanal»; Telegram y SMS siguen en 403. El canal Correo de mayoreo nace inactivo y activarlo exige al menos una dirección (409). La dirección de envío sigue siendo `RESEND_FROM_ADDRESS`; no hay variables de entorno nuevas. El correo de menudeo y Hotel (`CorreoProvider.enviar`, `config.correoDestino`) no cambia.
+
+**Qué entra.** Pedidos B2B cuyo `DetalleB2B.semanaInicio` es el lunes de la semana anterior, con todas sus entregas (caigan en el día que caigan) y los cancelados incluidos (en el Excel salen como «Cancelado»; en el cuerpo se cuentan aparte y no suman en piezas, importes ni entregas). La selección (`buildWherePedidosB2b`), las filas y las columnas (vista `HISTORICOS`: hojas «Pedidos» y «Entregas») son las del export del panel: viven en `pedidos-b2b/pedidos-b2b-export.ts` y las usan los dos, así que el adjunto es el mismo que exportar esa semana. `ResumenSemanalArmadoService` lo arma con `PrismaService` y `tenantId` explícito (sin sesión). Semana sin pedidos: correo corto «Sin pedidos esta semana» y sin adjunto.
+
+**Programación.** `ResumenSemanalCronService`: `@Cron` cada hora y una vez al arrancar; `ResumenSemanalBarridoService.ejecutar` decide con `ventanaActivaResumen` (lunes en CDMX desde las 10:00 hasta el fin del día, vía `Intl`, no la zona del servidor) y recorre, uno por uno, los negocios con canal Correo activo y evento activo. Si el servidor estuvo caído a las 10, sale al volver ese mismo lunes; si no vuelve ese día, se pierde esa semana. Un negocio que falla no impide los demás y no hay reintentos.
+
+**Duplicados.** `ResumenSemanalEnvio.semanaProgramada` + `@@unique([tenantId, semanaProgramada])`: el envío programado crea su fila ANTES de enviar y quien pierde la carrera (P2002) no envía. Seguro con dos instancias y tras reinicios. Las pruebas dejan `semanaProgramada` en NULL y nunca reservan ni bloquean el envío del lunes.
+
+**Registro (`resumen_semanal_envios`).** Por intento: negocio, semana, tipo (`PROGRAMADO`/`PRUEBA`), estado (`EN_CURSO`/`EXITO`/`FALLO`), motivo (sin direcciones de correo; `motivoSeguro`), número de destinatarios, si hubo pedidos, `createdAt` y `resueltoAt`. No hay pantalla todavía: se consulta en la base. Un `EN_CURSO` que nunca se resolvió (el proceso murió) se queda así.
+
+**Botón «Enviar resumen de prueba»** (`POST /notificaciones/resumen-semanal/prueba`, solo Dueño, solo mayoreo): manda ahora el resumen de la semana anterior a la lista guardada (aunque el canal esté inactivo), se registra como `PRUEBA`, se puede repetir y no afecta el envío del lunes. Sin canal o sin direcciones → 409; un fallo del envío responde 200 con `resultado: "FALLO"` y el motivo.
+
+**Pruebas.** Unitarias: `resumen-semanal.spec.ts` (semana, ventana, totales, contenido) y `providers/correo.provider.spec.ts` (Resend simulado). Caracterización: `notificaciones-resumen-config`, `resumen-semanal-armado`, `resumen-semanal-envio` (reloj falso y `fakes.correoEnviarConAdjuntos`, nunca sale a la red) y `resumen-semanal-prueba`. El disparador (`ResumenSemanalCronService`) se sustituye en el harness; las pruebas llaman al barrido a mano.
+
 ## Por confirmar (no verificable desde el repo)
 
 - Que las plantillas de Meta de cada flujo (código de acceso `auth`, `pedido_modificado_cliente`, recordatorios, reservas) estén aprobadas y que los workflows de Botpress cumplan los contratos documentados aquí y en diseno-operacion.md.
 - Recordatorio semanal: que la plantilla de Meta (Utility, con botón de URL dinámica y base `https://pide.aelika.com/`) esté aprobada y que el workflow de Botpress que atiende las reglas lea `boton` del payload (hasta ahora solo lo leen los avisos internos y el código del portal). Que Meta no reclasifique la plantilla como Marketing.
+- Que `RESEND_API_KEY` y `RESEND_FROM_ADDRESS` estén configurados en staging y producción y el dominio verificado en Resend (sin eso el resumen queda registrado como FALLO); cuántas instancias del backend corren en Railway (el diseño es seguro con varias).
 - Que los eventos del módulo de Notificaciones estén replicados para Entredós y Banetto (pendiente según el roadmap).
