@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ResumenSemanalBarridoService } from './resumen-semanal-barrido.service';
+import { ResumenSemanalClienteBarridoService } from './resumen-semanal-cliente-barrido.service';
 
 /**
  * Disparador del resumen semanal: cada hora (la ventana lunes 10:00 CDMX la decide `ResumenSemanalBarridoService`, en hora de
@@ -11,7 +12,10 @@ import { ResumenSemanalBarridoService } from './resumen-semanal-barrido.service'
 export class ResumenSemanalCronService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ResumenSemanalCronService.name);
 
-  constructor(private readonly barrido: ResumenSemanalBarridoService) {}
+  constructor(
+    private readonly barrido: ResumenSemanalBarridoService,
+    private readonly barridoClientes: ResumenSemanalClienteBarridoService,
+  ) {}
 
   onApplicationBootstrap() {
     void this.correr('arranque');
@@ -28,6 +32,14 @@ export class ResumenSemanalCronService implements OnApplicationBootstrap {
     } catch (error: unknown) {
       this.logger.error(
         `Resumen semanal (${origen}) falló: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    // Aparte: un fallo del resumen al negocio no frena el de los clientes, ni al revés.
+    try {
+      await this.barridoClientes.ejecutar();
+    } catch (error: unknown) {
+      this.logger.error(
+        `Resumen semanal a clientes (${origen}) falló: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

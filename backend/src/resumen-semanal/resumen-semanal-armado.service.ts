@@ -7,6 +7,7 @@ import {
   PEDIDOS_EXPORT_ORDEN,
   PEDIDOS_EXPORT_SELECT,
 } from '../pedidos-b2b/pedidos-b2b-export';
+import { construirCorreoCliente } from './resumen-semanal-cliente';
 import {
   calcularTotales,
   construirCorreoResumen,
@@ -52,6 +53,52 @@ export class ResumenSemanalArmadoService {
     const correo = construirCorreoResumen(negocioNombre, semana, totales);
     if (!totales.hayPedidos) return { correo, totales };
     const contenido = await libroPedidos(filas, entregas, 'HISTORICOS');
+    return {
+      correo,
+      totales,
+      adjunto: {
+        nombreArchivo: nombreArchivoResumen(negocioNombre, semana),
+        contenido,
+      },
+    };
+  }
+
+  /**
+   * Arma el resumen de UN cliente B2B (el que recibe el propio cliente): solo sus pedidos de la semana, seleccionados por
+   * `clienteId` (nunca por nombre comercial), con el Excel de la vista CLIENTE (sin pago ni descuento). `null` si el cliente no
+   * tuvo ningún pedido esa semana (ni cancelado): no hay nada que mandar.
+   */
+  async armarParaCliente(
+    tenantId: string,
+    clienteId: string,
+    clienteNombre: string,
+    negocioNombre: string,
+    semana: SemanaResumen,
+  ): Promise<ResumenArmado | null> {
+    const pedidos = await this.prisma.order.findMany({
+      where: {
+        ...buildWherePedidosB2b({
+          desde: semana.inicio,
+          hasta: semana.inicio,
+          clienteId,
+        }),
+        tenantId,
+      },
+      orderBy: PEDIDOS_EXPORT_ORDEN,
+      select: PEDIDOS_EXPORT_SELECT,
+    });
+    if (pedidos.length === 0) return null;
+    const { filas, entregas } = filasExcelDePedidos(pedidos);
+    const totales = calcularTotales(filas);
+    const correo = construirCorreoCliente(
+      negocioNombre,
+      clienteNombre,
+      semana,
+      totales,
+      filas,
+      entregas,
+    );
+    const contenido = await libroPedidos(filas, entregas, 'CLIENTE');
     return {
       correo,
       totales,

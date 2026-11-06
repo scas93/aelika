@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ResumenSemanalArmadoService } from './resumen-semanal-armado.service';
 import { ResumenSemanalBarridoService } from './resumen-semanal-barrido.service';
+import { ResumenSemanalClienteBarridoService } from './resumen-semanal-cliente-barrido.service';
+import { ResumenSemanalClienteEnvioService } from './resumen-semanal-cliente-envio.service';
 import { ResumenSemanalCronService } from './resumen-semanal-cron.service';
 import { ResumenSemanalController } from './resumen-semanal.controller';
 import { ResumenSemanalEnvioService } from './resumen-semanal-envio.service';
@@ -17,6 +19,8 @@ import { ResumenSemanalEnvioService } from './resumen-semanal-envio.service';
     ResumenSemanalArmadoService,
     ResumenSemanalEnvioService,
     ResumenSemanalBarridoService,
+    ResumenSemanalClienteEnvioService,
+    ResumenSemanalClienteBarridoService,
     ResumenSemanalCronService,
   ],
   exports: [ResumenSemanalEnvioService],
