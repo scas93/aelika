@@ -429,6 +429,8 @@ enum NotificacionEvento {
   PAGO_CONFIRMADO
   // Solo mayoreo (Cambio B): un cliente B2B modificó su pedido desde el portal. Solo se combina con un canal WHATSAPP.
   PEDIDO_MODIFICADO_CLIENTE
+  // Solo mayoreo: resumen semanal por correo (lunes 10:00 CDMX) de los pedidos de la semana anterior. Solo se combina con el canal CORREO.
+  RESUMEN_SEMANAL
 }
 
 enum NotificacionAudiencia {

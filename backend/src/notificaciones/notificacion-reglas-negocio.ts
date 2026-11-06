@@ -1,21 +1,40 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { NotificacionAudiencia, NotificacionCanalTipo, NotificacionEvento, TipoStorefront } from '../../generated/prisma/enums';
 
-/** Único evento de mayoreo. El resto de `NotificacionEvento` es de menudeo. */
-export const EVENTO_MAYOREO = NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE;
-/** Único canal que usa mayoreo. */
-export const CANAL_MAYOREO = NotificacionCanalTipo.WHATSAPP;
+/** Eventos que solo existen en mayoreo. El resto de `NotificacionEvento` es de menudeo. */
+export const EVENTOS_MAYOREO: NotificacionEvento[] = [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE, NotificacionEvento.RESUMEN_SEMANAL];
+/** Canales que usa mayoreo. */
+export const CANALES_MAYOREO: NotificacionCanalTipo[] = [NotificacionCanalTipo.WHATSAPP, NotificacionCanalTipo.CORREO];
+
+/** Canal con el que se combina cada evento de mayoreo (uno a uno, en las dos direcciones). */
+const CANAL_DEL_EVENTO: Partial<Record<NotificacionEvento, NotificacionCanalTipo>> = {
+  [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]: NotificacionCanalTipo.WHATSAPP,
+  [NotificacionEvento.RESUMEN_SEMANAL]: NotificacionCanalTipo.CORREO,
+};
+const NOMBRE_EVENTO: Partial<Record<NotificacionEvento, string>> = {
+  [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]: 'Pedido modificado por el cliente',
+  [NotificacionEvento.RESUMEN_SEMANAL]: 'Resumen semanal',
+};
+const NOMBRE_CANAL: Partial<Record<NotificacionCanalTipo, string>> = {
+  [NotificacionCanalTipo.WHATSAPP]: 'WhatsApp',
+  [NotificacionCanalTipo.CORREO]: 'Correo',
+};
 
 export const esMayoreo = (tipo: TipoStorefront) => tipo === TipoStorefront.RETAIL_B2B;
+export const esEventoMayoreo = (evento: NotificacionEvento) => EVENTOS_MAYOREO.includes(evento);
+export const esCanalMayoreo = (canal: NotificacionCanalTipo) => CANALES_MAYOREO.includes(canal);
 
-/** Un canal de este tipo solo existe en mayoreo (WHATSAPP) o solo fuera de él (el resto). 403 si no corresponde al negocio. */
+/**
+ * WHATSAPP solo existe en mayoreo. En mayoreo solo existen WHATSAPP y CORREO (este último con la lista de direcciones del resumen
+ * semanal); los demás canales y el WhatsApp fuera de mayoreo → 403. El CORREO de menudeo y hotel no cambia.
+ */
 export function exigirCanalPermitido(tipoNegocio: TipoStorefront, canal: NotificacionCanalTipo) {
   const mayoreo = esMayoreo(tipoNegocio);
-  if (canal === CANAL_MAYOREO && !mayoreo) {
+  if (canal === NotificacionCanalTipo.WHATSAPP && !mayoreo) {
     throw new ForbiddenException('El canal de WhatsApp solo está disponible para negocios de mayoreo');
   }
-  if (canal !== CANAL_MAYOREO && mayoreo) {
-    throw new ForbiddenException('Los negocios de mayoreo solo usan el canal de WhatsApp');
+  if (mayoreo && !esCanalMayoreo(canal)) {
+    throw new ForbiddenException('Los negocios de mayoreo solo usan los canales de WhatsApp y Correo');
   }
 }
 
@@ -27,21 +46,24 @@ export function exigirEventoPermitido(
   canal: NotificacionCanalTipo,
 ) {
   const mayoreo = esMayoreo(tipoNegocio);
-  const esEventoMayoreo = evento === EVENTO_MAYOREO;
-  if (esEventoMayoreo && !mayoreo) {
-    throw new ForbiddenException('El evento «Pedido modificado por el cliente» solo está disponible para negocios de mayoreo');
+  const eventoDeMayoreo = esEventoMayoreo(evento);
+  if (eventoDeMayoreo && !mayoreo) {
+    throw new ForbiddenException(`El evento «${NOMBRE_EVENTO[evento]}» solo está disponible para negocios de mayoreo`);
   }
-  if (!esEventoMayoreo && mayoreo) {
+  if (!eventoDeMayoreo && mayoreo) {
     throw new ForbiddenException('Los negocios de mayoreo no usan los eventos de menudeo');
   }
-  if (esEventoMayoreo && audiencia !== NotificacionAudiencia.NEGOCIO) {
-    throw new BadRequestException('Este evento solo avisa al negocio');
+  if (eventoDeMayoreo) {
+    if (audiencia !== NotificacionAudiencia.NEGOCIO) {
+      throw new BadRequestException('Este evento solo avisa al negocio');
+    }
+    const canalEsperado = CANAL_DEL_EVENTO[evento]!;
+    if (canal !== canalEsperado) {
+      throw new BadRequestException(`Este evento solo puede avisar por ${NOMBRE_CANAL[canalEsperado]}`);
+    }
+    return;
   }
-  if (esEventoMayoreo !== (canal === CANAL_MAYOREO)) {
-    throw new BadRequestException(
-      esEventoMayoreo
-        ? 'Este evento solo puede avisar por WhatsApp'
-        : 'El canal de WhatsApp solo puede usarse con el evento «Pedido modificado por el cliente»',
-    );
+  if (canal === NotificacionCanalTipo.WHATSAPP) {
+    throw new BadRequestException('El canal de WhatsApp solo puede usarse con el evento «Pedido modificado por el cliente»');
   }
 }

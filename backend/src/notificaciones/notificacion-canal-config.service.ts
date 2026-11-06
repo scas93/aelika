@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { NotificacionCanalTipo } from '../../generated/prisma/enums';
 import { validarConfigWhatsapp } from './notificacion-whatsapp';
-import { CANAL_MAYOREO, esMayoreo, exigirCanalPermitido } from './notificacion-reglas-negocio';
+import { CANALES_MAYOREO, esMayoreo, exigirCanalPermitido } from './notificacion-reglas-negocio';
+import { correosDeConfig, validarConfigCorreoResumen } from './notificacion-correo-resumen';
 
 const PRISMA_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 
 const MSG_SIN_WEBHOOK = 'Configura primero la URL del webhook en Conexión WhatsApp para poder activar este canal';
+const MSG_SIN_CORREOS = 'Un canal de correo activo necesita al menos una dirección. Desactívalo primero o agrega una';
 const MSG_SIN_DESTINATARIOS = 'Un canal de WhatsApp activo necesita al menos un destinatario. Desactívalo primero o agrega uno';
 
 export interface CreateNotificacionCanalConfigInput {
@@ -44,11 +46,11 @@ export class NotificacionCanalConfigService {
     });
   }
 
-  /** Mayoreo solo ve el canal de WhatsApp: si le quedaron filas viejas de otros canales no se borran, solo no se muestran. */
+  /** Mayoreo solo ve los canales de WhatsApp y Correo: si le quedaron filas viejas de otros canales no se borran, solo no se muestran. */
   async findAll(tenantId: string) {
     const { tipoStorefront } = await this.negocio(tenantId);
     return this.tenantPrisma.client.notificacionCanalConfig.findMany({
-      where: esMayoreo(tipoStorefront) ? { tipo: CANAL_MAYOREO } : {},
+      where: esMayoreo(tipoStorefront) ? { tipo: { in: CANALES_MAYOREO } } : {},
       orderBy: { tipo: 'asc' },
     });
   }
@@ -64,11 +66,16 @@ export class NotificacionCanalConfigService {
   async create(tenantId: string, dto: CreateNotificacionCanalConfigInput) {
     const negocio = await this.negocio(tenantId);
     exigirCanalPermitido(negocio.tipoStorefront, dto.tipo);
-    const activo = dto.activo ?? true;
+    const correoMayoreo = esMayoreo(negocio.tipoStorefront) && dto.tipo === NotificacionCanalTipo.CORREO;
+    // El correo del resumen semanal (mayoreo) nace inactivo: cada negocio lo activa por su cuenta. Los demás canales, como siempre.
+    const activo = dto.activo ?? !correoMayoreo;
     let config = dto.config;
-    if (dto.tipo === CANAL_MAYOREO) {
+    if (dto.tipo === NotificacionCanalTipo.WHATSAPP) {
       config = { ...validarConfigWhatsapp(dto.config) };
       this.exigirActivable(activo, config.destinatarios as unknown[], negocio.botWebhookUrl, true);
+    } else if (correoMayoreo) {
+      config = { ...validarConfigCorreoResumen(dto.config) };
+      this.exigirCorreosSiActivo(activo, config.correos as string[]);
     }
     try {
       return await this.tenantPrisma.client.notificacionCanalConfig.create({
@@ -93,7 +100,14 @@ export class NotificacionCanalConfigService {
     const negocio = await this.negocio(tenantId);
     exigirCanalPermitido(negocio.tipoStorefront, existente.tipo);
     let data: UpdateNotificacionCanalConfigInput = dto;
-    if (existente.tipo === CANAL_MAYOREO) {
+    if (esMayoreo(negocio.tipoStorefront) && existente.tipo === NotificacionCanalTipo.CORREO) {
+      const config =
+        dto.config !== undefined
+          ? { ...validarConfigCorreoResumen(dto.config) }
+          : { ...(existente.config as Record<string, unknown>), correos: correosDeConfig(existente.config) };
+      this.exigirCorreosSiActivo(dto.activo ?? existente.activo, config.correos as string[]);
+      data = { ...dto, ...(dto.config !== undefined ? { config } : {}) };
+    } else if (existente.tipo === NotificacionCanalTipo.WHATSAPP) {
       const config = dto.config !== undefined ? { ...validarConfigWhatsapp(dto.config) } : (existente.config as Record<string, unknown>);
       const activo = dto.activo ?? existente.activo;
       // El webhook solo se exige al ACTIVAR (apagado → encendido o alta); editar destinatarios de uno ya activo no lo revisa.
@@ -111,6 +125,11 @@ export class NotificacionCanalConfigService {
       }
       throw error;
     }
+  }
+
+  /** CORREO de mayoreo activo ⇒ al menos 1 dirección (409). */
+  private exigirCorreosSiActivo(activo: boolean, correos: string[]) {
+    if (activo && correos.length < 1) throw new ConflictException(MSG_SIN_CORREOS);
   }
 
   /** WHATSAPP activo ⇒ al menos 1 destinatario (409) y, al activar, la URL del webhook de Conexión WhatsApp (409). */

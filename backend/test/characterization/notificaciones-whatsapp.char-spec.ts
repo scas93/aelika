@@ -94,11 +94,17 @@ describe.each([['RETAIL_B2B']] as const)('Notificaciones WhatsApp · mayoreo (%s
       await dueno().patch(`/notificaciones/canales/${c.id}`).send({ config: { destinatarios: [ana, luis] } }).expect(200);
     });
 
-    it('mayoreo no puede crear Telegram ni Correo (403), ni editar filas viejas; GET solo muestra WhatsApp; DELETE de una fila vieja sí', async () => {
+    // CAMBIO A PROPÓSITO (resumen semanal por correo): antes mayoreo solo podía usar WhatsApp y el canal Correo daba 403. Ahora mayoreo
+    // también usa Correo (solo para el evento «Resumen semanal»; su configuración se cubre en notificaciones-resumen-config.char-spec.ts).
+    // Telegram (y SMS) siguen dando 403 y sus filas viejas siguen sin mostrarse ni editarse.
+    it('mayoreo no puede crear Telegram (403), ni editar filas viejas de Telegram; GET solo muestra WhatsApp y Correo; DELETE de una fila vieja sí', async () => {
       await conWebhook();
-      expect((await dueno().post('/notificaciones/canales', { tipo: 'CORREO', config: {} })).status).toBe(403);
-      expect((await dueno().post('/notificaciones/canales', { tipo: 'TELEGRAM', config: {} })).status).toBe(403);
-      const vieja = await s.h.prisma.notificacionCanalConfig.create({ data: { tenantId: s.base.tenant.id, tipo: 'CORREO', config: {} } });
+      expectError(
+        await dueno().post('/notificaciones/canales', { tipo: 'TELEGRAM', config: {} }),
+        403,
+        'Los negocios de mayoreo solo usan los canales de WhatsApp y Correo',
+      );
+      const vieja = await s.h.prisma.notificacionCanalConfig.create({ data: { tenantId: s.base.tenant.id, tipo: 'TELEGRAM', config: {} } });
       const wa = (await crear({ destinatarios: [ana] }).expect(201)).body;
       expect((await dueno().get('/notificaciones/canales').expect(200)).body.map((c: { id: string }) => c.id)).toStrictEqual([wa.id]);
       expect((await dueno().patch(`/notificaciones/canales/${vieja.id}`).send({ activo: false })).status).toBe(403);

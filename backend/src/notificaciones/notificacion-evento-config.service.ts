@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { NotificacionAudiencia, NotificacionEvento } from '../../generated/prisma/enums';
-import { EVENTO_MAYOREO, esMayoreo, exigirEventoPermitido } from './notificacion-reglas-negocio';
+import { EVENTOS_MAYOREO, esMayoreo, exigirEventoPermitido } from './notificacion-reglas-negocio';
 
 const PRISMA_NOT_FOUND = 'P2025';
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
@@ -37,11 +37,11 @@ export class NotificacionEventoConfigService {
     return t.tipoStorefront;
   }
 
-  /** Mayoreo solo ve su evento: si le quedaron filas viejas de menudeo no se borran, solo no se muestran. */
+  /** Mayoreo solo ve sus eventos: si le quedaron filas viejas de menudeo no se borran, solo no se muestran. */
   async findAll(tenantId: string) {
     const tipo = await this.tipoDeNegocio(tenantId);
     return this.tenantPrisma.client.notificacionEventoConfig.findMany({
-      where: esMayoreo(tipo) ? { evento: EVENTO_MAYOREO } : {},
+      where: esMayoreo(tipo) ? { evento: { in: EVENTOS_MAYOREO } } : {},
       orderBy: [{ evento: 'asc' }, { audiencia: 'asc' }],
       include: { canalConfig: true },
     });
