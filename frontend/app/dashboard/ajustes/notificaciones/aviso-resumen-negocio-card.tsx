@@ -7,14 +7,14 @@ import {
   enviarResumenSemanalPrueba,
   updateNotificacionCanal,
   type NotificacionCanalConfig,
+  type NotificacionEventoConfig,
   type ResumenPruebaResultado,
 } from "@/lib/api";
-import Aviso from "../../_components/Aviso";
-import Badge from "../../_components/Badge";
-import Button from "../../_components/Button";
-import ToggleSwitch from "../../_components/ToggleSwitch";
-import { CanalCardShell } from "./canal-card-shell";
 import { ultimasSemanas } from "@/lib/semanas-resumen";
+import Aviso from "../../_components/Aviso";
+import Button from "../../_components/Button";
+import AvisoCard, { Plegable } from "./aviso-card";
+import { apagarAviso, avisoEncendido, encenderAviso } from "./aviso-activacion";
 
 const MAX_CORREOS = 10;
 const MAX_NOMBRE = 60;
@@ -25,17 +25,19 @@ function correosGuardados(canal: NotificacionCanalConfig | null): string[] {
 }
 
 /**
- * Canal Correo de MAYOREO: la lista de direcciones (de 1 a 10) a las que llega el resumen semanal y el nombre del remitente.
- * Nace inactivo: se enciende con el interruptor cuando ya hay al menos una dirección guardada. El botón de prueba envía ahora
- * el resumen de la semana anterior (solo con lo guardado).
+ * «Resumen semanal del negocio»: cada lunes por correo, a una lista de direcciones (de 1 a 10), con su Excel. Por dentro es el
+ * canal Correo + el evento RESUMEN_SEMANAL para el negocio; aquí es un solo interruptor con sus direcciones y el nombre del
+ * remitente. La prueba envía el resumen de la semana elegida solo con lo guardado.
  */
-export default function CorreoResumenCard({
+export default function AvisoResumenNegocioCard({
   token,
   canal,
+  evento,
   onChange,
 }: {
   token: string;
   canal: NotificacionCanalConfig | null;
+  evento: NotificacionEventoConfig | null;
   onChange: () => Promise<void>;
 }) {
   const guardados = correosGuardados(canal);
@@ -53,17 +55,23 @@ export default function CorreoResumenCard({
   }
 
   const [guardando, setGuardando] = useState(false);
-  const [cambiandoActivo, setCambiandoActivo] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
   const [probando, setProbando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prueba, setPrueba] = useState<ResumenPruebaResultado | null>(null);
   const semanas = ultimasSemanas();
   const [semanaPrueba, setSemanaPrueba] = useState(semanas[0].inicio);
 
-  const activo = canal?.activo ?? false;
-  const sucio = JSON.stringify([nombre.trim(), correos.map((c) => c.trim())]) !== JSON.stringify([nombreGuardado, guardados]);
+  const encendido = avisoEncendido(canal, evento);
+  const sucio = JSON.stringify([nombre.trim(), correos.map((c) => c.trim())]) !== firmaGuardada;
   const valido = nombre.trim().length > 0 && correos.every((c) => c.trim().length > 0);
-  const puedeEncender = guardados.length > 0 && !sucio;
+
+  const faltan: string[] = [];
+  if (guardados.length === 0) faltan.push("Agrega al menos una dirección para poder encenderlo.");
+  else if (sucio) faltan.push("Guarda los cambios para poder encenderlo.");
+
+  const destino =
+    guardados.length === 0 ? "Nadie todavía" : `${guardados.length} ${guardados.length === 1 ? "dirección" : "direcciones"}: ${guardados.join(", ")}`;
 
   async function handleGuardar(e: React.FormEvent) {
     e.preventDefault();
@@ -84,17 +92,18 @@ export default function CorreoResumenCard({
     }
   }
 
-  async function handleActivo() {
-    if (!canal) return;
-    setCambiandoActivo(true);
+  async function handleInterruptor() {
+    if (cambiando) return;
+    setCambiando(true);
     setError(null);
     try {
-      await updateNotificacionCanal(token, canal.id, { activo: !activo });
+      if (encendido) await apagarAviso(token, canal, evento);
+      else if (canal) await encenderAviso(token, canal, evento, { evento: "RESUMEN_SEMANAL", audiencia: "NEGOCIO" });
       await onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado del canal");
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el aviso");
     } finally {
-      setCambiandoActivo(false);
+      setCambiando(false);
     }
   }
 
@@ -112,15 +121,16 @@ export default function CorreoResumenCard({
   }
 
   return (
-    <CanalCardShell emoji="✉️" iconBg="#FEF3C7" iconColor="#D97706" titulo="Correo (resumen semanal)" className="min-w-0">
-      {activo ? <Badge variant="exito">Activo</Badge> : <Badge variant="neutro">{canal ? "Inactivo" : "Sin configurar"}</Badge>}
-
-      <p className="text-sm text-admin-ink-soft">
-        Cada lunes a las 10:00 (hora de Ciudad de México) mandamos a estas direcciones el resumen de los pedidos de la semana
-        anterior, con su Excel adjunto.
-      </p>
-
-      <form onSubmit={handleGuardar} className="flex flex-col gap-3">
+    <AvisoCard
+      titulo="Resumen semanal del negocio"
+      descripcion="Cada lunes a las 10:00 (hora de Ciudad de México), por correo, los pedidos de la semana anterior con su Excel adjunto."
+      encendido={encendido}
+      destino={destino}
+      faltan={faltan}
+      ocupado={cambiando || !canal}
+      onInterruptor={() => void handleInterruptor()}
+    >
+      <form onSubmit={handleGuardar} className="flex flex-col gap-3 border-t border-admin-border pt-3">
         <label className="flex flex-col gap-1 text-xs font-semibold text-admin-ink-soft">
           Nombre del remitente
           <input
@@ -160,13 +170,6 @@ export default function CorreoResumenCard({
         <p className="break-words text-xs text-admin-ink-soft">Máximo {MAX_CORREOS} direcciones.</p>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {prueba && (
-          <Aviso tono={prueba.resultado === "EXITO" ? "neutro" : "ambar"}>
-            {prueba.resultado === "EXITO"
-              ? `Resumen de prueba enviado a ${prueba.destinatarios} ${prueba.destinatarios === 1 ? "dirección" : "direcciones"} (semana del ${prueba.semanaInicio} al ${prueba.semanaFin}${prueba.conPedidos ? "" : ", sin pedidos"}).`
-              : `No se pudo enviar el resumen de prueba${prueba.motivo ? `: ${prueba.motivo}` : "."}`}
-          </Aviso>
-        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -179,46 +182,38 @@ export default function CorreoResumenCard({
             Agregar dirección
           </Button>
           <Button type="submit" size="barra" disabled={guardando || !sucio || !valido}>
-            {guardando ? "Guardando..." : "Guardar"}
+            {guardando ? "Guardando..." : "Guardar direcciones"}
           </Button>
-          {canal && (
-            <label className="ml-auto flex items-center gap-2 text-sm font-semibold text-admin-ink">
-              {activo ? "Activo" : "Inactivo"}
-              <ToggleSwitch
-                checked={activo}
-                onChange={() => {
-                  // Encender exige al menos una dirección guardada; apagar nunca se bloquea.
-                  if (cambiandoActivo || (!activo && !puedeEncender)) return;
-                  void handleActivo();
-                }}
-                label={activo ? "Desactivar el resumen semanal por correo" : "Activar el resumen semanal por correo"}
-              />
-            </label>
-          )}
         </div>
-        {canal && !activo && !puedeEncender && (
-          <p className="text-xs text-admin-ink-soft">Guarda al menos una dirección para poder activar el canal.</p>
-        )}
+      </form>
 
-        <div className="flex flex-col gap-1 border-t border-admin-border pt-3">
-          <label className="flex flex-col gap-1 text-xs font-semibold text-admin-ink-soft">
-            Semana de la prueba
-            <select value={semanaPrueba} onChange={(e) => setSemanaPrueba(e.target.value)} className="admin-input w-full font-normal">
-              {semanas.map((w) => (
-                <option key={w.inicio} value={w.inicio}>
-                  {w.etiqueta}
-                </option>
-              ))}
-            </select>
-          </label>
+      <Plegable titulo="Probar">
+        {prueba && (
+          <Aviso tono={prueba.resultado === "EXITO" ? "neutro" : "ambar"}>
+            {prueba.resultado === "EXITO"
+              ? `Resumen de prueba enviado a ${prueba.destinatarios} ${prueba.destinatarios === 1 ? "dirección" : "direcciones"} (semana del ${prueba.semanaInicio} al ${prueba.semanaFin}${prueba.conPedidos ? "" : ", sin pedidos"}).`
+              : `No se pudo enviar el resumen de prueba${prueba.motivo ? `: ${prueba.motivo}` : "."}`}
+          </Aviso>
+        )}
+        <label className="flex flex-col gap-1 text-xs font-semibold text-admin-ink-soft">
+          Semana de la prueba
+          <select value={semanaPrueba} onChange={(e) => setSemanaPrueba(e.target.value)} className="admin-input w-full font-normal">
+            {semanas.map((w) => (
+              <option key={w.inicio} value={w.inicio}>
+                {w.etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
           <Button type="button" variant="secondary" size="barra" disabled={probando || !canal || guardados.length === 0 || sucio} onClick={() => void handlePrueba()}>
             {probando ? "Enviando..." : "Enviar resumen de prueba"}
           </Button>
-          <p className="text-xs text-admin-ink-soft">
-            Manda ahora el resumen de la semana elegida a las direcciones guardadas. No cuenta como el envío del lunes.
-          </p>
         </div>
-      </form>
-    </CanalCardShell>
+        <p className="text-xs text-admin-ink-soft">
+          Manda ahora el resumen de la semana elegida a las direcciones guardadas. No cuenta como el envío del lunes.
+        </p>
+      </Plegable>
+    </AvisoCard>
   );
 }

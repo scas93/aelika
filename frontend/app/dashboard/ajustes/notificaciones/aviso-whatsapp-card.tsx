@@ -7,12 +7,11 @@ import {
   updateNotificacionCanal,
   type DestinatarioWhatsapp,
   type NotificacionCanalConfig,
+  type NotificacionEventoConfig,
 } from "@/lib/api";
-import Aviso from "../../_components/Aviso";
-import Badge from "../../_components/Badge";
 import Button from "../../_components/Button";
-import ToggleSwitch from "../../_components/ToggleSwitch";
-import { CanalCardShell } from "./canal-card-shell";
+import AvisoCard from "./aviso-card";
+import { apagarAviso, avisoEncendido, encenderAviso } from "./aviso-activacion";
 
 const MAX_DESTINATARIOS = 10;
 const MAX_NOMBRE = 60;
@@ -31,17 +30,21 @@ function destinatariosGuardados(canal: NotificacionCanalConfig | null): Destinat
 
 const aFilas = (lista: DestinatarioWhatsapp[]): Fila[] => lista.map((d) => ({ id: d.id, nombre: d.nombre, telefono: d.telefono }));
 
-export default function WhatsappCard({
+/**
+ * «Pedido modificado por un cliente»: aviso por WhatsApp al equipo cuando un cliente cambia su pedido desde el portal. Por dentro
+ * es el canal WhatsApp + el evento PEDIDO_MODIFICADO_CLIENTE; aquí es un solo interruptor con sus destinatarios.
+ */
+export default function AvisoWhatsappCard({
   token,
   canal,
+  evento,
   tieneWebhook,
-  cargado,
   onChange,
 }: {
   token: string;
   canal: NotificacionCanalConfig | null;
+  evento: NotificacionEventoConfig | null;
   tieneWebhook: boolean;
-  cargado: boolean;
   onChange: () => Promise<void>;
 }) {
   const guardados = destinatariosGuardados(canal);
@@ -56,14 +59,22 @@ export default function WhatsappCard({
   }
 
   const [guardando, setGuardando] = useState(false);
-  const [cambiandoActivo, setCambiandoActivo] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activo = canal?.activo ?? false;
+  const encendido = avisoEncendido(canal, evento);
   const sucio = JSON.stringify(filas.map((f) => [f.id, f.nombre.trim(), f.telefono.trim()])) !== firmaGuardada;
   const filasValidas = filas.every((f) => f.nombre.trim().length > 0 && f.telefono.trim().length > 0);
-  // No se puede encender sin webhook ni sin al menos un destinatario GUARDADO; apagar siempre se puede.
-  const puedeEncender = tieneWebhook && guardados.length > 0 && !sucio;
+
+  const faltan: string[] = [];
+  if (!tieneWebhook) faltan.push("Falta conectar tu WhatsApp para poder encenderlo.");
+  if (guardados.length === 0) faltan.push("Agrega al menos un destinatario para poder encenderlo.");
+  else if (sucio) faltan.push("Guarda los cambios para poder encenderlo.");
+
+  const destino =
+    guardados.length === 0
+      ? "Nadie todavía"
+      : `${guardados.length} ${guardados.length === 1 ? "persona" : "personas"}: ${guardados.map((d) => d.nombre).join(", ")}`;
 
   function actualizar(i: number, cambio: Partial<Fila>) {
     setFilas((prev) => prev.map((f, j) => (j === i ? { ...f, ...cambio } : f)));
@@ -77,46 +88,44 @@ export default function WhatsappCard({
     try {
       const config = { destinatarios: filas.map((f) => ({ ...(f.id ? { id: f.id } : {}), nombre: f.nombre.trim(), telefono: f.telefono.trim() })) };
       if (canal) await updateNotificacionCanal(token, canal.id, { config });
-      // El canal nace apagado: se enciende con el interruptor, cuando ya hay destinatarios y webhook.
+      // El canal nace apagado: se enciende con el interruptor, cuando ya hay destinatarios guardados y conexión de WhatsApp.
       else await createNotificacionCanal(token, { tipo: "WHATSAPP", config, activo: false });
       await onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar los destinatarios");
+      setError(err instanceof ApiError ? err.message : "No se pudieron guardar los destinatarios");
     } finally {
       setGuardando(false);
     }
   }
 
-  async function handleActivo() {
-    if (!canal) return;
-    setCambiandoActivo(true);
+  async function handleInterruptor() {
+    if (cambiando) return;
+    setCambiando(true);
     setError(null);
     try {
-      await updateNotificacionCanal(token, canal.id, { activo: !activo });
+      if (encendido) await apagarAviso(token, canal, evento);
+      else if (canal) await encenderAviso(token, canal, evento, { evento: "PEDIDO_MODIFICADO_CLIENTE", audiencia: "NEGOCIO" });
       await onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado del canal");
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el aviso");
     } finally {
-      setCambiandoActivo(false);
+      setCambiando(false);
     }
   }
 
   return (
-    <CanalCardShell emoji="📲" iconBg="#DCFCE7" iconColor="#16A34A" titulo="WhatsApp (avisos internos)" className="min-w-0">
-      {activo ? <Badge variant="exito">Activo</Badge> : <Badge variant="neutro">{canal ? "Inactivo" : "Sin configurar"}</Badge>}
-
-      <p className="text-sm text-admin-ink-soft">
-        Avisos para las personas de tu equipo que agregues aquí (no son clientes). Salen por la misma conexión de WhatsApp de tu
-        negocio, sin credenciales aparte.
-      </p>
-
-      {cargado && !tieneWebhook && (
-        <Aviso tono="ambar" accion={{ label: "Ir a Conexión WhatsApp", href: "/dashboard/ajustes/conexion-whatsapp" }}>
-          Falta la URL del webhook de tu conexión de WhatsApp: sin ella no se puede activar este canal.
-        </Aviso>
-      )}
-
-      <form onSubmit={handleGuardar} className="flex flex-col gap-3">
+    <AvisoCard
+      titulo="Pedido modificado por un cliente"
+      descripcion="Aviso por WhatsApp cuando un cliente cambia su pedido desde su portal."
+      encendido={encendido}
+      destino={destino}
+      faltan={faltan}
+      enlaceFalta={!tieneWebhook ? { label: "Ir a Conexión WhatsApp", href: "/dashboard/ajustes/conexion-whatsapp" } : undefined}
+      ocupado={cambiando || !canal}
+      onInterruptor={() => void handleInterruptor()}
+    >
+      <form onSubmit={handleGuardar} className="flex flex-col gap-3 border-t border-admin-border pt-3">
+        <span className="text-xs font-semibold text-admin-ink-soft">Personas de tu equipo que reciben el aviso</span>
         <div className="flex flex-col gap-2">
           {filas.length === 0 && <p className="text-xs text-admin-ink-soft">Aún no hay destinatarios.</p>}
           {filas.map((f, i) => (
@@ -167,27 +176,10 @@ export default function WhatsappCard({
             Agregar destinatario
           </Button>
           <Button type="submit" size="barra" disabled={guardando || !sucio || !filasValidas}>
-            {guardando ? "Guardando..." : "Guardar"}
+            {guardando ? "Guardando..." : "Guardar destinatarios"}
           </Button>
-          {canal && (
-            <label className="ml-auto flex items-center gap-2 text-sm font-semibold text-admin-ink">
-              {activo ? "Activo" : "Inactivo"}
-              <ToggleSwitch
-                checked={activo}
-                onChange={() => {
-                  // Encender exige webhook y destinatarios guardados; apagar nunca se bloquea.
-                  if (cambiandoActivo || (!activo && !puedeEncender)) return;
-                  void handleActivo();
-                }}
-                label={activo ? "Desactivar WhatsApp" : "Activar WhatsApp"}
-              />
-            </label>
-          )}
         </div>
-        {canal && !activo && tieneWebhook && !puedeEncender && (
-          <p className="text-xs text-admin-ink-soft">Guarda al menos un destinatario para poder activar el canal.</p>
-        )}
       </form>
-    </CanalCardShell>
+    </AvisoCard>
   );
 }

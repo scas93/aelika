@@ -2,12 +2,13 @@
 
 import { useState, type ReactNode } from "react";
 import { formatMoney } from "@/lib/format";
-import { ApiError, type CorregirEntregaPedidoB2bPayload, type Product } from "@/lib/api";
+import { ApiError, type CorregirEntregaPedidoB2bPayload, type PedidoB2bCambios, type PedidoB2bEntregaCambio, type Product } from "@/lib/api";
 import CantidadInput, { cantidadNumero, type Cantidad } from "@/components/cantidad-input";
 import Badge from "../_components/Badge";
 import Button from "../_components/Button";
 import { ESTADO_ENTREGA_LABEL, ESTADO_ENTREGA_VARIANT } from "./estado";
 import { entregaAbiertaPorDefecto, fechaCorta, type EntregaVista } from "./entregas-vista";
+import { cambiosPorFecha, claveLinea, etiquetaLinea } from "./cambios-vista";
 
 function formatCierre(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -129,6 +130,25 @@ function CorregirEntregaForm({
   );
 }
 
+// Entrega que el cliente quitó (solo con «Cambios desde la última revisión»): tachada, con sus productos, donde estaba.
+function EntregaEliminada({ cambio }: { cambio: PedidoB2bEntregaCambio }) {
+  return (
+    <li className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-dashed border-admin-border bg-admin-bg p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-admin-ink-soft line-through">{fechaCorta(cambio.fecha)}</span>
+        <Badge variant="peligro">Eliminada</Badge>
+      </div>
+      <ul className="flex flex-col gap-0.5 text-xs text-admin-ink-soft">
+        {cambio.lineas.map((l, i) => (
+          <li key={i} className="line-through">
+            {l.nombreProducto} × {l.antes}
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
 // Bloque de entregas del pedido, compartido por el panel del pedido y el historial del cliente. Una fila plegable por entrega
 // («Mié 21 oct» + estado); al abrirla, sus productos con el importe de la línea. El monto es ANTES del
 // descuento (el descuento se aplica una sola vez en los totales). Abierta por defecto: la atrasada, o si no la próxima pendiente.
@@ -141,6 +161,7 @@ export default function EntregasLista({
   productos,
   cargarProductos,
   encabezadoAccion,
+  cambios,
 }: {
   entregas: EntregaVista[];
   onCerrar?: (entregaId: string, estado: "ENTREGADA" | "NO_RECOGIDA") => Promise<void>;
@@ -149,13 +170,25 @@ export default function EntregasLista({
   cargarProductos?: () => void;
   /** Junto al título de la sección (p. ej. «Editar pedido»). */
   encabezadoAccion?: ReactNode;
+  /** «Cambios desde la última revisión»: marca en su lugar las líneas y entregas afectadas. Sin él, la lista se ve como siempre. */
+  cambios?: PedidoB2bCambios | null;
 }) {
   const [cerrando, setCerrando] = useState<string | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // null = sin tocar: rige el default (que se recalcula si cambian las entregas, p. ej. al cerrar una).
   const [manual, setManual] = useState<Set<string> | null>(null);
-  const abiertas = manual ?? new Set([entregaAbiertaPorDefecto(entregas)].filter((x): x is string => x !== null));
+  const cambioDe = cambiosPorFecha(cambios);
+  const fechaDe = (e: EntregaVista) => e.fecha.slice(0, 10);
+  // Con cambios, las entregas afectadas se abren solas para que el cambio se vea sin buscarlo.
+  const conCambios = entregas.filter((e) => cambioDe.has(fechaDe(e))).map((e) => e.id);
+  const abiertas =
+    manual ?? new Set([entregaAbiertaPorDefecto(entregas), ...conCambios].filter((x): x is string => x !== null));
+  // Las entregas eliminadas ya no están en el pedido: se muestran tachadas en el lugar (fecha) donde estaban.
+  const filas = [
+    ...entregas.map((entrega) => ({ tipo: "real" as const, entrega, fecha: fechaDe(entrega) })),
+    ...(cambios?.entregas ?? []).filter((c) => c.tipo === "ELIMINADA").map((cambio) => ({ tipo: "eliminada" as const, cambio, fecha: cambio.fecha })),
+  ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   function alternar(id: string) {
     const siguiente = new Set(abiertas);
@@ -196,7 +229,11 @@ export default function EntregasLista({
       </div>
       {entregas.length === 0 && <p className="text-xs text-admin-ink-soft">Este pedido no tiene entregas.</p>}
       <ul className="flex flex-col gap-2">
-        {entregas.map((entrega) => {
+        {filas.map((fila) => {
+          if (fila.tipo === "eliminada") return <EntregaEliminada key={`eliminada-${fila.fecha}`} cambio={fila.cambio} />;
+          const entrega = fila.entrega;
+          const cambio = cambioDe.get(fila.fecha);
+          const lineasCambio = new Map((cambio?.tipo === "MODIFICADA" ? cambio.lineas : []).map((l) => [claveLinea(l), l]));
           const pendiente = entrega.estado === "PENDIENTE" || entrega.estado === "LISTA";
           const cerrada = entrega.estado === "ENTREGADA" || entrega.estado === "NO_RECOGIDA";
           const cancelada = entrega.estado === "CANCELADA";
@@ -215,6 +252,8 @@ export default function EntregasLista({
                   {fechaCorta(entrega.fecha)}
                 </span>
                 <span className="flex items-center gap-1.5">
+                  {cambio?.tipo === "NUEVA" && <Badge variant="advertencia">Nueva</Badge>}
+                  {cambio?.tipo === "MOVIDA" && <Badge variant="advertencia">Movida de {fechaCorta(cambio.fechaAnterior!)}</Badge>}
                   {entrega.atrasada && <Badge variant="peligro">Atrasada</Badge>}
                   <Badge variant={ESTADO_ENTREGA_VARIANT[entrega.estado]}>{ESTADO_ENTREGA_LABEL[entrega.estado]}</Badge>
                 </span>
@@ -222,14 +261,28 @@ export default function EntregasLista({
               {abierta && (
                 <>
                   <ul className={`flex flex-col gap-0.5 text-xs ${cancelada ? "text-admin-ink-soft" : "text-admin-ink"}`}>
-                    {entrega.productos.map((p, i) => (
-                      <li key={i} className="flex justify-between gap-2">
-                        <span>
-                          {p.nombreProducto} × {p.cantidad}
-                        </span>
-                        <span className="tabular-nums">{formatMoney(p.cantidad * p.precioUnitario)}</span>
-                      </li>
-                    ))}
+                    {entrega.productos.map((p, i) => {
+                      const marca = lineasCambio.get(claveLinea(p));
+                      return (
+                        <li key={i} className="flex justify-between gap-2">
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            {p.nombreProducto} × {p.cantidad}
+                            {marca && <Badge variant="advertencia">{etiquetaLinea(marca)}</Badge>}
+                          </span>
+                          <span className="tabular-nums">{formatMoney(p.cantidad * p.precioUnitario)}</span>
+                        </li>
+                      );
+                    })}
+                    {[...lineasCambio.values()]
+                      .filter((l) => l.tipo === "ELIMINADO")
+                      .map((l) => (
+                        <li key={`eliminado-${claveLinea(l)}`} className="flex flex-wrap items-center gap-1.5 text-admin-ink-soft">
+                          <span className="line-through">
+                            {l.nombreProducto} × {l.antes}
+                          </span>
+                          <Badge variant="peligro">{etiquetaLinea(l)}</Badge>
+                        </li>
+                      ))}
                   </ul>
                   {entrega.cerradaAt && <span className="text-xs text-admin-ink-soft">Cerrada el {formatCierre(entrega.cerradaAt)}</span>}
                   {onCorregir && cerrada && corrigiendo !== entrega.id && (

@@ -79,7 +79,8 @@ describe('Resumen semanal por cliente · API (mayoreo)', () => {
 
   describe('correo de respuestas del negocio', () => {
     it('GET/PUT solo Dueño; se normaliza, vacío lo borra y uno inválido da 400', async () => {
-      expect((await dueno().get(`${BASE}/clientes/config`).expect(200)).body).toEqual({ correoRespuestas: null });
+      // CAMBIO A PROPÓSITO: GET clientes/config suma `clientesConEnvio` (contador de la tarjeta del panel); PUT no cambia.
+      expect((await dueno().get(`${BASE}/clientes/config`).expect(200)).body).toEqual({ correoRespuestas: null, clientesConEnvio: 0 });
       expect((await dueno().put(`${BASE}/clientes/config`).send({ correoRespuestas: ' Ventas@Negocio.TEST ' }).expect(200)).body).toEqual({
         correoRespuestas: 'ventas@negocio.test',
       });
@@ -90,6 +91,21 @@ describe('Resumen semanal por cliente · API (mayoreo)', () => {
         expectError(await apiRol(s.h, s.base, rol).put(`${BASE}/clientes/config`).send({ correoRespuestas: null }), 403, MSG_403);
         expectError(await apiRol(s.h, s.base, rol).get(`${BASE}/clientes/config`), 403, MSG_403);
       }
+    });
+  });
+
+  describe('contador de clientes con envío activado', () => {
+    it('cuenta clientes sin baja con el envío encendido y correo; no cuenta apagados ni dados de baja', async () => {
+      const a = await cliente('Uno');
+      const b = await cliente('Dos');
+      await cliente('Tres');
+      const cuenta = async () => (await dueno().get(`${BASE}/clientes/config`).expect(200)).body.clientesConEnvio;
+      expect(await cuenta()).toBe(0);
+      await dueno().patch(`/clientes-b2b/${a}`).send({ resumenSemanalActivo: true, resumenSemanalCorreo: 'a@uno.test' }).expect(200);
+      await dueno().patch(`/clientes-b2b/${b}`).send({ resumenSemanalActivo: true, resumenSemanalCorreo: 'b@dos.test' }).expect(200);
+      expect(await cuenta()).toBe(2);
+      await dueno().post(`/clientes-b2b/${b}/baja`).expect(201);
+      expect(await cuenta()).toBe(1);
     });
   });
 

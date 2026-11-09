@@ -1341,7 +1341,8 @@ export interface ResumenClientePruebaResultado {
 
 /** «Resumen semanal para clientes»: correo de respuestas (Reply-To) del negocio. */
 export function fetchResumenClientesConfig(token: string) {
-  return request<{ correoRespuestas: string | null }>("/notificaciones/resumen-semanal/clientes/config", {
+  // `clientesConEnvio`: clientes B2B sin baja con el envío encendido y correo capturado (contador de la tarjeta).
+  return request<{ correoRespuestas: string | null; clientesConEnvio?: number }>("/notificaciones/resumen-semanal/clientes/config", {
     headers: authHeaders(token),
   });
 }
@@ -1900,6 +1901,39 @@ export function marcarRevisadoPedidoB2b(token: string, id: string) {
     method: "PATCH",
     headers: authHeaders(token),
   });
+}
+
+// «Cambios desde la última revisión» (GET /pedidos-b2b/:id/cambios). Ver backend pedidos-b2b-cambios.ts.
+export interface PedidoB2bLineaCambio {
+  productId: string | null;
+  nombreProducto: string;
+  tipo: "NUEVO" | "CAMBIO" | "ELIMINADO";
+  antes: number | null;
+  despues: number | null;
+}
+export interface PedidoB2bEntregaCambio {
+  tipo: "NUEVA" | "ELIMINADA" | "MOVIDA" | "MODIFICADA";
+  // "YYYY-MM-DD". En una ELIMINADA, la fecha que tenía.
+  fecha: string;
+  fechaAnterior?: string;
+  piezas: number;
+  lineas: PedidoB2bLineaCambio[];
+}
+export interface PedidoB2bCambios {
+  entregas: PedidoB2bEntregaCambio[];
+  nota: "NUEVA" | "MODIFICADA" | "QUITADA" | null;
+  total: { antes: string; despues: string } | null;
+  soloPrecios: boolean;
+  sinDiferencias: boolean;
+}
+export interface PedidoB2bCambiosRespuesta {
+  // NINGUNO = sin marca o cancelado; SIN_DETALLE = marca anterior a la referencia.
+  estado: "NINGUNO" | "SIN_DETALLE" | "SIN_DIFERENCIAS" | "CON_CAMBIOS";
+  cambios: PedidoB2bCambios | null;
+}
+
+export function fetchCambiosPedidoB2b(token: string, id: string) {
+  return request<PedidoB2bCambiosRespuesta>(`/pedidos-b2b/${id}/cambios`, { headers: authHeaders(token) });
 }
 
 export function avanzarPedidoB2b(token: string, id: string) {

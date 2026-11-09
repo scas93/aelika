@@ -62,6 +62,11 @@ import {
   sincronizarOrdenB2b,
 } from './pedidos-b2b-orden';
 import {
+  armarReferencia,
+  calcularCambios,
+  type ReferenciaPedido,
+} from './pedidos-b2b-cambios';
+import {
   entregaAtrasada,
   ESTADOS_B2B_ACTIVOS,
   ESTADOS_B2B_COMPLETADOS,
@@ -580,6 +585,28 @@ export class PedidosB2bService {
   }
 
   /**
+   * GET /:id/cambios: qué es distinto frente a la referencia guardada en la primera modificación del cliente (ver
+   * pedidos-b2b-cambios.ts). NINGUNO = sin marca o cancelado (el panel no muestra la sección); SIN_DETALLE = marca prendida
+   * desde antes de que existiera la referencia; SIN_DIFERENCIAS = el pedido quedó igual que la referencia; CON_CAMBIOS.
+   */
+  async cambios(id: string) {
+    const orden = await this.cargar(id, true);
+    if (orden.cancelado || orden.modificadoPorClienteAt === null)
+      return { estado: 'NINGUNO' as const, cambios: null };
+    const ref = await this.tenantPrisma.client.pedidoB2bReferencia.findFirst({
+      where: { orderId: id },
+    });
+    if (!ref) return { estado: 'SIN_DETALLE' as const, cambios: null };
+    const cambios = calcularCambios(
+      ref.snapshot as unknown as ReferenciaPedido,
+      armarReferencia(orden),
+    );
+    return cambios.sinDiferencias
+      ? { estado: 'SIN_DIFERENCIAS' as const, cambios: null }
+      : { estado: 'CON_CAMBIOS' as const, cambios };
+  }
+
+  /**
    * ¿Ya tiene este cliente un pedido (no cancelado) en esa semana? Lo usa la captura del panel para avisar ANTES de guardar.
    * Devuelve folio e id del existente, o null. Cliente de otro negocio o que no es B2B: 404, igual que al crear.
    */
@@ -790,6 +817,8 @@ export class PedidosB2bService {
             data: { confirmadoAt },
           });
         }
+        // Se apaga la marca: la referencia de «Cambios desde la última revisión» ya no aplica.
+        await tx.pedidoB2bReferencia.deleteMany({ where: { orderId: id } });
         return tx.order.update({
           where: { id },
           // Al confirmar (o reconfirmar tras una modificación del cliente) se apaga la marca «Modificado por el cliente».
@@ -900,6 +929,7 @@ export class PedidosB2bService {
           }
           data.estadoPedido = EstadoPedido.CONFIRMADO_SURTIENDO;
           data.modificadoPorClienteAt = null;
+          await tx.pedidoB2bReferencia.deleteMany({ where: { orderId: id } });
         }
         await tx.order.update({ where: { id }, data });
         const ahora = new Date();
@@ -1222,6 +1252,7 @@ export class PedidosB2bService {
         where: { id, modificadoPorClienteAt: { not: null } },
         data: { modificadoPorClienteAt: null },
       });
+      await tx.pedidoB2bReferencia.deleteMany({ where: { orderId: id } });
       return aRespuestaPedidoB2b(
         await tx.order.findUniqueOrThrow({
           where: { id },

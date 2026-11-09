@@ -72,6 +72,7 @@ Un pedido B2B es `Order` (`tipo = B2B`) + `DetalleB2B` + `OrderItem` (`cantidad`
 
 - `Entrega`: `fecha` real, `estado` (`PENDIENTE`/`LISTA`/`ENTREGADA`/`NO_RECOGIDA`/`CANCELADA`), `nota`, `hora?`, `destino?`, `estadoCambiadoAt`; `estadoCambiadoPorId` sigue en el schema sin uso.
 - **Sin restricción única `(orderId, fecha)` en la base a propósito** (otros tipos de orden podrán tener varias entregas el mismo día); "una por fecha" es regla de la lógica B2B (`pedidos-b2b-orden.ts`, edición bajo `FOR UPDATE` de la orden).
+- `PedidoB2bReferencia` (`pedido_b2b_referencias`, 1:1 con `Order` por `orderId`, `snapshot` JSON, cascada con la orden y el tenant): copia del pedido (entregas vigentes por fecha con sus líneas `productId`/`nombreProducto`/`cantidad`, nota del cliente y total) justo antes de la primera modificación del cliente que prende `modificadoPorClienteAt`. Solo para el panel («Cambios desde la última revisión»); nunca sale en el portal, Excel, resúmenes ni avisos. Ver docs/diseno-operacion.md.
 - `PedidoB2b` y sus tablas **no se borran** todavía: dejan de escribirse y se retirarán en una etapa posterior. `Cliente.pedidosB2b` es la relación legada; las consultas nuevas leen `Order`.
 - Toda consulta B2C a `Order` filtra `tipo = B2C` (panel, histórico, métricas, `avanzar`, `reembolsar`, contadores, folio); un pedido B2B nunca aparece ni se puede operar desde los endpoints B2C.
 

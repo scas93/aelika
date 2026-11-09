@@ -114,6 +114,12 @@ export class PedidosB2bController {
     return this.pedidosB2bService.findOne(id);
   }
 
+  // «Cambios desde la última revisión» del panel lateral (los 3 roles, solo lectura). Endpoint aparte para no tocar el contrato de GET /:id.
+  @Get(':id/cambios')
+  cambios(@Param('id') id: string) {
+    return this.pedidosB2bService.cambios(id);
+  }
+
   // Captura por teléfono: los 3 roles (el Operador también captura pedidos).
   @Roles(Role.OPERADOR, Role.GERENTE, Role.DUENO)
   @Post()

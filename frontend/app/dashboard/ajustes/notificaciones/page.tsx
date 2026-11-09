@@ -14,7 +14,7 @@ import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 import NotificacionesCanalesSection from "./canales-section";
 import NotificacionesEventosSection from "./eventos-section";
-import ResumenClientesCard from "./resumen-clientes-card";
+import NotificacionesMayoreo from "./notificaciones-mayoreo";
 
 export default function NotificacionesAjustesPage() {
   const { user, token } = useSession();
@@ -33,7 +33,7 @@ export default function NotificacionesAjustesPage() {
       const [canalesData, eventosData, ajustes] = await Promise.all([
         fetchNotificacionCanales(token),
         fetchNotificacionEventos(token),
-        // Solo mayoreo necesita saber si hay webhook (el canal WhatsApp no se activa sin él); los demás no hacen la llamada.
+        // Solo mayoreo necesita saber si hay webhook (el aviso de WhatsApp no se enciende sin él); los demás no hacen la llamada.
         esMayoreo ? fetchTenantSettings(token) : Promise.resolve(null),
       ]);
       setCanales(canalesData);
@@ -76,15 +76,30 @@ export default function NotificacionesAjustesPage() {
     );
   }
 
+  if (esMayoreo) {
+    return (
+      <div className="flex flex-col gap-6">
+        <VolverAjustesLink />
+        <h1 className="text-xl font-extrabold text-admin-ink">Notificaciones</h1>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <NotificacionesMayoreo
+          token={token}
+          nombreNegocio={user.tenant.nombre}
+          canales={canales}
+          eventos={eventos}
+          tieneWebhook={tieneWebhook}
+          onChange={load}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <VolverAjustesLink />
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <NotificacionesCanalesSection token={token} canales={canales} esMayoreo={esMayoreo} tieneWebhook={tieneWebhook} onChange={load} />
-      <NotificacionesEventosSection token={token} canales={canales} eventos={eventos} esMayoreo={esMayoreo} onChange={load} />
-      {esMayoreo && (
-        <ResumenClientesCard token={token} nombreNegocio={user.tenant.nombre} canales={canales} eventos={eventos} onChange={load} />
-      )}
+      <NotificacionesCanalesSection token={token} canales={canales} onChange={load} />
+      <NotificacionesEventosSection token={token} canales={canales} eventos={eventos} onChange={load} />
     </div>
   );
 }
