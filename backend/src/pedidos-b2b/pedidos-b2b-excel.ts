@@ -134,7 +134,7 @@ export function ordenarEntregasPedidos(
 type ColumnaPedidos = ColumnaXlsx<FilaPedidoExcel>;
 type ColumnaEntregaPedidos = ColumnaXlsx<FilaEntregaPedidoExcel>;
 
-const COL_PED = {
+export const COL_PED = {
   folio: { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (f) => f.folio },
   codigo: {
     encabezado: 'Código del cliente',
@@ -258,7 +258,7 @@ const COL_PED = {
   },
 } satisfies Record<string, ColumnaPedidos>;
 
-const COL_ENT = {
+export const COL_ENT = {
   folio: { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (f) => f.folio },
   codigo: {
     encabezado: 'Código del cliente',
@@ -335,7 +335,7 @@ const COL_ENT = {
 } satisfies Record<string, ColumnaEntregaPedidos>;
 
 /** Columnas de Históricos y de Pedidos activos, en orden (cada pantalla tiene las suyas, definidas por producto). */
-const COLUMNAS_PEDIDOS: Record<VistaExcelPedidos, ColumnaPedidos[]> = {
+export const COLUMNAS_PEDIDOS: Record<VistaExcelPedidos, ColumnaPedidos[]> = {
   HISTORICOS: [
     COL_PED.negocio,
     COL_PED.semanaInicio,
@@ -371,7 +371,7 @@ const COLUMNAS_PEDIDOS: Record<VistaExcelPedidos, ColumnaPedidos[]> = {
   ],
 };
 
-const COLUMNAS_ENTREGAS_PEDIDOS: Record<
+export const COLUMNAS_ENTREGAS_PEDIDOS: Record<
   VistaExcelPedidos,
   ColumnaEntregaPedidos[]
 > = {

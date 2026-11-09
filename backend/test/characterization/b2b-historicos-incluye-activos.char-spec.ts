@@ -73,7 +73,8 @@ describe('B2B · Históricos incluye pedidos activos', () => {
       return libro;
     };
     const negocios = (libro: ExcelJS.Workbook) => {
-      const hoja = libro.getWorksheet('Pedidos')!;
+      // Cambio deliberado: la tabla plana de Históricos pasó a «Datos pedidos» (la hoja «Pedidos» ahora tiene bloques por negocio).
+      const hoja = libro.getWorksheet('Datos pedidos')!;
       const out: string[] = [];
       hoja.eachRow((row, n) => n > 1 && out.push(String(row.getCell(1).value)));
       return out.sort();
@@ -81,7 +82,7 @@ describe('B2B · Históricos incluye pedidos activos', () => {
     const todos = await descargar('');
     expect(negocios(todos)).toStrictEqual(['Negocio Actual', 'Negocio Pasado', 'Negocio Siguiente']);
     // Mismas columnas de siempre en Históricos (empieza por Negocio, sin Folio).
-    expect((todos.getWorksheet('Pedidos')!.getRow(1).values as string[]).slice(1, 3)).toStrictEqual(['Negocio', 'Semana (inicio)']);
+    expect((todos.getWorksheet('Datos pedidos')!.getRow(1).values as string[]).slice(1, 3)).toStrictEqual(['Negocio', 'Semana (inicio)']);
     expect(negocios(await descargar('&estado=PENDIENTE_CONFIRMACION&cancelado=false'))).toStrictEqual(['Negocio Siguiente']);
     expect(negocios(await descargar('&estadoPago=PAGADO'))).toStrictEqual(['Negocio Pasado']);
     expect(negocios(await descargar('&negocioNombre=actual'))).toStrictEqual(['Negocio Actual']);

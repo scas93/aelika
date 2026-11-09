@@ -6,6 +6,7 @@ import {
   type VistaExcelPedidos,
 } from './pedidos-b2b-excel';
 import { fechaExcel } from '../common/xlsx';
+import { libroPedidosAgrupado } from './pedidos-b2b-excel-agrupado';
 import { round2 } from '../common/money';
 import {
   EstadoEntrega,
@@ -149,7 +150,7 @@ export const PEDIDOS_EXPORT_SELECT = {
       items: {
         select: {
           cantidad: true,
-          orderItem: { select: { precioUnitario: true } },
+          orderItem: { select: { precioUnitario: true, nombreProducto: true } },
         },
       },
     },
@@ -226,6 +227,9 @@ export function libroDePedidosExport(
   pedidos: PedidoExport[],
   vista: VistaExcelPedidos,
 ): Promise<Buffer> {
+  // Históricos del panel: bloques por negocio, pedido y entrega (+ tablas planas). El resumen semanal al negocio llama a
+  // `libroPedidos` directamente y conserva su formato plano.
+  if (vista === 'HISTORICOS') return libroPedidosAgrupado(pedidos);
   const { filas, entregas } = filasExcelDePedidos(pedidos);
   return libroPedidos(filas, entregas, vista);
 }
