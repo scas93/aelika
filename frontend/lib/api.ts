@@ -1341,7 +1341,8 @@ export interface ResumenClientePruebaResultado {
 
 /** «Resumen semanal para clientes»: correo de respuestas (Reply-To) del negocio. */
 export function fetchResumenClientesConfig(token: string) {
-  return request<{ correoRespuestas: string | null }>("/notificaciones/resumen-semanal/clientes/config", {
+  // `clientesConEnvio`: clientes B2B sin baja con el envío encendido y correo capturado (contador de la tarjeta).
+  return request<{ correoRespuestas: string | null; clientesConEnvio?: number }>("/notificaciones/resumen-semanal/clientes/config", {
     headers: authHeaders(token),
   });
 }

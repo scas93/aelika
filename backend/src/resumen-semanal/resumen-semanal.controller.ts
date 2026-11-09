@@ -93,7 +93,17 @@ export class ResumenSemanalController {
   @Get('clientes/config')
   async configClientes(@CurrentUser() user: JwtPayload) {
     const t = await this.negocioMayoreo(user.tenantId);
-    return { correoRespuestas: t.correoRespuestas };
+    // Contador de la tarjeta del panel: clientes B2B sin baja con el envío encendido y un correo capturado.
+    const clientesConEnvio = await this.prisma.cliente.count({
+      where: {
+        tenantId: user.tenantId,
+        canal: 'B2B',
+        bajaAt: null,
+        resumenSemanalActivo: true,
+        resumenSemanalCorreo: { not: null },
+      },
+    });
+    return { correoRespuestas: t.correoRespuestas, clientesConEnvio };
   }
 
   @Put('clientes/config')
