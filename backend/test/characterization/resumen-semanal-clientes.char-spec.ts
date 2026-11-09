@@ -110,11 +110,16 @@ describe('Resumen semanal por cliente · envío programado (mayoreo)', () => {
     // CAMBIO A PROPÓSITO (contenido del Excel al cliente): sin columnas de estado ni conteos por estado; Entregas una fila por producto.
     expect(encabezados('Pedidos')).not.toMatch(/Estado|Entregadas|No recogidas|Canceladas|Atrasada/i);
     expect(encabezados('Pedidos')).toContain('Entregas totales');
-    expect(encabezados('Entregas')).toBe('|Folio|Fecha de entrega|Día|Producto|Unidades|Monto|Nota de la entrega');
+    expect(encabezados('Entregas')).toBe('|Fecha de entrega|Día|Producto|Unidades|Monto|Nota de la entrega');
     expect(encabezados('Entregas')).not.toMatch(/Estado/i);
+    // CAMBIO A PROPÓSITO (Excel al cliente sin folio): ninguna hoja tiene columna Folio y el folio no aparece en ninguna celda.
+    expect(encabezados('Pedidos')).not.toMatch(/Folio/i);
+    expect(encabezados('Entregas')).not.toMatch(/Folio/i);
     const todo: string[] = [libro.creator ?? '', libro.lastModifiedBy ?? '', libro.company ?? '', libro.title ?? ''];
     libro.eachSheet((w) => w.eachRow((r) => r.eachCell((c) => todo.push(String(c.value ?? '')))));
     expect(todo.join('\n')).not.toMatch(/aelika|atrasada/i);
+    expect(todo).not.toContain(a.folio); // ninguna celda ni propiedad es el folio (comparación exacta: un folio corto no choca con fechas o montos)
+    expect(libro.worksheets.map((w) => w.name).join('|')).not.toContain(a.folio);
     expect(arg.mensaje.texto + arg.mensaje.html + arg.mensaje.asunto + arg.adjuntos[0].nombreArchivo).not.toMatch(/aelika/i);
     const m = await marcas();
     expect(m).toHaveLength(1);

@@ -124,13 +124,6 @@ export function datosResumenCliente(pedidos: PedidoResumenCliente[]): {
 const DIA_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 const COL_PEDIDOS: ColumnaXlsx<FilaPedidoExcel>[] = [
-  {
-    encabezado: 'Folio',
-    tipo: 'texto',
-    ancho: 22,
-    // Un pedido cancelado se marca aquí, sin columna de estado.
-    valor: (f) => (f.cancelado ? `${f.folio} (Cancelado)` : f.folio),
-  },
   { encabezado: 'Negocio', tipo: 'texto', ancho: 32, valor: (f) => f.negocioNombre },
   {
     encabezado: 'Semana (inicio)',
@@ -164,14 +157,13 @@ const COL_PEDIDOS: ColumnaXlsx<FilaPedidoExcel>[] = [
     encabezado: 'Total',
     tipo: 'moneda',
     ancho: 14,
-    // Cancelado: sin monto, para que la columna sume solo lo vigente.
-    valor: (f) => (f.cancelado ? null : f.total),
+    // Cancelado: en lugar del monto va el texto «Cancelado» (sin columna de estado; una suma de la columna solo toma lo vigente).
+    valor: (f) => (f.cancelado ? 'Cancelado' : f.total),
   },
   { encabezado: 'Nota del cliente', tipo: 'texto', ancho: 40, valor: (f) => f.notaCliente },
 ];
 
 const COL_ENTREGAS: ColumnaXlsx<LineaEntregaCliente>[] = [
-  { encabezado: 'Folio', tipo: 'texto', ancho: 14, valor: (l) => l.folio },
   { encabezado: 'Fecha de entrega', tipo: 'fecha', ancho: 17, valor: (l) => l.fecha },
   { encabezado: 'Día', tipo: 'texto', ancho: 8, valor: (l) => DIA_CORTO[l.fecha.getUTCDay()] },
   { encabezado: 'Producto', tipo: 'texto', ancho: 36, valor: (l) => l.producto },
@@ -180,12 +172,16 @@ const COL_ENTREGAS: ColumnaXlsx<LineaEntregaCliente>[] = [
   { encabezado: 'Nota de la entrega', tipo: 'texto', ancho: 40, valor: (l) => l.nota },
 ];
 
-/** Líneas por fecha de entrega, luego folio (numérico si lo es); dentro de una entrega conserva el orden del pedido. */
+/**
+ * Sin columna de folio, el orden es lo que agrupa: fecha de entrega, luego pedido (por folio, solo para ordenar; no se muestra),
+ * luego entrega del mismo pedido y producto (por nombre).
+ */
 function ordenarLineas(lineas: LineaEntregaCliente[]): LineaEntregaCliente[] {
   return [...lineas].sort(
     (a, b) =>
       a.fecha.getTime() - b.fecha.getTime() ||
-      a.folio.localeCompare(b.folio, 'es', { numeric: true }),
+      a.folio.localeCompare(b.folio, 'es', { numeric: true }) ||
+      a.producto.localeCompare(b.producto, 'es'),
   );
 }
 
