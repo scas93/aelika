@@ -69,7 +69,7 @@ describe('Resumen semanal · armado (mayoreo)', () => {
     );
   });
 
-  it('el adjunto es IDÉNTICO al que el Dueño exporta desde el panel para esa semana (Históricos)', async () => {
+  it('el adjunto es IDÉNTICO a las tablas planas («Datos pedidos» y «Datos entregas») que el Dueño exporta desde el panel para esa semana (Históricos)', async () => {
     await pedido('Pasada Uno');
     const b = await pedido('Pasada Dos');
     await dueno().patch(`/pedidos-b2b/${b.id}/cancelar`).expect(200);
@@ -86,7 +86,15 @@ describe('Resumen semanal · armado (mayoreo)', () => {
         rs.on('end', () => cb(null, Buffer.concat(t)));
       });
     expect(res.status).toBe(200);
-    expect(await hojas(r.adjunto!.contenido)).toEqual(await hojas(res.body));
+    // Cambio deliberado: el Excel de Históricos del panel ahora trae hojas con bloques («Pedidos» y «Entregas») y, al final, las tablas
+    // planas de siempre («Datos pedidos» y «Datos entregas»). El adjunto del resumen semanal conserva el formato plano y debe ser
+    // idéntico a esas dos tablas.
+    const adjunto = await hojas(r.adjunto!.contenido);
+    const panel = await hojas(res.body);
+    const plana = (nombre: string) => panel.find((h) => h.nombre === nombre)!.valores;
+    expect(adjunto.map((h) => h.nombre)).toEqual(['Pedidos', 'Entregas']);
+    expect(adjunto[0].valores).toEqual(plana('Datos pedidos'));
+    expect(adjunto[1].valores).toEqual(plana('Datos entregas'));
   });
 
   it('pedido cancelado: sale en el Excel como Cancelado, se cuenta aparte y no suma (ni sus entregas ya cerradas)', async () => {

@@ -117,7 +117,8 @@ describe('B2B · filtros de selección múltiple (Estado y Pago)', () => {
       const libro = new ExcelJS.Workbook();
       await libro.xlsx.load(res.body);
       const out: string[] = [];
-      libro.getWorksheet('Pedidos')!.eachRow((row, i) => i > 1 && out.push(String(row.getCell(1).value)));
+      // Cambio deliberado: Históricos ahora trae hojas con bloques; la tabla plana con el mismo contenido es «Datos pedidos».
+      libro.getWorksheet('Datos pedidos')!.eachRow((row, i) => i > 1 && out.push(String(row.getCell(1).value)));
       return out.sort();
     };
     const negociosLista = async (qs: string) => {

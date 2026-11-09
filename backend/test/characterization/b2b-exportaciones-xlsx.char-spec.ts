@@ -181,13 +181,17 @@ describe('B2B · exportaciones Excel', () => {
       apiRol(s.h, s.base, 'OPERADOR'),
       '/pedidos-b2b/export-xlsx?vista=HISTORICOS',
     );
+    // Cambio deliberado (Excel de Históricos con bloques por negocio/pedido/entrega): las tablas planas de siempre pasan a las hojas
+    // «Datos pedidos» y «Datos entregas» (mismas columnas y filas); «Pedidos» y «Entregas» ahora son hojas con bloques (ver b2b-exportaciones-agrupado).
     expect(todos.libro.worksheets.map((h) => h.name)).toStrictEqual([
       'Pedidos',
       'Entregas',
+      'Datos pedidos',
+      'Datos entregas',
     ]);
     // Entregas no canceladas de TODOS los pedidos: las 3 Entregadas del Completado y las 3 Pendientes del activo (Cafetería
     // Tres); las del cancelado (todas Canceladas) no salen.
-    const entregasHist = filas(todos.libro.getWorksheet('Entregas')!);
+    const entregasHist = filas(todos.libro.getWorksheet('Datos entregas')!);
     expect(
       entregasHist.map((r) => [r['Negocio'], r['Estado de la entrega']]),
     ).toStrictEqual([
@@ -199,7 +203,7 @@ describe('B2B · exportaciones Excel', () => {
       ['Cafetería Tres', 'Pendiente'],
     ]);
     expect(
-      (todos.libro.getWorksheet('Pedidos')!.getRow(1).values as string[]).slice(
+      (todos.libro.getWorksheet('Datos pedidos')!.getRow(1).values as string[]).slice(
         1,
       ),
     ).toStrictEqual([
@@ -221,7 +225,7 @@ describe('B2B · exportaciones Excel', () => {
       'Total',
       'Nota del cliente',
     ]);
-    const f = filas(todos.libro.getWorksheet('Pedidos')!);
+    const f = filas(todos.libro.getWorksheet('Datos pedidos')!);
     const porNegocio = Object.fromEntries(
       f.map((r) => [r['Negocio'] as string, r]),
     );
@@ -539,8 +543,10 @@ describe('B2B · exportaciones Excel', () => {
     await cerrarEntregasB2b(dueno(), a.id);
     await dueno().patch(`/pedidos-b2b/${b.id}/cancelar`).expect(200);
     const { libro } = await descargar(dueno(), '/pedidos-b2b/export-xlsx?vista=HISTORICOS');
-    expect(libro.worksheets.map((h) => h.name)).toStrictEqual(['Pedidos', 'Entregas']);
-    expect(encabezados(libro.getWorksheet('Pedidos')!)).toStrictEqual([
+        // Cambio deliberado (Excel de Históricos con bloques por negocio/pedido/entrega): las tablas planas de siempre pasan a las hojas
+    // «Datos pedidos» y «Datos entregas» (mismas columnas y filas); «Pedidos» y «Entregas» ahora son hojas con bloques (ver b2b-exportaciones-agrupado).
+    expect(libro.worksheets.map((h) => h.name)).toStrictEqual(['Pedidos', 'Entregas', 'Datos pedidos', 'Datos entregas']);
+    expect(encabezados(libro.getWorksheet('Datos pedidos')!)).toStrictEqual([
       'Negocio',
       'Semana (inicio)',
       'Semana (fin)',
@@ -559,7 +565,7 @@ describe('B2B · exportaciones Excel', () => {
       'Nota del cliente',
     ]);
     // «Importe (antes de descuento)» se conserva; no se divide en subtotal/descuento/total como en Pedidos activos.
-    expect(encabezados(libro.getWorksheet('Entregas')!)).toStrictEqual([
+    expect(encabezados(libro.getWorksheet('Datos entregas')!)).toStrictEqual([
       'Negocio',
       'Fecha de entrega',
       'Día',
@@ -586,10 +592,10 @@ describe('B2B · exportaciones Excel', () => {
       .expect(200);
     await dueno().patch(`/pedidos-b2b/${a.id}/cancelar`).expect(200); // queda la tercera (pendiente) cancelada
     const { libro } = await descargar(dueno(), '/pedidos-b2b/export-xlsx?vista=HISTORICOS&cancelado=true');
-    const pedido = filas(libro.getWorksheet('Pedidos')!)[0];
+    const pedido = filas(libro.getWorksheet('Datos pedidos')!)[0];
     expect(pedido['Estado del pedido']).toBe('Cancelado');
     expect(
-      filas(libro.getWorksheet('Entregas')!).map((r) => [r['Negocio'], r['Estado de la entrega']]),
+      filas(libro.getWorksheet('Datos entregas')!).map((r) => [r['Negocio'], r['Estado de la entrega']]),
     ).toStrictEqual([
       ['Abarrotes Uno', 'Entregada'],
       ['Abarrotes Uno', 'No recogida'],

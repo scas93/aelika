@@ -12,6 +12,13 @@ import {
   libroABuffer,
 } from '../common/xlsx';
 import { dinero, fechaLarga } from './resumen-semanal';
+import {
+  BORDE,
+  configurarImpresion,
+  encabezadoDeHoja,
+  FONDO_ENCABEZADO,
+  FONDO_ENTREGA,
+} from '../common/xlsx-estilo';
 
 /**
  * Datos y Excel del resumen semanal que recibe CADA CLIENTE B2B (puro: sin base de datos ni red). El cliente ve solo lo que le
@@ -169,34 +176,6 @@ function agruparEntregas(lineas: LineaEntregaCliente[]): EntregaAgrupada[] {
     e.centavos += centavos(l.monto);
   }
   return [...porId.values()];
-}
-
-const FONDO_ENCABEZADO = 'FFF2F2F2';
-const FONDO_ENTREGA = 'FFE9EEF3';
-const BORDE = { style: 'thin' as const, color: { argb: 'FFBFBFBF' } };
-
-/** Impresión sobria: horizontal, una hoja de ancho, fila de encabezados repetida. */
-function configurarImpresion(hoja: ExcelJS.Worksheet) {
-  hoja.pageSetup = {
-    orientation: 'landscape',
-    paperSize: 9,
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 0,
-    printTitlesRow: '1:1',
-    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
-  };
-}
-
-function encabezadoDeHoja(hoja: ExcelJS.Worksheet) {
-  const fila = hoja.getRow(1);
-  fila.font = { bold: true };
-  fila.alignment = { vertical: 'middle', wrapText: true };
-  fila.height = 22;
-  fila.eachCell((c) => {
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
-    c.border = { bottom: BORDE };
-  });
 }
 
 function hojaPedidos(libro: ExcelJS.Workbook, filas: FilaPedidoExcel[], lineas: LineaEntregaCliente[]) {
