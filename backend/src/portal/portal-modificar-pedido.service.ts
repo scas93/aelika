@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EstadoEntrega, EstadoPedido } from '../../generated/prisma/client';
+import {
+  EstadoEntrega,
+  EstadoPedido,
+  Prisma,
+} from '../../generated/prisma/client';
 import { DiaSemana } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { bloquearClienteB2b } from '../pedidos-b2b/pedidos-b2b-crear';
@@ -13,6 +17,7 @@ import {
   recalcularTotalesB2b,
 } from '../pedidos-b2b/pedidos-b2b-estados';
 import { sincronizarOrdenB2b } from '../pedidos-b2b/pedidos-b2b-orden';
+import { armarReferencia } from '../pedidos-b2b/pedidos-b2b-cambios';
 import {
   resolverItems,
   resolverSemanaYDia,
@@ -424,6 +429,20 @@ export class PortalModificarPedidoService {
               : 'Alguno de los productos no existe en este negocio',
           );
         }
+      }
+
+      // «Cambios desde la última revisión»: la primera edición que prende la marca guarda cómo estaba el pedido justo antes
+      // (bajo el mismo candado, antes de escribir nada; si algo falla más abajo, la transacción la deshace). Mientras la marca
+      // siga prendida NO se reemplaza, para que los cambios se acumulen contra la misma referencia.
+      if (orden.modificadoPorClienteAt === null) {
+        const snapshot = armarReferencia(
+          orden,
+        ) as unknown as Prisma.InputJsonObject;
+        await tx.pedidoB2bReferencia.upsert({
+          where: { orderId: id },
+          create: { tenantId: t.id, orderId: id, snapshot },
+          update: { snapshot, createdAt: ahora },
+        });
       }
 
       let totalPiezas = detalle.totalPiezas;

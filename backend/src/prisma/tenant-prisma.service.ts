@@ -106,6 +106,9 @@ export class TenantPrismaService {
           diaSinEntrega: {
             $allOperations: tenantScopedQuery(tenantId),
           },
+          pedidoB2bReferencia: {
+            $allOperations: tenantScopedQuery(tenantId),
+          },
           modifierGroup: {
             $allOperations: tenantScopedQuery(tenantId),
           },

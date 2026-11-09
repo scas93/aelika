@@ -189,6 +189,7 @@ model Tenant {
   entregaItems              EntregaItem[]
   puntosEnvio               PuntoEnvio[]
   diasSinEntrega            DiaSinEntrega[]
+  pedidosB2bReferencias     PedidoB2bReferencia[]
   modifierGroups            ModifierGroup[]
   modifierOptions           ModifierOption[]
   orderItemModifiers        OrderItemModifier[]
@@ -650,6 +651,7 @@ model Order {
   detalleReserva DetalleReserva?
   reglaEnvioLogs ReglaEnvioLog[]
   avisosInternosEnvios AvisoInternoEnvio[]
+  referenciaB2b PedidoB2bReferencia?
   entregas   Entrega[]
   items      OrderItem[]
   payments   Payment[]
@@ -743,6 +745,24 @@ model DetalleB2B {
   @@index([tenantId, semanaInicio])
   @@index([codigoDescuentoId])
   @@map("detalles_b2b")
+}
+
+// Referencia para «Cambios desde la última revisión» (solo B2B, solo panel): copia del pedido justo antes de la primera
+// modificación del cliente que prende `Order.modificadoPorClienteAt`. Se conserva mientras la marca siga prendida y se borra
+// al apagarla (confirmar, «Marcar pagado» que confirma, «Marcar como revisado»). Nunca sale en el portal, Excel, resúmenes ni avisos.
+model PedidoB2bReferencia {
+  id        String   @id @default(uuid())
+  tenantId  String
+  orderId   String   @unique
+  // { total, notaCliente, entregas: [{ fecha: 'YYYY-MM-DD', lineas: [{ productId, nombreProducto, cantidad }] }] }
+  snapshot  Json
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("pedido_b2b_referencias")
 }
 
 // Lo exclusivo de una reserva de hotel (Order.tipo = RESERVA), 1:1 con Order. Aelika es un espejo de solo lectura del PMS:
