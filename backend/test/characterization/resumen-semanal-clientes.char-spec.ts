@@ -110,8 +110,11 @@ describe('Resumen semanal por cliente · envío programado (mayoreo)', () => {
     // CAMBIO A PROPÓSITO (contenido del Excel al cliente): sin columnas de estado ni conteos por estado; Entregas una fila por producto.
     expect(encabezados('Pedidos')).not.toMatch(/Estado|Entregadas|No recogidas|Canceladas|Atrasada/i);
     expect(encabezados('Pedidos')).toContain('Entregas totales');
-    expect(encabezados('Entregas')).toBe('|Fecha de entrega|Día|Producto|Unidades|Monto|Nota de la entrega');
+    expect(encabezados('Entregas')).toBe('|Entrega / Producto|Unidades|Monto');
     expect(encabezados('Entregas')).not.toMatch(/Estado/i);
+    // CAMBIO A PROPÓSITO (formato del Excel al cliente): «Pedidos» suma la columna «Detalle de entregas» y «Entregas» se organiza por
+    // entrega (encabezado con día y fecha, piezas e importe; debajo sus productos) con un total al final.
+    expect(encabezados('Pedidos')).toContain('Detalle de entregas');
     // CAMBIO A PROPÓSITO (Excel al cliente sin folio): ninguna hoja tiene columna Folio y el folio no aparece en ninguna celda.
     expect(encabezados('Pedidos')).not.toMatch(/Folio/i);
     expect(encabezados('Entregas')).not.toMatch(/Folio/i);

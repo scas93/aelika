@@ -2,10 +2,9 @@ import { fechaEnMexico } from '../common/horario';
 import { sumarDiasISO } from '../pedidos-b2b/pedidos-b2b-logica';
 import { horaCdmx } from '../notificaciones-reglas/reserva-trigger';
 import type { FilaPedidoExcel } from '../pedidos-b2b/pedidos-b2b-excel';
-import type { LineaEntregaCliente } from './resumen-semanal-cliente-datos';
+import { diaLargo, type LineaEntregaCliente } from './resumen-semanal-cliente-datos';
 import {
   dinero,
-  fechaLarga,
   HORA_ENVIO,
   rangoSemana,
   type CorreoResumen,
@@ -36,16 +35,6 @@ export function inicioVentanaDeEnvio(semana: SemanaResumen): Date {
   return new Date(Date.UTC(a, m - 1, d, HORA_ENVIO + 6, 0));
 }
 
-const DIAS = [
-  'domingo',
-  'lunes',
-  'martes',
-  'miércoles',
-  'jueves',
-  'viernes',
-  'sábado',
-];
-
 const esc = (s: string) =>
   s
     .replace(/&/g, '&amp;')
@@ -58,12 +47,6 @@ const unaLinea = (s: string) =>
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-
-/** "2026-10-27" (fecha UTC a medianoche) → "martes 27 de octubre". */
-function diaLargo(fecha: Date): string {
-  const iso = fecha.toISOString().slice(0, 10);
-  return `${DIAS[fecha.getUTCDay()]} ${fechaLarga(iso)}`;
-}
 
 const piezas = (n: number) => `${n} ${n === 1 ? 'pieza' : 'piezas'}`;
 const pesos = (n: number) => dinero(Math.round((n + Number.EPSILON) * 100));
