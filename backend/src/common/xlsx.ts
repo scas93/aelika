@@ -10,7 +10,7 @@ export interface ColumnaXlsx<T> {
   valor: (fila: T) => string | number | Date | null | undefined;
 }
 
-const FORMATO: Record<Exclude<TipoColumnaXlsx, 'texto'>, string> = {
+export const FORMATO_XLSX: Record<Exclude<TipoColumnaXlsx, 'texto'>, string> = {
   entero: '#,##0',
   decimal: '0.##',
   moneda: '"$"#,##0.00',
@@ -27,7 +27,7 @@ export function agregarHoja<T>(libro: ExcelJS.Workbook, nombre: string, columnas
   for (const fila of filas) {
     const row = hoja.addRow(columnas.map((c) => c.valor(fila) ?? null));
     columnas.forEach((c, i) => {
-      if (c.tipo !== 'texto') row.getCell(i + 1).numFmt = FORMATO[c.tipo];
+      if (c.tipo !== 'texto') row.getCell(i + 1).numFmt = FORMATO_XLSX[c.tipo];
     });
   }
   if (columnas.length > 0) {

@@ -4,7 +4,9 @@ import {
 } from './resumen-semanal-cliente';
 import { calcularTotales } from './resumen-semanal';
 import type { FilaPedidoExcel } from '../pedidos-b2b/pedidos-b2b-excel';
+import ExcelJS from 'exceljs';
 import {
+  libroResumenCliente,
   repartirTotalEnLineas,
   type LineaEntregaCliente,
 } from './resumen-semanal-cliente-datos';
@@ -185,5 +187,76 @@ describe('resolverResumenSemanal (ficha del cliente)', () => {
     expect(() =>
       resolverResumenSemanal(apagado, { resumenSemanalActivo: true, resumenSemanalCorreo: null }),
     ).toThrow('Captura el correo');
+  });
+});
+
+// CAMBIO A PROPÓSITO (formato del Excel al cliente): hoja «Pedidos» con detalle de entregas por pedido y hoja «Entregas» organizada
+// por entrega (encabezado con día y fecha, piezas e importe, nota una sola vez, productos debajo y total al final).
+describe('libroResumenCliente', () => {
+  const leer = async (filas: FilaPedidoExcel[], lineas: LineaEntregaCliente[]) => {
+    const libro = new ExcelJS.Workbook();
+    await libro.xlsx.load((await libroResumenCliente(filas, lineas)) as any);
+    return libro;
+  };
+  const texto = (h: ExcelJS.Worksheet) => {
+    const r: string[] = [];
+    h.eachRow({ includeEmpty: true }, (row) =>
+      r.push(
+        [1, 2, 3]
+          .map((c) => {
+            const cell = row.getCell(c);
+            return cell.isMerged && cell.master !== cell ? '' : String(cell.value ?? '');
+          })
+          .join('|'),
+      ),
+    );
+    return r;
+  };
+
+  it('Pedidos: detalle de entregas (una por línea, por fecha) y Total; cancelado dice «Cancelado» en Total', async () => {
+    const lineas = [
+      linea({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), unidades: 3, monto: 50 }),
+      linea({ entregaId: 'e1', unidades: 7, monto: 58 }),
+    ];
+    const libro = await leer([fila(), fila({ folio: 'B-2', cancelado: true, total: 50 })], lineas);
+    const h = libro.getWorksheet('Pedidos')!;
+    expect((h.getRow(1).values as string[]).slice(1)).toEqual([
+      'Negocio', 'Semana (inicio)', 'Semana (fin)', 'Fecha de creación', 'Entregas totales', 'Detalle de entregas', 'Total', 'Nota del cliente',
+    ]);
+    expect(h.getRow(2).getCell(6).value).toBe('martes 27 de octubre · 7 piezas · $58.00\njueves 29 de octubre · 3 piezas · $50.00');
+    expect(h.getRow(3).getCell(7).value).toBe('Cancelado');
+    expect(h.getRow(3).getCell(6).value).toBeNull();
+    expect(h.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+    expect(h.pageSetup.orientation).toBe('landscape');
+  });
+
+  it('Entregas: encabezado por entrega con piezas e importe, nota una sola vez, productos debajo y total al final', async () => {
+    const lineas = [
+      linea({ entregaId: 'e1', producto: 'Pan', unidades: 2, monto: 20, nota: 'Dejar en bodega' }),
+      linea({ entregaId: 'e1', producto: 'Concha', unidades: 5, monto: 40, nota: 'Dejar en bodega' }),
+      linea({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), producto: 'Bolillo', unidades: 3, monto: 10 }),
+    ];
+    const libro = await leer([fila()], lineas);
+    const h = libro.getWorksheet('Entregas')!;
+    expect(texto(h)).toEqual([
+      'Entrega / Producto|Unidades|Monto',
+      'martes 27 de octubre|7|60',
+      'Nota: Dejar en bodega||',
+      'Concha|5|40',
+      'Pan|2|20',
+      '||',
+      'jueves 29 de octubre|3|10',
+      'Bolillo|3|10',
+      '||',
+      'Total del pedido|10|70',
+    ]);
+    expect(texto(h).join('\n').match(/Dejar en bodega/g)).toHaveLength(1);
+  });
+
+  it('ni folio ni «Aelika» ni estados en ninguna celda ni propiedad', async () => {
+    const libro = await leer([fila()], [linea()]);
+    const todo = [libro.creator, libro.lastModifiedBy, libro.company, libro.title, ...libro.worksheets.map((w) => w.name)];
+    libro.eachSheet((w) => w.eachRow((r) => r.eachCell((c) => todo.push(String(c.value ?? '')))));
+    expect(todo.join('\n')).not.toMatch(/aelika|atrasada|B-1/i);
   });
 });

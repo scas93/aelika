@@ -6,12 +6,12 @@ import {
 } from '../pedidos-b2b/pedidos-b2b-export';
 import type { FilaPedidoExcel } from '../pedidos-b2b/pedidos-b2b-excel';
 import {
-  agregarHoja,
-  type ColumnaXlsx,
   fechaExcel,
   fechaHoraExcelMexico,
+  FORMATO_XLSX,
   libroABuffer,
 } from '../common/xlsx';
+import { dinero, fechaLarga } from './resumen-semanal';
 
 /**
  * Datos y Excel del resumen semanal que recibe CADA CLIENTE B2B (puro: sin base de datos ni red). El cliente ve solo lo que le
@@ -121,68 +121,188 @@ export function datosResumenCliente(pedidos: PedidoResumenCliente[]): {
 
 // ---------- Excel ----------
 
-const DIA_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
-const COL_PEDIDOS: ColumnaXlsx<FilaPedidoExcel>[] = [
-  { encabezado: 'Negocio', tipo: 'texto', ancho: 32, valor: (f) => f.negocioNombre },
-  {
-    encabezado: 'Semana (inicio)',
-    tipo: 'fecha',
-    ancho: 16,
-    valor: (f) => fechaExcel(f.semanaInicio),
-  },
-  {
-    encabezado: 'Semana (fin)',
-    tipo: 'fecha',
-    ancho: 14,
-    valor: (f) => {
-      const fin = fechaExcel(f.semanaInicio);
-      fin.setUTCDate(fin.getUTCDate() + 6);
-      return fin;
-    },
-  },
-  {
-    encabezado: 'Fecha de creación',
-    tipo: 'fechaHora',
-    ancho: 20,
-    valor: (f) => fechaHoraExcelMexico(f.createdAt),
-  },
-  {
-    encabezado: 'Entregas totales',
-    tipo: 'entero',
-    ancho: 16,
-    valor: (f) => f.estadosEntregas.length,
-  },
-  {
-    encabezado: 'Total',
-    tipo: 'moneda',
-    ancho: 14,
-    // Cancelado: en lugar del monto va el texto «Cancelado» (sin columna de estado; una suma de la columna solo toma lo vigente).
-    valor: (f) => (f.cancelado ? 'Cancelado' : f.total),
-  },
-  { encabezado: 'Nota del cliente', tipo: 'texto', ancho: 40, valor: (f) => f.notaCliente },
-];
+/** "2026-10-27" (fecha UTC a medianoche) → "martes 27 de octubre". */
+export function diaLargo(fecha: Date): string {
+  return `${DIAS[fecha.getUTCDay()]} ${fechaLarga(fecha.toISOString().slice(0, 10))}`;
+}
 
-const COL_ENTREGAS: ColumnaXlsx<LineaEntregaCliente>[] = [
-  { encabezado: 'Fecha de entrega', tipo: 'fecha', ancho: 17, valor: (l) => l.fecha },
-  { encabezado: 'Día', tipo: 'texto', ancho: 8, valor: (l) => DIA_CORTO[l.fecha.getUTCDay()] },
-  { encabezado: 'Producto', tipo: 'texto', ancho: 36, valor: (l) => l.producto },
-  { encabezado: 'Unidades', tipo: 'entero', ancho: 11, valor: (l) => l.unidades },
-  { encabezado: 'Monto', tipo: 'moneda', ancho: 14, valor: (l) => l.monto },
-  { encabezado: 'Nota de la entrega', tipo: 'texto', ancho: 40, valor: (l) => l.nota },
-];
+const piezas = (n: number) => `${n} ${n === 1 ? 'pieza' : 'piezas'}`;
+const centavos = (n: number) => Math.round(n * 100);
+
+/** Una entrega con sus productos y sus totales (en centavos). */
+interface EntregaAgrupada {
+  entregaId: string;
+  folio: string;
+  fecha: Date;
+  nota: string | null;
+  lineas: LineaEntregaCliente[];
+  piezas: number;
+  centavos: number;
+}
 
 /**
  * Sin columna de folio, el orden es lo que agrupa: fecha de entrega, luego pedido (por folio, solo para ordenar; no se muestra),
- * luego entrega del mismo pedido y producto (por nombre).
+ * luego la entrega y el producto (por nombre).
  */
 function ordenarLineas(lineas: LineaEntregaCliente[]): LineaEntregaCliente[] {
   return [...lineas].sort(
     (a, b) =>
       a.fecha.getTime() - b.fecha.getTime() ||
       a.folio.localeCompare(b.folio, 'es', { numeric: true }) ||
+      a.entregaId.localeCompare(b.entregaId) ||
       a.producto.localeCompare(b.producto, 'es'),
   );
+}
+
+function agruparEntregas(lineas: LineaEntregaCliente[]): EntregaAgrupada[] {
+  const porId = new Map<string, EntregaAgrupada>();
+  for (const l of ordenarLineas(lineas)) {
+    let e = porId.get(l.entregaId);
+    if (!e) {
+      e = { entregaId: l.entregaId, folio: l.folio, fecha: l.fecha, nota: l.nota, lineas: [], piezas: 0, centavos: 0 };
+      porId.set(l.entregaId, e);
+    }
+    e.lineas.push(l);
+    e.piezas += l.unidades;
+    e.centavos += centavos(l.monto);
+  }
+  return [...porId.values()];
+}
+
+const FONDO_ENCABEZADO = 'FFF2F2F2';
+const FONDO_ENTREGA = 'FFE9EEF3';
+const BORDE = { style: 'thin' as const, color: { argb: 'FFBFBFBF' } };
+
+/** Impresión sobria: horizontal, una hoja de ancho, fila de encabezados repetida. */
+function configurarImpresion(hoja: ExcelJS.Worksheet) {
+  hoja.pageSetup = {
+    orientation: 'landscape',
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    printTitlesRow: '1:1',
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+  };
+}
+
+function encabezadoDeHoja(hoja: ExcelJS.Worksheet) {
+  const fila = hoja.getRow(1);
+  fila.font = { bold: true };
+  fila.alignment = { vertical: 'middle', wrapText: true };
+  fila.height = 22;
+  fila.eachCell((c) => {
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
+    c.border = { bottom: BORDE };
+  });
+}
+
+function hojaPedidos(libro: ExcelJS.Workbook, filas: FilaPedidoExcel[], lineas: LineaEntregaCliente[]) {
+  const hoja = libro.addWorksheet('Pedidos', { views: [{ state: 'frozen', ySplit: 1 }] });
+  hoja.columns = [
+    { header: 'Negocio', width: 28 },
+    { header: 'Semana (inicio)', width: 15 },
+    { header: 'Semana (fin)', width: 13 },
+    { header: 'Fecha de creación', width: 19 },
+    { header: 'Entregas totales', width: 11 },
+    { header: 'Detalle de entregas', width: 50 },
+    { header: 'Total', width: 14 },
+    { header: 'Nota del cliente', width: 36 },
+  ];
+  encabezadoDeHoja(hoja);
+  for (const f of filas) {
+    // Detalle: una entrega por línea (día y fecha, piezas e importe), ordenado por fecha. Pedido cancelado: sin detalle.
+    const detalle = f.cancelado
+      ? []
+      : agruparEntregas(lineas.filter((l) => l.folio === f.folio)).map(
+          (e) => `${diaLargo(e.fecha)} · ${piezas(e.piezas)} · ${dinero(e.centavos)}`,
+        );
+    const fin = fechaExcel(f.semanaInicio);
+    fin.setUTCDate(fin.getUTCDate() + 6);
+    const fila = hoja.addRow([
+      f.negocioNombre,
+      fechaExcel(f.semanaInicio),
+      fin,
+      fechaHoraExcelMexico(f.createdAt),
+      f.estadosEntregas.length,
+      detalle.join('\n') || null,
+      // Cancelado: en lugar del monto va el texto «Cancelado» (sin columna de estado).
+      f.cancelado ? 'Cancelado' : f.total,
+      f.notaCliente,
+    ]);
+    fila.getCell(2).numFmt = FORMATO_XLSX.fecha;
+    fila.getCell(3).numFmt = FORMATO_XLSX.fecha;
+    fila.getCell(4).numFmt = FORMATO_XLSX.fechaHora;
+    fila.getCell(5).numFmt = FORMATO_XLSX.entero;
+    fila.getCell(7).numFmt = FORMATO_XLSX.moneda;
+    fila.alignment = { vertical: 'top', wrapText: true };
+    fila.getCell(7).alignment = { vertical: 'top', horizontal: 'right' };
+    const lineasTexto = Math.max(detalle.length, 1);
+    fila.height = Math.max(18, 15 * lineasTexto + 3);
+  }
+  configurarImpresion(hoja);
+}
+
+function hojaEntregas(libro: ExcelJS.Workbook, lineas: LineaEntregaCliente[]) {
+  const hoja = libro.addWorksheet('Entregas', { views: [{ state: 'frozen', ySplit: 1 }] });
+  hoja.columns = [
+    { header: 'Entrega / Producto', width: 46 },
+    { header: 'Unidades', width: 12 },
+    { header: 'Monto', width: 16 },
+  ];
+  encabezadoDeHoja(hoja);
+  hoja.getCell('B1').alignment = { horizontal: 'right', vertical: 'middle' };
+  hoja.getCell('C1').alignment = { horizontal: 'right', vertical: 'middle' };
+
+  const entregas = agruparEntregas(lineas);
+  let totalPiezas = 0;
+  let totalCent = 0;
+  const pedidos = new Set<string>();
+  entregas.forEach((e, n) => {
+    if (n > 0) hoja.addRow([]); // separación clara entre entregas
+    // Encabezado de la entrega: día y fecha, total de piezas y total de importe.
+    const enc = hoja.addRow([diaLargo(e.fecha), e.piezas, e.centavos / 100]);
+    enc.font = { bold: true };
+    enc.getCell(2).numFmt = FORMATO_XLSX.entero;
+    enc.getCell(3).numFmt = FORMATO_XLSX.moneda;
+    enc.eachCell({ includeEmpty: true }, (c, col) => {
+      if (col > 3) return;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENTREGA } };
+      c.border = { top: BORDE, bottom: BORDE };
+    });
+    // La nota de la entrega, una sola vez, en el encabezado (fila propia combinada, con ajuste de línea).
+    if (e.nota && e.nota.trim()) {
+      const nota = hoja.addRow([`Nota: ${e.nota.trim()}`]);
+      hoja.mergeCells(nota.number, 1, nota.number, 3);
+      nota.alignment = { vertical: 'top', wrapText: true };
+      nota.font = { italic: true };
+      nota.height = Math.max(18, 15 * Math.ceil(e.nota.trim().length / 70) + 3);
+    }
+    for (const l of e.lineas) {
+      const r = hoja.addRow([l.producto, l.unidades, l.monto]);
+      r.getCell(1).alignment = { indent: 1, wrapText: true, vertical: 'top' };
+      r.getCell(2).numFmt = FORMATO_XLSX.entero;
+      r.getCell(3).numFmt = FORMATO_XLSX.moneda;
+    }
+    totalPiezas += e.piezas;
+    totalCent += e.centavos;
+    pedidos.add(e.folio);
+  });
+  if (entregas.length > 0) {
+    hoja.addRow([]);
+    const tot = hoja.addRow([pedidos.size > 1 ? 'Total de la semana' : 'Total del pedido', totalPiezas, totalCent / 100]);
+    tot.font = { bold: true };
+    tot.getCell(2).numFmt = FORMATO_XLSX.entero;
+    tot.getCell(3).numFmt = FORMATO_XLSX.moneda;
+    tot.eachCell({ includeEmpty: true }, (c, col) => {
+      if (col > 3) return;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
+      c.border = { top: { style: 'medium', color: { argb: 'FF7F7F7F' } }, bottom: BORDE };
+    });
+  }
+  configurarImpresion(hoja);
 }
 
 export async function libroResumenCliente(
@@ -190,7 +310,7 @@ export async function libroResumenCliente(
   lineas: LineaEntregaCliente[],
 ): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
-  agregarHoja(libro, 'Pedidos', COL_PEDIDOS, filas);
-  agregarHoja(libro, 'Entregas', COL_ENTREGAS, ordenarLineas(lineas));
+  hojaPedidos(libro, filas, lineas);
+  hojaEntregas(libro, lineas);
   return libroABuffer(libro);
 }
