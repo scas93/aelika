@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -36,4 +37,15 @@ export class UpdateClienteB2bDto {
   @ValidateIf((_, valor) => valor !== undefined)
   @IsEnum(PedidoB2bModoCobro)
   modalidadPago?: PedidoB2bModoCobro;
+
+  // Resumen semanal por correo (dato PROPIO del cliente; no se prellena ni se toma de Cliente.correo). El interruptor solo puede
+  // encenderse con correo capturado; `null` o vacío en el correo lo borra (y apaga el interruptor).
+  @IsOptional()
+  @IsBoolean()
+  resumenSemanalActivo?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(254)
+  resumenSemanalCorreo?: string | null;
 }

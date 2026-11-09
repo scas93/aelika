@@ -14,6 +14,7 @@ import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 import NotificacionesCanalesSection from "./canales-section";
 import NotificacionesEventosSection from "./eventos-section";
+import ResumenClientesCard from "./resumen-clientes-card";
 
 export default function NotificacionesAjustesPage() {
   const { user, token } = useSession();
@@ -81,6 +82,9 @@ export default function NotificacionesAjustesPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       <NotificacionesCanalesSection token={token} canales={canales} esMayoreo={esMayoreo} tieneWebhook={tieneWebhook} onChange={load} />
       <NotificacionesEventosSection token={token} canales={canales} eventos={eventos} esMayoreo={esMayoreo} onChange={load} />
+      {esMayoreo && (
+        <ResumenClientesCard token={token} nombreNegocio={user.tenant.nombre} canales={canales} eventos={eventos} onChange={load} />
+      )}
     </div>
   );
 }

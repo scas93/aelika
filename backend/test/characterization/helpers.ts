@@ -42,6 +42,7 @@ export function auth(h: Harness, token: string) {
   return {
     get: (url: string) => request(s).get(url).set('Authorization', `Bearer ${token}`),
     post: (url: string, body?: object) => request(s).post(url).set('Authorization', `Bearer ${token}`).send(body),
+    put: (url: string) => request(s).put(url).set('Authorization', `Bearer ${token}`),
     patch: (url: string) => request(s).patch(url).set('Authorization', `Bearer ${token}`),
     delete: (url: string) => request(s).delete(url).set('Authorization', `Bearer ${token}`),
   };

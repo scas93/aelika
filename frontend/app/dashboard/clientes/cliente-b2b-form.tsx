@@ -6,6 +6,7 @@ import { ApiError, createClienteB2b, fetchClientesB2bConfig, type ClienteB2bDeta
 import { modalidadInicial } from "@/lib/modalidades-cobro";
 import Modal from "../_components/Modal";
 import Button from "../_components/Button";
+import ToggleSwitch from "../_components/ToggleSwitch";
 import SelectorModalidadPago from "./selector-modalidad-pago";
 
 interface TelefonoForm {
@@ -47,6 +48,8 @@ export default function ClienteB2bAltaModal({
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
   const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
+  const [resumenActivo, setResumenActivo] = useState(false);
+  const [resumenCorreo, setResumenCorreo] = useState("");
   const [telefonos, setTelefonos] = useState<TelefonoForm[]>([{ key: 1, telefono: "", nombreContacto: "" }]);
   const [principal, setPrincipal] = useState(1);
   const [siguienteKey, setSiguienteKey] = useState(2);
@@ -61,6 +64,8 @@ export default function ClienteB2bAltaModal({
     setDireccion("");
     setDescuento("");
     setModalidad("");
+    setResumenActivo(false);
+    setResumenCorreo("");
     setTelefonos([{ key: 1, telefono: "", nombreContacto: "" }]);
     setPrincipal(1);
     setSiguienteKey(2);
@@ -125,6 +130,7 @@ export default function ClienteB2bAltaModal({
         direccion: direccion.trim(),
         descuentoPorcentaje: descuentoNum && descuentoNum > 0 ? descuentoNum : undefined,
         modalidadPago: modalidad as ModalidadPagoB2b,
+        ...(resumenCorreo.trim() ? { resumenSemanalCorreo: resumenCorreo.trim(), resumenSemanalActivo: resumenActivo } : {}),
         telefonos: telefonosLlenos.map((t) => ({
           telefono: t.telefono.trim(),
           principal: t.key === principalKey,
@@ -247,6 +253,37 @@ export default function ClienteB2bAltaModal({
           </div>
           {errores.telefonos && <p className="text-xs text-red-600">{errores.telefonos}</p>}
         </fieldset>
+
+        <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-admin-ink">Enviar resumen semanal (opcional)</span>
+            <ToggleSwitch
+              checked={resumenActivo}
+              onChange={() => {
+                if (!resumenActivo && !resumenCorreo.trim()) return;
+                setResumenActivo((v) => !v);
+              }}
+              label={resumenActivo ? "Apagar el resumen semanal de este cliente" : "Encender el resumen semanal de este cliente"}
+            />
+          </div>
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+            Correo del resumen
+            <input
+              type="email"
+              value={resumenCorreo}
+              onChange={(e) => {
+                setResumenCorreo(e.target.value);
+                if (!e.target.value.trim()) setResumenActivo(false);
+              }}
+              className="admin-input"
+              placeholder="compras@cliente.com"
+            />
+          </label>
+          <p className="text-xs font-normal text-admin-ink-soft">
+            Cada lunes a las 10:00 recibe en ese correo sus pedidos de la semana anterior y sus entregas, con su Excel. Solo se envía si el
+            negocio tiene encendido el «Resumen semanal para clientes» en Ajustes → Notificaciones.
+          </p>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>

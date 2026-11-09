@@ -13,6 +13,10 @@ export interface NotificacionMensaje {
 export interface NotificacionEnvioResultado {
   exito: boolean;
   error?: string;
+  /** Solo CorreoProvider.enviarConAdjuntos: Resend rechazó por exceso de tasa (429). Se puede reintentar sin perder el correo. */
+  limitadoPorTasa?: boolean;
+  /** Segundos que pidió esperar Resend (encabezado retry-after), si los mandó. */
+  reintentarEnSeg?: number;
 }
 
 /**

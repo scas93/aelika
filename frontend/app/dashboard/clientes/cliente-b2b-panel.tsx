@@ -24,6 +24,7 @@ import Modal from "../_components/Modal";
 import Button from "../_components/Button";
 import Badge from "../_components/Badge";
 import Aviso from "../_components/Aviso";
+import ToggleSwitch from "../_components/ToggleSwitch";
 import HistorialPedidosCliente from "./historial-pedidos-cliente";
 
 const textoDescuento = (d: number | null) => (d === null ? "" : String(d));
@@ -48,6 +49,8 @@ export default function ClienteB2bPanel({
   const [descuento, setDescuento] = useState("");
   const [modalidad, setModalidad] = useState<"" | ModalidadPagoB2b>("");
   const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
+  const [resumenActivo, setResumenActivo] = useState(false);
+  const [resumenCorreo, setResumenCorreo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +80,8 @@ export default function ClienteB2bPanel({
     setDireccion(c.direccion ?? "");
     setDescuento(textoDescuento(c.descuentoPorcentaje));
     setModalidad(c.modalidadPago ?? "");
+    setResumenActivo(c.resumenSemanalActivo);
+    setResumenCorreo(c.resumenSemanalCorreo ?? "");
   }
 
   useEffect(() => {
@@ -112,7 +117,9 @@ export default function ClienteB2bPanel({
     (nombre.trim() !== cliente.nombre ||
       direccion.trim() !== (cliente.direccion ?? "") ||
       descuentoCambio ||
-      modalidad !== (cliente.modalidadPago ?? ""));
+      modalidad !== (cliente.modalidadPago ?? "") ||
+      resumenActivo !== cliente.resumenSemanalActivo ||
+      resumenCorreo.trim() !== (cliente.resumenSemanalCorreo ?? ""));
   const puedeGuardar = hayCambios && nombre.trim().length >= 2 && direccion.trim().length >= 3 && descuentoValido(descuentoNum) && !guardando;
 
   async function handleGuardar() {
@@ -127,6 +134,9 @@ export default function ClienteB2bPanel({
         descuentoPorcentaje: descuentoNum && descuentoNum > 0 ? descuentoNum : null,
         // Solo se manda si hay una elegida (la modalidad no se puede borrar).
         ...(modalidad ? { modalidadPago: modalidad } : {}),
+        // Sin correo el envío queda apagado (el servidor lo exige).
+        resumenSemanalCorreo: resumenCorreo.trim() || null,
+        resumenSemanalActivo: resumenCorreo.trim() ? resumenActivo : false,
       });
       aplicar(c);
       setGuardado(true);
@@ -244,6 +254,39 @@ export default function ClienteB2bPanel({
               <Aviso tono="ambar">{AVISO_MODALIDAD_INACTIVA}. Elige otra modalidad arriba para cambiarla.</Aviso>
             )}
             {descuentoCambio && <p className="text-xs font-semibold text-amber-800">No afecta pedidos ya creados.</p>}
+
+            <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-admin-ink">Enviar resumen semanal</span>
+                <ToggleSwitch
+                  checked={resumenActivo}
+                  onChange={() => {
+                    // Solo puede encenderse con correo capturado; apagar nunca se bloquea.
+                    if (!resumenActivo && !resumenCorreo.trim()) return;
+                    setResumenActivo((v) => !v);
+                  }}
+                  label={resumenActivo ? "Apagar el resumen semanal de este cliente" : "Encender el resumen semanal de este cliente"}
+                />
+              </div>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-admin-ink">
+                Correo del resumen
+                <input
+                  type="email"
+                  value={resumenCorreo}
+                  onChange={(e) => {
+                    setResumenCorreo(e.target.value);
+                    if (!e.target.value.trim()) setResumenActivo(false);
+                  }}
+                  className="admin-input"
+                  placeholder="compras@cliente.com"
+                />
+              </label>
+              <p className="text-xs font-normal text-admin-ink-soft">
+                Cada lunes a las 10:00 este cliente recibe en ese correo sus pedidos de la semana anterior y sus entregas, con su Excel y sin
+                información de pago. Si no tuvo pedidos esa semana, no recibe nada. Es un correo propio, distinto del que pudo quedar en sus
+                pedidos. Si lo enciendes después de las 10:00 del lunes, el primer envío es el lunes siguiente.
+              </p>
+            </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
             {guardado && !hayCambios && <p className="text-sm text-admin-green-dark">Cambios guardados.</p>}

@@ -13,7 +13,7 @@ Este archivo es el índice: solo lo que se necesita en casi cualquier tarea. El 
 | Mayoreo B2B: pedidos con entregas, clientes, Entregas del día, Excel, Adopción | Operativo | docs/diseno-operacion.md |
 | Portal del cliente B2B `/mayoreo` (acceso por WhatsApp, crear/ver/modificar pedido) | Operativo | docs/diseno-operacion.md |
 | Hotel: reservas desde Amenitiz y reglas automáticas | Operativo | docs/hoteles-reservas.md |
-| Notificaciones: canales, motor de reglas, avisos internos, bot-config | Operativo | docs/notificaciones.md |
+| Notificaciones: canales, motor de reglas, avisos internos, bot-config, resumen semanal por correo (mayoreo: al negocio y a cada cliente B2B) | Operativo | docs/notificaciones.md |
 | Lealtad (tarjeta de sellos + pase de wallet) | Operativo | docs/lealtad.md |
 | Aelika Scan Lite | Existe; producto sin definir | docs/architecture.md |
 | **No construido:** configurador de bot y OAuth de canales (Meta), resolución de tenant por canal (`CHANNEL_CONNECTION`), cobro de la suscripción a los negocios, impresión automática en red, Dashboard "mejorado" | — | docs/historial.md, docs/aelika-roadmap-maestro.md |

@@ -12,7 +12,7 @@ Fuente de verdad: `backend/prisma/schema.prisma` (34 modelos, 68 migraciones en 
 | Pedidos B2B legados | `PedidoB2b`, `PedidoB2bItem`, `PedidoB2bItemDia`, `PedidoB2bCodigoDescuento` |
 | Clientes | `Cliente`, `ClienteTelefono` |
 | Lealtad | `LoyaltyCard`, `LoyaltyVisit`, `LoyaltyRedemption` |
-| Notificaciones | `NotificacionCanalConfig`, `NotificacionEventoConfig`, `Regla`, `ReglaClienteEstado`, `ReglaEnvioLog`, `AvisoInternoEnvio` |
+| Notificaciones | `NotificacionCanalConfig`, `NotificacionEventoConfig`, `Regla`, `ReglaClienteEstado`, `ReglaEnvioLog`, `AvisoInternoEnvio`, `ResumenSemanalEnvio` |
 | Portal B2B | `SesionPortal` (no es tabla de tenant) |
 
 Entidades planeadas que **aún no tienen modelo**: `CHANNEL_CONNECTION` (canal + `external_account_id` único, para resolver el tenant desde WhatsApp/Instagram/Facebook) y `SUBSCRIPTION` (lo que el negocio paga a Aelika). El documento de planeación tiene el ERD completo original (sección 4).
@@ -99,7 +99,7 @@ Un pedido B2B es `Order` (`tipo = B2B`) + `DetalleB2B` + `OrderItem` (`cantidad`
 
 ## Notificaciones y portal
 
-`Regla`, `ReglaClienteEstado`, `ReglaEnvioLog` (con `orderId` opcional, FK `SET NULL`), `NotificacionCanalConfig`, `NotificacionEventoConfig`, `AvisoInternoEnvio`: ver [notificaciones.md](notificaciones.md). `SesionPortal`: token opaco guardado como hash; ver diseno-operacion.md.
+`Regla`, `ReglaClienteEstado`, `ReglaEnvioLog` (con `orderId` opcional, FK `SET NULL`), `NotificacionCanalConfig`, `NotificacionEventoConfig`, `AvisoInternoEnvio`, `ResumenSemanalEnvio` (resumen semanal por correo, único `(tenantId, semanaProgramada)`), `ResumenSemanalClienteEnvio` (marca por cliente B2B y semana, único `(clienteId, semanaInicio)`; `Cliente.resumenSemanalActivo/Correo/ActivadoAt` y `Tenant.correoRespuestas`): ver [notificaciones.md](notificaciones.md). `SesionPortal`: token opaco guardado como hash; ver diseno-operacion.md.
 
 ## Lealtad
 

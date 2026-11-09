@@ -75,6 +75,8 @@ model Tenant {
   // Módulos opcionales apagados para este negocio (valores de backend/src/common/modulos.ts: LEALTAD,
   // CODIGOS_DESCUENTO). Vacío = todo encendido (default de todos los tenants). Se cambia por seed/API interna, sin pantalla.
   modulosDesactivados          String[]           @default([])
+  // Mayoreo: Reply-To de los resúmenes semanales que reciben los clientes B2B (opcional; sin él, el correo sale sin Reply-To).
+  correoRespuestas             String?
   // Obligatorio en RegisterDto (sin default a nivel de API) para tenants
   // nuevos; nullable en DB para no romper tenants ya existentes (Entredós,
   // Banetto), que se actualizarán manualmente desde Ajustes. Ver GiroNegocio.
@@ -203,6 +205,8 @@ model Tenant {
   reglas                    Regla[]
   reglaEnvioLogs            ReglaEnvioLog[]
   avisosInternosEnvios      AvisoInternoEnvio[]
+  resumenSemanalEnvios      ResumenSemanalEnvio[]
+  resumenSemanalClienteEnvios ResumenSemanalClienteEnvio[]
   reglaClienteEstados       ReglaClienteEstado[]
   detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
@@ -429,6 +433,8 @@ enum NotificacionEvento {
   PAGO_CONFIRMADO
   // Solo mayoreo (Cambio B): un cliente B2B modificó su pedido desde el portal. Solo se combina con un canal WHATSAPP.
   PEDIDO_MODIFICADO_CLIENTE
+  // Solo mayoreo: resumen semanal por correo (lunes 10:00 CDMX) de los pedidos de la semana anterior. Solo se combina con el canal CORREO.
+  RESUMEN_SEMANAL
 }
 
 enum NotificacionAudiencia {
@@ -1249,8 +1255,15 @@ model Cliente {
   // Último acceso al portal como cliente activo (OTP verificado, cambio de cliente o sesión reanudada, máx. 1 vez por hora).
   // null = sin dato; sin relleno retroactivo. Observabilidad del Dueño: no se expone en la API.
   ultimoAccesoAt      DateTime?
+  // Resumen semanal por correo para ESTE cliente B2B (dato propio, capturado a propósito: NO es Cliente.correo, que es ambiguo).
+  // El interruptor solo puede estar encendido con correo. `resumenSemanalActivadoAt` = cuándo se encendió por última vez (la
+  // activación nunca es retroactiva: si fue después del lunes 10:00 CDMX, ese lunes no se envía).
+  resumenSemanalActivo       Boolean   @default(false)
+  resumenSemanalCorreo       String?
+  resumenSemanalActivadoAt   DateTime?
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resumenSemanalEnvios ResumenSemanalClienteEnvio[]
   telefonos      ClienteTelefono[]
   sesionesPortal SesionPortal[]
   orders         Order[]
@@ -1715,4 +1728,70 @@ model AvisoInternoEnvio {
   @@index([tenantId, orderId])
   @@index([tenantId, createdAt])
   @@map("avisos_internos_envios")
+}
+
+// ---------------------------------------------------------------------------
+// Resumen semanal por correo (mayoreo). Un registro por intento de envío del resumen de un negocio: la semana que resume
+// (`semanaInicio`, el lunes), si fue el envío programado del lunes o una prueba del botón, cuántas direcciones recibieron y cómo
+// terminó. NUNCA guarda direcciones de correo (solo cuántas): ante un «no me llegó» se ve si salió, cuándo y por qué falló.
+// Estado final inmutable; un EN_CURSO que nunca se resolvió (el proceso murió a media operación) se queda así: no hay reintentos.
+// ---------------------------------------------------------------------------
+enum ResumenSemanalTipo {
+  PROGRAMADO
+  PRUEBA
+}
+
+enum ResumenSemanalEstado {
+  EN_CURSO
+  EXITO
+  FALLO
+}
+
+model ResumenSemanalEnvio {
+  id               String               @id @default(uuid())
+  tenantId         String
+  // Lunes de la semana que resume el correo.
+  semanaInicio     DateTime             @db.Date
+  // Solo PROGRAMADO: copia de `semanaInicio`. Con @@unique([tenantId, semanaProgramada]) hay UN resumen programado por negocio y
+  // semana (la fila se crea ANTES de enviar, así que el índice es la reserva: dos instancias o un reinicio no duplican). En las
+  // pruebas es NULL y Postgres trata los NULL como distintos, así que las pruebas nunca chocan ni bloquean el envío del lunes.
+  semanaProgramada DateTime?            @db.Date
+  tipo             ResumenSemanalTipo
+  estado           ResumenSemanalEstado @default(EN_CURSO)
+  // Motivo del fallo (sin direcciones de correo).
+  motivo           String?
+  // Cuántas direcciones tenía la lista al enviar.
+  destinatarios    Int
+  // false = «Sin pedidos esta semana» (correo corto, sin Excel).
+  conPedidos       Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  resueltoAt       DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, semanaProgramada])
+  @@index([tenantId, createdAt])
+  @@map("resumen_semanal_envios")
+}
+
+// Marca mínima del resumen semanal PROGRAMADO por cliente B2B: una fila por (cliente, semana) se crea ANTES de enviar y el índice
+// único es la reserva (reinicios, despliegues o varias instancias no duplican). Sin dirección de correo. Las pruebas no escriben aquí.
+model ResumenSemanalClienteEnvio {
+  id           String               @id @default(uuid())
+  tenantId     String
+  clienteId    String
+  // Lunes de la semana que resume el correo.
+  semanaInicio DateTime             @db.Date
+  estado       ResumenSemanalEstado @default(EN_CURSO)
+  // Motivo del fallo (sin direcciones de correo).
+  motivo       String?
+  createdAt    DateTime             @default(now())
+  resueltoAt   DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([clienteId, semanaInicio])
+  @@index([tenantId, createdAt])
+  @@map("resumen_semanal_cliente_envios")
 }

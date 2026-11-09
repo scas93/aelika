@@ -643,12 +643,13 @@ export type NotificacionEvento =
   | "PEDIDO_EN_CAMINO"
   | "PEDIDO_ENTREGADO"
   | "PAGO_CONFIRMADO"
-  | "PEDIDO_MODIFICADO_CLIENTE";
+  | "PEDIDO_MODIFICADO_CLIENTE"
+  | "RESUMEN_SEMANAL";
 export type NotificacionAudiencia = "CLIENTE" | "NEGOCIO";
 
 // `config` shape depende de `tipo` — ver comentario en schema.prisma:
 //   TELEGRAM -> { chatId: string } (lo captura el webhook de conexión)
-//   CORREO   -> { nombreRemitente: string, correoDestino?: string }
+//   CORREO   -> { nombreRemitente: string, correoDestino?: string }; en MAYOREO es { nombreRemitente: string, correos: string[] } (resumen semanal)
 //   WHATSAPP -> { destinatarios: DestinatarioWhatsapp[] } (solo mayoreo; el backend normaliza los teléfonos)
 export interface DestinatarioWhatsapp {
   id: string;
@@ -1310,6 +1311,55 @@ export function deleteNotificacionEvento(token: string, id: string) {
   return request<void>(`/notificaciones/eventos/${id}`, {
     method: "DELETE",
     headers: authHeaders(token),
+  });
+}
+
+export interface ResumenPruebaResultado {
+  resultado: "EXITO" | "FALLO";
+  motivo: string | null;
+  destinatarios: number;
+  conPedidos: boolean;
+  semanaInicio: string;
+  semanaFin: string;
+}
+
+/** «Enviar resumen de prueba» (solo Dueño, mayoreo): manda ahora el resumen de la semana elegida (por defecto la anterior) a la lista del canal Correo. */
+export function enviarResumenSemanalPrueba(token: string, semanaInicio?: string) {
+  return request<ResumenPruebaResultado>("/notificaciones/resumen-semanal/prueba", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(semanaInicio ? { semanaInicio } : {}),
+  });
+}
+
+export interface ResumenClientePruebaResultado {
+  resultado: "EXITO" | "FALLO";
+  motivo: string | null;
+  semanaInicio: string;
+  semanaFin: string;
+}
+
+/** «Resumen semanal para clientes»: correo de respuestas (Reply-To) del negocio. */
+export function fetchResumenClientesConfig(token: string) {
+  return request<{ correoRespuestas: string | null }>("/notificaciones/resumen-semanal/clientes/config", {
+    headers: authHeaders(token),
+  });
+}
+
+export function guardarResumenClientesConfig(token: string, correoRespuestas: string | null) {
+  return request<{ correoRespuestas: string | null }>("/notificaciones/resumen-semanal/clientes/config", {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ correoRespuestas }),
+  });
+}
+
+/** Prueba del resumen de UN cliente: mismo correo y Excel que recibiría, enviados a la dirección escrita (no al cliente). */
+export function enviarResumenClientePrueba(token: string, payload: { clienteId: string; correo: string; semanaInicio?: string }) {
+  return request<ResumenClientePruebaResultado>("/notificaciones/resumen-semanal/clientes/prueba", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -2198,6 +2248,9 @@ export interface ClienteB2bFila {
   modalidadPago: ModalidadPagoB2b | null;
   activo: boolean;
   bajaAt: string | null;
+  // Resumen semanal por correo del cliente (dato propio, distinto del correo heredado de los pedidos).
+  resumenSemanalActivo: boolean;
+  resumenSemanalCorreo: string | null;
   telefonoPrincipal: string | null;
   nombreContactoPrincipal: string | null;
   pedidosActivos: number;
@@ -2231,6 +2284,8 @@ export interface ClienteB2bDetalle {
   modalidadInactiva: boolean;
   activo: boolean;
   bajaAt: string | null;
+  resumenSemanalActivo: boolean;
+  resumenSemanalCorreo: string | null;
   pedidosActivos: number;
   incompleto: boolean;
   totalPedidos: number;
@@ -2260,6 +2315,8 @@ export interface CreateClienteB2bPayload {
   // Obligatoria, y debe estar activa en Ajustes → Pagos.
   modalidadPago: ModalidadPagoB2b;
   telefonos: TelefonoClienteB2bInput[];
+  resumenSemanalActivo?: boolean;
+  resumenSemanalCorreo?: string | null;
 }
 
 export interface UpdateClienteB2bPayload {
@@ -2268,6 +2325,9 @@ export interface UpdateClienteB2bPayload {
   // null borra el descuento. La modalidad no se puede borrar: se omite para no tocarla.
   descuentoPorcentaje?: number | null;
   modalidadPago?: ModalidadPagoB2b;
+  // El interruptor solo puede encenderse con correo; null/"" borra el correo (y apaga el envío).
+  resumenSemanalActivo?: boolean;
+  resumenSemanalCorreo?: string | null;
 }
 
 export function fetchClientesB2b(

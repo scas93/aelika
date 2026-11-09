@@ -24,6 +24,7 @@ const EVENTO_LABEL: Record<NotificacionEvento, string> = {
   PEDIDO_EN_CAMINO: "Pedido en camino",
   PEDIDO_ENTREGADO: "Pedido entregado",
   PEDIDO_MODIFICADO_CLIENTE: "Pedido modificado por el cliente",
+  RESUMEN_SEMANAL: "Resumen semanal",
 };
 
 const CANAL_LABEL: Record<string, string> = {
@@ -35,6 +36,10 @@ const CANAL_LABEL: Record<string, string> = {
 interface EventoDef {
   evento: NotificacionEvento;
   audiencia: NotificacionAudiencia;
+  /** Canal con el que solo se combina (eventos de mayoreo); sin él, cualquiera de los disponibles. */
+  canalTipo?: NotificacionCanalConfig["tipo"];
+  /** Texto de apoyo bajo el nombre del evento. */
+  nota?: string;
 }
 
 const EVENTOS_NEGOCIO: EventoDef[] = [
@@ -42,8 +47,16 @@ const EVENTOS_NEGOCIO: EventoDef[] = [
   { evento: "PAGO_CONFIRMADO", audiencia: "NEGOCIO" },
 ];
 
-// Mayoreo: el único evento. Menudeo y Hotel nunca lo ven.
-const EVENTOS_MAYOREO: EventoDef[] = [{ evento: "PEDIDO_MODIFICADO_CLIENTE", audiencia: "NEGOCIO" }];
+// Mayoreo: sus dos eventos, cada uno con su canal. Menudeo y Hotel nunca los ven.
+const EVENTOS_MAYOREO: EventoDef[] = [
+  { evento: "PEDIDO_MODIFICADO_CLIENTE", audiencia: "NEGOCIO", canalTipo: "WHATSAPP" },
+  {
+    evento: "RESUMEN_SEMANAL",
+    audiencia: "NEGOCIO",
+    canalTipo: "CORREO",
+    nota: "Cada lunes a las 10:00 (hora de Ciudad de México) con los pedidos de la semana anterior y su Excel.",
+  },
+];
 
 const EVENTOS_CLIENTE: EventoDef[] = [
   { evento: "PEDIDO_CONFIRMADO", audiencia: "CLIENTE" },
@@ -68,6 +81,8 @@ function canalesDisponibles(canales: NotificacionCanalConfig[], audiencia: Notif
       return audiencia === "NEGOCIO" && c.activo && Array.isArray(destinatarios) && destinatarios.length > 0;
     }
     if (c.tipo === "CORREO") {
+      // Correo de mayoreo (resumen semanal): activo y con al menos una dirección en su lista.
+      if (Array.isArray(c.config.correos)) return audiencia === "NEGOCIO" && c.activo && c.config.correos.length > 0;
       const campo = audiencia === "NEGOCIO" ? c.config.correoDestino : c.config.nombreRemitente;
       return typeof campo === "string" && campo.length > 0;
     }
@@ -152,7 +167,7 @@ function EventoRow({
   const [error, setError] = useState<string | null>(null);
 
   const existing = eventos?.find((e) => e.evento === def.evento && e.audiencia === def.audiencia) ?? null;
-  const opciones = canales ? canalesDisponibles(canales, def.audiencia) : [];
+  const opciones = canales ? canalesDisponibles(canales, def.audiencia).filter((c) => !def.canalTipo || c.tipo === def.canalTipo) : [];
   const activo = existing?.activo ?? false;
   const canalIdSeleccionado = existing?.canalConfigId ?? "";
   // Prendido pero apuntando a un canal que ya no está disponible (se
@@ -201,6 +216,7 @@ function EventoRow({
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-admin-ink">{EVENTO_LABEL[def.evento]}</span>
+          {def.nota && <span className="text-xs text-admin-ink-soft">{def.nota}</span>}
           {def.audiencia === "CLIENTE" && (
             <span className="text-xs text-admin-ink-soft">
               Depende de que el cliente haya dejado su correo al hacer el pedido.
