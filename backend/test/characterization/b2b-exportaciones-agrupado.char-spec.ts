@@ -170,7 +170,7 @@ describe('B2B · Excel de Históricos con bloques', () => {
         continue;
       } else if (typeof f.v[1] === 'number' && typeof f.v[2] === 'number') {
         suma += f.v[2];
-        productos[`${subtotal}|${f.v[0]}`] = f.v[1];
+        productos[`${subtotal}|${texto(f.v[0])}`] = f.v[1];
       }
     }
     cerrar();
