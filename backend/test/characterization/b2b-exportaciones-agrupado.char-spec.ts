@@ -115,13 +115,7 @@ describe('B2B · Excel de Históricos con bloques', () => {
       'Semana (inicio)',
       'Semana (fin)',
       'Fecha de creación',
-      'Estado del pedido',
-      'Estado de pago',
-      'Fecha de pago',
       'Entregas totales',
-      'Entregadas',
-      'No recogidas',
-      'Canceladas',
       'Subtotal',
       'Descuento %',
       'Descuento $',
@@ -161,7 +155,7 @@ describe('B2B · Excel de Históricos con bloques', () => {
       if (f.banda) continue;
       if (f.fecha) {
         cerrar();
-        subtotal = f.v[10] as number; // Subtotal
+        subtotal = f.v[4] as number; // Subtotal
         suma = 0;
       } else if (
         f.v[0] === 'Producto' ||
@@ -186,6 +180,9 @@ describe('B2B · Excel de Históricos con bloques', () => {
   });
 
   it('Pedidos: un pedido cancelado sigue marcado y conserva los productos de sus entregas cerradas', async () => {
+    await pedido('Aaa Vigente', '5511000013', SEMANA_PASADA, [
+      dist(A(), ['LUNES', 2]),
+    ]); // primero alfabéticamente, sin cancelar
     const beta = await pedido('Beta', '5511000012', SEMANA_PASADA, [
       dist(B(), ['LUNES', 5], ['MIERCOLES', 3]),
     ]);
@@ -203,17 +200,48 @@ describe('B2B · Excel de Históricos con bloques', () => {
     const filas = leer(
       (await descargar('&cancelado=true')).getWorksheet('Pedidos')!,
     );
-    const ped = filas.find((f) => f.fecha)!;
-    expect(ped.v[3]).toBe('Cancelado'); // Estado del pedido
-    expect([ped.v[7], ped.v[9]]).toStrictEqual([1, 1]); // Entregadas 1; Canceladas 1
+    const ped = filas.filter((f) => f.fecha).at(-1)!; // Beta es el último negocio
+    // Cambio deliberado: las hojas con bloques ya no llevan columnas de estado; el cancelado se marca en el formato de su Total.
+    const hoja = (await descargar('&cancelado=true')).getWorksheet('Pedidos')!;
+    expect(hoja.getRow(ped.n).getCell(8).numFmt).toBe(
+      '"$"#,##0.00" · Cancelado"',
+    );
+    // Un pedido vigente no lleva la marca.
+    const todos = leer((await descargar()).getWorksheet('Pedidos')!);
+    const vigente = (await descargar())
+      .getWorksheet('Pedidos')!
+      .getRow(todos.find((f) => f.fecha)!.n);
+    expect(vigente.getCell(8).numFmt).not.toContain('Cancelado');
+    // La tabla plana conserva el estado y los conteos.
+    const plana = (await descargar('&cancelado=true')).getWorksheet(
+      'Datos pedidos',
+    )!;
+    const cab = plana.getRow(1).values as string[];
+    expect(
+      plana.getRow(2).getCell(cab.indexOf('Estado del pedido')).value,
+    ).toBe('Cancelado');
     const producto = filas.find((f) => f.v[0] === 'Concha');
     expect([producto?.v[1], producto?.v[2]]).toStrictEqual([5, 152.5]); // solo lo de la entrega cerrada
   });
 
-  it('Entregas: por negocio, por entrega ordenada por fecha, con día, fecha, estado, piezas, importe y productos que suman el importe', async () => {
+  it('Entregas: por negocio, por entrega ordenada por fecha, con día, fecha, piezas, importe y productos que suman el importe', async () => {
     await escenario();
     const hoja = (await descargar()).getWorksheet('Entregas')!;
     const filas = leer(hoja);
+    // Cambio deliberado: la hoja con bloques ya no lleva «Estado de la entrega» (sí la tabla plana «Datos entregas»).
+    expect((hoja.getRow(1).values as string[]).slice(1)).toStrictEqual([
+      'Día / Producto',
+      'Fecha de entrega',
+      'Piezas / Unidades',
+      'Importe / Monto (antes de descuento)',
+      'Nota de la entrega',
+    ]);
+    expect(
+      (
+        (await descargar()).getWorksheet('Datos entregas')!.getRow(1)
+          .values as string[]
+      ).includes('Estado de la entrega'),
+    ).toBe(true);
     expect(
       filas
         .filter((f) => f.banda && !texto(f.v[0]).startsWith('Semana del'))
@@ -248,14 +276,13 @@ describe('B2B · Excel de Históricos con bloques', () => {
           'Sábado',
           'Domingo',
         ]).toContain(f.v[0]);
-        expect(['Pendiente', 'Atrasada']).toContain(f.v[2]); // semanas ya pasadas: Atrasada
-        piezas = f.v[3] as number;
-        importe = f.v[4] as number;
+        piezas = f.v[2] as number;
+        importe = f.v[3] as number;
         sumaMonto = 0;
         sumaUnidades = 0;
-      } else if (typeof f.v[3] === 'number') {
-        sumaUnidades += f.v[3];
-        sumaMonto += f.v[4] as number;
+      } else if (typeof f.v[2] === 'number') {
+        sumaUnidades += f.v[2];
+        sumaMonto += f.v[3] as number;
       }
     }
     cerrar();

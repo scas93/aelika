@@ -180,9 +180,22 @@ function bandaNegocio(
 
 // ---------- Hoja «Pedidos» ----------
 
+// Las hojas con bloques llevan menos columnas que la tabla plana: sin Negocio (va en la banda) ni estados ni fecha de pago ni
+// conteos de entregas por estado. La tabla plana «Datos pedidos» conserva todas.
+const SIN_COLUMNA_EN_BLOQUES: unknown[] = [
+  COL_PED.negocio,
+  COL_PED.estado,
+  COL_PED.pago,
+  COL_PED.fechaPago,
+  COL_PED.entregadas,
+  COL_PED.noRecogidas,
+  COL_PED.canceladas,
+];
 const COLUMNAS_BLOQUE_PEDIDOS = COLUMNAS_PEDIDOS.HISTORICOS.filter(
-  (c) => c !== COL_PED.negocio,
+  (c) => !SIN_COLUMNA_EN_BLOQUES.includes(c),
 );
+// Marca discreta de un pedido cancelado, sin columna de estado: su Total (lo que queda por cobrar) lleva el sufijo «Cancelado».
+const FORMATO_TOTAL_CANCELADO = '"$"#,##0.00" · Cancelado"';
 
 function hojaPedidos(
   libro: ExcelJS.Workbook,
@@ -195,7 +208,12 @@ function hojaPedidos(
   // La primera columna también aloja los productos (sangrados) debajo de cada pedido: se ensancha para que quepan.
   hoja.columns = columnas.map((c, i) => ({
     header: c.encabezado,
-    width: i === 0 ? Math.max(c.ancho ?? 16, 34) : (c.ancho ?? 14),
+    width:
+      i === 0
+        ? Math.max(c.ancho ?? 16, 34)
+        : c === COL_PED.total
+          ? 26 // cabe «$12,345.00 · Cancelado»
+          : (c.ancho ?? 14),
   }));
   encabezadoDeHoja(hoja);
 
@@ -210,7 +228,10 @@ function hojaPedidos(
       );
       columnas.forEach((c, i) => {
         if (c.tipo !== 'texto')
-          fila.getCell(i + 1).numFmt = FORMATO_XLSX[c.tipo];
+          fila.getCell(i + 1).numFmt =
+            pedido.fila.cancelado && c === COL_PED.total
+              ? FORMATO_TOTAL_CANCELADO
+              : FORMATO_XLSX[c.tipo];
       });
       fila.font = { bold: true };
       fila.alignment = { vertical: 'top', wrapText: true };
@@ -243,7 +264,7 @@ function hojaPedidos(
 
 // ---------- Hoja «Entregas» ----------
 
-const COLUMNAS_ENTREGAS = 6;
+const COLUMNAS_ENTREGAS = 5;
 
 function hojaEntregas(
   libro: ExcelJS.Workbook,
@@ -255,13 +276,12 @@ function hojaEntregas(
   hoja.columns = [
     { header: 'Día / Producto', width: 34 },
     { header: COL_ENT.fecha.encabezado, width: 16 },
-    { header: COL_ENT.estado.encabezado, width: 20 },
     { header: 'Piezas / Unidades', width: 17 },
     { header: 'Importe / Monto (antes de descuento)', width: 26 },
     { header: COL_ENT.nota.encabezado, width: 40 },
   ];
   encabezadoDeHoja(hoja);
-  for (const c of [4, 5])
+  for (const c of [3, 4])
     hoja.getRow(1).getCell(c).alignment = {
       horizontal: 'right',
       vertical: 'middle',
@@ -299,26 +319,25 @@ function hojaEntregas(
         const enc = hoja.addRow([
           DIAS[f.fecha.getUTCDay()],
           COL_ENT.fecha.valor(f),
-          COL_ENT.estado.valor(f),
           f.piezas,
           f.importe,
           f.nota,
         ]);
         enc.getCell(2).numFmt = FORMATO_XLSX.fecha;
-        enc.getCell(4).numFmt = FORMATO_XLSX.entero;
-        enc.getCell(5).numFmt = FORMATO_XLSX.moneda;
+        enc.getCell(3).numFmt = FORMATO_XLSX.entero;
+        enc.getCell(4).numFmt = FORMATO_XLSX.moneda;
         enc.font = { bold: true };
         enc.alignment = { vertical: 'top', wrapText: true };
         rellenar(enc, COLUMNAS_ENTREGAS, FONDO_ENTREGA);
         for (const l of entrega.lineas) {
-          const r = hoja.addRow([l.producto, null, null, l.unidades, l.monto]);
+          const r = hoja.addRow([l.producto, null, l.unidades, l.monto]);
           r.getCell(1).alignment = {
             indent: 1,
             wrapText: true,
             vertical: 'top',
           };
-          r.getCell(4).numFmt = FORMATO_XLSX.entero;
-          r.getCell(5).numFmt = FORMATO_XLSX.moneda;
+          r.getCell(3).numFmt = FORMATO_XLSX.entero;
+          r.getCell(4).numFmt = FORMATO_XLSX.moneda;
         }
       });
     });
