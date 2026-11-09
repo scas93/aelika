@@ -13,6 +13,8 @@ import {
   corregirEntregaPedidoB2b,
   desmarcarPagadoPedidoB2b,
   fetchPedidoB2b,
+  fetchCambiosPedidoB2b,
+  type PedidoB2bCambiosRespuesta,
   marcarPagadoPedidoB2b,
   fetchProducts,
   updatePedidoB2bItems,
@@ -37,6 +39,7 @@ import {
   puedeCerrarEntregas,
 } from "./estado";
 import EntregasLista from "./entregas-lista";
+import CambiosRevision from "./cambios-revision";
 import { diasBloqueadosDeSemana, useDiasSinEntrega } from "./dias-sin-entrega";
 import SidePanel from "../_components/SidePanel";
 import Aviso from "../_components/Aviso";
@@ -150,6 +153,27 @@ export default function DetallePanel({
         ),
       );
   }, [pedidoId, token]);
+
+  // «Cambios desde la última revisión»: se lee aparte de GET /:id (que no cambia) y solo mientras la marca esté prendida y el
+  // pedido no esté cancelado. La respuesta guarda a qué versión del pedido pertenece: si el pedido cambia, deja de mostrarse
+  // hasta que llegue la nueva (sin parpadeos ni estados viejos).
+  const claveCambios =
+    pedido && !pedido.cancelado && pedido.modificadoPorClienteAt ? `${pedido.id}|${pedido.updatedAt}|${pedido.modificadoPorClienteAt}` : null;
+  const [cambiosLeidos, setCambiosLeidos] = useState<{ clave: string; respuesta: PedidoB2bCambiosRespuesta } | null>(null);
+  const pedidoIdCambios = pedido?.id;
+  useEffect(() => {
+    if (!claveCambios || !pedidoIdCambios) return;
+    let vigente = true;
+    fetchCambiosPedidoB2b(token, pedidoIdCambios)
+      .then((respuesta) => vigente && setCambiosLeidos({ clave: claveCambios, respuesta }))
+      .catch(() => {
+        // La sección es solo informativa: si no carga, el aviso de siempre sigue ahí.
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [claveCambios, pedidoIdCambios, token]);
+  const cambios = claveCambios && cambiosLeidos?.clave === claveCambios ? cambiosLeidos.respuesta : null;
 
   function startEdit() {
     if (!pedido) return;
@@ -467,6 +491,8 @@ export default function DetallePanel({
             </Aviso>
           )}
 
+          <CambiosRevision respuesta={cambios} />
+
           {/* Tarjeta de montos y pago: el único lugar del panel con el total. Marcar pagado (Gerente/Dueño) pide confirmación
               (modal con folio y total). En un cancelado, «Pedido original» va como línea y el total es lo que queda por cobrar. */}
           <div className="flex flex-col gap-3 rounded-[var(--radius-admin-control)] border border-admin-border p-4">
@@ -542,6 +568,7 @@ export default function DetallePanel({
             <EntregasLista
               key={pedido.id}
               entregas={entregasVista}
+              cambios={cambios?.cambios ?? null}
               onCerrar={puedeCerrar ? handleCerrarEntrega : undefined}
               onCorregir={esAdmin ? handleCorregirEntrega : undefined}
               productos={products}
