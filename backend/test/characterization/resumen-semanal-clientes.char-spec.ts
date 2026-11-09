@@ -107,6 +107,15 @@ describe('Resumen semanal por cliente · envío programado (mayoreo)', () => {
     expect(encabezados('Pedidos')).not.toMatch(/pago|Descuento|Subtotal/i);
     expect(encabezados('Entregas')).not.toMatch(/pago|Descuento|Subtotal/i);
     expect(libro.getWorksheet('Pedidos')!.rowCount).toBe(2); // encabezado + su pedido
+    // CAMBIO A PROPÓSITO (contenido del Excel al cliente): sin columnas de estado ni conteos por estado; Entregas una fila por producto.
+    expect(encabezados('Pedidos')).not.toMatch(/Estado|Entregadas|No recogidas|Canceladas|Atrasada/i);
+    expect(encabezados('Pedidos')).toContain('Entregas totales');
+    expect(encabezados('Entregas')).toBe('|Folio|Fecha de entrega|Día|Producto|Unidades|Monto|Nota de la entrega');
+    expect(encabezados('Entregas')).not.toMatch(/Estado/i);
+    const todo: string[] = [libro.creator ?? '', libro.lastModifiedBy ?? '', libro.company ?? '', libro.title ?? ''];
+    libro.eachSheet((w) => w.eachRow((r) => r.eachCell((c) => todo.push(String(c.value ?? '')))));
+    expect(todo.join('\n')).not.toMatch(/aelika|atrasada/i);
+    expect(arg.mensaje.texto + arg.mensaje.html + arg.mensaje.asunto + arg.adjuntos[0].nombreArchivo).not.toMatch(/aelika/i);
     const m = await marcas();
     expect(m).toHaveLength(1);
     expect(m[0]).toMatchObject({ clienteId: a.id, estado: 'EXITO', motivo: null });

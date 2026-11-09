@@ -3,10 +3,11 @@ import {
   inicioVentanaDeEnvio,
 } from './resumen-semanal-cliente';
 import { calcularTotales } from './resumen-semanal';
-import type {
-  FilaEntregaPedidoExcel,
-  FilaPedidoExcel,
-} from '../pedidos-b2b/pedidos-b2b-excel';
+import type { FilaPedidoExcel } from '../pedidos-b2b/pedidos-b2b-excel';
+import {
+  repartirTotalEnLineas,
+  type LineaEntregaCliente,
+} from './resumen-semanal-cliente-datos';
 import { resolverResumenSemanal } from '../clientes-b2b/clientes-b2b.service';
 
 const SEMANA = { inicio: '2026-10-26', fin: '2026-11-01' };
@@ -29,66 +30,81 @@ const fila = (extra: Partial<FilaPedidoExcel> = {}): FilaPedidoExcel => ({
   total: 108,
   ...extra,
 });
-const entrega = (extra: Partial<FilaEntregaPedidoExcel> = {}): FilaEntregaPedidoExcel => ({
-  fecha: new Date('2026-10-27T00:00:00.000Z'),
+const linea = (extra: Partial<LineaEntregaCliente> = {}): LineaEntregaCliente => ({
   folio: 'B-1',
-  clienteCodigo: 'banetto-cafe',
-  negocioNombre: 'Café Ñandú',
-  estado: 'PENDIENTE',
-  atrasada: false,
-  piezas: 10,
-  importe: 120,
-  descuento: 12,
-  cerradaAt: null,
+  entregaId: 'e1',
+  fecha: new Date('2026-10-27T00:00:00.000Z'),
+  producto: 'Concha',
+  unidades: 10,
+  monto: 108,
   nota: null,
   ...extra,
 });
-const armar = (filas: FilaPedidoExcel[], entregas: FilaEntregaPedidoExcel[]) =>
-  construirCorreoCliente('Banetto', 'Café Ñandú', SEMANA, calcularTotales(filas), filas, entregas);
+const armar = (filas: FilaPedidoExcel[], lineas: LineaEntregaCliente[]) =>
+  construirCorreoCliente('Banetto', 'Café Ñandú', SEMANA, calcularTotales(filas), filas, lineas);
 
+// CAMBIO A PROPÓSITO (contenido del correo al cliente, tras revisar el correo real en staging): resumen en una línea, sin recuadro
+// «Por revisar», sin estados de pedido ni de entrega (solo «Cancelado»), pie nuevo y sin la marca de Aelika.
 describe('construirCorreoCliente', () => {
-  it('asunto, encabezado y pie con el nombre del negocio', () => {
-    const c = armar([fila()], [entrega()]);
+  it('asunto, encabezado y pie exacto con el nombre del negocio; sin la palabra Aelika', () => {
+    const c = armar([fila()], [linea()]);
     expect(c.asunto).toBe('Tus pedidos con Banetto: 26 de octubre al 1 de noviembre');
     expect(c.html).toContain('Resumen semanal de tus pedidos con Banetto');
-    expect(c.texto).toContain(
-      'Mensaje automático enviado por Aelika en nombre de Banetto. Si tienes dudas o no quieres recibir este correo, contacta a Banetto.',
-    );
-    expect(c.html).toContain(
-      'Mensaje automático enviado por Aelika en nombre de Banetto. Si tienes dudas o no quieres recibir este correo, contacta a Banetto.',
-    );
+    const pie = 'Este es un mensaje automático. Para cualquier aclaración, comunícate con alguien del equipo de Banetto.';
+    expect(c.texto).toContain(pie);
+    expect(c.html).toContain(pie);
+    for (const t of [c.texto, c.html, c.asunto]) expect(t).not.toMatch(/aelika/i);
   });
 
-  it('NO menciona pago, cobranza ni descuento, y las entregas muestran el importe ya con descuento (suman el total)', () => {
-    const c = armar([fila()], [entrega()]);
+  it('resumen en una línea: pedidos y total (sin desglose por estado, piezas ni cancelados)', () => {
+    const cancelado = fila({ folio: 'B-2', cancelado: true, estadosEntregas: ['CANCELADA'], total: 50 });
+    const c = armar([fila(), cancelado], [linea()]);
+    expect(c.texto).toContain('Pedidos: 1 · Total: $108.00');
+    expect(c.html).toContain('Pedidos: 1 · Total: $108.00');
+    for (const t of [c.texto, c.html]) {
+      expect(t).not.toMatch(/Por confirmar|Confirmados|En proceso|Completados|Cancelados \(no suman\)|Por revisar|POR REVISAR/);
+    }
+  });
+
+  it('sin estados de pedido ni de entrega; cada pedido muestra folio, piezas e importe y sus entregas día, piezas e importe', () => {
+    const c = armar([fila()], [linea()]);
+    for (const t of [c.texto, c.html]) {
+      expect(t).not.toMatch(/Por confirmar|Confirmado|Pendiente|Atrasada|Entregada|No recogida|En proceso|Completado/);
+    }
+    expect(c.texto).toContain('Pedido B-1 · 10 piezas · $108.00');
+    expect(c.texto).toContain('  - martes 27 de octubre · 10 piezas · $108.00');
+  });
+
+  it('NO menciona pago, cobranza ni descuento, y los montos son netos', () => {
+    const c = armar([fila()], [linea()]);
     for (const t of [c.texto, c.html, c.asunto]) {
       expect(t).not.toMatch(/pago|pagad|cobranza|descuento|pendiente de/i);
     }
-    // 120 - 12 = 108 en la entrega; 108 de total del pedido.
-    expect(c.texto).toContain('martes 27 de octubre · Pendiente · 10 piezas · $108.00');
-    expect(c.texto).toContain('Pedido B-1 · Por confirmar · 10 piezas · $108.00');
     expect(c.texto).not.toContain('$120.00');
     expect(c.texto).not.toContain('$12.00');
   });
 
-  it('resalta lo Por confirmar y las entregas Pendientes', () => {
-    const c = armar([fila()], [entrega()]);
-    expect(c.texto).toContain('POR REVISAR');
-    expect(c.texto).toContain('1 pedido sigue Por confirmar');
-    expect(c.texto).toContain('1 entrega sigue Pendiente');
-  });
-
-  it('pedidos cancelados salen marcados y no suman; si es lo único lo dice claro, con totales en cero', () => {
+  it('un pedido cancelado dice solo «Cancelado» y no suma; si es lo único, el aviso se conserva con totales en cero', () => {
     const cancelado = fila({ folio: 'B-2', cancelado: true, estadosEntregas: ['CANCELADA'], total: 50 });
-    const mixto = armar([fila(), cancelado], [entrega()]);
+    const mixto = armar([fila(), cancelado], [linea()]);
     expect(mixto.texto).toContain('Pedido B-2 · Cancelado');
-    expect(mixto.texto).toContain('Cancelados (no suman): 1');
-    expect(mixto.texto).toContain('Pedidos: 1');
+    expect(mixto.texto).not.toContain('$50.00');
     const solo = armar([cancelado], []);
     expect(solo.texto).toContain('Todos tus pedidos de esta semana (1) están cancelados');
-    expect(solo.texto).toContain('Pedidos: 0');
-    expect(solo.texto).toContain('Total: $0.00');
-    expect(solo.texto).not.toContain('POR REVISAR');
+    expect(solo.texto).toContain('Pedidos: 0 · Total: $0.00');
+  });
+
+  it('dos entregas del mismo pedido se muestran por separado con la suma de sus productos', () => {
+    const c = armar(
+      [fila({ totalPiezas: 7, total: 100 })],
+      [
+        linea({ entregaId: 'e1', unidades: 3, monto: 30.5 }),
+        linea({ entregaId: 'e1', producto: 'Pan', unidades: 1, monto: 19.5 }),
+        linea({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), unidades: 3, monto: 50 }),
+      ],
+    );
+    expect(c.texto).toContain('  - martes 27 de octubre · 4 piezas · $50.00');
+    expect(c.texto).toContain('  - jueves 29 de octubre · 3 piezas · $50.00');
   });
 
   it('escapa HTML y conserva acentos y ñ', () => {
@@ -98,11 +114,34 @@ describe('construirCorreoCliente', () => {
       SEMANA,
       calcularTotales([fila()]),
       [fila()],
-      [entrega()],
+      [linea()],
     );
     expect(c.html).toContain('Panadería &lt;Ñ&gt; &amp; Co');
     expect(c.html).toContain('Cliente &quot;Ñ&quot;');
     expect(c.asunto).toBe('Tus pedidos con Panadería <Ñ> & Co: 26 de octubre al 1 de noviembre');
+  });
+});
+
+describe('repartirTotalEnLineas', () => {
+  it('la suma es EXACTAMENTE el total y cada línea queda en centavos enteros', () => {
+    // 3 líneas iguales de $10.00 con total $10.00: 3.33 + 3.33 + 3.34 (el centavo sobrante a la primera de mayor residuo).
+    const r = repartirTotalEnLineas(1000, [1000, 1000, 1000]);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(1000);
+    expect(r).toEqual([334, 333, 333]);
+  });
+  it('con descuento: proporcional al importe de lista y exacto', () => {
+    // Lista 120.00 (80 + 40), total 108.00 → 72.00 y 36.00.
+    expect(repartirTotalEnLineas(10800, [8000, 4000])).toEqual([7200, 3600]);
+  });
+  it('sin importe de lista o sin total, todo en cero', () => {
+    expect(repartirTotalEnLineas(500, [0, 0])).toEqual([0, 0]);
+    expect(repartirTotalEnLineas(0, [100, 200])).toEqual([0, 0]);
+  });
+  it('siempre suma el total aunque haya muchos residuos', () => {
+    const brutos = [333, 777, 1234, 5, 9999, 1];
+    for (const total of [1, 99, 12345, 20349]) {
+      expect(repartirTotalEnLineas(total, brutos).reduce((a, b) => a + b, 0)).toBe(total);
+    }
   });
 });
 

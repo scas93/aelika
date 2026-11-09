@@ -9,6 +9,11 @@ import {
 } from '../pedidos-b2b/pedidos-b2b-export';
 import { construirCorreoCliente } from './resumen-semanal-cliente';
 import {
+  datosResumenCliente,
+  libroResumenCliente,
+  PEDIDOS_RESUMEN_CLIENTE_SELECT,
+} from './resumen-semanal-cliente-datos';
+import {
   calcularTotales,
   construirCorreoResumen,
   nombreArchivoResumen,
@@ -85,10 +90,10 @@ export class ResumenSemanalArmadoService {
         tenantId,
       },
       orderBy: PEDIDOS_EXPORT_ORDEN,
-      select: PEDIDOS_EXPORT_SELECT,
+      select: PEDIDOS_RESUMEN_CLIENTE_SELECT,
     });
     if (pedidos.length === 0) return null;
-    const { filas, entregas } = filasExcelDePedidos(pedidos);
+    const { filas, lineas } = datosResumenCliente(pedidos);
     const totales = calcularTotales(filas);
     const correo = construirCorreoCliente(
       negocioNombre,
@@ -96,9 +101,9 @@ export class ResumenSemanalArmadoService {
       semana,
       totales,
       filas,
-      entregas,
+      lineas,
     );
-    const contenido = await libroPedidos(filas, entregas, 'CLIENTE');
+    const contenido = await libroResumenCliente(filas, lineas);
     return {
       correo,
       totales,
