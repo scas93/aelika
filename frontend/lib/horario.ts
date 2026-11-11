@@ -71,3 +71,131 @@ export function generarOpcionesHora(desde: string, hasta: string, pasoMinutos = 
   }
   return opciones;
 }
+
+// ---------------------------------------------------------------------------
+// Reglas de entrega (anticipación mínima y agendar en días futuros). Réplica de UX de
+// backend/src/common/horario.ts (validarEntregaProgramada): aquí solo se calculan las opciones a mostrar.
+// ---------------------------------------------------------------------------
+
+/** "YYYY-MM-DD" de hoy en America/Mexico_City. */
+export function fechaActualMexico(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(now);
+}
+
+/** Suma días a una fecha "YYYY-MM-DD" (calendario puro, a mediodía UTC). */
+export function sumarDiasFecha(fecha: string, dias: number): string {
+  const d = new Date(`${fecha}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+const DIA_POR_INDICE_UTC: DiaSemana[] = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+
+export function diaDeFecha(fecha: string): DiaSemana {
+  return DIA_POR_INDICE_UTC[new Date(`${fecha}T12:00:00Z`).getUTCDay()];
+}
+
+/** Primer momento en que se puede entregar: ahora + `minutosMinimos`, expresado en hora de México. */
+export function entregaMasTemprana(minutosMinimos: number, now = new Date()): { fecha: string; hora: string } {
+  const instante = new Date(now.getTime() + minutosMinimos * 60_000);
+  return { fecha: fechaActualMexico(instante), hora: horaActualMexico(instante) };
+}
+
+/** Horas (cada `paso` min, dentro del horario) que se pueden elegir en `fecha` respetando el mínimo. */
+export function horasDisponiblesParaFecha(
+  horario: HorarioSemana | null,
+  fecha: string,
+  minutosMinimos: number,
+  now = new Date(),
+  paso = 30,
+): string[] {
+  const dia = horario?.[diaDeFecha(fecha)];
+  if (!dia?.abierto || !dia.apertura || !dia.cierre) return [];
+  const minima = entregaMasTemprana(minutosMinimos, now);
+  if (fecha < minima.fecha) return [];
+  const aMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+  let desde = aMin(dia.apertura);
+  if (fecha === minima.fecha) desde = Math.max(desde, Math.ceil(aMin(minima.hora) / paso) * paso);
+  const hasta = aMin(dia.cierre);
+  const horas: string[] = [];
+  for (let t = desde; t < hasta; t += paso) {
+    horas.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
+  }
+  return horas;
+}
+
+/**
+ * Duraciones ("recoger en X min", pasos de 15) elegibles hoy: desde el mínimo (margen o anticipación, redondeado hacia
+ * arriba) hasta que la hora resultante siga antes del cierre. Vacío si hoy no abre.
+ */
+export function duracionesDisponibles(
+  horario: HorarioSemana | null,
+  minutosMinimos: number,
+  now = new Date(),
+  paso = 15,
+): number[] {
+  const hoyHorario = horarioDeHoy(horario, now);
+  if (!hoyHorario?.abierto || !hoyHorario.cierre) return [];
+  const aMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+  const maximo = Math.floor((aMin(hoyHorario.cierre) - aMin(horaActualMexico(now)) - 1) / paso) * paso;
+  const duraciones: number[] = [];
+  for (let d = Math.ceil(minutosMinimos / paso) * paso; d <= maximo; d += paso) duraciones.push(d);
+  return duraciones;
+}
+
+export function etiquetaDia(fecha: string, hoy: string): string {
+  if (fecha === hoy) return "Hoy";
+  if (fecha === sumarDiasFecha(hoy, 1)) return "Mañana";
+  const texto = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(`${fecha}T12:00:00Z`));
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/**
+ * Días elegibles: la ventana de `diasMax` días cuenta desde el primer día en que ya se puede entregar
+ * (hoy + anticipación), no desde hoy. Los días cerrados o sin horas se omiten.
+ */
+export function diasDisponibles(
+  horario: HorarioSemana | null,
+  diasMax: number,
+  minutosMinimos: number,
+  now = new Date(),
+): { fecha: string; etiqueta: string }[] {
+  const hoy = fechaActualMexico(now);
+  const primero = entregaMasTemprana(minutosMinimos, now).fecha;
+  const dias: { fecha: string; etiqueta: string }[] = [];
+  for (let i = 0; i <= diasMax; i++) {
+    const fecha = sumarDiasFecha(primero, i);
+    if (horasDisponiblesParaFecha(horario, fecha, minutosMinimos, now).length > 0) {
+      dias.push({ fecha, etiqueta: etiquetaDia(fecha, hoy) });
+    }
+  }
+  return dias;
+}
+
+/** Para los chips de día: "Hoy" / "Mañana" / "Vie" arriba y "13 nov" abajo. */
+export function partesDia(fecha: string, hoy: string): { titulo: string; detalle: string } {
+  const fmt = (opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", ...opts }).format(new Date(`${fecha}T12:00:00Z`));
+  const detalle = fmt({ day: "numeric", month: "short" }).replace(".", "");
+  let titulo = "Hoy";
+  if (fecha !== hoy) {
+    titulo =
+      fecha === sumarDiasFecha(hoy, 1)
+        ? "Mañana"
+        : fmt({ weekday: "short" }).replace(".", "").replace(/^./, (c) => c.toUpperCase());
+  }
+  return { titulo, detalle };
+}
+
+/** "45 min", "2 h", "1 h 15 min": para mostrar la anticipación al cliente. */
+export function formatoDuracion(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}

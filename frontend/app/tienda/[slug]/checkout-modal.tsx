@@ -16,12 +16,16 @@ import {
 } from "@/lib/api";
 import { getStripe } from "@/lib/stripe";
 import {
+  diasDisponibles,
+  duracionesDisponibles,
+  etiquetaDia,
+  fechaActualMexico,
   horaActualMexico,
-  horarioDeHoy,
-  generarOpcionesHora,
-  siguienteMultiploDe30,
+  horasDisponiblesParaFecha,
+  partesDia,
   sumarMinutos,
 } from "@/lib/horario";
+import RuedaHoraMin, { aMinutos, deMinutos, formato12h } from "./rueda-hora";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
 export interface CartItemModifier {
@@ -56,7 +60,8 @@ export interface ResumenItem extends CartItem {
   precioOriginal: number;
 }
 
-type Step = "cart" | "entrega" | "datos" | "pago" | "pago-tarjeta" | "confirmation";
+// Orden del flujo: confirmar pedido (cart) → tus datos → entrega (pickup / envío a domicilio) → método de pago.
+type Step = "cart" | "datos" | "entrega" | "pago" | "pago-tarjeta" | "confirmation";
 
 const MARGEN_MINIMO_MINUTOS = 15;
 
@@ -66,7 +71,6 @@ const TOGGLE_INACTIVE =
   "rounded-lg border-2 border-black/15 px-3 py-1.5 text-xs font-medium text-black/60 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:text-white/60 dark:hover:bg-white/10";
 const BTN_PRIMARY =
   "rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black";
-const BACK_LINK = "text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white";
 const RESUMEN_BOX = "flex flex-col gap-2 rounded-xl bg-black/[0.03] p-3 dark:bg-white/5";
 const RESUMEN_LABEL = "text-xs font-semibold uppercase tracking-wide text-black/40 dark:text-white/40";
 
@@ -79,8 +83,12 @@ export default function CheckoutModal({
   horario,
   facturacionModo,
   aceptaTarjeta,
+  anticipacionPickupMinutos = 0,
+  anticipacionDomicilioMinutos = 0,
+  diasMaxAgendarPickup = 0,
+  diasMaxAgendarDomicilio = 0,
   onChangeQty,
-  onClose,
+  onClose: onCerrarProp,
   onSuccess,
 }: {
   slug: string;
@@ -91,6 +99,12 @@ export default function CheckoutModal({
   horario: HorarioSemana | null;
   facturacionModo: FacturacionModo;
   aceptaTarjeta: boolean;
+  // Reglas de entrega del negocio (horas mínimas por método y días hacia adelante que se puede agendar). El servidor
+  // las vuelve a validar; aquí solo definen qué días/horas se ofrecen.
+  anticipacionPickupMinutos?: number;
+  anticipacionDomicilioMinutos?: number;
+  diasMaxAgendarPickup?: number;
+  diasMaxAgendarDomicilio?: number;
   // Keyed by CartItem.id (the line), not productId — two lines can share a
   // productId once modifiers are involved, so productId alone can't identify
   // which one to adjust.
@@ -100,22 +114,63 @@ export default function CheckoutModal({
 }) {
   const [step, setStep] = useState<Step>("cart");
 
+  // Historial del navegador por paso: cada paso empuja una entrada, así el botón «atrás» (y el gesto en el celular)
+  // vuelve al paso anterior en vez de salir de la tienda. `pila` refleja las entradas que este checkout empujó.
+  const pila = useRef<Step[]>(["cart"]);
+  const empujado = useRef(false);
+  const cerrando = useRef(false);
+
+  function irA(siguiente: Step) {
+    if (siguiente === "confirmation") {
+      // El pedido ya se creó: no se puede «volver» a pagar; la confirmación ocupa el lugar del paso anterior.
+      window.history.replaceState(window.history.state, "");
+      pila.current[pila.current.length - 1] = siguiente;
+    } else {
+      window.history.pushState(window.history.state, "");
+      pila.current.push(siguiente);
+    }
+    setStep(siguiente);
+  }
+
+  function atras() {
+    window.history.back();
+  }
+
+  // Cierra el checkout y deshace las entradas de historial que empujó.
+  function cerrar() {
+    const n = pila.current.length;
+    pila.current = [];
+    cerrando.current = true;
+    if (n > 0) window.history.go(-n);
+    onCerrarProp();
+  }
+
+  useEffect(() => {
+    if (!empujado.current) {
+      empujado.current = true;
+      window.history.pushState(window.history.state, "");
+    }
+    function alPopState() {
+      if (cerrando.current) return;
+      const salida = pila.current.pop();
+      const nuevo = pila.current[pila.current.length - 1];
+      if (!nuevo || salida === "confirmation") cerrar();
+      else setStep(nuevo);
+    }
+    window.addEventListener("popstate", alPopState);
+    return () => window.removeEventListener("popstate", alPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // "entrega"
   const [metodoEntrega, setMetodoEntrega] = useState<MetodoEntrega>("RECOGER");
-  // Which of the 4 pickup-time buttons is active — null before the customer
-  // picks one. horaRecogidaTipo is always HORA_ESPECIFICA once any of these
-  // is chosen (LO_ANTES_POSIBLE is no longer offered as its own option; "En
-  // 15 min o menos" already covers that case with a concrete time).
-  const [opcionRecogida, setOpcionRecogida] = useState<"15" | "30" | "60" | "otra" | null>(null);
+  // Hora elegida en la rueda de reloj ("HH:mm", cuando hay varios días) y duración elegida en la rueda de "recoger
+  // en X" (minutos, cuando solo hay hoy). Ninguna es obligatoria: si no hay elección válida se usa la primera
+  // opción disponible (valores derivados abajo), así Continuar nunca queda trabado por no haber tocado la rueda.
   const [horaRecogida, setHoraRecogida] = useState("");
-  // Minutos de la opción rápida activa (15/30/60), o null si la selección
-  // fue "Otra hora" (manual) o si no se ha elegido nada. horaRecogida ya
-  // trae el "HH:mm" calculado al momento del clic — sirve para mostrarlo en
-  // pantalla — pero para el envío real hay que recalcularlo con la hora
-  // actual en el momento del submit (ver handleSubmit), porque el tiempo
-  // que tarda el cliente en pasar por "Datos"/"Pago" puede dejar ese valor
-  // congelado por debajo del mínimo que el backend vuelve a exigir.
-  const [minutosOpcionRapida, setMinutosOpcionRapida] = useState<number | null>(null);
+  const [duracionElegida, setDuracionElegida] = useState<number | null>(null);
+  // Día elegido ("YYYY-MM-DD"); "" = el primero disponible.
+  const [fechaElegida, setFechaElegida] = useState("");
   const [puntosEnvio, setPuntosEnvio] = useState<PublicPuntoEnvio[] | null>(null);
   const [puntoEnvioId, setPuntoEnvioId] = useState("");
   const [direccionCalle, setDireccionCalle] = useState("");
@@ -153,73 +208,80 @@ export default function CheckoutModal({
       .catch(() => setPuntosEnvio([]));
   }, [slug]);
 
-  const horarioHoy = horarioDeHoy(horario);
-  const horarioAbiertoHoy = Boolean(horarioHoy?.abierto && horarioHoy.apertura && horarioHoy.cierre);
+  // Reglas de entrega: cada método tiene su anticipación mínima y el negocio define cuántos días se pueden elegir.
+  // La vista cambia según haya un solo día (hoy) o varios:
+  //  - pickup solo hoy: rueda "recoger en [h] [min]", pasos de 15 min (la hora real se calcula al enviar);
+  //  - domicilio, o varios días (o un único día que no es hoy): chips de día (si hay más de uno) + rueda de reloj
+  //    "entregar a las HH:mm" cada 30 min. El domicilio siempre es una hora de reloj, nunca un temporizador.
+  const anticipacionMinutos = metodoEntrega === "DOMICILIO" ? anticipacionDomicilioMinutos : anticipacionPickupMinutos;
+  const minutosMinimos = Math.max(MARGEN_MINIMO_MINUTOS, anticipacionMinutos);
+  const hoy = fechaActualMexico();
+  const dias = diasDisponibles(
+    horario,
+    metodoEntrega === "DOMICILIO" ? diasMaxAgendarDomicilio : diasMaxAgendarPickup,
+    minutosMinimos,
+  );
+  const fechaSel = dias.find((d) => d.fecha === fechaElegida)?.fecha ?? dias[0]?.fecha ?? hoy;
+  const modoDuracion = metodoEntrega === "RECOGER" && dias.length <= 1 && fechaSel === hoy;
+  const duraciones = modoDuracion ? duracionesDisponibles(horario, minutosMinimos) : [];
+  const horasDelDia = modoDuracion ? [] : horasDisponiblesParaFecha(horario, fechaSel, minutosMinimos);
+  const duracionSel =
+    duracionElegida != null && duraciones.includes(duracionElegida) ? duracionElegida : (duraciones[0] ?? null);
+  const horaSel = horasDelDia.includes(horaRecogida) ? horaRecogida : (horasDelDia[0] ?? "");
+  const horaPorDuracion = duracionSel != null ? sumarMinutos(horaActualMexico(), duracionSel) : "";
+  const horaEntrega = modoDuracion ? horaPorDuracion : horaSel;
+  const sinOpcionesDeHora = modoDuracion ? duraciones.length === 0 : horasDelDia.length === 0;
 
-  /** max(horaActual + minutos, apertura) — same calc as the old cotaInferior, generalized. */
-  function horaRapida(minutos: number): string | null {
-    if (!horarioAbiertoHoy) return null;
-    const candidata = sumarMinutos(horaActualMexico(), minutos);
-    return candidata > horarioHoy!.apertura! ? candidata : horarioHoy!.apertura!;
-  }
-
-  // The 3 quick buttons, in order. Since horaRapida(minutos) is
-  // non-decreasing as minutos grows, a later button can only equal (never
-  // precede) an earlier one — that's the "apertura is more than N minutes
-  // away" edge case, where several buttons collapse onto the same apertura
-  // time. Disabled whenever: not computable, >= cierre, or identical to the
-  // immediately preceding (already-shown) button's time — no point in 3
-  // buttons doing the same thing.
-  const opcionesRapidas = (
-    [
-      { key: "15" as const, label: "En 15 min o menos", minutos: MARGEN_MINIMO_MINUTOS },
-      { key: "30" as const, label: "En 30 min o menos", minutos: 30 },
-      { key: "60" as const, label: "En 1 hora o menos", minutos: 60 },
-    ] satisfies { key: "15" | "30" | "60"; label: string; minutos: number }[]
-  ).map((opcion, index, arr) => {
-    const hora = horaRapida(opcion.minutos);
-    const anterior = index > 0 ? horaRapida(arr[index - 1].minutos) : null;
-    const disabled = !hora || !horarioHoy?.cierre || hora >= horarioHoy.cierre || hora === anterior;
-    return { ...opcion, hora, disabled };
-  });
-
-  // "Otra hora": starts strictly after the 1-hour-or-less option, on the next
-  // 30-min boundary, so it never overlaps that option's range.
-  const calc60 = horaRapida(60);
-  const otraDesde = calc60 ? siguienteMultiploDe30(calc60) : null;
-  const opcionesOtraHora =
-    otraDesde && horarioHoy?.cierre ? generarOpcionesHora(otraDesde, horarioHoy.cierre, 30) : [];
-  const otraHoraDisabled = opcionesOtraHora.length === 0;
-
-  const sinOpcionesDeHora = opcionesRapidas.every((o) => o.disabled) && otraHoraDisabled;
-
-  function elegirHoraRapida(opcion: (typeof opcionesRapidas)[number]) {
-    if (opcion.disabled || !opcion.hora) return;
-    setOpcionRecogida(opcion.key);
-    setHoraRecogida(opcion.hora);
-    setMinutosOpcionRapida(opcion.minutos);
-  }
-
-  function elegirOtraHora() {
-    if (otraHoraDisabled) return;
-    setOpcionRecogida("otra");
+  function reiniciarHora() {
     setHoraRecogida("");
-    setMinutosOpcionRapida(null);
+    setDuracionElegida(null);
   }
 
-  const zonaSeleccionada = puntosEnvio?.find((p) => p.id === puntoEnvioId) ?? null;
+  function elegirMetodoEntrega(metodo: MetodoEntrega) {
+    if (metodo === metodoEntrega) return;
+    setMetodoEntrega(metodo);
+    setFechaElegida("");
+    reiniciarHora();
+  }
+
+  function elegirFecha(fecha: string) {
+    setFechaElegida(fecha);
+    reiniciarHora();
+  }
+
+  // Con una sola zona no hay nada que elegir: se selecciona sola y el <select> ni aparece.
+  const unaSolaZona = puntosEnvio?.length === 1;
+  const puntoEnvioIdEfectivo = unaSolaZona ? puntosEnvio![0].id : puntoEnvioId;
+
+  // El envío a domicilio solo se habilita si el pedido alcanza el mínimo de al menos una zona (la más baja);
+  // dentro de la lista, las zonas con un mínimo mayor al total quedan deshabilitadas.
+  const minimoDomicilio =
+    puntosEnvio && puntosEnvio.length > 0 ? Math.min(...puntosEnvio.map((p) => Number(p.pedidoMinimo ?? 0))) : null;
+  const faltanteDomicilio = minimoDomicilio != null ? Math.max(0, minimoDomicilio - total) : 0;
+  const domicilioNoDisponible = !puntosEnvio || puntosEnvio.length === 0 || faltanteDomicilio > 0;
+  // Si el carrito baja del mínimo después de haber elegido domicilio (solo se puede editar en el paso del carrito),
+  // se regresa a pickup y se reinicia la hora (la anticipación es por método).
+  function cambiarCantidad(id: string, delta: number) {
+    onChangeQty(id, delta);
+    if (metodoEntrega === "DOMICILIO") {
+      setMetodoEntrega("RECOGER");
+      setFechaElegida("");
+      reiniciarHora();
+    }
+  }
+
+  const zonaSeleccionada = puntosEnvio?.find((p) => p.id === puntoEnvioIdEfectivo) ?? null;
   const minimoZona = zonaSeleccionada?.pedidoMinimo != null ? Number(zonaSeleccionada.pedidoMinimo) : null;
   const faltantePorMinimo = minimoZona != null ? Math.max(0, minimoZona - total) : 0;
-  const avisoMinimoVisible = Boolean(zonaSeleccionada) && faltantePorMinimo > 0;
 
   const canContinueEntrega =
-    metodoEntrega === "RECOGER"
-      ? horaRecogida !== ""
-      : puntoEnvioId !== "" &&
+    horaEntrega !== "" &&
+    (metodoEntrega === "RECOGER" ||
+      (puntoEnvioIdEfectivo !== "" &&
         faltantePorMinimo <= 0 &&
         direccionCalle.trim() !== "" &&
         direccionNumero.trim() !== "" &&
-        direccionColonia.trim() !== "";
+        direccionColonia.trim() !== ""));
 
   const canContinueDatos = clienteNombre.trim().length >= 2 && clienteTelefono.trim().length >= 7;
 
@@ -261,30 +323,26 @@ export default function CheckoutModal({
     setSubmitting(true);
     setError(null);
     try {
-      // Si la selección fue una opción rápida (15/30/60 min), horaRecogida
-      // en el estado quedó congelada al momento del clic — recalcularla
-      // aquí, lo más cerca posible del request real, con la hora actual en
-      // este instante. "Otra hora" (minutosOpcionRapida === null) se manda
-      // tal cual, sin recalcular: ahí el cliente eligió un horario de reloj
-      // explícito y ese valor debe respetarse.
+      // Con la rueda de "recoger en X", la hora real se calcula aquí, lo más cerca posible del request, con la hora
+      // actual de este instante (el cliente tarda en pasar por "Datos"/"Pago" y la hora mostrada se habría quedado
+      // atrás). Con la rueda de reloj se manda tal cual la hora de reloj elegida.
       const horaRecogidaFinal =
-        metodoEntrega === "RECOGER" && minutosOpcionRapida != null
-          ? (horaRapida(minutosOpcionRapida) ?? horaRecogida)
-          : horaRecogida;
+        modoDuracion && duracionSel != null ? sumarMinutos(horaActualMexico(), duracionSel) : horaSel;
 
       const created = await createPublicOrder(slug, {
         clienteNombre,
         clienteTelefono,
         clienteCorreo: clienteCorreo.trim() || undefined,
         notas: notas.trim() || undefined,
-        // horaRecogidaTipo is always HORA_ESPECIFICA now — LO_ANTES_POSIBLE
-        // isn't offered as its own UI option anymore ("En 15 min o menos"
-        // already covers that case with a concrete time).
-        horaRecogidaTipo: metodoEntrega === "RECOGER" ? "HORA_ESPECIFICA" : undefined,
-        horaRecogida: metodoEntrega === "RECOGER" ? horaRecogidaFinal : undefined,
+        // horaRecogidaTipo siempre es HORA_ESPECIFICA: LO_ANTES_POSIBLE ya no se ofrece (la rueda de "recoger en X"
+        // cubre ese caso con una hora concreta). Pickup y domicilio comparten día/hora (el servidor aplica la
+        // anticipación de cada método).
+        horaRecogidaTipo: "HORA_ESPECIFICA",
+        horaRecogida: horaRecogidaFinal,
+        fechaEntrega: fechaSel,
         metodoPago,
         metodoEntrega,
-        puntoEnvioId: metodoEntrega === "DOMICILIO" ? puntoEnvioId : undefined,
+        puntoEnvioId: metodoEntrega === "DOMICILIO" ? puntoEnvioIdEfectivo : undefined,
         direccionCalle: metodoEntrega === "DOMICILIO" ? direccionCalle.trim() : undefined,
         direccionNumero: metodoEntrega === "DOMICILIO" ? direccionNumero.trim() : undefined,
         direccionColonia: metodoEntrega === "DOMICILIO" ? direccionColonia.trim() : undefined,
@@ -310,9 +368,9 @@ export default function CheckoutModal({
       // step actually collect and confirm the card. onSuccess() (clears the
       // cart) only fires once payment is confirmed there, not here.
       if (metodoPago === "TARJETA" && created.clientSecret) {
-        setStep("pago-tarjeta");
+        irA("pago-tarjeta");
       } else {
-        setStep("confirmation");
+        irA("confirmation");
         onSuccess();
       }
     } catch (err) {
@@ -324,47 +382,30 @@ export default function CheckoutModal({
 
   if (!abierto) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-        <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-white p-6 shadow-lg dark:bg-chat-card-dark">
+      <HojaInferior>
+        <div className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Estamos cerrados</h2>
           <p className="text-sm text-black/60 dark:text-white/60">
             No podemos recibir pedidos en este momento. Vuelve a intentarlo cuando abramos.
           </p>
           <button
-            onClick={onClose}
+            onClick={cerrar}
             className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 dark:bg-white dark:text-black"
           >
             Cerrar
           </button>
         </div>
-      </div>
+      </HojaInferior>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div
-        className={`flex max-h-[85vh] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-xl bg-white p-6 shadow-lg dark:bg-chat-card-dark ${
-          step === "entrega" ? "pb-24" : ""
-        }`}
-      >
-        {/* El paso "entrega" agrega pb-24 aquí (encima del p-6 normal) porque
-            su botón "Continuar" es sticky bottom-0: cuando el contenido no
-            cabe en max-h-[85vh], el sticky se clampa dentro del área visible
-            del scroll respetando este padding-bottom como "zona segura"
-            debajo de él. Sin este padding extra, el sticky se recalcula más
-            arriba de lo esperado y tapa el último texto/aviso del paso. */}
+    // Hoja anclada abajo cuya altura se adapta al contenido de cada paso (con transición suave); en pasos largos
+    // scrollea por dentro con el encabezado y el botón principal fijos. Ver HojaInferior.
+    <HojaInferior>
         {step === "cart" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Tu pedido</h2>
-              <button
-                onClick={onClose}
-                className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
-              >
-                Cerrar
-              </button>
-            </div>
+            <EncabezadoPantalla titulo="Confirma tu pedido" onAtras={cerrar} etiqueta="Cerrar" cerrar />
 
             <ul className="flex flex-col gap-2">
               {items.map((item) => {
@@ -390,7 +431,7 @@ export default function CheckoutModal({
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-black px-1.5 py-1 text-white dark:bg-white dark:text-black">
                     <button
-                      onClick={() => onChangeQty(item.id, -1)}
+                      onClick={() => cambiarCantidad(item.id, -1)}
                       aria-label="Quitar uno"
                       className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-medium"
                     >
@@ -398,7 +439,7 @@ export default function CheckoutModal({
                     </button>
                     <span className="w-4 text-center text-sm font-semibold">{item.cantidad}</span>
                     <button
-                      onClick={() => onChangeQty(item.id, 1)}
+                      onClick={() => cambiarCantidad(item.id, 1)}
                       aria-label="Agregar uno"
                       className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-medium"
                     >
@@ -418,42 +459,35 @@ export default function CheckoutModal({
               El precio de combos y descuentos se confirma al enviar tu pedido.
             </p>
 
-            <button
-              onClick={() => setStep("entrega")}
-              disabled={items.length === 0}
-              className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
-            >
-              Continuar ({totalUnidades} artículo{totalUnidades === 1 ? "" : "s"})
-            </button>
+            <PieFijo>
+              <button onClick={() => irA("datos")} disabled={items.length === 0} className={BTN_PRIMARY}>
+                Continuar ({totalUnidades} artículo{totalUnidades === 1 ? "" : "s"})
+              </button>
+            </PieFijo>
           </>
         )}
 
         {step === "entrega" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Entrega</h2>
-              <button onClick={() => setStep("cart")} className={BACK_LINK}>
-                Atrás
-              </button>
-            </div>
+            <EncabezadoPantalla titulo="Entrega" onAtras={atras} />
 
             <div className="flex flex-col gap-1.5 text-sm font-medium">
               Método de entrega
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setMetodoEntrega("RECOGER")}
+                  onClick={() => elegirMetodoEntrega("RECOGER")}
                   className={metodoEntrega === "RECOGER" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
                 >
-                  Recoger
+                  Pickup
                 </button>
                 <button
                   type="button"
-                  disabled={!puntosEnvio || puntosEnvio.length === 0}
-                  onClick={() => setMetodoEntrega("DOMICILIO")}
+                  disabled={domicilioNoDisponible}
+                  onClick={() => elegirMetodoEntrega("DOMICILIO")}
                   className={metodoEntrega === "DOMICILIO" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
                 >
-                  A domicilio
+                  Envío a domicilio
                 </button>
               </div>
               {puntosEnvio && puntosEnvio.length === 0 && (
@@ -461,84 +495,43 @@ export default function CheckoutModal({
                   Este negocio no ofrece entrega a domicilio por ahora.
                 </span>
               )}
+              {puntosEnvio && puntosEnvio.length > 0 && faltanteDomicilio > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-normal text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                  El envío a domicilio es desde ${(minimoDomicilio ?? 0).toFixed(2)} de pedido: te faltan $
+                  {faltanteDomicilio.toFixed(2)}. Agrega más productos para habilitarlo.
+                </div>
+              )}
             </div>
 
-            {metodoEntrega === "RECOGER" ? (
+            {metodoEntrega === "DOMICILIO" && (
               <div className="flex flex-col gap-1.5 text-sm font-medium">
-                Hora de recogida
-                <div className="flex flex-wrap gap-2">
-                  {opcionesRapidas.map((opcion) => (
-                    <button
-                      key={opcion.key}
-                      type="button"
-                      disabled={opcion.disabled}
-                      onClick={() => elegirHoraRapida(opcion)}
-                      className={opcionRecogida === opcion.key ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
+                {!unaSolaZona && (
+                  <>
+                    Zona de entrega
+                    <select
+                      required
+                      value={puntoEnvioId}
+                      onChange={(e) => setPuntoEnvioId(e.target.value)}
+                      className="input"
                     >
-                      {opcion.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={otraHoraDisabled}
-                    onClick={elegirOtraHora}
-                    className={opcionRecogida === "otra" ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}
-                  >
-                    Otra hora
-                  </button>
-                </div>
-                {sinOpcionesDeHora && (
-                  <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    Ya no queda margen para elegir una hora hoy.
-                  </span>
+                      <option value="">Selecciona una zona...</option>
+                      {(puntosEnvio ?? []).map((punto) => {
+                        const minimo = punto.pedidoMinimo != null ? Number(punto.pedidoMinimo) : 0;
+                        return (
+                          <option key={punto.id} value={punto.id} disabled={minimo > total}>
+                            {punto.nombre}
+                            {minimo > 0 ? ` (mínimo $${minimo.toFixed(2)})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {zonaSeleccionada && (
+                      <span className="text-xs font-normal text-black/50 dark:text-white/50">
+                        {zonaSeleccionada.direccion}
+                      </span>
+                    )}
+                  </>
                 )}
-                {opcionRecogida === "otra" && (
-                  <select
-                    required
-                    value={horaRecogida}
-                    onChange={(e) => setHoraRecogida(e.target.value)}
-                    className="input"
-                  >
-                    <option value="">Selecciona...</option>
-                    {opcionesOtraHora.map((hora) => (
-                      <option key={hora} value={hora}>
-                        {hora}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5 text-sm font-medium">
-                Zona de entrega
-                <select
-                  required
-                  value={puntoEnvioId}
-                  onChange={(e) => setPuntoEnvioId(e.target.value)}
-                  className="input"
-                >
-                  <option value="">Selecciona una zona...</option>
-                  {(puntosEnvio ?? []).map((punto) => (
-                    <option key={punto.id} value={punto.id}>
-                      {punto.nombre}
-                      {punto.pedidoMinimo ? ` (mínimo $${Number(punto.pedidoMinimo).toFixed(2)})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {zonaSeleccionada && (
-                  <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    {zonaSeleccionada.direccion}
-                  </span>
-                )}
-                <div
-                  className={`overflow-hidden rounded-xl border text-xs font-normal transition-all duration-300 ease-in-out ${
-                    avisoMinimoVisible
-                      ? "mt-0 max-h-24 border-amber-200 bg-amber-50 p-3 text-amber-800 opacity-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-                      : "max-h-0 border-transparent p-0 text-amber-800 opacity-0 dark:text-amber-300"
-                  }`}
-                >
-                  Te faltan ${faltantePorMinimo.toFixed(2)} para el pedido mínimo de esta zona (${(minimoZona ?? 0).toFixed(2)}).
-                </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -581,27 +574,80 @@ export default function CheckoutModal({
               </div>
             )}
 
-            <div className="sticky bottom-0 bg-white pb-1 pt-3 dark:bg-chat-card-dark">
+              <div className="flex flex-col gap-1.5 text-sm font-medium">
+                {dias.length > 1 && (
+                  <>
+                    Día
+                    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="radiogroup" aria-label="Día">
+                      {dias.map((dia) => {
+                        const { titulo, detalle } = partesDia(dia.fecha, hoy);
+                        const activo = dia.fecha === fechaSel;
+                        return (
+                          <button
+                            key={dia.fecha}
+                            type="button"
+                            role="radio"
+                            aria-checked={activo}
+                            onClick={() => elegirFecha(dia.fecha)}
+                            className={`flex min-w-16 shrink-0 flex-col items-center rounded-xl border-2 px-3 py-2 leading-tight ${
+                              activo
+                                ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                                : "border-black/15 text-black/70 hover:bg-black/5 dark:border-white/20 dark:text-white/70 dark:hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="text-xs font-semibold">{titulo}</span>
+                            <span className={`text-[11px] font-normal ${activo ? "opacity-80" : "opacity-60"}`}>{detalle}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                {modoDuracion ? "Pasar a recoger en" : metodoEntrega === "DOMICILIO" ? "Entregar a las:" : "Hora de recogida"}
+                {dias.length === 1 && fechaSel !== hoy && (
+                  <span className="text-xs font-normal text-black/50 dark:text-white/50">Día: {dias[0].etiqueta}</span>
+                )}
+                {modoDuracion && duraciones.length > 0 && duracionSel != null && (
+                  <>
+                    <RuedaHoraMin modo="duracion" opciones={duraciones} valor={duracionSel} onChange={setDuracionElegida} />
+                    <span className="text-center text-xs font-normal text-black/50 dark:text-white/50">
+                      Estará listo aprox. a las {formato12h(horaPorDuracion)}
+                    </span>
+                  </>
+                )}
+                {!modoDuracion && horasDelDia.length > 0 && (
+                  <RuedaHoraMin
+                    modo="reloj"
+                    opciones={horasDelDia.map(aMinutos)}
+                    valor={aMinutos(horaSel)}
+                    onChange={(total) => setHoraRecogida(deMinutos(total))}
+                  />
+                )}
+                {sinOpcionesDeHora && (
+                  <span className="text-xs font-normal text-black/50 dark:text-white/50">
+                    {anticipacionMinutos > 0
+                      ? "Por ahora no hay horarios disponibles con la anticipación que pide este negocio."
+                      : "Ya no queda margen para elegir una hora hoy."}
+                  </span>
+                )}
+              </div>
+
+            <PieFijo>
               <button
                 type="button"
-                onClick={() => setStep("datos")}
+                onClick={() => irA("pago")}
                 disabled={!canContinueEntrega}
                 className={BTN_PRIMARY}
               >
                 Continuar
               </button>
-            </div>
+            </PieFijo>
           </>
         )}
 
         {step === "datos" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Tus datos</h2>
-              <button onClick={() => setStep("entrega")} className={BACK_LINK}>
-                Atrás
-              </button>
-            </div>
+            <EncabezadoPantalla titulo="Tus datos" onAtras={atras} />
 
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -650,22 +696,19 @@ export default function CheckoutModal({
               </label>
             </div>
 
-            <button type="button" onClick={() => setStep("pago")} disabled={!canContinueDatos} className={BTN_PRIMARY}>
-              Continuar
-            </button>
+            <PieFijo>
+              <button type="button" onClick={() => irA("entrega")} disabled={!canContinueDatos} className={BTN_PRIMARY}>
+                Continuar
+              </button>
+            </PieFijo>
           </>
         )}
 
         {step === "pago" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Pago</h2>
-              <button onClick={() => setStep("datos")} className={BACK_LINK}>
-                Atrás
-              </button>
-            </div>
+            <EncabezadoPantalla titulo="Selecciona tu método de pago" onAtras={atras} />
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-3">
               <div className={RESUMEN_BOX}>
                 <span className={RESUMEN_LABEL}>Resumen</span>
                 <ul className="flex flex-col gap-1">
@@ -750,7 +793,7 @@ export default function CheckoutModal({
                     >
                       {metodoPago === "EFECTIVO" && <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />}
                     </span>
-                    {metodoEntrega === "RECOGER" ? "Pagar en el local al recoger" : "Pagar en efectivo al recibir"}
+                    {metodoEntrega === "RECOGER" ? "Pagar al recoger" : "Pagar al recibir"}
                   </button>
 
                   {aceptaTarjeta ? (
@@ -884,13 +927,11 @@ export default function CheckoutModal({
 
               {error && <p className="text-sm text-red-600">{error}</p>}
 
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
-              >
-                {submitting ? "Enviando..." : metodoPago === "TARJETA" ? "Continuar al pago" : "Confirmar pedido"}
-              </button>
+              <PieFijo>
+                <button type="submit" disabled={!canSubmit} className={BTN_PRIMARY}>
+                  {submitting ? "Enviando..." : metodoPago === "TARJETA" ? "Continuar al pago" : "Confirmar pedido"}
+                </button>
+              </PieFijo>
             </form>
           </>
         )}
@@ -900,9 +941,9 @@ export default function CheckoutModal({
             slug={slug}
             order={order}
             total={total}
-            onAtras={() => setStep("pago")}
+            onAtras={atras}
             onPagado={() => {
-              setStep("confirmation");
+              irA("confirmation");
               onSuccess();
             }}
           />
@@ -924,10 +965,12 @@ export default function CheckoutModal({
             )}
             <p className="text-sm text-black/60 dark:text-white/60">
               Tu folio es <span className="font-semibold text-black dark:text-white">#{order.folio}</span>.{" "}
-              {order.metodoEntrega === "DOMICILIO"
-                ? "Te avisaremos cuando salga a reparto."
-                : order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
-                  ? `Te esperamos a las ${order.horaRecogida}.`
+              {order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
+                ? `${order.metodoEntrega === "DOMICILIO" ? "Te lo llevamos" : "Te esperamos"} ${
+                    order.fechaEntrega ? `${etiquetaDia(order.fechaEntrega, fechaActualMexico()).toLowerCase()} ` : ""
+                  }a las ${formato12h(order.horaRecogida)}.`
+                : order.metodoEntrega === "DOMICILIO"
+                  ? "Te avisaremos cuando salga a reparto."
                   : "Te avisaremos cuando esté listo."}
             </p>
 
@@ -1002,15 +1045,14 @@ export default function CheckoutModal({
             )}
 
             <button
-              onClick={onClose}
+              onClick={cerrar}
               className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-95 dark:bg-white dark:text-black"
             >
               Cerrar
             </button>
           </>
         )}
-      </div>
-    </div>
+    </HojaInferior>
   );
 }
 
@@ -1020,6 +1062,90 @@ export default function CheckoutModal({
  * because useStripe()/useElements() only work inside an <Elements> provider —
  * they can't be called from the parent that renders it.
  */
+// Contenedor del checkout: hoja anclada abajo con fondo muy oscuro (casi sólido, con blur) para que no distraiga el
+// menú. Su altura sigue la del contenido (ResizeObserver) con transición, hasta un tope de 92 % de la pantalla; más
+// allá scrollea por dentro (el encabezado y el botón principal de cada paso son sticky).
+function HojaInferior({ children }: { children: React.ReactNode }) {
+  const contenidoRef = useRef<HTMLDivElement>(null);
+  const [alto, setAlto] = useState<number | null>(null);
+
+  // Bloquea el scroll de la página de atrás mientras el checkout está abierto. En iOS Safari `overflow: hidden` en el
+  // body no basta (el gesto se pasa a la página), así que se fija el body en su lugar y se restaura la posición al cerrar.
+  useEffect(() => {
+    const y = window.scrollY;
+    const { position, top, left, right, width, overflow } = document.body.style;
+    Object.assign(document.body.style, { position: "fixed", top: `-${y}px`, left: "0", right: "0", width: "100%", overflow: "hidden" });
+    return () => {
+      Object.assign(document.body.style, { position, top, left, right, width, overflow });
+      window.scrollTo(0, y);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = contenidoRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observador = new ResizeObserver(() => setAlto(el.getBoundingClientRect().height));
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-sm">
+      <div
+        className="hoja-checkout max-h-[92dvh] w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-lg transition-[height] duration-300 ease-out motion-reduce:transition-none dark:bg-chat-card-dark"
+        style={alto != null ? { height: alto } : undefined}
+      >
+        <div className="h-full overflow-y-auto overscroll-contain">
+          <div ref={contenidoRef} className="flex flex-col gap-4 p-6">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Encabezado de cada pantalla: flecha (o X en la primera) + título, pegado arriba al hacer scroll.
+function EncabezadoPantalla({
+  titulo,
+  onAtras,
+  etiqueta = "Atrás",
+  cerrar = false,
+}: {
+  titulo: string;
+  onAtras: () => void;
+  etiqueta?: string;
+  cerrar?: boolean;
+}) {
+  return (
+    <div className="sticky top-0 z-10 -mx-6 -mt-6 flex items-center gap-1 bg-white px-4 pb-2 pt-4 dark:bg-chat-card-dark">
+      <button
+        type="button"
+        onClick={onAtras}
+        aria-label={etiqueta}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-black/70 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/10"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          {cerrar ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M15 5l-7 7 7 7" />}
+        </svg>
+      </button>
+      <h2 className="text-lg font-semibold">{titulo}</h2>
+    </div>
+  );
+}
+
+// Botón principal del paso, fijo al borde inferior de la hoja (y al final del contenido si este es corto).
+function PieFijo({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-auto flex flex-col bg-white px-6 pt-3 dark:bg-chat-card-dark"
+      style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function TarjetaPagoStep({
   slug,
   order,
@@ -1206,12 +1332,7 @@ export function TarjetaPagoForm({
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Pago con tarjeta</h2>
-        <button onClick={onAtras} className={BACK_LINK}>
-          Atrás
-        </button>
-      </div>
+      <EncabezadoPantalla titulo="Pago con tarjeta" onAtras={onAtras} />
 
       <p className="text-sm text-black/60 dark:text-white/60">
         Folio <span className="font-semibold text-black dark:text-white">#{order.folio}</span> — Total ${total.toFixed(2)}

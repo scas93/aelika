@@ -290,6 +290,11 @@ export interface PublicTenantInfo {
   // Whether metodoPago = TARJETA can be offered at checkout — the server
   // re-checks this independently at order creation, this is only a UI hint.
   aceptaTarjeta: boolean;
+  // Reglas de entrega del negocio — solo para mostrar opciones en el checkout; el servidor las re-valida.
+  anticipacionPickupMinutos: number;
+  anticipacionDomicilioMinutos: number;
+  diasMaxAgendarPickup: number;
+  diasMaxAgendarDomicilio: number;
 }
 
 export interface PublicModifierOption {
@@ -360,6 +365,8 @@ export interface CreatePublicOrderPayload {
   notas?: string;
   horaRecogidaTipo?: HoraRecogidaTipo;
   horaRecogida?: string;
+  // "YYYY-MM-DD" del día elegido; sin él, hoy.
+  fechaEntrega?: string;
   metodoPago: MetodoPago;
   metodoEntrega?: MetodoEntrega;
   puntoEnvioId?: string;
@@ -401,6 +408,7 @@ export interface PublicOrder {
   notas: string | null;
   horaRecogidaTipo: HoraRecogidaTipo;
   horaRecogida: string | null;
+  fechaEntrega?: string | null;
   metodoPago: MetodoPago;
   // Only meaningful for TARJETA — EFECTIVO/TRANSFERENCIA are always PAGADO.
   estadoPago: EstadoPago;
@@ -557,6 +565,10 @@ export interface TenantSettings {
   // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
   // Cliente) — null = usa el default del backend (7 días).
   candadoMarketingDias: number | null;
+  anticipacionPickupMinutos: number;
+  anticipacionDomicilioMinutos: number;
+  diasMaxAgendarPickup: number;
+  diasMaxAgendarDomicilio: number;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
@@ -591,6 +603,10 @@ export interface UpdateTenantSettingsPayload {
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
   facturacionModo?: FacturacionModo;
+  anticipacionPickupMinutos?: number;
+  anticipacionDomicilioMinutos?: number;
+  diasMaxAgendarPickup?: number;
+  diasMaxAgendarDomicilio?: number;
   stripeContactEmail?: string;
   // Objeto para configurar, null para limpiar (vuelve a "sin ventana
   // configurada"), omitido para no tocarla — mismo contrato que

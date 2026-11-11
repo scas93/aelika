@@ -82,7 +82,7 @@ Next.js 16.3.1, React 19, Tailwind 4 (tokens en `app/globals.css`), Vitest + Tes
 
 | Ruta | Qué es |
 |---|---|
-| `app/login`, `app/register` | Autenticación y alta de negocio (acepta `RETAIL_B2C`, `RETAIL_B2B`, `HOTEL`) |
+| `app/login`, `app/registrar-negocio` (ruta no enlazada: alta manual de negocios) | Autenticación y alta de negocio (acepta `RETAIL_B2C`, `RETAIL_B2B`, `HOTEL`) |
 | `app/dashboard/*` | Panel administrativo: `pedidos`, `pedidos-b2b` (+ `dia`, `historico`), `catalogo`, `clientes`, `pagos`, `adopcion`, `lealtad`, `notificaciones` (`seguimiento`, `recontacto`), `ajustes` (`negocio`, `equipo`, `envios`, `facturacion`, `pagos`, `notificaciones`, `conexion-whatsapp`, `codigos-descuento`, `pedidos-b2b`), `cambiar-password` |
 | `app/tienda/[slug]` | Storefront público B2C (`pide.aelika.com/{slug}` es un detalle de despliegue) |
 | `app/mayoreo/[slug]` | Portal del cliente B2B (+ `portal/modificar`, `portal/pedidos`, `portal/pedidos/[folio]`, `…/modificar`) |

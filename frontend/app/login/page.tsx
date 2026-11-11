@@ -100,12 +100,14 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-admin-ink-soft">
-              ¿Aún no tienes negocio en Aelika?{" "}
-              <Link href="/register" className="font-semibold text-admin-green underline">
-                Regístralo aquí
-              </Link>
-            </p>
+            {process.env.NEXT_PUBLIC_REGISTRO_ABIERTO === "true" && (
+              <p className="text-center text-sm text-admin-ink-soft">
+                ¿Aún no tienes negocio en Aelika?{" "}
+                <Link href="/registrar-negocio" className="font-semibold text-admin-green underline">
+                  Regístralo aquí
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>

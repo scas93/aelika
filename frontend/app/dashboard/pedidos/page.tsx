@@ -15,6 +15,7 @@ import {
 import {
   cabeEnUnaLinea,
   COLUMNS_BODY,
+  cuandoLinea,
   entregaLinea,
   formatFechaHora,
   isWebUsbSupported,
@@ -237,8 +238,7 @@ function OrderCard({
     }
   }
 
-  const horaRecogidaDisplay =
-    order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida ? order.horaRecogida : "Lo antes posible";
+  const horaRecogidaDisplay = cuandoLinea(order);
   const fecha = new Date(order.createdAt).toLocaleString("es-MX", {
     day: "numeric",
     month: "short",
@@ -305,7 +305,7 @@ function OrderCard({
 
             <p className="text-sm text-admin-ink-soft">
               {entregaLinea(order, nombrePuntoEnvio)}
-              {order.metodoEntrega === "RECOGER" && ` · ${horaRecogidaDisplay}`} · Pago:{" "}
+              {(order.metodoEntrega === "RECOGER" || order.horaRecogidaTipo === "HORA_ESPECIFICA") && ` · ${horaRecogidaDisplay}`} · Pago:{" "}
               {METODO_PAGO_LABEL[order.metodoPago] ?? order.metodoPago}
             </p>
 
@@ -413,8 +413,7 @@ function ComandaImprimible({
   ctx: ComandaContext;
   fechaImpresion: Date;
 }) {
-  const horaRecogidaDisplay =
-    order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida ? `Recoge: ${order.horaRecogida}` : "Lo antes posible";
+  const horaRecogidaDisplay = cuandoLinea(order);
 
   return (
     <div id="comanda-imprimible" className="hidden print:block">
@@ -422,7 +421,7 @@ function ComandaImprimible({
       {ctx.ubicacionNegocio && <p className="text-center text-sm">{ctx.ubicacionNegocio}</p>}
       <p className="text-center text-3xl font-bold">#{order.folio}</p>
       <p className="text-center text-xl font-semibold">
-        {order.metodoEntrega === "DOMICILIO" ? "A domicilio" : horaRecogidaDisplay}
+        {order.metodoEntrega === "DOMICILIO" && horaRecogidaDisplay === "Lo antes posible" ? "A domicilio" : horaRecogidaDisplay}
       </p>
       <hr className="my-2 border-black" />
       <p className="text-sm font-bold">{entregaLinea(order, ctx.nombrePuntoEnvio)}</p>

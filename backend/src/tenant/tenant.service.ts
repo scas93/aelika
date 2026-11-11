@@ -38,6 +38,10 @@ const SETTINGS_SELECT = {
   botWebhookUrl: true,
   botWebhookSecret: true,
   candadoMarketingDias: true,
+  anticipacionPickupMinutos: true,
+  anticipacionDomicilioMinutos: true,
+  diasMaxAgendarPickup: true,
+  diasMaxAgendarDomicilio: true,
   facturacionModo: true,
   stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
@@ -172,6 +176,10 @@ export class TenantService {
         botWebhookUrl: dto.botWebhookUrl,
         botWebhookSecret: dto.botWebhookSecret,
         candadoMarketingDias: dto.candadoMarketingDias,
+        anticipacionPickupMinutos: dto.anticipacionPickupMinutos,
+        anticipacionDomicilioMinutos: dto.anticipacionDomicilioMinutos,
+        diasMaxAgendarPickup: dto.diasMaxAgendarPickup,
+        diasMaxAgendarDomicilio: dto.diasMaxAgendarDomicilio,
         portalHoraEntrega: dto.portalHoraEntrega,
         portalHorasAgregarDia: dto.portalHorasAgregarDia,
         portalHorasModificar: dto.portalHorasModificar,
@@ -381,6 +389,10 @@ export class TenantService {
     botWebhookUrl: string | null;
     botWebhookSecret: string | null;
     candadoMarketingDias: number | null;
+    anticipacionPickupMinutos: number;
+    anticipacionDomicilioMinutos: number;
+    diasMaxAgendarPickup: number;
+    diasMaxAgendarDomicilio: number;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
     stripeAccountId: string | null;
@@ -409,6 +421,10 @@ export class TenantService {
       botWebhookUrl: tenant.botWebhookUrl,
       botWebhookSecret: tenant.botWebhookSecret,
       candadoMarketingDias: tenant.candadoMarketingDias,
+      anticipacionPickupMinutos: tenant.anticipacionPickupMinutos,
+      anticipacionDomicilioMinutos: tenant.anticipacionDomicilioMinutos,
+      diasMaxAgendarPickup: tenant.diasMaxAgendarPickup,
+      diasMaxAgendarDomicilio: tenant.diasMaxAgendarDomicilio,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,

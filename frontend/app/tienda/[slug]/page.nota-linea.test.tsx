@@ -49,7 +49,7 @@ async function agregarLatte(nota: string, opciones: { grande?: boolean } = {}) {
 
 function lineasDelCarrito() {
   fireEvent.click(screen.getByRole("button", { name: /artículo/ }));
-  const carrito = screen.getByText("Tu pedido").parentElement!.parentElement!;
+  const carrito = screen.getByText("Confirma tu pedido").parentElement!.parentElement!;
   return within(carrito).getAllByRole("listitem");
 }
 

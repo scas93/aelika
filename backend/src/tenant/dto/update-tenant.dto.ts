@@ -101,6 +101,31 @@ export class UpdateTenantDto {
   @IsPositive()
   candadoMarketingDias?: number;
 
+  // Reglas de entrega del menudeo (B2C): horas de anticipación por método y días máximos para agendar (0 = sin regla / solo hoy).
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10080)
+  anticipacionPickupMinutos?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10080)
+  anticipacionDomicilioMinutos?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  diasMaxAgendarPickup?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  diasMaxAgendarDomicilio?: number;
+
   // Calendario del portal del cliente B2B (Fase 4, 4c). Hora en Ciudad de México.
   @IsOptional()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
