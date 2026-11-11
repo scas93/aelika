@@ -49,7 +49,7 @@ Alta/búsqueda con función propia (`clientes/cliente-reserva.ts`: `createMany �
 - `TenantB2cPublicGuard` rechaza `HOTEL` (404 como un slug inexistente); `TenantB2bPublicGuard` ya rechazaba todo lo no B2B. `GET /public/tenants/:slug` (info) no tiene guard: un hotel sigue devolviendo su info y `/tienda/<slug>` muestra el error del catálogo.
 - `GET /internal/bot-config` de un hotel devuelve `catalogoUrl: null`.
 - El panel no cambia (un hotel cae en la rama por defecto = menú y pantallas de menudeo). Las reservas no aparecen en Pedidos, Histórico, Kanban, Pagos, Dashboard ni exportes porque todas esas consultas filtran `tipo` B2C/B2B fijo; los huéspedes SÍ aparecen en el directorio de Clientes.
-- `register` acepta `HOTEL` (opción en `/register`; no fija `giroNegocio`, que se elige aparte). `METODO_PAGO_LABEL` incluye `EXTERNO: 'Pago externo'`.
+- `register` acepta `HOTEL` (opción en `/registrar-negocio`; no fija `giroNegocio`, que se elige aparte). `METODO_PAGO_LABEL` incluye `EXTERNO: 'Pago externo'`.
 - Reglas automáticas sobre reservas (`RESERVA_AUTOMATICA`) y su editor en el panel: [notificaciones.md](notificaciones.md).
 - Seed local de un hotel de prueba: `backend/prisma/seed-hotel-demo.ts` (ver [seeds-y-datos-demo.md](seeds-y-datos-demo.md)).
 - Pruebas: `backend/test/characterization/reservas-amenitiz.char-spec.ts` (fixtures = respuestas reales de Amenitiz).

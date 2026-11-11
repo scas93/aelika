@@ -10,7 +10,7 @@ export default function Home() {
       </p>
       <div className="flex gap-4">
         <Link
-          href="/register"
+          href="/registrar-negocio"
           className="rounded-full bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90 dark:bg-white dark:text-black"
         >
           Crear mi negocio
