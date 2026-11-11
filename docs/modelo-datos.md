@@ -42,7 +42,7 @@ Campos relevantes (ver comentarios en el schema): `slug` único, `tipoStorefront
 
 | Detalle | Tipo | Contenido |
 |---|---|---|
-| `DetalleB2C` (`detalles_b2c`) | B2C | `horaRecogidaTipo`, `horaRecogida`, `metodoEntrega`, `puntoEnvioId` (FK `Restrict`), `direccionCalle/Numero/Colonia/Referencias`, `notasDescuento` |
+| `DetalleB2C` (`detalles_b2c`) | B2C | `horaRecogidaTipo`, `horaRecogida`, `fechaEntrega` ("YYYY-MM-DD", null = anterior a las reglas de entrega), `metodoEntrega`, `puntoEnvioId` (FK `Restrict`), `direccionCalle/Numero/Colonia/Referencias`, `notasDescuento` |
 | `DetalleB2B` | B2B | `negocioNombre`, `semanaInicio`, `modoCobro`, `minimoPiezasAplicado`, `totalPiezas`, `subtotal`, código de descuento, `notaCliente`, `pagadoAt`, `confirmadoAt`, `origen`, `descuentoPorcentajeAplicado` |
 | `DetalleReserva` (`detalles_reserva`) | RESERVA | datos de la reserva del PMS (ver [hoteles-reservas.md](hoteles-reservas.md)) |
 

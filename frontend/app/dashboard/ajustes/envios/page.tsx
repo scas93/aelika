@@ -2,6 +2,7 @@
 
 import { useSession } from "@/lib/session-context";
 import PuntosEnvioSection from "../puntos-envio-section";
+import ReglasEntregaSection from "../reglas-entrega-section";
 import { mensajeSinAcceso } from "../acceso";
 import VolverAjustesLink from "../volver-link";
 
@@ -16,7 +17,10 @@ export default function AjustesEnviosPage() {
       ) : user.tenant.tipoStorefront === "RETAIL_B2B" ? (
         <p className="text-sm text-admin-ink-soft">Esta sección no aplica a negocios de mayoreo.</p>
       ) : (
-        <PuntosEnvioSection token={token} />
+        <>
+          <ReglasEntregaSection token={token} />
+          <PuntosEnvioSection token={token} />
+        </>
       )}
     </div>
   );

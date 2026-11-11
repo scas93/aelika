@@ -57,6 +57,12 @@ export class CreatePublicOrderDto {
   @Matches(HORA_PATTERN, { message: 'horaRecogida debe tener formato HH:mm' })
   horaRecogida?: string;
 
+  // Día de la entrega/recogida ("YYYY-MM-DD"). Opcional: sin él es hoy. Validado en PublicService contra
+  // diasMaxAgendar y el horario de ese día.
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'fechaEntrega debe tener formato YYYY-MM-DD' })
+  fechaEntrega?: string;
+
   @IsEnum(MetodoPago)
   metodoPago: MetodoPago;
 

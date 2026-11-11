@@ -38,6 +38,9 @@ const SETTINGS_SELECT = {
   botWebhookUrl: true,
   botWebhookSecret: true,
   candadoMarketingDias: true,
+  anticipacionPickupHoras: true,
+  anticipacionDomicilioHoras: true,
+  diasMaxAgendar: true,
   facturacionModo: true,
   stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
@@ -172,6 +175,9 @@ export class TenantService {
         botWebhookUrl: dto.botWebhookUrl,
         botWebhookSecret: dto.botWebhookSecret,
         candadoMarketingDias: dto.candadoMarketingDias,
+        anticipacionPickupHoras: dto.anticipacionPickupHoras,
+        anticipacionDomicilioHoras: dto.anticipacionDomicilioHoras,
+        diasMaxAgendar: dto.diasMaxAgendar,
         portalHoraEntrega: dto.portalHoraEntrega,
         portalHorasAgregarDia: dto.portalHorasAgregarDia,
         portalHorasModificar: dto.portalHorasModificar,
@@ -381,6 +387,9 @@ export class TenantService {
     botWebhookUrl: string | null;
     botWebhookSecret: string | null;
     candadoMarketingDias: number | null;
+    anticipacionPickupHoras: number;
+    anticipacionDomicilioHoras: number;
+    diasMaxAgendar: number;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
     stripeAccountId: string | null;
@@ -409,6 +418,9 @@ export class TenantService {
       botWebhookUrl: tenant.botWebhookUrl,
       botWebhookSecret: tenant.botWebhookSecret,
       candadoMarketingDias: tenant.candadoMarketingDias,
+      anticipacionPickupHoras: tenant.anticipacionPickupHoras,
+      anticipacionDomicilioHoras: tenant.anticipacionDomicilioHoras,
+      diasMaxAgendar: tenant.diasMaxAgendar,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,

@@ -85,6 +85,12 @@ model Tenant {
   // { lunes: { abierto, apertura: "HH:mm"|null, cierre: "HH:mm"|null }, ..., domingo: {...} }
   // apertura/cierre are null when abierto is false. See backend/src/common/horario.ts.
   horarioAtencion              Json?
+  // Reglas de entrega del menudeo (B2C), por negocio. Horas de anticipación mínima entre el pedido y la hora de
+  // entrega elegida (0 = sin regla; el margen base de 15 min siempre aplica), una por método, y cuántos días hacia
+  // adelante puede agendar el cliente (0 = solo hoy). Ver backend/src/common/horario.ts (validarEntregaProgramada).
+  anticipacionPickupHoras      Int                @default(0)
+  anticipacionDomicilioHoras   Int                @default(0)
+  diasMaxAgendar               Int                @default(0)
   ubicacion                    String?
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.
@@ -686,6 +692,9 @@ model DetalleB2C {
   orderId              String           @unique
   horaRecogidaTipo     HoraRecogidaTipo @default(LO_ANTES_POSIBLE)
   horaRecogida         String?
+  // "YYYY-MM-DD" (America/Mexico_City) del día elegido para la hora; null en pedidos anteriores a las reglas de
+  // entrega (= el día en que se creó) y con LO_ANTES_POSIBLE.
+  fechaEntrega         String?
   metodoEntrega        MetodoEntrega    @default(RECOGER)
   puntoEnvioId         String?
   direccionCalle       String?

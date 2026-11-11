@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 
 export const DIAS_SEMANA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'] as const;
 export type DiaSemana = (typeof DIAS_SEMANA)[number];
@@ -99,6 +99,87 @@ export function sumarMinutos(hhmm: string, minutos: number): string {
   const horas = Math.floor(total / 60);
   const mins = total % 60;
   return `${String(horas).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+const DIA_POR_INDICE_UTC: DiaSemana[] = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+
+/** Suma `dias` a una fecha "YYYY-MM-DD" (aritmética de calendario puro: se hace a mediodía UTC, sin offsets). */
+export function sumarDiasFecha(fecha: string, dias: number): string {
+  const d = new Date(`${fecha}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Día de la semana de una fecha de calendario "YYYY-MM-DD". */
+export function diaDeFecha(fecha: string): DiaSemana {
+  return DIA_POR_INDICE_UTC[new Date(`${fecha}T12:00:00Z`).getUTCDay()];
+}
+
+export interface ReglasEntrega {
+  /** Horas mínimas entre ahora y la hora elegida (0 = solo el margen base). */
+  anticipacionHoras: number;
+  /** Cuántos días después del primer día disponible se puede agendar (0 = solo ese día). */
+  diasMaxAgendar: number;
+  /** Margen base en minutos que siempre aplica (el de "lo antes posible"). */
+  margenMinutos: number;
+}
+
+/**
+ * Primer momento (fecha + "HH:mm", America/Mexico_City) en que se puede entregar: ahora + max(margen, anticipación).
+ * Se obtiene formateando el instante resultante con Intl — nunca sumando offsets a mano.
+ */
+export function entregaMasTemprana(reglas: ReglasEntrega, now = new Date()): { fecha: string; hora: string } {
+  const minutos = Math.max(reglas.margenMinutos, reglas.anticipacionHoras * 60);
+  const instante = new Date(now.getTime() + minutos * 60_000);
+  return { fecha: fechaEnMexico(instante), hora: horaActualMexico(instante) };
+}
+
+/**
+ * Valida la fecha/hora de entrega que eligió el cliente contra el horario del negocio y las reglas de entrega, y
+ * devuelve la fecha resuelta ("YYYY-MM-DD"; hoy si el cliente no mandó una). La hora debe caer dentro del horario del
+ * día elegido y no antes de ahora + max(margen, anticipación). Fuente de verdad del servidor; el storefront solo la
+ * replica para mostrar opciones.
+ */
+export function validarEntregaProgramada(
+  horario: HorarioSemana | null | undefined,
+  entrada: { fecha?: string | null; hora: string },
+  reglas: ReglasEntrega,
+  now = new Date(),
+): string {
+  const hoy = fechaEnMexico(now);
+  const fecha = entrada.fecha ?? hoy;
+
+  if (fecha < hoy) {
+    throw new BadRequestException('Elige una fecha de entrega que no haya pasado');
+  }
+  // La ventana de días cuenta desde el primer día en que ya se puede entregar (hoy + anticipación), no desde hoy:
+  // con 48 h de anticipación, "7 días" son los 7 días siguientes a ese primer día.
+  const minima = entregaMasTemprana(reglas, now);
+  if (fecha > sumarDiasFecha(minima.fecha, reglas.diasMaxAgendar)) {
+    throw new BadRequestException(
+      reglas.diasMaxAgendar === 0
+        ? 'Este negocio solo recibe pedidos para el primer día disponible'
+        : `Solo puedes agendar hasta ${reglas.diasMaxAgendar} día(s) después del primer día disponible`,
+    );
+  }
+
+  const horarioDia = horario?.[diaDeFecha(fecha)];
+  if (!horarioDia?.abierto || !horarioDia.apertura || !horarioDia.cierre) {
+    throw new ConflictException('El negocio no tiene horario disponible ese día');
+  }
+  if (entrada.hora < horarioDia.apertura || entrada.hora >= horarioDia.cierre) {
+    throw new BadRequestException(`Elige una hora entre ${horarioDia.apertura} y ${horarioDia.cierre}`);
+  }
+
+  if (`${fecha} ${entrada.hora}` < `${minima.fecha} ${minima.hora}`) {
+    throw new BadRequestException(
+      reglas.anticipacionHoras > 0
+        ? `Este negocio requiere al menos ${reglas.anticipacionHoras} hora(s) de anticipación`
+        : `Elige una hora a partir de las ${minima.hora}`,
+    );
+  }
+
+  return fecha;
 }
 
 export function horarioSemanaVacio(): HorarioSemana {

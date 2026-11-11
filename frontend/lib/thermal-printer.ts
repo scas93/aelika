@@ -2,6 +2,7 @@ import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
 import { METODO_PAGO_LABEL, type Order, type PedidoB2bEntregaDia, type PublicOrderItem, type Role } from "./api";
 import { regimenFiscalLabel, usoCfdiLabel } from "./catalogos-sat";
 import { formatearFolioB2b } from "./format";
+import { etiquetaDia, fechaActualMexico } from "./horario";
 
 // GHIA GTP801, 80mm — Font A fits ~42-48 chars at this width; 42 is the
 // conservative choice so lines don't wrap unexpectedly on narrower printers.
@@ -126,11 +127,18 @@ function padColumnas(izquierda: string, derecha: string, columns: number): strin
   return izquierda + " ".repeat(espacio) + derecha;
 }
 
+/**
+ * Cuándo se entrega el pedido, para el panel y la comanda: "Recoge: Mañana 12:00" / "Entrega: Hoy 13:30"
+ * (el día solo aparece si el pedido lo guardó) o "Lo antes posible".
+ */
+export function cuandoLinea(order: Order): string {
+  if (order.horaRecogidaTipo !== "HORA_ESPECIFICA" || !order.horaRecogida) return "Lo antes posible";
+  const dia = order.fechaEntrega ? `${etiquetaDia(order.fechaEntrega, fechaActualMexico())} ` : "";
+  return `${order.metodoEntrega === "DOMICILIO" ? "Entrega" : "Recoge"}: ${dia}${order.horaRecogida}`;
+}
+
 export function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array<ArrayBuffer> {
-  const horaRecogidaDisplay =
-    order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
-      ? `Recoge: ${order.horaRecogida}`
-      : "Lo antes posible";
+  const horaRecogidaDisplay = cuandoLinea(order);
 
   const encoder = new ReceiptPrinterEncoder({ language: "esc-pos", columns: COLUMNS });
 
@@ -151,7 +159,7 @@ export function buildComandaBytes(order: Order, ctx: ComandaContext): Uint8Array
     .bold(false)
     .size(1, 1)
     .bold(true)
-    .line(order.metodoEntrega === "DOMICILIO" ? "A domicilio" : horaRecogidaDisplay)
+    .line(order.metodoEntrega === "DOMICILIO" && horaRecogidaDisplay === "Lo antes posible" ? "A domicilio" : horaRecogidaDisplay)
     .bold(false)
     .font("B")
     .align("left")

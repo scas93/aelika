@@ -11,6 +11,7 @@ const logger = new Logger('OrderRespuesta');
 const CAMPOS_DETALLE_B2C = [
   'horaRecogidaTipo',
   'horaRecogida',
+  'fechaEntrega',
   'metodoEntrega',
   'puntoEnvioId',
   'direccionCalle',

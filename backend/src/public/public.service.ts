@@ -12,7 +12,7 @@ import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
 import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
-import { horaActualMexico, horarioDeHoy, isAbiertoAhora, sumarMinutos, HorarioSemana } from '../common/horario';
+import { isAbiertoAhora, validarEntregaProgramada, HorarioSemana, ReglasEntrega } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
 import { calcularHuellaCheckout, normalizarNombre } from '../common/huella-checkout';
@@ -103,6 +103,9 @@ export class PublicService {
         stripeAccountId: true,
         stripeChargesEnabled: true,
         tipoStorefront: true,
+        anticipacionPickupHoras: true,
+        anticipacionDomicilioHoras: true,
+        diasMaxAgendar: true,
       },
     });
     if (!tenant) {
@@ -125,6 +128,11 @@ export class PublicService {
       // same re-check createOrder does server-side (see step 3 below), so the
       // storefront never shows an option the server would 409 anyway.
       aceptaTarjeta: Boolean(tenant.stripeAccountId) && tenant.stripeChargesEnabled,
+      // Reglas de entrega del negocio (ver validarEntregaProgramada): el storefront solo las usa para mostrar
+      // opciones; createOrder las vuelve a exigir.
+      anticipacionPickupHoras: tenant.anticipacionPickupHoras,
+      anticipacionDomicilioHoras: tenant.anticipacionDomicilioHoras,
+      diasMaxAgendar: tenant.diasMaxAgendar,
     };
   }
 
@@ -256,6 +264,9 @@ export class PublicService {
         facturacionModo: true,
         stripeAccountId: true,
         stripeChargesEnabled: true,
+        anticipacionPickupHoras: true,
+        anticipacionDomicilioHoras: true,
+        diasMaxAgendar: true,
       },
     });
     if (!tenant) {
@@ -271,23 +282,16 @@ export class PublicService {
       throw new ConflictException('El negocio está cerrado en este momento');
     }
 
-    // 2. Pickup time — meaningless for DOMICILIO orders (no time slot for
-    // delivery yet), so horaRecogidaTipo/horaRecogida are ignored entirely
-    // and forced to their RECOGER defaults whenever metodoEntrega = DOMICILIO,
-    // no matter what the client sent for them.
+    // 2. Fecha/hora de entrega (RECOGER y DOMICILIO comparten el mismo selector). Cada método tiene su propia
+    // anticipación mínima (Tenant.anticipacionPickupHoras / anticipacionDomicilioHoras); con anticipación > 0 la hora
+    // específica es obligatoria. Sin hora (solo DOMICILIO, clientes API viejos y sin anticipación) = LO_ANTES_POSIBLE.
     const metodoEntrega = dto.metodoEntrega ?? MetodoEntrega.RECOGER;
-    let horaRecogidaTipo: HoraRecogidaTipo;
-    let horaRecogida: string | null;
-    if (metodoEntrega === MetodoEntrega.DOMICILIO) {
-      horaRecogidaTipo = HoraRecogidaTipo.LO_ANTES_POSIBLE;
-      horaRecogida = null;
-    } else {
-      if (!dto.horaRecogidaTipo) {
-        throw new BadRequestException('horaRecogidaTipo es obligatorio');
-      }
-      horaRecogidaTipo = dto.horaRecogidaTipo;
-      horaRecogida = this.resolverHoraRecogida(dto, horario);
-    }
+    const { horaRecogidaTipo, horaRecogida, fechaEntrega } = this.resolverEntrega(dto, metodoEntrega, horario, {
+      anticipacionHoras:
+        metodoEntrega === MetodoEntrega.DOMICILIO ? tenant.anticipacionDomicilioHoras : tenant.anticipacionPickupHoras,
+      diasMaxAgendar: tenant.diasMaxAgendar,
+      margenMinutos: MARGEN_MINIMO_MINUTOS,
+    });
 
     // 3. Payment method. TARJETA requires a connected Stripe account with
     // card_payments actually active — same check exposed to the client as
@@ -482,6 +486,7 @@ export class PublicService {
               tenantId: tenant.id,
               horaRecogidaTipo,
               horaRecogida,
+              fechaEntrega,
               metodoEntrega,
               puntoEnvioId: puntoEnvio?.id,
               ...direccionEntrega,
@@ -546,6 +551,7 @@ export class PublicService {
         total,
         horaRecogidaTipo,
         horaRecogida,
+        fechaEntrega,
         crearNuevo,
       });
     }
@@ -585,6 +591,7 @@ export class PublicService {
     total: number;
     horaRecogidaTipo: HoraRecogidaTipo;
     horaRecogida: string | null;
+    fechaEntrega: string | null;
     crearNuevo: (tx: Prisma.TransactionClient) => Promise<OrderCompleto>;
   }) {
     const { tenant, slug, huella, total } = ctx;
@@ -689,6 +696,7 @@ export class PublicService {
       total: number;
       horaRecogidaTipo: HoraRecogidaTipo;
       horaRecogida: string | null;
+      fechaEntrega: string | null;
     },
   ): Promise<ResultadoReutilizacion> {
     const { tenant, slug } = ctx;
@@ -765,10 +773,18 @@ export class PublicService {
     // La hora del último envío prevalece. Se lee y se escribe SOLO en el DetalleB2C (Etapa 1b-a): las columnas
     // viejas de Order ya no se tocan.
     const detalle = exigirDetalleB2C(cand).detalleB2c;
-    if (detalle.horaRecogida !== ctx.horaRecogida || detalle.horaRecogidaTipo !== ctx.horaRecogidaTipo) {
+    if (
+      detalle.horaRecogida !== ctx.horaRecogida ||
+      detalle.horaRecogidaTipo !== ctx.horaRecogidaTipo ||
+      detalle.fechaEntrega !== ctx.fechaEntrega
+    ) {
       await this.prisma.detalleB2C.update({
         where: { orderId: cand.id },
-        data: { horaRecogidaTipo: ctx.horaRecogidaTipo, horaRecogida: ctx.horaRecogida },
+        data: {
+          horaRecogidaTipo: ctx.horaRecogidaTipo,
+          horaRecogida: ctx.horaRecogida,
+          fechaEntrega: ctx.fechaEntrega,
+        },
       });
     }
     return { tipo: 'ok', order: await this.recargarOrder(cand.id), clientSecret };
@@ -1055,33 +1071,41 @@ export class PublicService {
   }
 
   /**
-   * Returns the "HH:mm" to store, or null. LO_ANTES_POSIBLE always stores
-   * null — whatever the client sent in `horaRecogida` is discarded, not
-   * validated. HORA_ESPECIFICA requires a value that's both inside today's
-   * schedule and at least MARGEN_MINIMO_MINUTOS from now.
+   * Resuelve cuándo se entrega el pedido. HORA_ESPECIFICA exige `horaRecogida` y valida (día, hora, anticipación) con
+   * `validarEntregaProgramada`. LO_ANTES_POSIBLE guarda null y solo se acepta si el método no tiene anticipación
+   * mínima; en RECOGER el tipo es obligatorio, en DOMICILIO se asume LO_ANTES_POSIBLE si no viene.
    */
-  private resolverHoraRecogida(dto: CreatePublicOrderDto, horario: HorarioSemana | null): string | null {
-    if (dto.horaRecogidaTipo === HoraRecogidaTipo.LO_ANTES_POSIBLE) {
-      return null;
+  private resolverEntrega(
+    dto: CreatePublicOrderDto,
+    metodoEntrega: MetodoEntrega,
+    horario: HorarioSemana | null,
+    reglas: ReglasEntrega,
+  ): { horaRecogidaTipo: HoraRecogidaTipo; horaRecogida: string | null; fechaEntrega: string | null } {
+    const tipo = dto.horaRecogidaTipo;
+    if (!tipo && metodoEntrega === MetodoEntrega.RECOGER) {
+      throw new BadRequestException('horaRecogidaTipo es obligatorio');
+    }
+
+    if (!tipo || tipo === HoraRecogidaTipo.LO_ANTES_POSIBLE) {
+      if (reglas.anticipacionHoras > 0) {
+        throw new BadRequestException(
+          `Este negocio requiere ${reglas.anticipacionHoras} hora(s) de anticipación: elige día y hora`,
+        );
+      }
+      return { horaRecogidaTipo: HoraRecogidaTipo.LO_ANTES_POSIBLE, horaRecogida: null, fechaEntrega: null };
     }
 
     if (!dto.horaRecogida) {
-      throw new BadRequestException('Elige una hora de recogida');
+      throw new BadRequestException(
+        metodoEntrega === MetodoEntrega.DOMICILIO ? 'Elige una hora de entrega' : 'Elige una hora de recogida',
+      );
     }
-
-    const horarioHoy = horarioDeHoy(horario);
-    if (!horarioHoy?.abierto || !horarioHoy.apertura || !horarioHoy.cierre) {
-      throw new ConflictException('El negocio no tiene horario disponible hoy');
-    }
-
-    const horaMinima = sumarMinutos(horaActualMexico(), MARGEN_MINIMO_MINUTOS);
-    const cotaInferior = horaMinima > horarioHoy.apertura ? horaMinima : horarioHoy.apertura;
-
-    if (dto.horaRecogida < cotaInferior || dto.horaRecogida >= horarioHoy.cierre) {
-      throw new BadRequestException(`Elige una hora de recogida entre ${cotaInferior} y ${horarioHoy.cierre}`);
-    }
-
-    return dto.horaRecogida;
+    const fechaEntrega = validarEntregaProgramada(
+      horario,
+      { fecha: dto.fechaEntrega, hora: dto.horaRecogida },
+      reglas,
+    );
+    return { horaRecogidaTipo: HoraRecogidaTipo.HORA_ESPECIFICA, horaRecogida: dto.horaRecogida, fechaEntrega };
   }
 
   /**
