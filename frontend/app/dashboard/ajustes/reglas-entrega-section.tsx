@@ -27,7 +27,8 @@ const MAX_MINUTOS = 10080; // 7 días
 export default function ReglasEntregaSection({ token }: { token: string }) {
   const [pickup, setPickup] = useState<CampoTiempo>({ valor: "0", unidad: "min" });
   const [domicilio, setDomicilio] = useState<CampoTiempo>({ valor: "0", unidad: "min" });
-  const [dias, setDias] = useState("0");
+  const [diasPickup, setDiasPickup] = useState("0");
+  const [diasDomicilio, setDiasDomicilio] = useState("0");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,7 +39,8 @@ export default function ReglasEntregaSection({ token }: { token: string }) {
       .then((s) => {
         setPickup(deMinutos(s.anticipacionPickupMinutos ?? 0));
         setDomicilio(deMinutos(s.anticipacionDomicilioMinutos ?? 0));
-        setDias(String(s.diasMaxAgendar ?? 0));
+        setDiasPickup(String(s.diasMaxAgendarPickup ?? 0));
+        setDiasDomicilio(String(s.diasMaxAgendarDomicilio ?? 0));
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar las reglas de entrega"))
       .finally(() => setLoading(false));
@@ -59,7 +61,8 @@ export default function ReglasEntregaSection({ token }: { token: string }) {
       await updateTenantSettings(token, {
         anticipacionPickupMinutos: minPickup,
         anticipacionDomicilioMinutos: minDomicilio,
-        diasMaxAgendar: Number(dias),
+        diasMaxAgendarPickup: Number(diasPickup),
+        diasMaxAgendarDomicilio: Number(diasDomicilio),
       });
       setSaved(true);
     } catch (err) {
@@ -140,15 +143,16 @@ export default function ReglasEntregaSection({ token }: { token: string }) {
           <p className="text-sm text-admin-ink-soft">Cargando...</p>
         ) : (
           <>
-            {campoTiempo("Anticipación mínima para pickup", pickup, setPickup)}
-            {campoTiempo("Anticipación mínima para envío a domicilio", domicilio, setDomicilio)}
-            {campoDias(
-              "Días disponibles para agendar",
-              "Cuántos días se ofrecen contando desde el primer día disponible (ej. con 48 h de anticipación, desde pasado mañana). 0 = solo ese día.",
-              dias,
-              setDias,
-              30,
-            )}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-sm font-extrabold text-admin-ink">Pickup</h3>
+              {campoTiempo("Anticipación mínima para pickup", pickup, setPickup)}
+              {campoDias("Días disponibles para agendar pickup", "Cuántos días se ofrecen contando desde el primer día disponible (ej. con 48 h de anticipación, desde pasado mañana). 0 = solo ese día.", diasPickup, setDiasPickup, 30)}
+            </div>
+            <div className="flex flex-col gap-3 border-t border-black/10 pt-4">
+              <h3 className="text-sm font-extrabold text-admin-ink">Envío a domicilio</h3>
+              {campoTiempo("Anticipación mínima para envío a domicilio", domicilio, setDomicilio)}
+              {campoDias("Días disponibles para agendar envío a domicilio", "Cuántos días se ofrecen contando desde el primer día disponible (ej. con 48 h de anticipación, desde pasado mañana). 0 = solo ese día.", diasDomicilio, setDiasDomicilio, 30)}
+            </div>
           </>
         )}
 

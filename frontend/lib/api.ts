@@ -293,7 +293,8 @@ export interface PublicTenantInfo {
   // Reglas de entrega del negocio — solo para mostrar opciones en el checkout; el servidor las re-valida.
   anticipacionPickupMinutos: number;
   anticipacionDomicilioMinutos: number;
-  diasMaxAgendar: number;
+  diasMaxAgendarPickup: number;
+  diasMaxAgendarDomicilio: number;
 }
 
 export interface PublicModifierOption {
@@ -566,7 +567,8 @@ export interface TenantSettings {
   candadoMarketingDias: number | null;
   anticipacionPickupMinutos: number;
   anticipacionDomicilioMinutos: number;
-  diasMaxAgendar: number;
+  diasMaxAgendarPickup: number;
+  diasMaxAgendarDomicilio: number;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
   // Read-only — never sent via UpdateTenantSettingsPayload. Managed through
@@ -603,7 +605,8 @@ export interface UpdateTenantSettingsPayload {
   facturacionModo?: FacturacionModo;
   anticipacionPickupMinutos?: number;
   anticipacionDomicilioMinutos?: number;
-  diasMaxAgendar?: number;
+  diasMaxAgendarPickup?: number;
+  diasMaxAgendarDomicilio?: number;
   stripeContactEmail?: string;
   // Objeto para configurar, null para limpiar (vuelve a "sin ventana
   // configurada"), omitido para no tocarla — mismo contrato que

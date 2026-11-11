@@ -105,7 +105,8 @@ export class PublicService {
         tipoStorefront: true,
         anticipacionPickupMinutos: true,
         anticipacionDomicilioMinutos: true,
-        diasMaxAgendar: true,
+        diasMaxAgendarPickup: true,
+        diasMaxAgendarDomicilio: true,
       },
     });
     if (!tenant) {
@@ -132,7 +133,8 @@ export class PublicService {
       // opciones; createOrder las vuelve a exigir.
       anticipacionPickupMinutos: tenant.anticipacionPickupMinutos,
       anticipacionDomicilioMinutos: tenant.anticipacionDomicilioMinutos,
-      diasMaxAgendar: tenant.diasMaxAgendar,
+      diasMaxAgendarPickup: tenant.diasMaxAgendarPickup,
+      diasMaxAgendarDomicilio: tenant.diasMaxAgendarDomicilio,
     };
   }
 
@@ -266,7 +268,8 @@ export class PublicService {
         stripeChargesEnabled: true,
         anticipacionPickupMinutos: true,
         anticipacionDomicilioMinutos: true,
-        diasMaxAgendar: true,
+        diasMaxAgendarPickup: true,
+        diasMaxAgendarDomicilio: true,
       },
     });
     if (!tenant) {
@@ -289,7 +292,8 @@ export class PublicService {
     const { horaRecogidaTipo, horaRecogida, fechaEntrega } = this.resolverEntrega(dto, metodoEntrega, horario, {
       anticipacionMinutos:
         metodoEntrega === MetodoEntrega.DOMICILIO ? tenant.anticipacionDomicilioMinutos : tenant.anticipacionPickupMinutos,
-      diasMaxAgendar: tenant.diasMaxAgendar,
+      diasMaxAgendar:
+        metodoEntrega === MetodoEntrega.DOMICILIO ? tenant.diasMaxAgendarDomicilio : tenant.diasMaxAgendarPickup,
       margenMinutos: MARGEN_MINIMO_MINUTOS,
     });
 

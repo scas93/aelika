@@ -7,11 +7,18 @@ import { useEffect, useRef } from "react";
 // un valor para elegirlo. El valor es un total de minutos: duración ("en 1 h 15 min") o minutos del día ("13:30").
 
 const ALTO_FILA = 40;
-const FILAS_VISIBLES = 5;
+const FILAS_DURACION = 5;
+const FILAS_RELOJ = 3;
 
 export function aMinutos(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** "13:30" → "1:30 p. m." (formato que se usa al hablar de horas de entrega en México). */
+export function formato12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "a. m." : "p. m."}`;
 }
 
 export function deMinutos(total: number): string {
@@ -29,12 +36,14 @@ function Columna({
   unidad,
   onChange,
   etiquetaAria,
+  filas,
 }: {
   items: ItemRueda[];
   valor: number;
   unidad?: string;
   onChange: (valor: number) => void;
   etiquetaAria: string;
+  filas: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,7 +77,7 @@ function Columna({
     }, 90);
   }
 
-  const relleno = ((FILAS_VISIBLES - 1) / 2) * ALTO_FILA;
+  const relleno = ((filas - 1) / 2) * ALTO_FILA;
 
   return (
     <div
@@ -78,7 +87,7 @@ function Columna({
       aria-label={etiquetaAria}
       className="snap-y snap-mandatory overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{
-        height: ALTO_FILA * FILAS_VISIBLES,
+        height: ALTO_FILA * filas,
         paddingBlock: relleno,
         maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
         WebkitMaskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
@@ -135,8 +144,41 @@ export default function RuedaHoraMin({
     onChange(delasHora.find((t) => t % 60 >= minutoActual) ?? delasHora[delasHora.length - 1]);
   }
 
-  const etiquetaHora = (h: number) => (modo === "reloj" ? String(h).padStart(2, "0") : String(h));
-  const etiquetaMin = (m: number) => (modo === "reloj" ? String(m).padStart(2, "0") : String(m));
+  const etiquetaHora = (h: number) =>
+    modo === "reloj" ? `${h % 12 || 12} ${h < 12 ? "a. m." : "p. m."}` : String(h);
+  const etiquetaMin = (m: number) => String(m);
+
+  // Modo reloj: dos ruedas de 3 filas (hora con a. m./p. m. y minutos ":00"/":30") con una sola banda de selección.
+  // Compacto y centrado, no a todo el ancho.
+  if (modo === "reloj") {
+    return (
+      <div className="relative mx-auto flex w-full max-w-[17rem] items-center gap-1 rounded-xl bg-black/[0.03] px-3 dark:bg-white/5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-lg bg-black/[0.06] dark:bg-white/10"
+          style={{ height: ALTO_FILA }}
+        />
+        <div className="relative flex-[3]">
+          <Columna
+            items={horas.map((h) => ({ valor: h, etiqueta: etiquetaHora(h) }))}
+            valor={horaSel}
+            onChange={cambiarHora}
+            etiquetaAria="Hora"
+            filas={FILAS_RELOJ}
+          />
+        </div>
+        <div className="relative flex-[2]">
+          <Columna
+            items={minutos.map((m) => ({ valor: m, etiqueta: `:${String(m).padStart(2, "0")}` }))}
+            valor={valor % 60}
+            onChange={(m) => onChange(horaSel * 60 + m)}
+            etiquetaAria="Minutos"
+            filas={FILAS_RELOJ}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex items-center justify-center gap-2 rounded-xl bg-black/[0.03] px-2 dark:bg-white/5">
@@ -150,19 +192,20 @@ export default function RuedaHoraMin({
         <Columna
           items={horas.map((h) => ({ valor: h, etiqueta: etiquetaHora(h) }))}
           valor={horaSel}
-          unidad={modo === "duracion" ? "h" : undefined}
+          unidad="h"
           onChange={cambiarHora}
-          etiquetaAria={modo === "duracion" ? "Horas" : "Hora"}
+          etiquetaAria="Horas"
+          filas={FILAS_DURACION}
         />
       </div>
-      {modo === "reloj" && <span className="relative text-xl font-semibold">:</span>}
       <div className="relative w-32">
         <Columna
           items={minutos.map((m) => ({ valor: m, etiqueta: etiquetaMin(m) }))}
           valor={valor % 60}
-          unidad={modo === "duracion" ? "min" : undefined}
+          unidad="min"
           onChange={(m) => onChange(horaSel * 60 + m)}
           etiquetaAria="Minutos"
+          filas={FILAS_DURACION}
         />
       </div>
     </div>

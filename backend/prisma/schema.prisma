@@ -90,7 +90,8 @@ model Tenant {
   // adelante puede agendar el cliente (0 = solo hoy). Ver backend/src/common/horario.ts (validarEntregaProgramada).
   anticipacionPickupMinutos      Int                @default(0)
   anticipacionDomicilioMinutos   Int                @default(0)
-  diasMaxAgendar               Int                @default(0)
+  diasMaxAgendarPickup         Int                @default(0)
+  diasMaxAgendarDomicilio      Int                @default(0)
   ubicacion                    String?
   // No DB default on purpose — null means "not set yet". TenantService applies
   // a sensible default when reading, so we never need to backfill this column.

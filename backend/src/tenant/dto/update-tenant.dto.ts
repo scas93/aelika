@@ -118,7 +118,13 @@ export class UpdateTenantDto {
   @IsInt()
   @Min(0)
   @Max(30)
-  diasMaxAgendar?: number;
+  diasMaxAgendarPickup?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  diasMaxAgendarDomicilio?: number;
 
   // Calendario del portal del cliente B2B (Fase 4, 4c). Hora en Ciudad de México.
   @IsOptional()

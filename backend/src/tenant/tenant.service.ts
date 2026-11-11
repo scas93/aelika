@@ -40,7 +40,8 @@ const SETTINGS_SELECT = {
   candadoMarketingDias: true,
   anticipacionPickupMinutos: true,
   anticipacionDomicilioMinutos: true,
-  diasMaxAgendar: true,
+  diasMaxAgendarPickup: true,
+  diasMaxAgendarDomicilio: true,
   facturacionModo: true,
   stripeContactEmail: true,
   // Read-only here — never accepted by UpdateTenantDto. stripeAccountId is
@@ -177,7 +178,8 @@ export class TenantService {
         candadoMarketingDias: dto.candadoMarketingDias,
         anticipacionPickupMinutos: dto.anticipacionPickupMinutos,
         anticipacionDomicilioMinutos: dto.anticipacionDomicilioMinutos,
-        diasMaxAgendar: dto.diasMaxAgendar,
+        diasMaxAgendarPickup: dto.diasMaxAgendarPickup,
+        diasMaxAgendarDomicilio: dto.diasMaxAgendarDomicilio,
         portalHoraEntrega: dto.portalHoraEntrega,
         portalHorasAgregarDia: dto.portalHorasAgregarDia,
         portalHorasModificar: dto.portalHorasModificar,
@@ -389,7 +391,8 @@ export class TenantService {
     candadoMarketingDias: number | null;
     anticipacionPickupMinutos: number;
     anticipacionDomicilioMinutos: number;
-    diasMaxAgendar: number;
+    diasMaxAgendarPickup: number;
+    diasMaxAgendarDomicilio: number;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
     stripeAccountId: string | null;
@@ -420,7 +423,8 @@ export class TenantService {
       candadoMarketingDias: tenant.candadoMarketingDias,
       anticipacionPickupMinutos: tenant.anticipacionPickupMinutos,
       anticipacionDomicilioMinutos: tenant.anticipacionDomicilioMinutos,
-      diasMaxAgendar: tenant.diasMaxAgendar,
+      diasMaxAgendarPickup: tenant.diasMaxAgendarPickup,
+      diasMaxAgendarDomicilio: tenant.diasMaxAgendarDomicilio,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,
       stripeChargesEnabled: tenant.stripeChargesEnabled,

@@ -20,13 +20,12 @@ import {
   duracionesDisponibles,
   etiquetaDia,
   fechaActualMexico,
-  formatoDuracion,
   horaActualMexico,
   horasDisponiblesParaFecha,
   partesDia,
   sumarMinutos,
 } from "@/lib/horario";
-import RuedaHoraMin, { aMinutos, deMinutos } from "./rueda-hora";
+import RuedaHoraMin, { aMinutos, deMinutos, formato12h } from "./rueda-hora";
 import { REGIMEN_FISCAL, USO_CFDI } from "@/lib/catalogos-sat";
 
 export interface CartItemModifier {
@@ -86,7 +85,8 @@ export default function CheckoutModal({
   aceptaTarjeta,
   anticipacionPickupMinutos = 0,
   anticipacionDomicilioMinutos = 0,
-  diasMaxAgendar = 0,
+  diasMaxAgendarPickup = 0,
+  diasMaxAgendarDomicilio = 0,
   onChangeQty,
   onClose: onCerrarProp,
   onSuccess,
@@ -103,7 +103,8 @@ export default function CheckoutModal({
   // las vuelve a validar; aquí solo definen qué días/horas se ofrecen.
   anticipacionPickupMinutos?: number;
   anticipacionDomicilioMinutos?: number;
-  diasMaxAgendar?: number;
+  diasMaxAgendarPickup?: number;
+  diasMaxAgendarDomicilio?: number;
   // Keyed by CartItem.id (the line), not productId — two lines can share a
   // productId once modifiers are involved, so productId alone can't identify
   // which one to adjust.
@@ -215,7 +216,11 @@ export default function CheckoutModal({
   const anticipacionMinutos = metodoEntrega === "DOMICILIO" ? anticipacionDomicilioMinutos : anticipacionPickupMinutos;
   const minutosMinimos = Math.max(MARGEN_MINIMO_MINUTOS, anticipacionMinutos);
   const hoy = fechaActualMexico();
-  const dias = diasDisponibles(horario, diasMaxAgendar, minutosMinimos);
+  const dias = diasDisponibles(
+    horario,
+    metodoEntrega === "DOMICILIO" ? diasMaxAgendarDomicilio : diasMaxAgendarPickup,
+    minutosMinimos,
+  );
   const fechaSel = dias.find((d) => d.fecha === fechaElegida)?.fecha ?? dias[0]?.fecha ?? hoy;
   const modoDuracion = metodoEntrega === "RECOGER" && dias.length <= 1 && fechaSel === hoy;
   const duraciones = modoDuracion ? duracionesDisponibles(horario, minutosMinimos) : [];
@@ -599,12 +604,6 @@ export default function CheckoutModal({
                   </>
                 )}
                 {modoDuracion ? "Pasar a recoger en" : metodoEntrega === "DOMICILIO" ? "Entregar a las:" : "Hora de recogida"}
-                {anticipacionMinutos > 0 && (
-                  <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    Este negocio pide {formatoDuracion(anticipacionMinutos)} de anticipación
-                    {dias[0] && dias[0].fecha !== hoy ? ` — el primer día disponible es ${dias[0].etiqueta.toLowerCase()}.` : "."}
-                  </span>
-                )}
                 {dias.length === 1 && fechaSel !== hoy && (
                   <span className="text-xs font-normal text-black/50 dark:text-white/50">Día: {dias[0].etiqueta}</span>
                 )}
@@ -612,7 +611,7 @@ export default function CheckoutModal({
                   <>
                     <RuedaHoraMin modo="duracion" opciones={duraciones} valor={duracionSel} onChange={setDuracionElegida} />
                     <span className="text-center text-xs font-normal text-black/50 dark:text-white/50">
-                      Estará listo aprox. a las {horaPorDuracion}
+                      Estará listo aprox. a las {formato12h(horaPorDuracion)}
                     </span>
                   </>
                 )}
@@ -969,7 +968,7 @@ export default function CheckoutModal({
               {order.horaRecogidaTipo === "HORA_ESPECIFICA" && order.horaRecogida
                 ? `${order.metodoEntrega === "DOMICILIO" ? "Te lo llevamos" : "Te esperamos"} ${
                     order.fechaEntrega ? `${etiquetaDia(order.fechaEntrega, fechaActualMexico()).toLowerCase()} ` : ""
-                  }a las ${order.horaRecogida}.`
+                  }a las ${formato12h(order.horaRecogida)}.`
                 : order.metodoEntrega === "DOMICILIO"
                   ? "Te avisaremos cuando salga a reparto."
                   : "Te avisaremos cuando esté listo."}

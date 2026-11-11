@@ -376,7 +376,8 @@ export default function TiendaPage() {
           aceptaTarjeta={tenant.aceptaTarjeta}
           anticipacionPickupMinutos={tenant.anticipacionPickupMinutos ?? 0}
           anticipacionDomicilioMinutos={tenant.anticipacionDomicilioMinutos ?? 0}
-          diasMaxAgendar={tenant.diasMaxAgendar ?? 0}
+          diasMaxAgendarPickup={tenant.diasMaxAgendarPickup ?? 0}
+          diasMaxAgendarDomicilio={tenant.diasMaxAgendarDomicilio ?? 0}
           onChangeQty={changeQty}
           onClose={() => setCartOpen(false)}
           onSuccess={() => setCart([])}
