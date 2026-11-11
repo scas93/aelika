@@ -88,8 +88,8 @@ model Tenant {
   // Reglas de entrega del menudeo (B2C), por negocio. Horas de anticipación mínima entre el pedido y la hora de
   // entrega elegida (0 = sin regla; el margen base de 15 min siempre aplica), una por método, y cuántos días hacia
   // adelante puede agendar el cliente (0 = solo hoy). Ver backend/src/common/horario.ts (validarEntregaProgramada).
-  anticipacionPickupHoras      Int                @default(0)
-  anticipacionDomicilioHoras   Int                @default(0)
+  anticipacionPickupMinutos      Int                @default(0)
+  anticipacionDomicilioMinutos   Int                @default(0)
   diasMaxAgendar               Int                @default(0)
   ubicacion                    String?
   // No DB default on purpose — null means "not set yet". TenantService applies

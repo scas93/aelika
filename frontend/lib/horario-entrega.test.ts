@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HorarioSemana } from "./api";
-import { diasDisponibles, duracionesDisponibles, entregaMasTemprana, horasDisponiblesParaFecha } from "./horario";
+import { diasDisponibles, duracionesDisponibles, entregaMasTemprana, formatoDuracion, horasDisponiblesParaFecha } from "./horario";
 
 const abierto = { abierto: true, apertura: "09:00", cierre: "12:00" };
 const cerrado = { abierto: false, apertura: null, cierre: null };
@@ -48,5 +48,13 @@ describe("reglas de entrega", () => {
     const dias = diasDisponibles(HORARIO, 6, 48 * 60, AHORA).map((d) => d.fecha);
     expect(dias[0]).toBe("2026-11-12");
     expect(dias).toHaveLength(6); // 12..18 sin el domingo 15
+  });
+});
+
+describe("formatoDuracion", () => {
+  it("muestra minutos, horas o ambos", () => {
+    expect(formatoDuracion(15)).toBe("15 min");
+    expect(formatoDuracion(120)).toBe("2 h");
+    expect(formatoDuracion(75)).toBe("1 h 15 min");
   });
 });

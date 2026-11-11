@@ -105,14 +105,14 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  @Max(168)
-  anticipacionPickupHoras?: number;
+  @Max(10080)
+  anticipacionPickupMinutos?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  @Max(168)
-  anticipacionDomicilioHoras?: number;
+  @Max(10080)
+  anticipacionDomicilioMinutos?: number;
 
   @IsOptional()
   @IsInt()

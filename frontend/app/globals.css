@@ -130,6 +130,14 @@ body {
   background: white;
 }
 
+/* Mismo motivo (zoom de iOS al enfocar un campo con fuente < 16px), para todos los campos del checkout de la tienda
+   (hoja .hoja-checkout). Sin capa, para ganarle a las utilidades de Tailwind. */
+.hoja-checkout .input,
+.hoja-checkout select,
+.hoja-checkout textarea {
+  font-size: 1rem;
+}
+
 @media (prefers-color-scheme: dark) {
   .input {
     border-color: rgb(255 255 255 / 0.2);

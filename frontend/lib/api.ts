@@ -291,8 +291,8 @@ export interface PublicTenantInfo {
   // re-checks this independently at order creation, this is only a UI hint.
   aceptaTarjeta: boolean;
   // Reglas de entrega del negocio — solo para mostrar opciones en el checkout; el servidor las re-valida.
-  anticipacionPickupHoras: number;
-  anticipacionDomicilioHoras: number;
+  anticipacionPickupMinutos: number;
+  anticipacionDomicilioMinutos: number;
   diasMaxAgendar: number;
 }
 
@@ -564,8 +564,8 @@ export interface TenantSettings {
   // Umbral del candado de frecuencia (días entre envíos MARKETING al mismo
   // Cliente) — null = usa el default del backend (7 días).
   candadoMarketingDias: number | null;
-  anticipacionPickupHoras: number;
-  anticipacionDomicilioHoras: number;
+  anticipacionPickupMinutos: number;
+  anticipacionDomicilioMinutos: number;
   diasMaxAgendar: number;
   facturacionModo: FacturacionModo;
   stripeContactEmail: string | null;
@@ -601,8 +601,8 @@ export interface UpdateTenantSettingsPayload {
   horarioAtencion?: HorarioSemana;
   ubicacion?: string;
   facturacionModo?: FacturacionModo;
-  anticipacionPickupHoras?: number;
-  anticipacionDomicilioHoras?: number;
+  anticipacionPickupMinutos?: number;
+  anticipacionDomicilioMinutos?: number;
   diasMaxAgendar?: number;
   stripeContactEmail?: string;
   // Objeto para configurar, null para limpiar (vuelve a "sin ventana

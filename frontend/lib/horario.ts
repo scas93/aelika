@@ -191,3 +191,11 @@ export function partesDia(fecha: string, hoy: string): { titulo: string; detalle
   }
   return { titulo, detalle };
 }
+
+/** "45 min", "2 h", "1 h 15 min": para mostrar la anticipación al cliente. */
+export function formatoDuracion(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}

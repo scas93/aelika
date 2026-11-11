@@ -12,7 +12,7 @@ import { StripeService } from '../stripe/stripe.service';
 import { NotificacionesQueueService } from '../notificaciones/queue/notificaciones-queue.service';
 import { recalcularContadoresCliente } from '../clientes/cliente-contadores';
 import { ClientesService } from '../clientes/clientes.service';
-import { isAbiertoAhora, validarEntregaProgramada, HorarioSemana, ReglasEntrega } from '../common/horario';
+import { formatoDuracion, isAbiertoAhora, validarEntregaProgramada, HorarioSemana, ReglasEntrega } from '../common/horario';
 import { resolverFacturacion } from '../common/facturacion';
 import { round2 } from '../common/money';
 import { calcularHuellaCheckout, normalizarNombre } from '../common/huella-checkout';
@@ -103,8 +103,8 @@ export class PublicService {
         stripeAccountId: true,
         stripeChargesEnabled: true,
         tipoStorefront: true,
-        anticipacionPickupHoras: true,
-        anticipacionDomicilioHoras: true,
+        anticipacionPickupMinutos: true,
+        anticipacionDomicilioMinutos: true,
         diasMaxAgendar: true,
       },
     });
@@ -130,8 +130,8 @@ export class PublicService {
       aceptaTarjeta: Boolean(tenant.stripeAccountId) && tenant.stripeChargesEnabled,
       // Reglas de entrega del negocio (ver validarEntregaProgramada): el storefront solo las usa para mostrar
       // opciones; createOrder las vuelve a exigir.
-      anticipacionPickupHoras: tenant.anticipacionPickupHoras,
-      anticipacionDomicilioHoras: tenant.anticipacionDomicilioHoras,
+      anticipacionPickupMinutos: tenant.anticipacionPickupMinutos,
+      anticipacionDomicilioMinutos: tenant.anticipacionDomicilioMinutos,
       diasMaxAgendar: tenant.diasMaxAgendar,
     };
   }
@@ -264,8 +264,8 @@ export class PublicService {
         facturacionModo: true,
         stripeAccountId: true,
         stripeChargesEnabled: true,
-        anticipacionPickupHoras: true,
-        anticipacionDomicilioHoras: true,
+        anticipacionPickupMinutos: true,
+        anticipacionDomicilioMinutos: true,
         diasMaxAgendar: true,
       },
     });
@@ -283,12 +283,12 @@ export class PublicService {
     }
 
     // 2. Fecha/hora de entrega (RECOGER y DOMICILIO comparten el mismo selector). Cada método tiene su propia
-    // anticipación mínima (Tenant.anticipacionPickupHoras / anticipacionDomicilioHoras); con anticipación > 0 la hora
+    // anticipación mínima (Tenant.anticipacionPickupMinutos / anticipacionDomicilioMinutos); con anticipación > 0 la hora
     // específica es obligatoria. Sin hora (solo DOMICILIO, clientes API viejos y sin anticipación) = LO_ANTES_POSIBLE.
     const metodoEntrega = dto.metodoEntrega ?? MetodoEntrega.RECOGER;
     const { horaRecogidaTipo, horaRecogida, fechaEntrega } = this.resolverEntrega(dto, metodoEntrega, horario, {
-      anticipacionHoras:
-        metodoEntrega === MetodoEntrega.DOMICILIO ? tenant.anticipacionDomicilioHoras : tenant.anticipacionPickupHoras,
+      anticipacionMinutos:
+        metodoEntrega === MetodoEntrega.DOMICILIO ? tenant.anticipacionDomicilioMinutos : tenant.anticipacionPickupMinutos,
       diasMaxAgendar: tenant.diasMaxAgendar,
       margenMinutos: MARGEN_MINIMO_MINUTOS,
     });
@@ -1087,9 +1087,9 @@ export class PublicService {
     }
 
     if (!tipo || tipo === HoraRecogidaTipo.LO_ANTES_POSIBLE) {
-      if (reglas.anticipacionHoras > 0) {
+      if (reglas.anticipacionMinutos > 0) {
         throw new BadRequestException(
-          `Este negocio requiere ${reglas.anticipacionHoras} hora(s) de anticipación: elige día y hora`,
+          `Este negocio requiere ${formatoDuracion(reglas.anticipacionMinutos)} de anticipación: elige día y hora`,
         );
       }
       return { horaRecogidaTipo: HoraRecogidaTipo.LO_ANTES_POSIBLE, horaRecogida: null, fechaEntrega: null };

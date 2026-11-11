@@ -20,6 +20,7 @@ import {
   duracionesDisponibles,
   etiquetaDia,
   fechaActualMexico,
+  formatoDuracion,
   horaActualMexico,
   horasDisponiblesParaFecha,
   partesDia,
@@ -83,8 +84,8 @@ export default function CheckoutModal({
   horario,
   facturacionModo,
   aceptaTarjeta,
-  anticipacionPickupHoras = 0,
-  anticipacionDomicilioHoras = 0,
+  anticipacionPickupMinutos = 0,
+  anticipacionDomicilioMinutos = 0,
   diasMaxAgendar = 0,
   onChangeQty,
   onClose: onCerrarProp,
@@ -100,8 +101,8 @@ export default function CheckoutModal({
   aceptaTarjeta: boolean;
   // Reglas de entrega del negocio (horas mínimas por método y días hacia adelante que se puede agendar). El servidor
   // las vuelve a validar; aquí solo definen qué días/horas se ofrecen.
-  anticipacionPickupHoras?: number;
-  anticipacionDomicilioHoras?: number;
+  anticipacionPickupMinutos?: number;
+  anticipacionDomicilioMinutos?: number;
   diasMaxAgendar?: number;
   // Keyed by CartItem.id (the line), not productId — two lines can share a
   // productId once modifiers are involved, so productId alone can't identify
@@ -211,8 +212,8 @@ export default function CheckoutModal({
   //  - pickup solo hoy: rueda "recoger en [h] [min]", pasos de 15 min (la hora real se calcula al enviar);
   //  - domicilio, o varios días (o un único día que no es hoy): chips de día (si hay más de uno) + rueda de reloj
   //    "entregar a las HH:mm" cada 30 min. El domicilio siempre es una hora de reloj, nunca un temporizador.
-  const anticipacionHoras = metodoEntrega === "DOMICILIO" ? anticipacionDomicilioHoras : anticipacionPickupHoras;
-  const minutosMinimos = Math.max(MARGEN_MINIMO_MINUTOS, anticipacionHoras * 60);
+  const anticipacionMinutos = metodoEntrega === "DOMICILIO" ? anticipacionDomicilioMinutos : anticipacionPickupMinutos;
+  const minutosMinimos = Math.max(MARGEN_MINIMO_MINUTOS, anticipacionMinutos);
   const hoy = fechaActualMexico();
   const dias = diasDisponibles(horario, diasMaxAgendar, minutosMinimos);
   const fechaSel = dias.find((d) => d.fecha === fechaElegida)?.fecha ?? dias[0]?.fecha ?? hoy;
@@ -598,9 +599,9 @@ export default function CheckoutModal({
                   </>
                 )}
                 {modoDuracion ? "Pasar a recoger en" : metodoEntrega === "DOMICILIO" ? "Entregar a las:" : "Hora de recogida"}
-                {anticipacionHoras > 0 && (
+                {anticipacionMinutos > 0 && (
                   <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    Este negocio pide {anticipacionHoras} hora{anticipacionHoras === 1 ? "" : "s"} de anticipación
+                    Este negocio pide {formatoDuracion(anticipacionMinutos)} de anticipación
                     {dias[0] && dias[0].fecha !== hoy ? ` — el primer día disponible es ${dias[0].etiqueta.toLowerCase()}.` : "."}
                   </span>
                 )}
@@ -625,7 +626,7 @@ export default function CheckoutModal({
                 )}
                 {sinOpcionesDeHora && (
                   <span className="text-xs font-normal text-black/50 dark:text-white/50">
-                    {anticipacionHoras > 0
+                    {anticipacionMinutos > 0
                       ? "Por ahora no hay horarios disponibles con la anticipación que pide este negocio."
                       : "Ya no queda margen para elegir una hora hoy."}
                   </span>
@@ -1080,7 +1081,7 @@ function HojaInferior({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-sm">
       <div
-        className="max-h-[92dvh] w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-lg transition-[height] duration-300 ease-out motion-reduce:transition-none dark:bg-chat-card-dark"
+        className="hoja-checkout max-h-[92dvh] w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-lg transition-[height] duration-300 ease-out motion-reduce:transition-none dark:bg-chat-card-dark"
         style={alto != null ? { height: alto } : undefined}
       >
         <div className="h-full overflow-y-auto overscroll-contain">

@@ -38,8 +38,8 @@ const SETTINGS_SELECT = {
   botWebhookUrl: true,
   botWebhookSecret: true,
   candadoMarketingDias: true,
-  anticipacionPickupHoras: true,
-  anticipacionDomicilioHoras: true,
+  anticipacionPickupMinutos: true,
+  anticipacionDomicilioMinutos: true,
   diasMaxAgendar: true,
   facturacionModo: true,
   stripeContactEmail: true,
@@ -175,8 +175,8 @@ export class TenantService {
         botWebhookUrl: dto.botWebhookUrl,
         botWebhookSecret: dto.botWebhookSecret,
         candadoMarketingDias: dto.candadoMarketingDias,
-        anticipacionPickupHoras: dto.anticipacionPickupHoras,
-        anticipacionDomicilioHoras: dto.anticipacionDomicilioHoras,
+        anticipacionPickupMinutos: dto.anticipacionPickupMinutos,
+        anticipacionDomicilioMinutos: dto.anticipacionDomicilioMinutos,
         diasMaxAgendar: dto.diasMaxAgendar,
         portalHoraEntrega: dto.portalHoraEntrega,
         portalHorasAgregarDia: dto.portalHorasAgregarDia,
@@ -387,8 +387,8 @@ export class TenantService {
     botWebhookUrl: string | null;
     botWebhookSecret: string | null;
     candadoMarketingDias: number | null;
-    anticipacionPickupHoras: number;
-    anticipacionDomicilioHoras: number;
+    anticipacionPickupMinutos: number;
+    anticipacionDomicilioMinutos: number;
     diasMaxAgendar: number;
     facturacionModo: FacturacionModo;
     stripeContactEmail: string | null;
@@ -418,8 +418,8 @@ export class TenantService {
       botWebhookUrl: tenant.botWebhookUrl,
       botWebhookSecret: tenant.botWebhookSecret,
       candadoMarketingDias: tenant.candadoMarketingDias,
-      anticipacionPickupHoras: tenant.anticipacionPickupHoras,
-      anticipacionDomicilioHoras: tenant.anticipacionDomicilioHoras,
+      anticipacionPickupMinutos: tenant.anticipacionPickupMinutos,
+      anticipacionDomicilioMinutos: tenant.anticipacionDomicilioMinutos,
       diasMaxAgendar: tenant.diasMaxAgendar,
       facturacionModo: tenant.facturacionModo,
       stripeAccountId: tenant.stripeAccountId,

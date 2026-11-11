@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
+  formatoDuracion,
   diaDeFecha,
   entregaMasTemprana,
   sumarDiasFecha,
@@ -23,7 +24,7 @@ const HORARIO: HorarioSemana = {
 
 // Martes 2026-11-10 12:00 en Ciudad de México (UTC-6, sin horario de verano) = 18:00Z.
 const AHORA = new Date('2026-11-10T18:00:00Z');
-const base: ReglasEntrega = { anticipacionHoras: 0, diasMaxAgendar: 0, margenMinutos: 15 };
+const base: ReglasEntrega = { anticipacionMinutos: 0, diasMaxAgendar: 0, margenMinutos: 15 };
 
 describe('fechas de calendario', () => {
   it('suma días y calcula el día de la semana', () => {
@@ -38,7 +39,7 @@ describe('entregaMasTemprana', () => {
     expect(entregaMasTemprana(base, AHORA)).toEqual({ fecha: '2026-11-10', hora: '12:15' });
   });
   it('con 24 h cae al día siguiente a la misma hora', () => {
-    expect(entregaMasTemprana({ ...base, anticipacionHoras: 24 }, AHORA)).toEqual({ fecha: '2026-11-11', hora: '12:00' });
+    expect(entregaMasTemprana({ ...base, anticipacionMinutos: 1440 }, AHORA)).toEqual({ fecha: '2026-11-11', hora: '12:00' });
   });
 });
 
@@ -74,10 +75,10 @@ describe('validarEntregaProgramada', () => {
   });
 
   it('anticipación 24 h: hoy ya no alcanza y mañana solo desde la misma hora', () => {
-    const reglas = { ...base, anticipacionHoras: 24, diasMaxAgendar: 3 };
-    expect(() => validarEntregaProgramada(HORARIO, { hora: '17:00' }, reglas, AHORA)).toThrow(/24 hora/);
+    const reglas = { ...base, anticipacionMinutos: 1440, diasMaxAgendar: 3 };
+    expect(() => validarEntregaProgramada(HORARIO, { hora: '17:00' }, reglas, AHORA)).toThrow(/24 h de anticipación/);
     expect(() => validarEntregaProgramada(HORARIO, { fecha: '2026-11-11', hora: '11:30' }, reglas, AHORA)).toThrow(
-      /24 hora/,
+      /24 h de anticipación/,
     );
     expect(validarEntregaProgramada(HORARIO, { fecha: '2026-11-11', hora: '12:00' }, reglas, AHORA)).toBe('2026-11-11');
     expect(validarEntregaProgramada(HORARIO, { fecha: '2026-11-12', hora: '09:00' }, reglas, AHORA)).toBe('2026-11-12');
@@ -85,10 +86,18 @@ describe('validarEntregaProgramada', () => {
 
   it('la ventana de días cuenta desde el primer día disponible, no desde hoy', () => {
     // 48 h: el primer día es el jueves 12; con 3 días de ventana llega hasta el domingo 15 (cerrado) / sábado 14.
-    const reglas = { ...base, anticipacionHoras: 48, diasMaxAgendar: 3 };
+    const reglas = { ...base, anticipacionMinutos: 2880, diasMaxAgendar: 3 };
     expect(validarEntregaProgramada(HORARIO, { fecha: '2026-11-14', hora: '10:00' }, reglas, AHORA)).toBe('2026-11-14');
     expect(() => validarEntregaProgramada(HORARIO, { fecha: '2026-11-16', hora: '10:00' }, reglas, AHORA)).toThrow(
       /hasta 3 día/,
     );
+  });
+});
+
+describe('formatoDuracion', () => {
+  it('muestra minutos, horas o ambos', () => {
+    expect(formatoDuracion(15)).toBe('15 min');
+    expect(formatoDuracion(120)).toBe('2 h');
+    expect(formatoDuracion(75)).toBe('1 h 15 min');
   });
 });

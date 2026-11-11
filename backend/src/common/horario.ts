@@ -117,11 +117,19 @@ export function diaDeFecha(fecha: string): DiaSemana {
 
 export interface ReglasEntrega {
   /** Horas mínimas entre ahora y la hora elegida (0 = solo el margen base). */
-  anticipacionHoras: number;
+  anticipacionMinutos: number;
   /** Cuántos días después del primer día disponible se puede agendar (0 = solo ese día). */
   diasMaxAgendar: number;
   /** Margen base en minutos que siempre aplica (el de "lo antes posible"). */
   margenMinutos: number;
+}
+
+/** "45 min", "2 h", "1 h 15 min": para mensajes al cliente. */
+export function formatoDuracion(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
 /**
@@ -129,7 +137,7 @@ export interface ReglasEntrega {
  * Se obtiene formateando el instante resultante con Intl — nunca sumando offsets a mano.
  */
 export function entregaMasTemprana(reglas: ReglasEntrega, now = new Date()): { fecha: string; hora: string } {
-  const minutos = Math.max(reglas.margenMinutos, reglas.anticipacionHoras * 60);
+  const minutos = Math.max(reglas.margenMinutos, reglas.anticipacionMinutos);
   const instante = new Date(now.getTime() + minutos * 60_000);
   return { fecha: fechaEnMexico(instante), hora: horaActualMexico(instante) };
 }
@@ -173,8 +181,8 @@ export function validarEntregaProgramada(
 
   if (`${fecha} ${entrada.hora}` < `${minima.fecha} ${minima.hora}`) {
     throw new BadRequestException(
-      reglas.anticipacionHoras > 0
-        ? `Este negocio requiere al menos ${reglas.anticipacionHoras} hora(s) de anticipación`
+      reglas.anticipacionMinutos > 0
+        ? `Este negocio requiere al menos ${formatoDuracion(reglas.anticipacionMinutos)} de anticipación`
         : `Elige una hora a partir de las ${minima.hora}`,
     );
   }
