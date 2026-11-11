@@ -1070,6 +1070,18 @@ function HojaInferior({ children }: { children: React.ReactNode }) {
   const contenidoRef = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState<number | null>(null);
 
+  // Bloquea el scroll de la página de atrás mientras el checkout está abierto. En iOS Safari `overflow: hidden` en el
+  // body no basta (el gesto se pasa a la página), así que se fija el body en su lugar y se restaura la posición al cerrar.
+  useEffect(() => {
+    const y = window.scrollY;
+    const { position, top, left, right, width, overflow } = document.body.style;
+    Object.assign(document.body.style, { position: "fixed", top: `-${y}px`, left: "0", right: "0", width: "100%", overflow: "hidden" });
+    return () => {
+      Object.assign(document.body.style, { position, top, left, right, width, overflow });
+      window.scrollTo(0, y);
+    };
+  }, []);
+
   useEffect(() => {
     const el = contenidoRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
