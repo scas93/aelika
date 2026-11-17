@@ -36,6 +36,7 @@ import { PedidoContexto } from '../notificaciones-reglas/plantilla-variable.type
 import { CreatePedidoB2bDto } from './dto/create-pedido-b2b.dto';
 import { UpdatePedidoB2bItemsDto } from './dto/update-pedido-b2b-items.dto';
 import { ListPedidosB2bQueryDto } from './dto/list-pedidos-b2b-query.dto';
+import { EntregaConfirmadaService } from '../entrega-confirmada/entrega-confirmada.service';
 import { CerrarEntregaB2bDto } from './dto/cerrar-entrega-b2b.dto';
 import { CorregirEntregaB2bDto } from './dto/corregir-entrega-b2b.dto';
 import { ExportPedidosB2bQueryDto } from './dto/export-pedidos-b2b-query.dto';
@@ -138,7 +139,19 @@ export class PedidosB2bService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly clientesService: ClientesService,
     private readonly reglaEventoPedidoService: ReglaEventoPedidoService,
+    private readonly entregaConfirmada: EntregaConfirmadaService,
   ) {}
+
+  /** Dispara «Entrega confirmada» tras el commit y en segundo plano: nada de aquí puede afectar ni retrasar el cambio de estatus. */
+  private avisarEntregaConfirmada(tenantId: string, entregaId: string) {
+    try {
+      void this.entregaConfirmada
+        .avisarSeguro(tenantId, entregaId)
+        .catch(() => undefined);
+    } catch {
+      /* nunca afecta el cierre */
+    }
+  }
 
   private buildWhere(query: Parameters<typeof buildWherePedidosB2b>[0]): Prisma.OrderWhereInput {
     return buildWherePedidosB2b(query);
@@ -846,11 +859,12 @@ export class PedidosB2bService {
    * PATCH /:id/entregas/:entregaId/cerrar — cierra UNA entrega (Pendiente → Entregada | No recogida), nunca en bloque.
    * Solo en pedidos Confirmados o En proceso; una entrega ya cerrada no se vuelve a cerrar aquí (la corrección del admin es
    * otra entrega). Guarda fecha y hora del cierre (estadoCambiadoAt), sin usuario. Recalcula el estado del pedido
-   * (En proceso / Completado). No dispara eventos de notificación.
+   * (En proceso / Completado). Al pasar a Entregada, tras el commit y en segundo plano, se manda el correo «Entrega confirmada»
+   * al cliente (si sus interruptores lo permiten); un fallo de ese correo nunca afecta el cierre.
    */
   async cerrarEntrega(id: string, entregaId: string, dto: CerrarEntregaB2bDto) {
-    await this.cargar(id); // 404 si no existe / otro tenant / no es B2B
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    const pedido = await this.cargar(id); // 404 si no existe / otro tenant / no es B2B
+    const respuesta = await this.tenantPrisma.client.$transaction(async (tx) => {
       // Serializa contra otros cierres y ediciones del mismo pedido; el estado se revisa YA bajo el candado.
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
       const orden = await tx.order.findUniqueOrThrow({
@@ -891,6 +905,9 @@ export class PedidosB2bService {
         }),
       );
     });
+    if (dto.estado === EstadoEntrega.ENTREGADA)
+      this.avisarEntregaConfirmada(pedido.tenantId, entregaId);
+    return respuesta;
   }
 
   /**
@@ -1020,7 +1037,9 @@ export class PedidosB2bService {
    *
    * Recalcula con la regla actual: TODAS las líneas del pedido toman nombre y precio actuales del catálogo, y se reaplica el %
    * de descuento del pedido sobre las entregas no canceladas. NO cambia el estado del pedido (las entregas siguen cerradas),
-   * NO toca el pago, NO conserva usuario y NO dispara notificaciones. Conserva la fecha/hora del cierre original.
+   * NO toca el pago y NO conserva usuario. Conserva la fecha/hora del cierre original. Única notificación: si la corrección
+   * cambia el estado de No recogida a Entregada, es la primera vez que la entrega pasa a Entregada y se manda «Entrega
+   * confirmada» (misma regla que al cerrarla; nunca se repite).
    * Una línea nueva reutiliza el ítem del pedido de ese producto si existe (otro día) o crea uno; un ítem que se queda sin
    * ninguna entrega se elimina, y `OrderItem.cantidad` vuelve a ser la suma de sus entregas.
    */
@@ -1029,7 +1048,7 @@ export class PedidosB2bService {
     entregaId: string,
     dto: CorregirEntregaB2bDto,
   ) {
-    await this.cargar(id);
+    const pedido = await this.cargar(id);
     const ids = dto.items.map((i) => i.productId);
     if (new Set(ids).size !== ids.length) {
       throw new BadRequestException(
@@ -1037,7 +1056,8 @@ export class PedidosB2bService {
       );
     }
 
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    let pasoAEntregada = false;
+    const respuesta = await this.tenantPrisma.client.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
       const orden = await tx.order.findUniqueOrThrow({
         where: { id },
@@ -1126,6 +1146,7 @@ export class PedidosB2bService {
           where: { id: entregaId },
           data: { estado: dto.estado },
         });
+        pasoAEntregada = dto.estado === EstadoEntrega.ENTREGADA;
       }
 
       // --- 3. Todas las líneas toman el precio (y nombre) actual del catálogo; luego cantidad = suma de sus entregas.
@@ -1180,6 +1201,9 @@ export class PedidosB2bService {
         }),
       );
     });
+    if (pasoAEntregada)
+      this.avisarEntregaConfirmada(pedido.tenantId, entregaId);
+    return respuesta;
   }
 
   /**

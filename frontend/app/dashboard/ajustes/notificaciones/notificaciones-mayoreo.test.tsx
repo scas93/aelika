@@ -23,6 +23,7 @@ const fetchResumenClientesConfig = vi.fn();
 const guardarResumenClientesConfig = vi.fn();
 const fetchClientesB2bSelector = vi.fn();
 const enviarResumenClientePrueba = vi.fn();
+const enviarEntregaConfirmadaPrueba = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
@@ -39,6 +40,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     guardarResumenClientesConfig,
     fetchClientesB2bSelector,
     enviarResumenClientePrueba,
+    enviarEntregaConfirmadaPrueba,
   };
 });
 
@@ -81,6 +83,7 @@ function datos(opts: { canales?: NotificacionCanalConfig[]; eventos?: Notificaci
 }
 
 const TARJETAS = ["Pedido modificado por un cliente", "Resumen semanal del negocio", "Resumen semanal para clientes"];
+const ENTREGA = "Entrega confirmada";
 const tarjeta = (titulo: string) => screen.getByRole("group", { name: titulo });
 const interruptor = (titulo: string) => within(tarjeta(titulo)).getByRole("switch") as HTMLButtonElement;
 
@@ -88,14 +91,14 @@ beforeEach(() => {
   [
     fetchNotificacionCanales, fetchNotificacionEventos, fetchTenantSettings, createNotificacionCanal, updateNotificacionCanal,
     createNotificacionEvento, updateNotificacionEvento, enviarResumenSemanalPrueba, fetchResumenClientesConfig,
-    guardarResumenClientesConfig, fetchClientesB2bSelector, enviarResumenClientePrueba,
+    guardarResumenClientesConfig, fetchClientesB2bSelector, enviarResumenClientePrueba, enviarEntregaConfirmadaPrueba,
   ].forEach((f) => f.mockReset());
   fetchClientesB2bSelector.mockResolvedValue([{ id: "c1", nombre: "Café Aurora", codigo: "b-a", descuentoPorcentaje: null }]);
 });
 afterEach(cleanup);
 
 describe("Notificaciones de mayoreo: estructura", () => {
-  it("título, dos grupos y tres tarjetas; sin las palabras canal, evento ni audiencia", async () => {
+  it("título, dos grupos y cuatro tarjetas; sin las palabras canal, evento ni audiencia", async () => {
     datos();
     render(<Pagina />);
     await screen.findByRole("group", { name: TARJETAS[0] });
@@ -103,7 +106,8 @@ describe("Notificaciones de mayoreo: estructura", () => {
     expect(screen.getByRole("heading", { name: "Para tu equipo" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Para tus clientes" })).toBeTruthy();
     for (const t of TARJETAS) expect(tarjeta(t)).toBeTruthy();
-    expect(screen.getAllByRole("switch")).toHaveLength(3);
+    expect(tarjeta(ENTREGA)).toBeTruthy();
+    expect(screen.getAllByRole("switch")).toHaveLength(4);
     const texto = document.body.textContent ?? "";
     expect(texto).not.toMatch(/canal|evento|audiencia|Telegram|Ninguno|Sin configurar|Inactivo/i);
     expect(screen.queryByRole("heading", { name: "Eventos" })).toBeNull();
@@ -408,7 +412,7 @@ describe("Resumen semanal para clientes", () => {
     const boton = (await screen.findByRole("button", { name: "Enviar prueba del cliente" })) as HTMLButtonElement;
     expect(screen.getByText("Probar con un cliente").closest("details")!.open).toBe(false);
     expect(boton.disabled).toBe(true);
-    await screen.findByRole("option", { name: "Café Aurora" });
+    await screen.findAllByRole("option", { name: "Café Aurora" });
     fireEvent.change(screen.getByLabelText("Cliente"), { target: { value: "c1" } });
     const semana = screen.getByLabelText("Semana") as HTMLSelectElement;
     const segunda = semana.options[1].value;
@@ -417,5 +421,65 @@ describe("Resumen semanal para clientes", () => {
     fireEvent.click(boton);
     await waitFor(() => expect(enviarResumenClientePrueba).toHaveBeenCalledWith("t", { clienteId: "c1", correo: "yo@mio.com", semanaInicio: segunda }));
     expect(await screen.findByText(/Prueba enviada a yo@mio.com/)).toBeTruthy();
+  });
+});
+
+describe("Entrega confirmada (Para tus clientes)", () => {
+  it("vive en «Para tus clientes», arranca apagada y explica el aviso", async () => {
+    datos();
+    render(<Pagina />);
+    await screen.findByRole("group", { name: ENTREGA });
+    const t = within(tarjeta(ENTREGA));
+    expect(t.getByText("Apagado")).toBeTruthy();
+    expect(t.getByText(/marca como Entregada/)).toBeTruthy();
+    expect(interruptor(ENTREGA).disabled).toBe(false);
+  });
+
+  it("la primera vez crea el canal Correo apagado y el evento ENTREGA_CONFIRMADA para clientes, y lo enciende", async () => {
+    const canal = canalCorreo({ config: { nombreRemitente: "Banetto", correos: [] } });
+    datos();
+    createNotificacionCanal.mockResolvedValue(canal);
+    createNotificacionEvento.mockResolvedValue({ id: "e9" });
+    updateNotificacionEvento.mockResolvedValue({});
+    render(<Pagina />);
+    await screen.findByRole("group", { name: ENTREGA });
+    fireEvent.click(interruptor(ENTREGA));
+    await waitFor(() => expect(updateNotificacionEvento).toHaveBeenCalledWith("t", "e9", { activo: true }));
+    expect(createNotificacionCanal).toHaveBeenCalledWith("t", { tipo: "CORREO", config: { nombreRemitente: "Banetto", correos: [] }, activo: false });
+    expect(createNotificacionEvento).toHaveBeenCalledWith("t", { evento: "ENTREGA_CONFIRMADA", audiencia: "CLIENTE", canalConfigId: "m1" });
+  });
+
+  it("es independiente del resumen semanal para clientes: con el resumen encendido, esta sigue apagada y al apagarla no toca al otro", async () => {
+    const canal = canalCorreo();
+    datos({
+      canales: [canal],
+      eventos: [evento("RESUMEN_SEMANAL", "CLIENTE", canal, true, "e1"), evento("ENTREGA_CONFIRMADA", "CLIENTE", canal, false, "e2")],
+    });
+    updateNotificacionEvento.mockResolvedValue({});
+    render(<Pagina />);
+    await screen.findByRole("group", { name: ENTREGA });
+    expect(within(tarjeta(TARJETAS[2])).getByText("Encendido")).toBeTruthy();
+    expect(within(tarjeta(ENTREGA)).getByText("Apagado")).toBeTruthy();
+    fireEvent.click(interruptor(ENTREGA));
+    await waitFor(() => expect(updateNotificacionEvento).toHaveBeenCalledWith("t", "e2", { activo: true }));
+    expect(updateNotificacionEvento).not.toHaveBeenCalledWith("t", "e1", expect.anything());
+  });
+
+  it("«Probar la entrega confirmada con un cliente»: manda cliente y dirección, y muestra el resultado o el fallo", async () => {
+    datos();
+    enviarEntregaConfirmadaPrueba.mockResolvedValueOnce({ resultado: "EXITO", motivo: null, fechaEntrega: "2026-11-18" });
+    render(<Pagina />);
+    const boton = (await screen.findByRole("button", { name: "Enviar prueba de la entrega" })) as HTMLButtonElement;
+    expect(boton.disabled).toBe(true);
+    await screen.findAllByRole("option", { name: "Café Aurora" });
+    fireEvent.change(screen.getByLabelText("Cliente de la prueba"), { target: { value: "c1" } });
+    fireEvent.change(screen.getByLabelText("Enviar la prueba a"), { target: { value: "yo@mio.com" } });
+    fireEvent.click(boton);
+    await waitFor(() => expect(enviarEntregaConfirmadaPrueba).toHaveBeenCalledWith("t", { clienteId: "c1", correo: "yo@mio.com" }));
+    expect(await screen.findByText(/Prueba enviada a yo@mio.com \(entrega del 2026-11-18\)/)).toBeTruthy();
+
+    enviarEntregaConfirmadaPrueba.mockRejectedValueOnce(new ApiError("Este cliente aún no tiene entregas entregadas", 409));
+    fireEvent.click(boton);
+    expect(await screen.findByText(/aún no tiene entregas entregadas/)).toBeTruthy();
   });
 });

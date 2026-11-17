@@ -73,6 +73,7 @@ const EVENTO_TITULO: Record<NotificacionEvento, { titulo: string; subtitulo?: st
   [NotificacionEvento.PEDIDO_ENTREGADO]: { titulo: '✅ Tu pedido fue entregado' },
   [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]: { titulo: 'Pedido modificado por el cliente' }, // no se usa aquí (mayoreo, no pasa por OrdersService)
   [NotificacionEvento.RESUMEN_SEMANAL]: { titulo: 'Resumen semanal' }, // no se usa aquí (mayoreo, lo envía ResumenSemanalService)
+  [NotificacionEvento.ENTREGA_CONFIRMADA]: { titulo: 'Entrega confirmada' }, // no se usa aquí (mayoreo, lo envía EntregaConfirmadaService)
 };
 
 @Injectable()

@@ -104,6 +104,7 @@ export class ClientesService {
                 resumenSemanalActivo: true,
                 resumenSemanalCorreo: true,
                 resumenSemanalActivadoAt: true,
+                entregaConfirmadaActivo: true,
               }
             : OMITIR_CAMPOS_B2B,
         orderBy: { [query.ordenarPor]: query.orden },

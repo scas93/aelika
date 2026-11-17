@@ -25,6 +25,7 @@ const EVENTO_LABEL: Record<NotificacionEvento, string> = {
   PEDIDO_ENTREGADO: "Pedido entregado",
   PEDIDO_MODIFICADO_CLIENTE: "Pedido modificado por el cliente",
   RESUMEN_SEMANAL: "Resumen semanal",
+  ENTREGA_CONFIRMADA: "Entrega confirmada",
 };
 
 const CANAL_LABEL: Record<string, string> = {

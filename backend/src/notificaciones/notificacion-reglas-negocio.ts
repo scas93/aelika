@@ -10,6 +10,7 @@ import {
 export const EVENTOS_MAYOREO: NotificacionEvento[] = [
   NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE,
   NotificacionEvento.RESUMEN_SEMANAL,
+  NotificacionEvento.ENTREGA_CONFIRMADA,
 ];
 /** Canales que usa mayoreo. */
 export const CANALES_MAYOREO: NotificacionCanalTipo[] = [
@@ -24,11 +25,13 @@ const CANAL_DEL_EVENTO: Partial<
   [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]:
     NotificacionCanalTipo.WHATSAPP,
   [NotificacionEvento.RESUMEN_SEMANAL]: NotificacionCanalTipo.CORREO,
+  [NotificacionEvento.ENTREGA_CONFIRMADA]: NotificacionCanalTipo.CORREO,
 };
 const NOMBRE_EVENTO: Partial<Record<NotificacionEvento, string>> = {
   [NotificacionEvento.PEDIDO_MODIFICADO_CLIENTE]:
     'Pedido modificado por el cliente',
   [NotificacionEvento.RESUMEN_SEMANAL]: 'Resumen semanal',
+  [NotificacionEvento.ENTREGA_CONFIRMADA]: 'Entrega confirmada',
 };
 const NOMBRE_CANAL: Partial<Record<NotificacionCanalTipo, string>> = {
   [NotificacionCanalTipo.WHATSAPP]: 'WhatsApp',
@@ -83,14 +86,21 @@ export function exigirEventoPermitido(
     );
   }
   if (eventoDeMayoreo) {
-    // El resumen semanal tiene dos audiencias: NEGOCIO (su equipo) y CLIENTE (cada cliente B2B, a su correo propio). Es la única
-    // excepción a «la audiencia CLIENTE está bloqueada en mayoreo»; el resto de eventos solo avisa al negocio.
+    // El resumen semanal tiene dos audiencias: NEGOCIO (su equipo) y CLIENTE (cada cliente B2B, a su correo propio). «Entrega
+    // confirmada» es solo CLIENTE. Son las únicas excepciones a «la audiencia CLIENTE está bloqueada en mayoreo»; el resto de
+    // eventos solo avisa al negocio.
     const audienciasPermitidas =
       evento === NotificacionEvento.RESUMEN_SEMANAL
         ? [NotificacionAudiencia.NEGOCIO, NotificacionAudiencia.CLIENTE]
-        : [NotificacionAudiencia.NEGOCIO];
+        : evento === NotificacionEvento.ENTREGA_CONFIRMADA
+          ? [NotificacionAudiencia.CLIENTE]
+          : [NotificacionAudiencia.NEGOCIO];
     if (!audienciasPermitidas.includes(audiencia)) {
-      throw new BadRequestException('Este evento solo avisa al negocio');
+      throw new BadRequestException(
+        evento === NotificacionEvento.ENTREGA_CONFIRMADA
+          ? 'Este evento solo avisa al cliente'
+          : 'Este evento solo avisa al negocio',
+      );
     }
     const canalEsperado = CANAL_DEL_EVENTO[evento]!;
     if (canal !== canalEsperado) {

@@ -48,4 +48,10 @@ export class UpdateClienteB2bDto {
   @IsString()
   @MaxLength(254)
   resumenSemanalCorreo?: string | null;
+
+  // «Entrega confirmada» por correo: interruptor PROPIO (independiente del resumen semanal), usa el mismo correo. Solo puede
+  // encenderse con correo capturado; si se borra el correo se apaga.
+  @IsOptional()
+  @IsBoolean()
+  entregaConfirmadaActivo?: boolean;
 }

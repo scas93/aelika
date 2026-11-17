@@ -4,6 +4,7 @@ import type { NotificacionCanalConfig, NotificacionEventoConfig } from "@/lib/ap
 import AvisoWhatsappCard from "./aviso-whatsapp-card";
 import AvisoResumenNegocioCard from "./aviso-resumen-negocio-card";
 import AvisoResumenClientesCard from "./aviso-resumen-clientes-card";
+import AvisoEntregaConfirmadaCard from "./aviso-entrega-confirmada-card";
 
 const GRUPO = "text-[13px] font-semibold uppercase tracking-wide text-admin-ink-soft";
 
@@ -45,6 +46,7 @@ export default function NotificacionesMayoreo({
         <h2 className={GRUPO}>Para tus clientes</h2>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <AvisoResumenClientesCard token={token} nombreNegocio={nombreNegocio} canales={canales} eventos={eventos} onChange={onChange} />
+          <AvisoEntregaConfirmadaCard token={token} nombreNegocio={nombreNegocio} canales={canales} eventos={eventos} onChange={onChange} />
         </div>
       </section>
     </div>

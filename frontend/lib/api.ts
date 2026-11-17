@@ -660,7 +660,8 @@ export type NotificacionEvento =
   | "PEDIDO_ENTREGADO"
   | "PAGO_CONFIRMADO"
   | "PEDIDO_MODIFICADO_CLIENTE"
-  | "RESUMEN_SEMANAL";
+  | "RESUMEN_SEMANAL"
+  | "ENTREGA_CONFIRMADA";
 export type NotificacionAudiencia = "CLIENTE" | "NEGOCIO";
 
 // `config` shape depende de `tipo` — ver comentario en schema.prisma:
@@ -1374,6 +1375,22 @@ export function guardarResumenClientesConfig(token: string, correoRespuestas: st
 /** Prueba del resumen de UN cliente: mismo correo y Excel que recibiría, enviados a la dirección escrita (no al cliente). */
 export function enviarResumenClientePrueba(token: string, payload: { clienteId: string; correo: string; semanaInicio?: string }) {
   return request<ResumenClientePruebaResultado>("/notificaciones/resumen-semanal/clientes/prueba", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface EntregaConfirmadaPruebaResultado {
+  resultado: "EXITO" | "FALLO";
+  motivo: string | null;
+  /** Fecha (AAAA-MM-DD) de la entrega que se usó para armar la prueba. */
+  fechaEntrega: string;
+}
+
+/** Prueba de «Entrega confirmada» con UN cliente: el correo que recibiría (con su entrega entregada más reciente), enviado a la dirección escrita (no al cliente). */
+export function enviarEntregaConfirmadaPrueba(token: string, payload: { clienteId: string; correo: string }) {
+  return request<EntregaConfirmadaPruebaResultado>("/notificaciones/entrega-confirmada/prueba", {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(payload),
@@ -2301,6 +2318,8 @@ export interface ClienteB2bFila {
   // Resumen semanal por correo del cliente (dato propio, distinto del correo heredado de los pedidos).
   resumenSemanalActivo: boolean;
   resumenSemanalCorreo: string | null;
+  // «Entrega confirmada» por correo: interruptor propio, mismo correo que el resumen semanal.
+  entregaConfirmadaActivo: boolean;
   telefonoPrincipal: string | null;
   nombreContactoPrincipal: string | null;
   pedidosActivos: number;
@@ -2336,6 +2355,8 @@ export interface ClienteB2bDetalle {
   bajaAt: string | null;
   resumenSemanalActivo: boolean;
   resumenSemanalCorreo: string | null;
+  // «Entrega confirmada» por correo: interruptor propio, mismo correo que el resumen semanal.
+  entregaConfirmadaActivo: boolean;
   pedidosActivos: number;
   incompleto: boolean;
   totalPedidos: number;
@@ -2367,6 +2388,7 @@ export interface CreateClienteB2bPayload {
   telefonos: TelefonoClienteB2bInput[];
   resumenSemanalActivo?: boolean;
   resumenSemanalCorreo?: string | null;
+  entregaConfirmadaActivo?: boolean;
 }
 
 export interface UpdateClienteB2bPayload {
@@ -2378,6 +2400,7 @@ export interface UpdateClienteB2bPayload {
   // El interruptor solo puede encenderse con correo; null/"" borra el correo (y apaga el envío).
   resumenSemanalActivo?: boolean;
   resumenSemanalCorreo?: string | null;
+  entregaConfirmadaActivo?: boolean;
 }
 
 export function fetchClientesB2b(
