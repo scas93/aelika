@@ -91,10 +91,13 @@ export default function BarraBusqueda({
     return () => ro.disconnect();
   }, []);
 
-  // Ajuste por niveles: se empieza en el nivel 0 (todo con texto) y se sube un nivel mientras la fila se desborde. Si cambia el ancho
+  // Ajuste por niveles (congelado mientras el panel de filtros está abierto): se empieza en el nivel 0 (todo con texto) y se sube un nivel mientras la fila se desborde. Si cambia el ancho
   // o el contenido, se vuelve a empezar desde 0 (así los botones recuperan su texto cuando hay espacio).
   const firma = [ancho, activos.length, filtros.length, acciones.map((a) => `${a.key}${a.label}`).join(","), crear?.label ?? "", texto === "" ? 0 : 1].join("|");
   useLayoutEffect(() => {
+    // Con el panel de filtros abierto la barra NO se reacomoda (ni al marcar opciones ni por el contador de «Filtros»): el panel
+    // no se mueve ni se cierra mientras se eligen opciones. Al cerrarlo se vuelve a medir con lo que haya cambiado.
+    if (panelAbierto) return;
     if (ultimaClave.current !== firma) {
       ultimaClave.current = firma;
       if (nivel !== 0) {
@@ -105,7 +108,7 @@ export default function BarraBusqueda({
     }
     const fila = filaRef.current;
     if (fila && fila.scrollWidth > fila.clientWidth + 1 && nivel < NIVEL_MAX) setNivel(nivel + 1);
-  }, [firma, nivel]);
+  }, [firma, nivel, panelAbierto]);
 
   const corto = nivel >= 1;
   const soloIcono = nivel >= 2;
