@@ -20,7 +20,7 @@ import {
 import PedidoChips from "../pedido-chips";
 import { useSesionPortal } from "../usar-sesion-portal";
 
-// Detalle de un pedido (4e): total, estado, entregas por fecha con su estado y productos (solo cantidades), lugar y hora de
+// Detalle de un pedido (4e): total, estado, entregas por fecha con su estado y productos (precio unitario de lista y piezas), lugar y hora de
 // recolección. Solo lectura; «Modificar pedido» va en la barra fija cuando el pedido se puede modificar.
 export default function DetallePedidoPage() {
   const { slug, folio } = useParams<{ slug: string; folio: string }>();
@@ -96,6 +96,7 @@ export default function DetallePedidoPage() {
                     clave: p.nombre,
                     nombre: p.nombre,
                     cantidad: p.cantidad,
+                    precioUnitario: p.precioUnitario,
                   }))}
                 />
               ))}

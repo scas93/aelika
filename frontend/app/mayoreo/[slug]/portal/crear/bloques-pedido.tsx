@@ -42,6 +42,8 @@ export interface LineaDia {
   clave: string;
   nombre: string;
   cantidad: number;
+  /** Precio unitario de lista. Si se manda, el renglón muestra «(\$X c/u)» tras el nombre y «N pzas» a la derecha. */
+  precioUnitario?: number;
 }
 
 /** Un día de entrega: fecha en negritas, piezas del día a la derecha y productos (nombre a la izquierda, cantidad a la derecha). */
@@ -98,8 +100,18 @@ export function DiaEntrega({
             key={l.clave}
             className="flex items-baseline justify-between gap-3 text-sm text-mayoreo-ink-soft"
           >
-            <span className="min-w-0">{l.nombre}</span>
-            <span className="shrink-0 tabular-nums">{l.cantidad}</span>
+            <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+              <span className="min-w-0 break-words">{l.nombre}</span>
+              {l.precioUnitario !== undefined && (
+                <span className="text-xs">
+                  ({dinero(l.precioUnitario)} c/u)
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 whitespace-nowrap tabular-nums">
+              {l.cantidad}
+              {l.precioUnitario !== undefined && " pzas"}
+            </span>
           </li>
         ))}
       </ul>

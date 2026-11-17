@@ -234,10 +234,15 @@ describe("detalle del pedido", () => {
   it("entregas con estado (incluida la cancelada), productos, descuento, nota y total", async () => {
     fetchPedido.mockResolvedValue(detalle());
     render(<DetallePage />);
-    // Solo cantidades: nombre y cantidad por separado, sin «×» ni precios.
+    // Nombre, precio unitario de lista entre paréntesis y piezas por separado, sin «×».
     expect(await screen.findByText("Concha")).toBeInTheDocument();
     expect(screen.queryByText(/×/)).toBeNull();
-    expect(screen.queryByText(/c\/u/)).toBeNull();
+    expect(screen.getByText(/\$30\.50 c\/u/)).toBeInTheDocument();
+    expect(screen.getByText(/\$45\.00 c\/u/)).toBeInTheDocument();
+    // Una vez en el encabezado de la entrega y otra en el renglón.
+    expect(screen.getAllByText("2 pzas")).toHaveLength(2);
+    // Una vez en el encabezado de la entrega y otra en el renglón.
+    expect(screen.getAllByText("1 pzas")).toHaveLength(2);
     expect(fetchPedido).toHaveBeenCalledWith("banetto", "P-000001");
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
     expect(screen.getByText("Cancelada")).toBeInTheDocument();
@@ -248,6 +253,36 @@ describe("detalle del pedido", () => {
     // Sin acciones de modificar ni cancelar (4f).
     expect(screen.queryByText(/Modificar|Cancelar pedido/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /Escribir por WhatsApp/ })).toBeNull();
+  });
+
+  it("un mismo producto con precios distintos en entregas distintas muestra cada precio", async () => {
+    fetchPedido.mockResolvedValue(
+      detalle({
+        entregas: [
+          {
+            fecha: "2026-10-02",
+            estado: { codigo: "PENDIENTE", etiqueta: "Pendiente" },
+            productos: [
+              { nombre: "Baguette", cantidad: 10, precioUnitario: 45, subtotal: 450 },
+            ],
+          },
+          {
+            fecha: "2026-10-03",
+            estado: { codigo: "PENDIENTE", etiqueta: "Pendiente" },
+            productos: [
+              { nombre: "Baguette", cantidad: 4, precioUnitario: 48, subtotal: 192 },
+            ],
+          },
+        ],
+      }),
+    );
+    render(<DetallePage />);
+    expect(await screen.findByText(/\$45\.00 c\/u/)).toBeInTheDocument();
+    expect(screen.getByText(/\$48\.00 c\/u/)).toBeInTheDocument();
+    // Una vez en el encabezado de la entrega y otra en el renglón.
+    expect(screen.getAllByText("10 pzas")).toHaveLength(2);
+    // Una vez en el encabezado de la entrega y otra en el renglón.
+    expect(screen.getAllByText("4 pzas")).toHaveLength(2);
   });
 
   it("pedido modificable: «Modificar pedido» en la barra fija, hacia la pantalla de modificar con origen «detalle»", async () => {
