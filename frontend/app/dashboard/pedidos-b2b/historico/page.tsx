@@ -26,6 +26,7 @@ import Card from "../../_components/Card";
 import Badge from "../../_components/Badge";
 import Table, { type TableColumn } from "../../_components/Table";
 import BarraBusqueda from "../../_components/BarraFiltros";
+import { firmaDe, TablaActualizando, useTablaActualizando } from "../../_components/TablaActualizando";
 import { IconDownload } from "@tabler/icons-react";
 import { FiltroMultiSelectPopover, labelMultiSelect } from "../../_components/FiltroMultiSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroSemana, type FiltroFechaValue } from "../../_components/FiltroFecha";
@@ -87,10 +88,11 @@ export default function PedidosB2bHistoricoPage() {
   // cada cambio de filtro vuelve a consultar desde la página 1 — los filtros refinan esa lista, no son requisito para verla. El
   // filtrado lo hace el servidor porque la lista es paginada. Quitar todos los filtros devuelve la lista inicial.
   const [result, setResult] = useState<PaginatedPedidosB2b | null>(null);
-  // Con qué filtros se pidió `result`: si no coinciden con los actuales, lo que se ve es de otros filtros y no se presenta como válido.
-  const [filtrosDeResult, setFiltrosDeResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Atenúa la tabla cuando cambian los filtros (antes de que arranque la consulta) o hay una en curso.
+  const { actualizando, registrar } = useTablaActualizando({ filtros: filtrosActuales(), hayResultado: result !== null, cargando: loading });
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -130,19 +132,19 @@ export default function PedidosB2bHistoricoPage() {
   async function ejecutarBusqueda(pagina: number) {
     const consulta = ++ultimaConsulta.current;
     const filtros = filtrosActuales();
-    const firma = JSON.stringify(filtros);
+    const firma = firmaDe(filtros);
     setLoading(true);
     setError(null);
     try {
       const res = await fetchPedidosB2b(token, { ...filtros, page: pagina, limit: LIMIT });
       if (consulta === ultimaConsulta.current) {
         setResult(res);
-        setFiltrosDeResult(firma);
+        registrar(firma);
       }
     } catch (err) {
       if (consulta === ultimaConsulta.current) {
         setError(err instanceof ApiError ? err.message : "No se pudo cargar el histórico de pedidos");
-        setFiltrosDeResult(firma); // el error se muestra aparte; la tabla no se queda atenuada para siempre
+        registrar(firma); // el error se muestra aparte; la tabla no se queda atenuada para siempre
       }
     } finally {
       if (consulta === ultimaConsulta.current) setLoading(false);
@@ -154,10 +156,6 @@ export default function PedidosB2bHistoricoPage() {
     void ejecutarBusqueda(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fecha, estado, estadoPago, negocioNombre, importe]);
-
-  // «Actualizando»: hay una consulta en curso O los filtros ya cambiaron pero la consulta aún no arranca (el efecto corre después del
-  // render que pinta el chip). Calcularlo en el render evita el instante en que se ven las filas anteriores como si fueran válidas.
-  const actualizando = result !== null && (loading || filtrosDeResult !== JSON.stringify(filtrosActuales()));
 
   const hayFiltros = !!(fecha || estado.length > 0 || estadoPago.length > 0 || negocioNombre || importe);
 
@@ -239,10 +237,7 @@ export default function PedidosB2bHistoricoPage() {
 
       {result && (
         // Atenuada y sin clics mientras se actualiza; mismo tamaño (sin saltos) y sin vaciarla.
-        <div
-          aria-busy={actualizando}
-          className={`flex flex-col gap-3 transition-opacity duration-150 ${actualizando ? "pointer-events-none opacity-50" : ""}`}
-        >
+        <TablaActualizando actualizando={actualizando}>
           {exportError && <p className="text-sm text-red-600">{exportError}</p>}
 
           {result.data.length === 0 ? (
@@ -266,7 +261,7 @@ export default function PedidosB2bHistoricoPage() {
               }}
             />
           )}
-        </div>
+        </TablaActualizando>
       )}
 
       {/* Tras editar, corregir o cambiar el pago, la lista se vuelve a consultar (un Completado que recibe una entrega vuelve a

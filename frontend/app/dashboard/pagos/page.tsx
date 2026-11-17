@@ -30,6 +30,7 @@ import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../_components/FiltroImporteControl";
+import { firmaDe, TablaActualizando, useTablaActualizando } from "../_components/TablaActualizando";
 
 const LIMIT = 25;
 
@@ -130,8 +131,13 @@ export default function PagosPage() {
   const { desde, hasta } = resolverFiltroFecha(fecha);
   const hayFiltrosActivos = Boolean(status || paymentMethodType || desde || hasta || importe);
 
+  // Todo lo que cambia el resultado, tal como se pide. La tabla se atenúa en cuanto difiere de lo que se está mostrando.
+  const filtrosConsulta = { status, paymentMethodType, desde, hasta, importe, page };
+  const { actualizando, registrar } = useTablaActualizando({ filtros: filtrosConsulta, hayResultado: result !== null });
+
   useEffect(() => {
     let cancelled = false;
+    const firma = firmaDe({ status, paymentMethodType, desde, hasta, importe, page });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el error al iniciar cada consulta (mismo criterio que el resto de listados)
     setError(null);
     fetchPayments(token, {
@@ -146,20 +152,19 @@ export default function PagosPage() {
       limit: LIMIT,
     })
       .then((res) => {
-        if (!cancelled) setResult(res);
+        if (cancelled) return;
+        setResult(res);
+        registrar(firma);
       })
       .catch((err) => {
-        if (!cancelled)
-          setError(
-            err instanceof ApiError
-              ? err.message
-              : "No se pudo cargar el listado de pagos",
-          );
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado de pagos");
+        registrar(firma); // la tabla no se queda atenuada para siempre
       });
     return () => {
       cancelled = true;
     };
-  }, [token, page, status, paymentMethodType, desde, hasta, importe]);
+  }, [token, page, status, paymentMethodType, desde, hasta, importe, registrar]);
 
   function handleFilterChange<T>(setter: (value: T) => void, value: T) {
     setter(value);
@@ -283,7 +288,9 @@ export default function PagosPage() {
 
       {result === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
-      ) : result.data.length === 0 ? (
+      ) : (
+        <TablaActualizando actualizando={actualizando}>
+        {result.data.length === 0 ? (
         <Card className="text-sm text-admin-ink-soft">
           {hayFiltrosActivos
             ? "No hay pagos que coincidan con estos filtros."
@@ -303,6 +310,8 @@ export default function PagosPage() {
             onNext: () => setPage((p) => p + 1),
           }}
         />
+      )}
+        </TablaActualizando>
       )}
 
       <Modal
