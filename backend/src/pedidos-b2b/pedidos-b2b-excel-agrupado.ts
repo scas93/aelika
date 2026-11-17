@@ -52,6 +52,8 @@ const FECHA_SEMANA = new Intl.DateTimeFormat('es-MX', {
 export interface LineaProductoExcel {
   producto: string;
   unidades: number;
+  /** Precio por unidad de la línea del pedido (antes de descuento): unidades × precio = monto. */
+  precio: number;
   monto: number;
 }
 
@@ -98,6 +100,7 @@ function consolidar(
     .map((g) => ({
       producto: g.producto,
       unidades: g.unidades,
+      precio: g.precio,
       monto: round2(g.unidades * g.precio),
     }));
 }
@@ -238,25 +241,31 @@ function hojaPedidos(
       rellenar(fila, columnas.length, FONDO_ENTREGA);
 
       if (pedido.lineas.length === 0) return;
-      const sub = hoja.addRow(['Producto', 'Unidades', 'Monto']);
+      const sub = hoja.addRow([
+        'Producto',
+        'Unidades',
+        'Precio unitario',
+        'Monto',
+      ]);
       sub.font = { italic: true, color: { argb: 'FF595959' } };
-      sub.getCell(2).alignment = { horizontal: 'right' };
-      sub.getCell(3).alignment = { horizontal: 'right' };
+      for (const c of [2, 3, 4]) sub.getCell(c).alignment = { horizontal: 'right' };
       for (const l of pedido.lineas) {
-        const r = hoja.addRow([l.producto, l.unidades, l.monto]);
+        const r = hoja.addRow([l.producto, l.unidades, l.precio, l.monto]);
         r.getCell(1).alignment = { indent: 1, wrapText: true, vertical: 'top' };
         r.getCell(2).numFmt = FORMATO_XLSX.entero;
         r.getCell(3).numFmt = FORMATO_XLSX.moneda;
+        r.getCell(4).numFmt = FORMATO_XLSX.moneda;
       }
       const total = hoja.addRow([
         'Subtotal de productos',
         null,
+        null,
         sumaLineas(pedido.lineas),
       ]);
       total.font = { bold: true };
-      total.getCell(3).numFmt = FORMATO_XLSX.moneda;
+      total.getCell(4).numFmt = FORMATO_XLSX.moneda;
       total.getCell(1).alignment = { indent: 1 };
-      for (let c = 1; c <= 3; c++) total.getCell(c).border = { top: BORDE };
+      for (let c = 1; c <= 4; c++) total.getCell(c).border = { top: BORDE };
     });
   });
   configurarImpresion(hoja);
@@ -264,7 +273,7 @@ function hojaPedidos(
 
 // ---------- Hoja «Entregas» ----------
 
-const COLUMNAS_ENTREGAS = 5;
+const COLUMNAS_ENTREGAS = 6;
 
 function hojaEntregas(
   libro: ExcelJS.Workbook,
@@ -277,11 +286,12 @@ function hojaEntregas(
     { header: 'Día / Producto', width: 34 },
     { header: COL_ENT.fecha.encabezado, width: 16 },
     { header: 'Piezas / Unidades', width: 17 },
+    { header: 'Precio unitario', width: 16 },
     { header: 'Importe / Monto (antes de descuento)', width: 26 },
     { header: COL_ENT.nota.encabezado, width: 40 },
   ];
   encabezadoDeHoja(hoja);
-  for (const c of [3, 4])
+  for (const c of [3, 4, 5])
     hoja.getRow(1).getCell(c).alignment = {
       horizontal: 'right',
       vertical: 'middle',
@@ -320,17 +330,24 @@ function hojaEntregas(
           DIAS[f.fecha.getUTCDay()],
           COL_ENT.fecha.valor(f),
           f.piezas,
+          null,
           f.importe,
           f.nota,
         ]);
         enc.getCell(2).numFmt = FORMATO_XLSX.fecha;
         enc.getCell(3).numFmt = FORMATO_XLSX.entero;
-        enc.getCell(4).numFmt = FORMATO_XLSX.moneda;
+        enc.getCell(5).numFmt = FORMATO_XLSX.moneda;
         enc.font = { bold: true };
         enc.alignment = { vertical: 'top', wrapText: true };
         rellenar(enc, COLUMNAS_ENTREGAS, FONDO_ENTREGA);
         for (const l of entrega.lineas) {
-          const r = hoja.addRow([l.producto, null, l.unidades, l.monto]);
+          const r = hoja.addRow([
+            l.producto,
+            null,
+            l.unidades,
+            l.precio,
+            l.monto,
+          ]);
           r.getCell(1).alignment = {
             indent: 1,
             wrapText: true,
@@ -338,6 +355,7 @@ function hojaEntregas(
           };
           r.getCell(3).numFmt = FORMATO_XLSX.entero;
           r.getCell(4).numFmt = FORMATO_XLSX.moneda;
+          r.getCell(5).numFmt = FORMATO_XLSX.moneda;
         }
       });
     });
