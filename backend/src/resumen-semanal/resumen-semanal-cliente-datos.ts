@@ -229,11 +229,13 @@ function hojaEntregas(libro: ExcelJS.Workbook, lineas: LineaEntregaCliente[]) {
   hoja.columns = [
     { header: 'Entrega / Producto', width: 46 },
     { header: 'Unidades', width: 12 },
+    { header: 'Precio unitario', width: 16 },
     { header: 'Monto', width: 16 },
   ];
   encabezadoDeHoja(hoja);
   hoja.getCell('B1').alignment = { horizontal: 'right', vertical: 'middle' };
   hoja.getCell('C1').alignment = { horizontal: 'right', vertical: 'middle' };
+  hoja.getCell('D1').alignment = { horizontal: 'right', vertical: 'middle' };
 
   const entregas = agruparEntregas(lineas);
   let totalPiezas = 0;
@@ -242,28 +244,30 @@ function hojaEntregas(libro: ExcelJS.Workbook, lineas: LineaEntregaCliente[]) {
   entregas.forEach((e, n) => {
     if (n > 0) hoja.addRow([]); // separación clara entre entregas
     // Encabezado de la entrega: día y fecha, total de piezas y total de importe.
-    const enc = hoja.addRow([diaLargo(e.fecha), e.piezas, e.centavos / 100]);
+    const enc = hoja.addRow([diaLargo(e.fecha), e.piezas, null, e.centavos / 100]);
     enc.font = { bold: true };
     enc.getCell(2).numFmt = FORMATO_XLSX.entero;
-    enc.getCell(3).numFmt = FORMATO_XLSX.moneda;
+    enc.getCell(4).numFmt = FORMATO_XLSX.moneda;
     enc.eachCell({ includeEmpty: true }, (c, col) => {
-      if (col > 3) return;
+      if (col > 4) return;
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENTREGA } };
       c.border = { top: BORDE, bottom: BORDE };
     });
     // La nota de la entrega, una sola vez, en el encabezado (fila propia combinada, con ajuste de línea).
     if (e.nota && e.nota.trim()) {
       const nota = hoja.addRow([`Nota: ${e.nota.trim()}`]);
-      hoja.mergeCells(nota.number, 1, nota.number, 3);
+      hoja.mergeCells(nota.number, 1, nota.number, 4);
       nota.alignment = { vertical: 'top', wrapText: true };
       nota.font = { italic: true };
       nota.height = Math.max(18, 15 * Math.ceil(e.nota.trim().length / 70) + 3);
     }
     for (const l of e.lineas) {
-      const r = hoja.addRow([l.producto, l.unidades, l.monto]);
+      // Precio efectivo cobrado (neto) = Monto ÷ Unidades, sin redondear: así Unidades × Precio = Monto exacto.
+      const r = hoja.addRow([l.producto, l.unidades, l.unidades > 0 ? l.monto / l.unidades : null, l.monto]);
       r.getCell(1).alignment = { indent: 1, wrapText: true, vertical: 'top' };
       r.getCell(2).numFmt = FORMATO_XLSX.entero;
       r.getCell(3).numFmt = FORMATO_XLSX.moneda;
+      r.getCell(4).numFmt = FORMATO_XLSX.moneda;
     }
     totalPiezas += e.piezas;
     totalCent += e.centavos;
@@ -271,12 +275,12 @@ function hojaEntregas(libro: ExcelJS.Workbook, lineas: LineaEntregaCliente[]) {
   });
   if (entregas.length > 0) {
     hoja.addRow([]);
-    const tot = hoja.addRow([pedidos.size > 1 ? 'Total de la semana' : 'Total del pedido', totalPiezas, totalCent / 100]);
+    const tot = hoja.addRow([pedidos.size > 1 ? 'Total de la semana' : 'Total del pedido', totalPiezas, null, totalCent / 100]);
     tot.font = { bold: true };
     tot.getCell(2).numFmt = FORMATO_XLSX.entero;
-    tot.getCell(3).numFmt = FORMATO_XLSX.moneda;
+    tot.getCell(4).numFmt = FORMATO_XLSX.moneda;
     tot.eachCell({ includeEmpty: true }, (c, col) => {
-      if (col > 3) return;
+      if (col > 4) return;
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
       c.border = { top: { style: 'medium', color: { argb: 'FF7F7F7F' } }, bottom: BORDE };
     });

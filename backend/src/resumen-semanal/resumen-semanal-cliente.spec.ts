@@ -202,7 +202,7 @@ describe('libroResumenCliente', () => {
     const r: string[] = [];
     h.eachRow({ includeEmpty: true }, (row) =>
       r.push(
-        [1, 2, 3]
+        [1, 2, 3, 4]
           .map((c) => {
             const cell = row.getCell(c);
             return cell.isMerged && cell.master !== cell ? '' : String(cell.value ?? '');
@@ -239,18 +239,37 @@ describe('libroResumenCliente', () => {
     const libro = await leer([fila()], lineas);
     const h = libro.getWorksheet('Entregas')!;
     expect(texto(h)).toEqual([
-      'Entrega / Producto|Unidades|Monto',
-      'martes 27 de octubre|7|60',
-      'Nota: Dejar en bodega||',
-      'Concha|5|40',
-      'Pan|2|20',
-      '||',
-      'jueves 29 de octubre|3|10',
-      'Bolillo|3|10',
-      '||',
-      'Total del pedido|10|70',
+      'Entrega / Producto|Unidades|Precio unitario|Monto',
+      'martes 27 de octubre|7||60',
+      'Nota: Dejar en bodega|||',
+      'Concha|5|8|40',
+      'Pan|2|10|20',
+      '|||',
+      'jueves 29 de octubre|3||10',
+      'Bolillo|3|3.3333333333333335|10',
+      '|||',
+      'Total del pedido|10||70',
     ]);
+    // Formato de moneda en precio y monto; el encabezado del día no lleva precio.
+    expect(h.getRow(2).getCell(3).value).toBeNull();
+    expect(h.getRow(4).getCell(3).numFmt).toBe(h.getRow(4).getCell(4).numFmt);
+    expect(h.getRow(3).getCell(1).isMerged).toBe(true);
+    expect(h.getColumn(3).width).toBe(16);
     expect(texto(h).join('\n').match(/Dejar en bodega/g)).toHaveLength(1);
+  });
+
+  it('Entregas: Unidades × Precio unitario = Monto en cada línea, aun con el mismo producto a precios distintos', async () => {
+    const lineas = [
+      linea({ entregaId: 'e1', producto: 'Alfajor', unidades: 3, monto: 91.2 }),
+      linea({ entregaId: 'e1', producto: 'Alfajor', unidades: 2, monto: 70 }),
+    ];
+    const h = (await leer([fila()], lineas)).getWorksheet('Entregas')!;
+    for (const n of [3, 4]) {
+      const r = h.getRow(n);
+      expect(Number(r.getCell(2).value) * Number(r.getCell(3).value)).toBeCloseTo(Number(r.getCell(4).value), 9);
+    }
+    expect(h.getRow(3).getCell(3).value).toBeCloseTo(30.4, 9);
+    expect(h.getRow(4).getCell(3).value).toBeCloseTo(35, 9);
   });
 
   it('ni folio ni «Aelika» ni estados en ninguna celda ni propiedad', async () => {
