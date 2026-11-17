@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { libroPedidosAgrupado } from './pedidos-b2b-excel-agrupado';
+import { libroDePedidosExport } from './pedidos-b2b-export';
 import type { PedidoExport } from './pedidos-b2b-export';
 
 const item = (nombre: string, precio: string, cantidad: number) => ({
@@ -262,5 +263,98 @@ describe('libroPedidosAgrupado: pestañas planas', () => {
     const de = (libro.getWorksheet('Datos entregas')!.getRow(1).values as string[]).slice(1);
     expect(de).toContain('Nota de la entrega');
     expect(de).not.toContain('Precio unitario');
+  });
+});
+
+// Pedidos activos y resumen semanal al negocio: mismo formato agrupado que Históricos + estados y sus propias tablas planas.
+describe('formato agrupado en Pedidos activos y resumen al negocio', () => {
+  const atrasada = {
+    ...(pedido as any),
+    estadoPedido: 'CONFIRMADO_SURTIENDO',
+    entregas: [
+      { ...(pedido as any).entregas[0], estado: 'PENDIENTE', fecha: new Date('2020-01-06T00:00:00.000Z'), estadoCambiadoAt: new Date('2020-01-01T00:00:00.000Z') },
+      { ...(pedido as any).entregas[1], estado: 'LISTA', fecha: new Date('2999-01-01T00:00:00.000Z') },
+    ],
+  } as unknown as PedidoExport;
+  const activos = async (pedidos: PedidoExport[]) => {
+    const l = new ExcelJS.Workbook();
+    await l.xlsx.load((await libroDePedidosExport(pedidos, 'ACTIVOS')) as any);
+    return l;
+  };
+  const encabezados = (h: ExcelJS.Worksheet) => (h.getRow(1).values as string[]).slice(1);
+
+  it('Pedidos activos sale agrupado: mismas columnas que Históricos + Estado del pedido y Estado de pago al final, sin nota', async () => {
+    const libro = await activos([atrasada]);
+    expect(libro.worksheets.map((w) => w.name)).toEqual(['Pedidos', 'Entregas', 'Datos pedidos', 'Datos entregas']);
+    const h = libro.getWorksheet('Pedidos')!;
+    expect(encabezados(h)).toEqual([
+      'Negocio / Producto', 'Semana (inicio)', 'Semana (fin)', 'Fecha de creación', 'Entregas totales',
+      'Subtotal', 'Descuento', 'Total', 'Estado del pedido', 'Estado de pago',
+    ]);
+    const fila = filas(h)[2];
+    expect([fila.getCell(9).value, fila.getCell(10).value]).toEqual(['Confirmado', 'Pendiente']);
+    // El detalle de productos queda donde en Históricos (D–F): los estados no mueven nada.
+    const iSub = filas(h).findIndex((r) => r.getCell(1).value === 'Producto');
+    expect([4, 5, 6].map((c) => filas(h)[iSub].getCell(c).value)).toEqual(['Unidades', 'Precio unitario', 'Monto']);
+    expect(textoFila(h, 10).join('\n')).not.toMatch(/Nota/);
+  });
+
+  it('«Entregas» agrega el estado de la entrega (con «Atrasada») al final; el resto igual que Históricos', async () => {
+    const h = (await activos([atrasada])).getWorksheet('Entregas')!;
+    expect(encabezados(h)).toEqual([
+      'Día / Producto', 'Fecha de entrega', 'Piezas / Unidades', 'Precio unitario',
+      'Importe / Monto (antes de descuento)', 'Estado de la entrega',
+    ]);
+    const estados = filas(h).map((r) => r.getCell(6).value).filter(Boolean).slice(1);
+    expect(estados).toEqual(['Atrasada', 'Lista']);
+    // Cierre del pedido siempre en tres renglones, aun sin descuento.
+    expect(textoFila(h, 6).slice(-3).map((x) => x.split('|')[0])).toEqual(['Subtotal del pedido', 'Descuento (0%)', 'Total del pedido']);
+  });
+
+  it('las tablas planas conservan TODAS las columnas de Pedidos activos (estado, pago, entregas, piezas, descuento %, nota…)', async () => {
+    const libro = await activos([atrasada]);
+    expect(encabezados(libro.getWorksheet('Datos pedidos')!)).toEqual([
+      'Negocio', 'Semana (inicio)', 'Semana (fin)', 'Fecha de creación', 'Estado del pedido', 'Estado de pago',
+      'Entregas', 'Piezas', 'Subtotal', 'Descuento %', 'Descuento $', 'Total', 'Nota del cliente',
+    ]);
+    expect(encabezados(libro.getWorksheet('Datos entregas')!)).toEqual([
+      'Negocio', 'Fecha de entrega', 'Día', 'Estado de la entrega', 'Piezas', 'Subtotal', 'Descuento', 'Total', 'Nota de la entrega',
+    ]);
+    const entregaFila = libro.getWorksheet('Datos entregas')!.getRow(2);
+    expect(entregaFila.getCell(4).value).toBe('Atrasada');
+    expect(entregaFila.getCell(6).value).toBe(199.2);
+  });
+
+  it('con descuento: bloques por entrega y cierre cuadran al centavo; los valores son los del pedido', async () => {
+    const con = { ...(atrasada as any), total: '196.38', descuentoTotal: '21.82', detalleB2b: { ...(pedido as any).detalleB2b, descuentoPorcentajeAplicado: '10' } } as PedidoExport;
+    const libro = await activos([con]);
+    expect(libro.getWorksheet('Pedidos')!.getRow(2).getCell(1).value).toBe('Café Sol · 10% de descuento');
+    const t = textoFila(libro.getWorksheet('Entregas')!, 6);
+    expect(t.slice(-3).map((x) => x.split('|').slice(0, 1).concat(x.split('|')[4]).join('|'))).toEqual([
+      'Subtotal del pedido|218.2', 'Descuento (10%)|21.82', 'Total del pedido|196.38',
+    ]);
+    const tot = t.filter((x) => x.startsWith('Total de la entrega')).map((x) => Math.round(Number(x.split('|')[4]) * 100));
+    expect(tot[0] + tot[1]).toBe(19638);
+  });
+
+  it.each([['Pedidos', 10], ['Entregas', 6]] as const)('«%s» con estados: bordes uniformes en todo el ancho y encabezados que no se cortan', async (nombre, n) => {
+    const h = (await activos([atrasada])).getWorksheet(nombre)!;
+    const firma = (c: ExcelJS.Cell) =>
+      JSON.stringify({ b: c.border && Object.keys(c.border).length > 0 ? c.border : null, f: (c.fill as any)?.fgColor?.argb ?? null });
+    h.eachRow((row) => {
+      for (let c = 1; c <= n; c++) {
+        expect(firma(row.getCell(c))).toBe(firma(row.getCell(1)));
+        expect((row.getCell(c).border as any)?.left).toBeUndefined();
+      }
+    });
+    expect(h.getRow(1).height).toBeGreaterThanOrEqual(30);
+    for (let c = 1; c <= n; c++) expect(h.getRow(1).getCell(c).alignment?.wrapText).toBe(true);
+  });
+
+  it('Históricos no cambia: sin columnas de estado en las hojas agrupadas y tablas planas de Históricos', async () => {
+    const libro = await leer();
+    expect(encabezados(libro.getWorksheet('Pedidos')!)).not.toContain('Estado del pedido');
+    expect(encabezados(libro.getWorksheet('Entregas')!)).not.toContain('Estado de la entrega');
+    expect(encabezados(libro.getWorksheet('Datos pedidos')!)).toContain('Entregadas');
   });
 });

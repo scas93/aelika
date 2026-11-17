@@ -22,6 +22,7 @@ import {
   ordenarEntregasPedidos,
   type FilaEntregaPedidoExcel,
   type FilaPedidoExcel,
+  type VistaExcelPedidos,
 } from './pedidos-b2b-excel';
 import { filasExcelDePedidos, type PedidoExport } from './pedidos-b2b-export';
 import {
@@ -268,7 +269,9 @@ const COLUMNAS_PEDIDOS_BLOQUE = [
   COL_DESCUENTO_PEDIDOS,
   COL_PED.total,
 ];
-const N_PEDIDOS = COLUMNAS_PEDIDOS_BLOQUE.length + 1;
+// Con `conEstados` (Pedidos activos y resumen semanal al negocio) se AGREGAN al final, sin mover nada de lo anterior, el estado del
+// pedido y el de pago: Históricos no los lleva en la vista agrupada, pero en esos reportes sí hacen falta.
+const COLUMNAS_ESTADOS_PEDIDOS = [COL_PED.estado, COL_PED.pago];
 const COL_UNIDADES = 4;
 const COL_PRECIO = 5;
 const COL_MONTO = 6;
@@ -278,14 +281,19 @@ const FORMATO_TOTAL_CANCELADO = '"$"#,##0.00" · Cancelado"';
 function hojaPedidos(
   libro: ExcelJS.Workbook,
   negocios: NegocioAgrupadoExcel[],
+  conEstados: boolean,
 ) {
+  const columnasPedido = conEstados
+    ? [...COLUMNAS_PEDIDOS_BLOQUE, ...COLUMNAS_ESTADOS_PEDIDOS]
+    : COLUMNAS_PEDIDOS_BLOQUE;
+  const N_PEDIDOS = columnasPedido.length + 1;
   const hoja = libro.addWorksheet('Pedidos', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
-  const anchos = [36, 16, 14, 20, 16, 16, 16, 26]; // H cabe «$12,345.00 · Cancelado»
+  const anchos = [36, 16, 14, 20, 16, 16, 16, 26, 18, 16]; // H cabe «$12,345.00 · Cancelado»
   hoja.columns = [
     { header: 'Negocio / Producto', width: anchos[0] },
-    ...COLUMNAS_PEDIDOS_BLOQUE.map((c, i) => ({
+    ...columnasPedido.map((c, i) => ({
       header: c.encabezado,
       width: anchos[i + 1],
     })),
@@ -304,13 +312,14 @@ function hojaPedidos(
       if (p > 0) hoja.addRow([]); // separación entre pedidos
       const fila = hoja.addRow([
         null,
-        ...COLUMNAS_PEDIDOS_BLOQUE.map((c) => c.valor(pedido.fila) ?? null),
+        ...columnasPedido.map((c) => c.valor(pedido.fila) ?? null),
       ]);
-      COLUMNAS_PEDIDOS_BLOQUE.forEach((c, i) => {
-        fila.getCell(i + 2).numFmt =
-          pedido.fila.cancelado && c === COL_PED.total
-            ? FORMATO_TOTAL_CANCELADO
-            : FORMATO_XLSX[c.tipo];
+      columnasPedido.forEach((c, i) => {
+        if (c.tipo !== 'texto')
+          fila.getCell(i + 2).numFmt =
+            pedido.fila.cancelado && c === COL_PED.total
+              ? FORMATO_TOTAL_CANCELADO
+              : FORMATO_XLSX[c.tipo];
       });
       fila.font = { bold: true };
       fila.alignment = { vertical: 'top', wrapText: true };
@@ -365,6 +374,7 @@ function filasBloque(
   porcentaje: number,
   etiquetas: { subtotal: string; total: string },
   cierre: boolean,
+  columnas: number,
   cancelado = false,
 ) {
   if (!cierre && b.descuento <= 0) return;
@@ -384,7 +394,7 @@ function filasBloque(
     const esTotal = i === filas.length - 1;
     if (cierre) {
       r.font = { bold: true };
-      estilar(r, COLUMNAS_ENTREGAS, {
+      estilar(r, columnas, {
         fondo: FONDO_ENCABEZADO,
         borde: i === 0 ? BORDE_BANDA : BORDE_FINO,
       });
@@ -393,7 +403,7 @@ function filasBloque(
       r.font = esTotal
         ? { bold: true }
         : { italic: true, color: { argb: 'FF595959' } };
-      estilar(r, COLUMNAS_ENTREGAS, {
+      estilar(r, columnas, {
         borde: esTotal || i === 0 ? BORDE_SUPERIOR : undefined,
       });
     }
@@ -403,7 +413,10 @@ function filasBloque(
 function hojaEntregas(
   libro: ExcelJS.Workbook,
   negocios: NegocioAgrupadoExcel[],
+  conEstados: boolean,
 ) {
+  // Con `conEstados` se agrega al final el estado de la entrega («Atrasada» incluida); las demás columnas no se mueven.
+  const nCols = COLUMNAS_ENTREGAS + (conEstados ? 1 : 0);
   const hoja = libro.addWorksheet('Entregas', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
@@ -413,8 +426,11 @@ function hojaEntregas(
     { header: 'Piezas / Unidades', width: 20 },
     { header: 'Precio unitario', width: 16 },
     { header: 'Importe / Monto (antes de descuento)', width: 28 },
+    ...(conEstados
+      ? [{ header: COL_ENT.estado.encabezado, width: 20 }]
+      : []),
   ];
-  encabezadoUniforme(hoja, COLUMNAS_ENTREGAS, [3, 4, 5]);
+  encabezadoUniforme(hoja, nCols, [3, 4, 5]);
 
   // Si el export abarca más de una semana, cada pedido lleva su encabezado de semana; con una sola, sobra.
   const semanas = new Set(
@@ -426,7 +442,7 @@ function hojaEntregas(
 
   negocios.forEach((negocio, n) => {
     if (n > 0) hoja.addRow([]);
-    bandaNegocio(hoja, negocio.nombre, COLUMNAS_ENTREGAS);
+    bandaNegocio(hoja, negocio.nombre, nCols);
 
     negocio.pedidos.forEach((pedido, p) => {
       if (variasSemanas) {
@@ -438,7 +454,7 @@ function hojaEntregas(
           `Semana del ${FECHA_SEMANA.format(inicio)} al ${FECHA_SEMANA.format(fin)}`,
         ]);
         semana.font = { bold: true };
-        estilar(semana, COLUMNAS_ENTREGAS, {
+        estilar(semana, nCols, {
           fondo: FONDO_ENCABEZADO,
           borde: BORDE_FINO,
         });
@@ -464,6 +480,7 @@ function hojaEntregas(
           f.piezas,
           null,
           f.importe,
+          conEstados ? COL_ENT.estado.valor(f) : null,
         ]);
         enc.getCell(2).numFmt = FORMATO_XLSX.fecha;
         enc.getCell(2).alignment = { horizontal: 'left' };
@@ -471,7 +488,7 @@ function hojaEntregas(
         enc.getCell(COL_IMPORTE).numFmt = FORMATO_XLSX.moneda;
         enc.font = { bold: true };
         enc.alignment = { vertical: 'top', wrapText: true };
-        estilar(enc, COLUMNAS_ENTREGAS, {
+        estilar(enc, nCols, {
           fondo: FONDO_ENTREGA,
           borde: BORDE_FINO,
         });
@@ -499,6 +516,7 @@ function hojaEntregas(
             bloque.porcentaje,
             { subtotal: 'Subtotal', total: 'Total de la entrega' },
             false,
+            nCols,
           );
       });
       if (bloque)
@@ -508,6 +526,7 @@ function hojaEntregas(
           bloque.porcentaje,
           { subtotal: 'Subtotal del pedido', total: 'Total del pedido' },
           true,
+          nCols,
           pedido.fila.cancelado,
         );
     });
@@ -515,25 +534,41 @@ function hojaEntregas(
   configurarImpresion(hoja);
 }
 
-/** Libro de Históricos del panel: hojas con bloques y, al final, las dos tablas planas de siempre. */
+export interface OpcionesLibroAgrupado {
+  /**
+   * Agrega a las hojas agrupadas el estado del pedido, el de pago y el de la entrega (Pedidos activos y resumen semanal al
+   * negocio). Históricos no los lleva ahí (están en las tablas planas).
+   */
+  conEstados?: boolean;
+  /** Columnas de las dos tablas planas del final («Datos pedidos» y «Datos entregas»): las de cada reporte. */
+  vistaPlana?: VistaExcelPedidos;
+}
+
+/**
+ * Libro con bloques (hojas «Pedidos» y «Entregas») y, al final, las dos tablas planas con todas las columnas del reporte. Lo usan
+ * Históricos, Pedidos activos y el resumen semanal al negocio: mismo formato, mismas reglas de diseño.
+ */
 export async function libroPedidosAgrupado(
   pedidos: PedidoExport[],
+  opciones: OpcionesLibroAgrupado = {},
 ): Promise<Buffer> {
+  const conEstados = opciones.conEstados ?? false;
+  const vista = opciones.vistaPlana ?? 'HISTORICOS';
   const negocios = agruparPorNegocio(pedidos);
   const { filas, entregas } = filasExcelDePedidos(pedidos);
   const libro = new ExcelJS.Workbook();
-  hojaPedidos(libro, negocios);
-  hojaEntregas(libro, negocios);
+  hojaPedidos(libro, negocios, conEstados);
+  hojaEntregas(libro, negocios, conEstados);
   agregarHoja<FilaPedidoExcel>(
     libro,
     'Datos pedidos',
-    COLUMNAS_PEDIDOS.HISTORICOS,
+    COLUMNAS_PEDIDOS[vista],
     filas,
   );
   agregarHoja<FilaEntregaPedidoExcel>(
     libro,
     'Datos entregas',
-    COLUMNAS_ENTREGAS_PEDIDOS.HISTORICOS,
+    COLUMNAS_ENTREGAS_PEDIDOS[vista],
     ordenarEntregasPedidos(entregas),
   );
   return libroABuffer(libro);
