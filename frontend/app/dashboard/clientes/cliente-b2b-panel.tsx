@@ -51,6 +51,7 @@ export default function ClienteB2bPanel({
   const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
   const [resumenActivo, setResumenActivo] = useState(false);
   const [resumenCorreo, setResumenCorreo] = useState("");
+  const [entregaActiva, setEntregaActiva] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,7 @@ export default function ClienteB2bPanel({
     setModalidad(c.modalidadPago ?? "");
     setResumenActivo(c.resumenSemanalActivo);
     setResumenCorreo(c.resumenSemanalCorreo ?? "");
+    setEntregaActiva(c.entregaConfirmadaActivo ?? false);
   }
 
   useEffect(() => {
@@ -119,7 +121,8 @@ export default function ClienteB2bPanel({
       descuentoCambio ||
       modalidad !== (cliente.modalidadPago ?? "") ||
       resumenActivo !== cliente.resumenSemanalActivo ||
-      resumenCorreo.trim() !== (cliente.resumenSemanalCorreo ?? ""));
+      resumenCorreo.trim() !== (cliente.resumenSemanalCorreo ?? "") ||
+      entregaActiva !== (cliente.entregaConfirmadaActivo ?? false));
   const puedeGuardar = hayCambios && nombre.trim().length >= 2 && direccion.trim().length >= 3 && descuentoValido(descuentoNum) && !guardando;
 
   async function handleGuardar() {
@@ -137,6 +140,7 @@ export default function ClienteB2bPanel({
         // Sin correo el envío queda apagado (el servidor lo exige).
         resumenSemanalCorreo: resumenCorreo.trim() || null,
         resumenSemanalActivo: resumenCorreo.trim() ? resumenActivo : false,
+        entregaConfirmadaActivo: resumenCorreo.trim() ? entregaActiva : false,
       });
       aplicar(c);
       setGuardado(true);
@@ -275,7 +279,10 @@ export default function ClienteB2bPanel({
                   value={resumenCorreo}
                   onChange={(e) => {
                     setResumenCorreo(e.target.value);
-                    if (!e.target.value.trim()) setResumenActivo(false);
+                    if (!e.target.value.trim()) {
+                      setResumenActivo(false);
+                      setEntregaActiva(false);
+                    }
                   }}
                   className="admin-input"
                   placeholder="compras@cliente.com"
@@ -285,6 +292,26 @@ export default function ClienteB2bPanel({
                 Cada lunes a las 10:00 este cliente recibe en ese correo sus pedidos de la semana anterior y sus entregas, con su Excel y sin
                 información de pago. Si no tuvo pedidos esa semana, no recibe nada. Es un correo propio, distinto del que pudo quedar en sus
                 pedidos. Si lo enciendes después de las 10:00 del lunes, el primer envío es el lunes siguiente.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-admin-ink">Avisar cuando se entregue un pedido</span>
+                <ToggleSwitch
+                  checked={entregaActiva}
+                  onChange={() => {
+                    // Usa el mismo correo del resumen: solo puede encenderse con correo capturado; apagar nunca se bloquea.
+                    if (!entregaActiva && !resumenCorreo.trim()) return;
+                    setEntregaActiva((v) => !v);
+                  }}
+                  label={entregaActiva ? "Apagar el aviso de entrega confirmada de este cliente" : "Encender el aviso de entrega confirmada de este cliente"}
+                />
+              </div>
+              <p className="text-xs font-normal text-admin-ink-soft">
+                Cada vez que una entrega se marca como Entregada, este cliente recibe un correo con lo que se le entregó y sus montos, sin
+                información de pago. Usa el mismo correo de arriba y es independiente del resumen semanal. Solo se envía si el negocio tiene
+                encendido «Entrega confirmada» en Ajustes → Notificaciones.
               </p>
             </div>
 

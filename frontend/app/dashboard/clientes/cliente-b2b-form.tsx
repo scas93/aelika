@@ -50,6 +50,7 @@ export default function ClienteB2bAltaModal({
   const [modalidadesActivas, setModalidadesActivas] = useState<ModalidadPagoB2b[]>([]);
   const [resumenActivo, setResumenActivo] = useState(false);
   const [resumenCorreo, setResumenCorreo] = useState("");
+  const [entregaActiva, setEntregaActiva] = useState(false);
   const [telefonos, setTelefonos] = useState<TelefonoForm[]>([{ key: 1, telefono: "", nombreContacto: "" }]);
   const [principal, setPrincipal] = useState(1);
   const [siguienteKey, setSiguienteKey] = useState(2);
@@ -66,6 +67,7 @@ export default function ClienteB2bAltaModal({
     setModalidad("");
     setResumenActivo(false);
     setResumenCorreo("");
+    setEntregaActiva(false);
     setTelefonos([{ key: 1, telefono: "", nombreContacto: "" }]);
     setPrincipal(1);
     setSiguienteKey(2);
@@ -130,7 +132,7 @@ export default function ClienteB2bAltaModal({
         direccion: direccion.trim(),
         descuentoPorcentaje: descuentoNum && descuentoNum > 0 ? descuentoNum : undefined,
         modalidadPago: modalidad as ModalidadPagoB2b,
-        ...(resumenCorreo.trim() ? { resumenSemanalCorreo: resumenCorreo.trim(), resumenSemanalActivo: resumenActivo } : {}),
+        ...(resumenCorreo.trim() ? { resumenSemanalCorreo: resumenCorreo.trim(), resumenSemanalActivo: resumenActivo, entregaConfirmadaActivo: entregaActiva } : {}),
         telefonos: telefonosLlenos.map((t) => ({
           telefono: t.telefono.trim(),
           principal: t.key === principalKey,
@@ -273,7 +275,10 @@ export default function ClienteB2bAltaModal({
               value={resumenCorreo}
               onChange={(e) => {
                 setResumenCorreo(e.target.value);
-                if (!e.target.value.trim()) setResumenActivo(false);
+                if (!e.target.value.trim()) {
+                  setResumenActivo(false);
+                  setEntregaActiva(false);
+                }
               }}
               className="admin-input"
               placeholder="compras@cliente.com"
@@ -282,6 +287,26 @@ export default function ClienteB2bAltaModal({
           <p className="text-xs font-normal text-admin-ink-soft">
             Cada lunes a las 10:00 recibe en ese correo sus pedidos de la semana anterior y sus entregas, con su Excel. Solo se envía si el
             negocio tiene encendido el «Resumen semanal para clientes» en Ajustes → Notificaciones.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-[var(--radius-admin-control)] border border-admin-border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-admin-ink">Avisar cuando se entregue un pedido</span>
+            <ToggleSwitch
+              checked={entregaActiva}
+              onChange={() => {
+                // Usa el mismo correo del resumen: solo puede encenderse con correo capturado; apagar nunca se bloquea.
+                if (!entregaActiva && !resumenCorreo.trim()) return;
+                setEntregaActiva((v) => !v);
+              }}
+              label={entregaActiva ? "Apagar el aviso de entrega confirmada de este cliente" : "Encender el aviso de entrega confirmada de este cliente"}
+            />
+          </div>
+          <p className="text-xs font-normal text-admin-ink-soft">
+            Cada vez que una entrega se marca como Entregada, este cliente recibe un correo con lo que se le entregó y sus montos, sin
+            información de pago. Usa el mismo correo de arriba y es independiente del resumen semanal. Solo se envía si el negocio tiene
+            encendido «Entrega confirmada» en Ajustes → Notificaciones.
           </p>
         </div>
 

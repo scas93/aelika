@@ -26,6 +26,7 @@ const cliente = (extra = {}) => ({
   incompleto: false,
   resumenSemanalActivo: false,
   resumenSemanalCorreo: null,
+  entregaConfirmadaActivo: false,
   totalPedidos: 0,
   ultimoPedidoAt: null,
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -88,5 +89,49 @@ describe("ficha del cliente B2B · resumen semanal por correo", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
     await waitFor(() => expect(updateClienteB2b).toHaveBeenCalled());
     expect(updateClienteB2b.mock.calls[0][2]).toMatchObject({ resumenSemanalCorreo: null, resumenSemanalActivo: false });
+  });
+});
+
+describe("ficha del cliente B2B · aviso de entrega confirmada", () => {
+  it("arranca apagado, no se enciende sin correo y es independiente del resumen semanal", async () => {
+    fetchClientesB2bConfig.mockResolvedValue({ modalidadesActivas: ["AL_FINAL"] });
+    fetchClienteB2b.mockResolvedValue(cliente());
+    render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
+    const entrega = await screen.findByRole("switch", { name: /Encender el aviso de entrega confirmada/ });
+    const resumen = screen.getByRole("switch", { name: /Encender el resumen semanal/ });
+    expect(entrega.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(entrega);
+    expect(entrega.getAttribute("aria-checked")).toBe("false");
+    fireEvent.change(screen.getByLabelText("Correo del resumen"), { target: { value: "compras@aurora.com" } });
+    fireEvent.click(entrega);
+    expect(entrega.getAttribute("aria-checked")).toBe("true");
+    expect(resumen.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("guardar manda el interruptor; borrar el correo lo apaga", async () => {
+    fetchClientesB2bConfig.mockResolvedValue({ modalidadesActivas: ["AL_FINAL"] });
+    fetchClienteB2b.mockResolvedValue(cliente({ resumenSemanalCorreo: "a@b.com", entregaConfirmadaActivo: true }));
+    updateClienteB2b.mockResolvedValue(cliente());
+    render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
+    const correo = (await screen.findByLabelText("Correo del resumen")) as HTMLInputElement;
+    await waitFor(() => expect(correo.value).toBe("a@b.com"));
+    expect(screen.getByRole("switch", { name: /aviso de entrega confirmada de este cliente/ }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.change(correo, { target: { value: "" } });
+    expect(screen.getByRole("switch", { name: /aviso de entrega confirmada de este cliente/ }).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(updateClienteB2b).toHaveBeenCalled());
+    expect(updateClienteB2b.mock.calls.at(-1)![2]).toMatchObject({ entregaConfirmadaActivo: false });
+  });
+
+  it("apagar solo el aviso de entrega manda true/false sin tocar el resumen", async () => {
+    fetchClientesB2bConfig.mockResolvedValue({ modalidadesActivas: ["AL_FINAL"] });
+    fetchClienteB2b.mockResolvedValue(cliente({ resumenSemanalActivo: true, resumenSemanalCorreo: "a@b.com", entregaConfirmadaActivo: true }));
+    updateClienteB2b.mockResolvedValue(cliente());
+    render(<Panel clienteId="c1" onClose={() => {}} onChanged={() => {}} />);
+    await waitFor(() => expect((screen.getByLabelText("Correo del resumen") as HTMLInputElement).value).toBe("a@b.com"));
+    fireEvent.click(screen.getByRole("switch", { name: /Apagar el aviso de entrega confirmada/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(updateClienteB2b).toHaveBeenCalled());
+    expect(updateClienteB2b.mock.calls.at(-1)![2]).toMatchObject({ resumenSemanalActivo: true, entregaConfirmadaActivo: false });
   });
 });

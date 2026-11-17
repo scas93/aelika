@@ -100,7 +100,7 @@ Un pedido B2B es `Order` (`tipo = B2B`) + `DetalleB2B` + `OrderItem` (`cantidad`
 
 ## Notificaciones y portal
 
-`Regla`, `ReglaClienteEstado`, `ReglaEnvioLog` (con `orderId` opcional, FK `SET NULL`), `NotificacionCanalConfig`, `NotificacionEventoConfig`, `AvisoInternoEnvio`, `ResumenSemanalEnvio` (resumen semanal por correo, único `(tenantId, semanaProgramada)`), `ResumenSemanalClienteEnvio` (marca por cliente B2B y semana, único `(clienteId, semanaInicio)`; `Cliente.resumenSemanalActivo/Correo/ActivadoAt` y `Tenant.correoRespuestas`): ver [notificaciones.md](notificaciones.md). `SesionPortal`: token opaco guardado como hash; ver diseno-operacion.md.
+`Regla`, `ReglaClienteEstado`, `ReglaEnvioLog` (con `orderId` opcional, FK `SET NULL`), `NotificacionCanalConfig`, `NotificacionEventoConfig`, `AvisoInternoEnvio`, `ResumenSemanalEnvio` (resumen semanal por correo, único `(tenantId, semanaProgramada)`), `ResumenSemanalClienteEnvio` (marca por cliente B2B y semana, único `(clienteId, semanaInicio)`; `Cliente.resumenSemanalActivo/Correo/ActivadoAt` y `Tenant.correoRespuestas`), `EntregaConfirmadaEnvio` (registro único por entrega del correo «Entrega confirmada»; `Cliente.entregaConfirmadaActivo`): ver [notificaciones.md](notificaciones.md). `SesionPortal`: token opaco guardado como hash; ver diseno-operacion.md.
 
 ## Lealtad
 

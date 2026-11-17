@@ -215,6 +215,7 @@ model Tenant {
   avisosInternosEnvios      AvisoInternoEnvio[]
   resumenSemanalEnvios      ResumenSemanalEnvio[]
   resumenSemanalClienteEnvios ResumenSemanalClienteEnvio[]
+  entregaConfirmadaEnvios   EntregaConfirmadaEnvio[]
   reglaClienteEstados       ReglaClienteEstado[]
   detallesReserva           DetalleReserva[]
   loyaltyCards              LoyaltyCard[]
@@ -443,6 +444,8 @@ enum NotificacionEvento {
   PEDIDO_MODIFICADO_CLIENTE
   // Solo mayoreo: resumen semanal por correo (lunes 10:00 CDMX) de los pedidos de la semana anterior. Solo se combina con el canal CORREO.
   RESUMEN_SEMANAL
+  // Solo mayoreo: correo «Entrega confirmada» al cliente B2B cuando una entrega pasa a Entregada. Solo audiencia CLIENTE y canal CORREO.
+  ENTREGA_CONFIRMADA
 }
 
 enum NotificacionAudiencia {
@@ -843,6 +846,7 @@ model Entrega {
   order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   estadoCambiadoPor User?         @relation(fields: [estadoCambiadoPorId], references: [id], onDelete: SetNull)
   items             EntregaItem[]
+  confirmacionEnvio EntregaConfirmadaEnvio?
 
   @@index([orderId, fecha])
   @@index([tenantId, fecha])
@@ -1291,9 +1295,13 @@ model Cliente {
   resumenSemanalActivo       Boolean   @default(false)
   resumenSemanalCorreo       String?
   resumenSemanalActivadoAt   DateTime?
+  // «Entrega confirmada» por correo: interruptor PROPIO del cliente, independiente del resumen semanal (apagado por defecto, también
+  // para clientes existentes). Usa el mismo correo (`resumenSemanalCorreo`); no puede estar encendido sin él.
+  entregaConfirmadaActivo    Boolean   @default(false)
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   resumenSemanalEnvios ResumenSemanalClienteEnvio[]
+  entregaConfirmadaEnvios EntregaConfirmadaEnvio[]
   telefonos      ClienteTelefono[]
   sesionesPortal SesionPortal[]
   orders         Order[]
@@ -1824,4 +1832,34 @@ model ResumenSemanalClienteEnvio {
   @@unique([clienteId, semanaInicio])
   @@index([tenantId, createdAt])
   @@map("resumen_semanal_cliente_envios")
+}
+
+// «Entrega confirmada» (mayoreo): una fila por entrega, creada la PRIMERA vez que pasa a Entregada y ANTES de enviar. El índice único
+// por entrega es la reserva: desmarcar y volver a marcar, dos peticiones simultáneas o un reinicio nunca reenvían. OMITIDO = esa
+// primera vez no se envió (interruptor del negocio o del cliente apagado, o sin correo): se registra para que encender algo después no
+// dispare correos de entregas viejas. Sin dirección de correo. Las pruebas no escriben aquí.
+enum EntregaConfirmadaEstado {
+  EN_CURSO
+  EXITO
+  FALLO
+  OMITIDO
+}
+
+model EntregaConfirmadaEnvio {
+  id         String                  @id @default(uuid())
+  tenantId   String
+  entregaId  String                  @unique
+  clienteId  String
+  estado     EntregaConfirmadaEstado @default(EN_CURSO)
+  // Motivo del fallo u omisión (sin direcciones de correo).
+  motivo     String?
+  createdAt  DateTime                @default(now())
+  resueltoAt DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entrega Entrega @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("entrega_confirmada_envios")
 }

@@ -6,10 +6,11 @@ import { CodigosDescuentoB2bService } from './codigos-descuento-b2b.service';
 import { PublicPedidosB2bController } from './public-pedidos-b2b.controller';
 import { PublicPedidosB2bService } from './public-pedidos-b2b.service';
 import { ClientesModule } from '../clientes/clientes.module';
+import { EntregaConfirmadaModule } from '../entrega-confirmada/entrega-confirmada.module';
 import { NotificacionesReglasModule } from '../notificaciones-reglas/notificaciones-reglas.module';
 
 @Module({
-  imports: [ClientesModule, NotificacionesReglasModule],
+  imports: [ClientesModule, NotificacionesReglasModule, EntregaConfirmadaModule],
   controllers: [
     PedidosB2bController,
     CodigosDescuentoB2bController,

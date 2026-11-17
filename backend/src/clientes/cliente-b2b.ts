@@ -265,6 +265,7 @@ export const OMITIR_CAMPOS_B2B = {
   resumenSemanalActivo: true,
   resumenSemanalCorreo: true,
   resumenSemanalActivadoAt: true,
+  entregaConfirmadaActivo: true,
 } as const;
 
 /**

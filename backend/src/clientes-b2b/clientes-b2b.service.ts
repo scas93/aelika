@@ -67,6 +67,28 @@ export function resolverResumenSemanal(
 }
 
 /**
+ * «Entrega confirmada» del cliente: mismo correo que el resumen semanal (`correoFinal`, ya resuelto) pero interruptor propio.
+ * No puede estar encendido sin correo: pedirlo encendido sin correo es 400; si el correo se borró, se apaga solo.
+ */
+export function resolverEntregaConfirmada(
+  actualActivo: boolean,
+  correoFinal: string | null,
+  dto: { entregaConfirmadaActivo?: boolean },
+): boolean | null {
+  if (dto.entregaConfirmadaActivo === undefined && correoFinal !== null)
+    return null;
+  let activo = dto.entregaConfirmadaActivo ?? actualActivo;
+  if (activo && !correoFinal) {
+    if (dto.entregaConfirmadaActivo === true)
+      throw new BadRequestException(
+        'Captura el correo del cliente para poder encender el aviso de entrega confirmada',
+      );
+    activo = false;
+  }
+  return activo !== actualActivo ? activo : null;
+}
+
+/**
  * Clientes B2B (Cliente con canal = B2B): alta solo por admin, teléfonos autorizados con un principal, baja lógica.
  * Todo pasa por TenantPrismaService (filtra por tenant); un id de otro tenant responde 404, igual que uno inexistente.
  *
@@ -151,6 +173,7 @@ export class ClientesB2bService {
         bajaAt: c.bajaAt,
         resumenSemanalActivo: c.resumenSemanalActivo,
         resumenSemanalCorreo: c.resumenSemanalCorreo,
+        entregaConfirmadaActivo: c.entregaConfirmadaActivo,
         telefonoPrincipal: c.telefonos[0]?.telefono ?? null,
         nombreContactoPrincipal: c.telefonos[0]?.nombreContacto ?? null,
         pedidosActivos: activos.get(c.id) ?? 0,
@@ -188,6 +211,7 @@ export class ClientesB2bService {
       bajaAt: c.bajaAt,
       resumenSemanalActivo: c.resumenSemanalActivo,
       resumenSemanalCorreo: c.resumenSemanalCorreo,
+      entregaConfirmadaActivo: c.entregaConfirmadaActivo,
       pedidosActivos: activos.get(c.id) ?? 0,
       incompleto: !c.direccion?.trim(),
       totalPedidos: c.totalPedidos,
@@ -366,6 +390,11 @@ export class ClientesB2bService {
       { activo: false, correo: null },
       dto,
     );
+    const entregaConfirmada = resolverEntregaConfirmada(
+      false,
+      resumen?.correo ?? null,
+      dto,
+    );
     try {
       const cliente = await this.db.$transaction(async (tx) => {
         const creado = await crearClienteB2b(tx as unknown as ClienteB2bDb, {
@@ -387,6 +416,12 @@ export class ClientesB2bService {
               resumenSemanalCorreo: resumen.correo,
               resumenSemanalActivadoAt: resumen.activadoAt ?? null,
             },
+          });
+        }
+        if (entregaConfirmada !== null) {
+          await tx.cliente.update({
+            where: { id: creado.id },
+            data: { entregaConfirmadaActivo: entregaConfirmada },
           });
         }
         return creado;
@@ -436,6 +471,13 @@ export class ClientesB2bService {
       data.resumenSemanalCorreo = resumen.correo;
       if (resumen.activadoAt) data.resumenSemanalActivadoAt = resumen.activadoAt;
     }
+    const entregaConfirmada = resolverEntregaConfirmada(
+      actual.entregaConfirmadaActivo,
+      resumen ? resumen.correo : actual.resumenSemanalCorreo,
+      dto,
+    );
+    if (entregaConfirmada !== null)
+      data.entregaConfirmadaActivo = entregaConfirmada;
     if (Object.keys(data).length > 0) {
       await this.db.cliente.update({ where: { id }, data });
     }
