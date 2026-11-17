@@ -42,6 +42,7 @@ import { IconDownload } from "@tabler/icons-react";
 import { FiltroSelectPopover } from "../../_components/FiltroSelect";
 import { FiltroFechaPopover, labelFiltroFecha, resolverFiltroFecha, type FiltroFechaValue } from "../../_components/FiltroFecha";
 import { FiltroImportePopover, labelFiltroImporte } from "../../_components/FiltroImporteControl";
+import { firmaDe, TablaActualizando, useTablaActualizando } from "../../_components/TablaActualizando";
 
 const LIMIT = 25;
 const METODOS_PAGO: MetodoPago[] = ["EFECTIVO", "TRANSFERENCIA", "TARJETA"];
@@ -103,8 +104,13 @@ export default function PedidosHistoricoPage() {
   const { desde, hasta } = resolverFiltroFecha(fecha);
   const hayFiltrosActivos = Boolean(estadoPedido || metodoPago || estadoPago || desde || hasta || importe);
 
+  // Todo lo que cambia el resultado, tal como se pide. La tabla se atenúa en cuanto difiere de lo que se está mostrando.
+  const filtrosConsulta = { estadoPedido, metodoPago, estadoPago, desde, hasta, importe, page };
+  const { actualizando, registrar } = useTablaActualizando({ filtros: filtrosConsulta, hayResultado: result !== null });
+
   useEffect(() => {
     let cancelled = false;
+    const firma = firmaDe({ estadoPedido, metodoPago, estadoPago, desde, hasta, importe, page });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el error al iniciar cada consulta (mismo criterio que el resto de listados)
     setError(null);
     fetchOrdersHistorico(token, {
@@ -120,15 +126,19 @@ export default function PedidosHistoricoPage() {
       limit: LIMIT,
     })
       .then((res) => {
-        if (!cancelled) setResult(res);
+        if (cancelled) return;
+        setResult(res);
+        registrar(firma);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "No se pudo cargar el histórico de pedidos");
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el histórico de pedidos");
+        registrar(firma); // la tabla no se queda atenuada para siempre
       });
     return () => {
       cancelled = true;
     };
-  }, [token, page, estadoPedido, metodoPago, estadoPago, desde, hasta, importe]);
+  }, [token, page, estadoPedido, metodoPago, estadoPago, desde, hasta, importe, registrar]);
 
   // Cada Aplicar de un pill llama esto — mismo criterio "autoaplica" que ya
   // tenía esta pantalla (cambiar un <select> disparaba la consulta de
@@ -267,7 +277,9 @@ export default function PedidosHistoricoPage() {
 
       {result === null ? (
         <p className="text-sm text-admin-ink-soft">Cargando...</p>
-      ) : result.data.length === 0 ? (
+      ) : (
+        <TablaActualizando actualizando={actualizando}>
+        {result.data.length === 0 ? (
         <Card className="text-sm text-admin-ink-soft">
           {hayFiltrosActivos ? "No hay pedidos que coincidan con estos filtros." : "No hay pedidos en el histórico."}
         </Card>
@@ -285,6 +297,8 @@ export default function PedidosHistoricoPage() {
             onNext: () => setPage((p) => p + 1),
           }}
         />
+      )}
+        </TablaActualizando>
       )}
 
       <Modal

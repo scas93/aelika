@@ -8,6 +8,7 @@ import Card from "../_components/Card";
 import Badge from "../_components/Badge";
 import Table, { type TableColumn } from "../_components/Table";
 import BarraBusqueda from "../_components/BarraFiltros";
+import { firmaDe, TablaActualizando, useTablaActualizando } from "../_components/TablaActualizando";
 import { FiltroSelectPopover } from "../_components/FiltroSelect";
 import ClienteB2bAltaModal from "./cliente-b2b-form";
 import ClienteB2bPanel from "./cliente-b2b-panel";
@@ -45,6 +46,13 @@ export default function ClientesB2b() {
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // La página no entra en la firma: al paginar ya manda `loading`. Aquí cuenta lo que cambia QUÉ clientes se listan.
+  const { actualizando, registrar } = useTablaActualizando({
+    filtros: { q: q.trim(), estado },
+    hayResultado: result !== null,
+    cargando: loading,
+  });
+
   const cargar = useCallback(
     async (page: number, filtros: { q: string; estado: ClienteB2bEstadoFiltro }) => {
       setLoading(true);
@@ -55,9 +63,10 @@ export default function ClientesB2b() {
         setError(err instanceof ApiError ? err.message : "No se pudo cargar la lista de clientes");
       } finally {
         setLoading(false);
+        registrar(firmaDe({ q: filtros.q.trim(), estado: filtros.estado })); // también tras un error: no queda atenuada para siempre
       }
     },
-    [token],
+    [token, registrar],
   );
 
   // Carga al abrir y cada vez que cambia la búsqueda o el filtro (la búsqueda ya espera un momento al teclear).
@@ -107,7 +116,7 @@ export default function ClientesB2b() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {result && (
-        <>
+        <TablaActualizando actualizando={actualizando}>
           {result.data.length === 0 ? (
             <Card className="text-sm text-admin-ink-soft">
               {q.trim()
@@ -133,7 +142,7 @@ export default function ClientesB2b() {
               }}
             />
           )}
-        </>
+        </TablaActualizando>
       )}
 
       <ClienteB2bAltaModal

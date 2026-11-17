@@ -13,6 +13,11 @@ import {
 } from '../common/xlsx';
 import { dinero, fechaLarga } from './resumen-semanal';
 import {
+  bloquesDePedido,
+  etiquetaDescuento,
+} from '../pedidos-b2b/pedidos-b2b-bloque-descuento';
+import { round2 } from '../common/money';
+import {
   BORDE,
   configurarImpresion,
   encabezadoDeHoja,
@@ -54,13 +59,20 @@ export type PedidoResumenCliente = Prisma.OrderGetPayload<{
   select: typeof PEDIDOS_RESUMEN_CLIENTE_SELECT;
 }>;
 
-/** Una línea (un producto) de una entrega, con su monto NETO: ya sin la parte del descuento que le toca. */
+/**
+ * Una línea (un producto) de una entrega. `monto` es NETO (ya sin la parte del descuento que le toca) y lo usa el cuerpo del
+ * correo; el Excel de la hoja «Entregas» muestra `precio` y `montoLista` (unidades × precio, exacto, antes de descuento).
+ */
 export interface LineaEntregaCliente {
   folio: string;
   entregaId: string;
   fecha: Date;
   producto: string;
   unidades: number;
+  /** Precio unitario de lista de la línea del pedido. */
+  precio: number;
+  /** unidades × precio (lista, antes de descuento). */
+  montoLista: number;
   monto: number;
   nota: string | null;
 }
@@ -109,6 +121,8 @@ export function datosResumenCliente(pedidos: PedidoResumenCliente[]): {
           fecha: fechaExcel(e.fecha),
           producto: i.orderItem.nombreProducto,
           unidades: i.cantidad,
+          precio: Number(i.orderItem.precioUnitario),
+          montoLista: round2(i.cantidad * Number(i.orderItem.precioUnitario)),
           nota: e.nota,
         });
         brutosCent.push(
@@ -224,61 +238,132 @@ function hojaPedidos(libro: ExcelJS.Workbook, filas: FilaPedidoExcel[], lineas: 
   configurarImpresion(hoja);
 }
 
-function hojaEntregas(libro: ExcelJS.Workbook, lineas: LineaEntregaCliente[]) {
+const COLUMNAS_ENTREGAS = 4;
+const BORDE_TOTAL = { style: 'medium' as const, color: { argb: 'FF7F7F7F' } };
+
+/** Fila de un bloque de montos: etiqueta en A, importe en D (bajo «Monto»), con ancho completo de relleno opcional. */
+function filaMonto(
+  hoja: ExcelJS.Worksheet,
+  etiqueta: string,
+  valor: number,
+  opciones: { piezas?: number; negritas?: boolean; sangria?: boolean; relleno?: boolean; bordeSuperior?: 'fino' | 'grueso' },
+) {
+  const r = hoja.addRow([etiqueta, opciones.piezas ?? null, null, valor]);
+  r.getCell(2).numFmt = FORMATO_XLSX.entero;
+  r.getCell(4).numFmt = FORMATO_XLSX.moneda;
+  if (opciones.sangria) r.getCell(1).alignment = { indent: 1 };
+  r.font = opciones.negritas ? { bold: true } : { italic: true, color: { argb: 'FF595959' } };
+  for (let c = 1; c <= COLUMNAS_ENTREGAS; c++) {
+    const celda = r.getCell(c);
+    if (opciones.relleno) celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
+    if (opciones.bordeSuperior)
+      celda.border = {
+        top: opciones.bordeSuperior === 'grueso' ? BORDE_TOTAL : BORDE,
+        bottom: opciones.relleno ? BORDE : undefined,
+      };
+  }
+  return r;
+}
+
+function hojaEntregas(libro: ExcelJS.Workbook, filas: FilaPedidoExcel[], lineas: LineaEntregaCliente[]) {
   const hoja = libro.addWorksheet('Entregas', { views: [{ state: 'frozen', ySplit: 1 }] });
   hoja.columns = [
     { header: 'Entrega / Producto', width: 46 },
     { header: 'Unidades', width: 12 },
+    { header: 'Precio unitario', width: 16 },
     { header: 'Monto', width: 16 },
   ];
   encabezadoDeHoja(hoja);
   hoja.getCell('B1').alignment = { horizontal: 'right', vertical: 'middle' };
   hoja.getCell('C1').alignment = { horizontal: 'right', vertical: 'middle' };
+  hoja.getCell('D1').alignment = { horizontal: 'right', vertical: 'middle' };
 
-  const entregas = agruparEntregas(lineas);
+  // Por pedido (en el orden de `filas`), y dentro de cada uno sus entregas por fecha: así el bloque de cierre del pedido queda
+  // junto a sus entregas. Los montos por producto son de LISTA (unidades × precio); el descuento aparece solo en los bloques.
+  const folios = [...new Set(lineas.map((l) => l.folio))];
+  const ordenFolios = filas.map((f) => f.folio);
+  folios.sort((a, b) => ordenFolios.indexOf(a) - ordenFolios.indexOf(b));
   let totalPiezas = 0;
   let totalCent = 0;
-  const pedidos = new Set<string>();
-  entregas.forEach((e, n) => {
-    if (n > 0) hoja.addRow([]); // separación clara entre entregas
-    // Encabezado de la entrega: día y fecha, total de piezas y total de importe.
-    const enc = hoja.addRow([diaLargo(e.fecha), e.piezas, e.centavos / 100]);
-    enc.font = { bold: true };
-    enc.getCell(2).numFmt = FORMATO_XLSX.entero;
-    enc.getCell(3).numFmt = FORMATO_XLSX.moneda;
-    enc.eachCell({ includeEmpty: true }, (c, col) => {
-      if (col > 3) return;
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENTREGA } };
-      c.border = { top: BORDE, bottom: BORDE };
+  folios.forEach((folio, nPedido) => {
+    const entregas = agruparEntregas(lineas.filter((l) => l.folio === folio));
+    const importeLista = (e: EntregaAgrupada) => round2(e.lineas.reduce((s, l) => s + l.montoLista, 0));
+    const fila = filas.find((f) => f.folio === folio);
+    const sumaLista = round2(entregas.reduce((s, e) => s + importeLista(e), 0));
+    const bloque = bloquesDePedido({
+      entregas: entregas.map((e) => ({ importe: importeLista(e), fecha: e.fecha })),
+      descuentoTotal: fila ? fila.descuentoTotal : 0,
+      total: fila ? fila.total : sumaLista,
+      porcentaje: fila ? fila.descuentoPorcentaje : null,
     });
-    // La nota de la entrega, una sola vez, en el encabezado (fila propia combinada, con ajuste de línea).
-    if (e.nota && e.nota.trim()) {
-      const nota = hoja.addRow([`Nota: ${e.nota.trim()}`]);
-      hoja.mergeCells(nota.number, 1, nota.number, 3);
-      nota.alignment = { vertical: 'top', wrapText: true };
-      nota.font = { italic: true };
-      nota.height = Math.max(18, 15 * Math.ceil(e.nota.trim().length / 70) + 3);
+    const conDescuento = bloque.descuento > 0;
+
+    if (nPedido > 0) hoja.addRow([]);
+    if (folios.length > 1) {
+      const banda = hoja.addRow([`Pedido ${nPedido + 1}`]);
+      hoja.mergeCells(banda.number, 1, banda.number, COLUMNAS_ENTREGAS);
+      banda.font = { bold: true };
+      for (let c = 1; c <= COLUMNAS_ENTREGAS; c++)
+        banda.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
     }
-    for (const l of e.lineas) {
-      const r = hoja.addRow([l.producto, l.unidades, l.monto]);
-      r.getCell(1).alignment = { indent: 1, wrapText: true, vertical: 'top' };
-      r.getCell(2).numFmt = FORMATO_XLSX.entero;
-      r.getCell(3).numFmt = FORMATO_XLSX.moneda;
-    }
-    totalPiezas += e.piezas;
-    totalCent += e.centavos;
-    pedidos.add(e.folio);
-  });
-  if (entregas.length > 0) {
+    entregas.forEach((e, n) => {
+      if (n > 0) hoja.addRow([]); // separación clara entre entregas
+      // Encabezado de la entrega: día y fecha, unidades y monto SIN descuento.
+      const enc = hoja.addRow([diaLargo(e.fecha), e.piezas, null, bloque.entregas[n].subtotal]);
+      enc.font = { bold: true };
+      enc.getCell(2).numFmt = FORMATO_XLSX.entero;
+      enc.getCell(4).numFmt = FORMATO_XLSX.moneda;
+      enc.eachCell({ includeEmpty: true }, (c, col) => {
+        if (col > COLUMNAS_ENTREGAS) return;
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENTREGA } };
+        c.border = { top: BORDE, bottom: BORDE };
+      });
+      // La nota de la entrega, una sola vez, en el encabezado (fila propia combinada, con ajuste de línea).
+      if (e.nota && e.nota.trim()) {
+        const nota = hoja.addRow([`Nota: ${e.nota.trim()}`]);
+        hoja.mergeCells(nota.number, 1, nota.number, COLUMNAS_ENTREGAS);
+        nota.alignment = { vertical: 'top', wrapText: true };
+        nota.font = { italic: true };
+        nota.height = Math.max(18, 15 * Math.ceil(e.nota.trim().length / 70) + 3);
+      }
+      for (const l of e.lineas) {
+        const r = hoja.addRow([l.producto, l.unidades, l.precio, l.montoLista]);
+        r.getCell(1).alignment = { indent: 1, wrapText: true, vertical: 'top' };
+        r.getCell(2).numFmt = FORMATO_XLSX.entero;
+        r.getCell(3).numFmt = FORMATO_XLSX.moneda;
+        r.getCell(4).numFmt = FORMATO_XLSX.moneda;
+      }
+      // Bloque de la entrega (solo si el pedido tiene descuento; sin él, el monto del encabezado ya es el total).
+      if (conDescuento) {
+        const b = bloque.entregas[n];
+        filaMonto(hoja, 'Subtotal', b.subtotal, { sangria: true, bordeSuperior: 'fino' });
+        filaMonto(hoja, etiquetaDescuento(bloque.porcentaje), b.descuento, { sangria: true });
+        filaMonto(hoja, 'Total de la entrega', b.total, { sangria: true, negritas: true });
+      }
+    });
+    // Cierre del pedido: Subtotal / Descuento / Total (con descuento) o solo «Total del pedido».
     hoja.addRow([]);
-    const tot = hoja.addRow([pedidos.size > 1 ? 'Total de la semana' : 'Total del pedido', totalPiezas, totalCent / 100]);
-    tot.font = { bold: true };
-    tot.getCell(2).numFmt = FORMATO_XLSX.entero;
-    tot.getCell(3).numFmt = FORMATO_XLSX.moneda;
-    tot.eachCell({ includeEmpty: true }, (c, col) => {
-      if (col > 3) return;
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FONDO_ENCABEZADO } };
-      c.border = { top: { style: 'medium', color: { argb: 'FF7F7F7F' } }, bottom: BORDE };
+    if (conDescuento) {
+      filaMonto(hoja, 'Subtotal del pedido', bloque.subtotal, { negritas: true, relleno: true, bordeSuperior: 'grueso' });
+      filaMonto(hoja, etiquetaDescuento(bloque.porcentaje), bloque.descuento, { negritas: true, relleno: true, bordeSuperior: 'fino' });
+    }
+    const piezasPedido = entregas.reduce((s, e) => s + e.piezas, 0);
+    filaMonto(hoja, 'Total del pedido', bloque.total, {
+      piezas: piezasPedido,
+      negritas: true,
+      relleno: true,
+      bordeSuperior: conDescuento ? 'fino' : 'grueso',
+    });
+    totalPiezas += piezasPedido;
+    totalCent += Math.round(bloque.total * 100);
+  });
+  if (folios.length > 1) {
+    hoja.addRow([]);
+    filaMonto(hoja, 'Total de la semana', totalCent / 100, {
+      piezas: totalPiezas,
+      negritas: true,
+      relleno: true,
+      bordeSuperior: 'grueso',
     });
   }
   configurarImpresion(hoja);
@@ -290,6 +375,6 @@ export async function libroResumenCliente(
 ): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
   hojaPedidos(libro, filas, lineas);
-  hojaEntregas(libro, lineas);
+  hojaEntregas(libro, filas, lineas);
   return libroABuffer(libro);
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { IconosTarjeta, IconoTransferencia } from "./iconos-medios-pago";
 import { useEffect, useRef, useState } from "react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import {
@@ -814,6 +815,7 @@ export default function CheckoutModal({
                         {metodoPago === "TARJETA" && <span className="h-1.5 w-1.5 rounded-full bg-black dark:bg-white" />}
                       </span>
                       Tarjeta
+                      <IconosTarjeta />
                     </button>
                   ) : (
                     <span
@@ -822,6 +824,7 @@ export default function CheckoutModal({
                     >
                       <span className="h-3.5 w-3.5 rounded-full border-2 border-black/15 dark:border-white/15" />
                       Tarjeta — próximamente
+                      <IconosTarjeta apagado />
                     </span>
                   )}
 
@@ -831,6 +834,7 @@ export default function CheckoutModal({
                   >
                     <span className="h-3.5 w-3.5 rounded-full border-2 border-black/15 dark:border-white/15" />
                     Transferencia — próximamente
+                    <IconoTransferencia apagado />
                   </span>
                 </div>
               </div>

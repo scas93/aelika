@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { libroPedidos } from '../pedidos-b2b/pedidos-b2b-excel';
+import { libroPedidosAgrupado } from '../pedidos-b2b/pedidos-b2b-excel-agrupado';
 import {
   buildWherePedidosB2b,
   filasExcelDePedidos,
@@ -53,11 +53,15 @@ export class ResumenSemanalArmadoService {
       orderBy: PEDIDOS_EXPORT_ORDEN,
       select: PEDIDOS_EXPORT_SELECT,
     });
-    const { filas, entregas } = filasExcelDePedidos(pedidos);
+    const { filas } = filasExcelDePedidos(pedidos);
     const totales = calcularTotales(filas);
     const correo = construirCorreoResumen(negocioNombre, semana, totales);
     if (!totales.hayPedidos) return { correo, totales };
-    const contenido = await libroPedidos(filas, entregas, 'HISTORICOS');
+    // Mismo formato agrupado que Históricos, con estados en las hojas agrupadas y las columnas planas de siempre al final.
+    const contenido = await libroPedidosAgrupado(pedidos, {
+      conEstados: true,
+      vistaPlana: 'HISTORICOS',
+    });
     return {
       correo,
       totales,

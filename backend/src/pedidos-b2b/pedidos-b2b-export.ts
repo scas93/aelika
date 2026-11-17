@@ -1,5 +1,4 @@
 import {
-  libroPedidos,
   repartirDescuento,
   type FilaEntregaPedidoExcel,
   type FilaPedidoExcel,
@@ -227,9 +226,11 @@ export function libroDePedidosExport(
   pedidos: PedidoExport[],
   vista: VistaExcelPedidos,
 ): Promise<Buffer> {
-  // Históricos del panel: bloques por negocio, pedido y entrega (+ tablas planas). El resumen semanal al negocio llama a
-  // `libroPedidos` directamente y conserva su formato plano.
+  // Los tres reportes de pedidos B2B comparten el formato agrupado (hojas «Pedidos» y «Entregas» con bloques + tablas planas).
+  // Históricos: sin estados en las hojas agrupadas; Pedidos activos: con estados y sus propias columnas planas.
   if (vista === 'HISTORICOS') return libroPedidosAgrupado(pedidos);
-  const { filas, entregas } = filasExcelDePedidos(pedidos);
-  return libroPedidos(filas, entregas, vista);
+  return libroPedidosAgrupado(pedidos, {
+    conEstados: true,
+    vistaPlana: 'ACTIVOS',
+  });
 }

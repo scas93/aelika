@@ -249,4 +249,24 @@ describe("Históricos B2B", () => {
     fireEvent.click(await screen.findByText("Negocio 7"));
     expect(await screen.findByText("panel 7")).toBeTruthy();
   });
+
+  it("al cambiar un filtro la tabla se atenúa YA (sin pasar por filas anteriores como válidas), no se vacía, y vuelve al llegar la respuesta", async () => {
+    fetchPedidosB2b.mockResolvedValueOnce(respuesta([fila("1"), fila("2", { cancelado: true })]));
+    render(<Historico />);
+    await screen.findByText("Negocio 1");
+    const zona = () => document.querySelector("[aria-busy]") as HTMLElement;
+    expect(zona().getAttribute("aria-busy")).toBe("false");
+    let resolver!: (r: PaginatedPedidosB2b) => void;
+    fetchPedidosB2b.mockReturnValueOnce(new Promise<PaginatedPedidosB2b>((r) => (resolver = r)));
+    await abrirFiltro("Estado");
+    fireEvent.click(await screen.findByRole("option", { name: /^Completado/ }));
+    // Mismo render que pinta el chip: la tabla ya está atenuada y sin clics, y sigue ahí (sin vaciarla ni saltos).
+    expect(zona().getAttribute("aria-busy")).toBe("true");
+    expect(zona().className).toContain("opacity-50");
+    expect(screen.getByText("Negocio 2")).toBeTruthy();
+    resolver(respuesta([fila("1")]));
+    await waitFor(() => expect(zona().getAttribute("aria-busy")).toBe("false"));
+    expect(zona().className).not.toContain("opacity-50");
+    expect(screen.queryByText("Negocio 2")).toBeNull();
+  });
 });

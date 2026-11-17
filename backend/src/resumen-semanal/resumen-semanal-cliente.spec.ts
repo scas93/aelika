@@ -38,6 +38,8 @@ const linea = (extra: Partial<LineaEntregaCliente> = {}): LineaEntregaCliente =>
   fecha: new Date('2026-10-27T00:00:00.000Z'),
   producto: 'Concha',
   unidades: 10,
+  precio: 12,
+  montoLista: 120,
   monto: 108,
   nota: null,
   ...extra,
@@ -202,7 +204,7 @@ describe('libroResumenCliente', () => {
     const r: string[] = [];
     h.eachRow({ includeEmpty: true }, (row) =>
       r.push(
-        [1, 2, 3]
+        [1, 2, 3, 4]
           .map((c) => {
             const cell = row.getCell(c);
             return cell.isMerged && cell.master !== cell ? '' : String(cell.value ?? '');
@@ -230,27 +232,132 @@ describe('libroResumenCliente', () => {
     expect(h.pageSetup.orientation).toBe('landscape');
   });
 
-  it('Entregas: encabezado por entrega con piezas e importe, nota una sola vez, productos debajo y total al final', async () => {
+  // Línea con precio de lista: el monto de lista es unidades × precio; `monto` (neto) solo lo usa el cuerpo del correo.
+  const lista = (extra: Partial<LineaEntregaCliente> & { unidades: number; precio: number }) =>
+    linea({ montoLista: Math.round(extra.unidades * extra.precio * 100) / 100, monto: 0, ...extra });
+  const sinDescuento = (total: number) => fila({ subtotal: total, descuentoPorcentaje: 0, descuentoTotal: 0, total });
+
+  it('Entregas sin descuento: productos a precio de lista, encabezado con el monto, nota una vez y solo «Total del pedido»', async () => {
     const lineas = [
-      linea({ entregaId: 'e1', producto: 'Pan', unidades: 2, monto: 20, nota: 'Dejar en bodega' }),
-      linea({ entregaId: 'e1', producto: 'Concha', unidades: 5, monto: 40, nota: 'Dejar en bodega' }),
-      linea({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), producto: 'Bolillo', unidades: 3, monto: 10 }),
+      lista({ entregaId: 'e1', producto: 'Pan', unidades: 2, precio: 10, nota: 'Dejar en bodega' }),
+      lista({ entregaId: 'e1', producto: 'Concha', unidades: 5, precio: 8, nota: 'Dejar en bodega' }),
+      lista({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), producto: 'Bolillo', unidades: 2, precio: 5 }),
     ];
-    const libro = await leer([fila()], lineas);
-    const h = libro.getWorksheet('Entregas')!;
+    const h = (await leer([sinDescuento(70)], lineas)).getWorksheet('Entregas')!;
     expect(texto(h)).toEqual([
-      'Entrega / Producto|Unidades|Monto',
-      'martes 27 de octubre|7|60',
-      'Nota: Dejar en bodega||',
-      'Concha|5|40',
-      'Pan|2|20',
-      '||',
-      'jueves 29 de octubre|3|10',
-      'Bolillo|3|10',
-      '||',
-      'Total del pedido|10|70',
+      'Entrega / Producto|Unidades|Precio unitario|Monto',
+      'martes 27 de octubre|7||60',
+      'Nota: Dejar en bodega|||',
+      'Concha|5|8|40',
+      'Pan|2|10|20',
+      '|||',
+      'jueves 29 de octubre|2||10',
+      'Bolillo|2|5|10',
+      '|||',
+      'Total del pedido|9||70',
     ]);
     expect(texto(h).join('\n').match(/Dejar en bodega/g)).toHaveLength(1);
+    expect(texto(h).join('\n')).not.toMatch(/Subtotal|Descuento/);
+  });
+
+  it('Entregas con descuento: bloque por entrega y por pedido, a precio de lista; Σ descuentos y Σ totales cuadran con el pedido', async () => {
+    const lineas = [
+      lista({ entregaId: 'e1', producto: 'Concha', unidades: 3, precio: 10 }),
+      lista({ entregaId: 'e1', producto: 'Pan', unidades: 1, precio: 20 }),
+      lista({ entregaId: 'e2', fecha: new Date('2026-10-29T00:00:00.000Z'), producto: 'Bolillo', unidades: 7, precio: 10 }),
+    ];
+    const h = (await leer([fila()], lineas)).getWorksheet('Entregas')!;
+    expect(texto(h)).toEqual([
+      'Entrega / Producto|Unidades|Precio unitario|Monto',
+      'martes 27 de octubre|4||50',
+      'Concha|3|10|30',
+      'Pan|1|20|20',
+      'Subtotal|||50',
+      'Descuento (10%)|||5',
+      'Total de la entrega|||45',
+      '|||',
+      'jueves 29 de octubre|7||70',
+      'Bolillo|7|10|70',
+      'Subtotal|||70',
+      'Descuento (10%)|||7',
+      'Total de la entrega|||63',
+      '|||',
+      'Subtotal del pedido|||120',
+      'Descuento (10%)|||12',
+      'Total del pedido|11||108',
+    ]);
+    // Unidades × Precio = Monto en cada renglón de producto y formato de moneda igual.
+    h.eachRow((r) => {
+      if (['Concha', 'Pan', 'Bolillo'].includes(String(r.getCell(1).value))) {
+        expect(Number(r.getCell(2).value) * Number(r.getCell(3).value)).toBeCloseTo(Number(r.getCell(4).value), 9);
+        expect(r.getCell(3).numFmt).toBe(r.getCell(4).numFmt);
+      }
+    });
+  });
+
+  it('el mismo producto con precios distintos sigue en renglones separados, cada uno a su precio de lista', async () => {
+    const lineas = [
+      lista({ entregaId: 'e1', producto: 'Alfajor', unidades: 3, precio: 30.4 }),
+      lista({ entregaId: 'e1', producto: 'Alfajor', unidades: 2, precio: 35 }),
+    ];
+    const h = (await leer([sinDescuento(161.2)], lineas)).getWorksheet('Entregas')!;
+    expect(texto(h).slice(2, 4)).toEqual(['Alfajor|3|30.4|91.2', 'Alfajor|2|35|70']);
+  });
+
+  it('el centavo del reparto cuadra: tres entregas iguales, descuento $10 → 3.33 + 3.33 + 3.34, totales que suman el del pedido', async () => {
+    const f = fila({ subtotal: 30, descuentoPorcentaje: 0, descuentoTotal: 10, total: 20 });
+    const lineas = ['e1', 'e2', 'e3'].map((id, i) =>
+      lista({ entregaId: id, fecha: new Date(`2026-10-${27 + i}T00:00:00.000Z`), unidades: 1, precio: 10 }),
+    );
+    const h = (await leer([f], lineas)).getWorksheet('Entregas')!;
+    const desc: number[] = [];
+    const tot: number[] = [];
+    h.eachRow((r) => {
+      const et = String(r.getCell(1).value);
+      if (et.startsWith('Descuento') && desc.length < 3) desc.push(Number(r.getCell(4).value));
+      if (et === 'Total de la entrega') tot.push(Number(r.getCell(4).value));
+    });
+    expect(Math.round(desc.reduce((a, b) => a + b, 0) * 100)).toBe(1000);
+    expect(Math.round(tot.reduce((a, b) => a + b, 0) * 100)).toBe(2000);
+    // Descuento por monto fijo (sin %): se muestra el porcentaje efectivo, 10 / 30 = 33.33%.
+    expect(texto(h).join('\n')).toContain('Descuento (33.33%)');
+  });
+
+  it('una sola entrega con una sola línea no rompe el formato', async () => {
+    const h = (await leer([fila()], [lista({ unidades: 10, precio: 12 })])).getWorksheet('Entregas')!;
+    expect(texto(h)).toEqual([
+      'Entrega / Producto|Unidades|Precio unitario|Monto',
+      'martes 27 de octubre|10||120',
+      'Concha|10|12|120',
+      'Subtotal|||120',
+      'Descuento (10%)|||12',
+      'Total de la entrega|||108',
+      '|||',
+      'Subtotal del pedido|||120',
+      'Descuento (10%)|||12',
+      'Total del pedido|10||108',
+    ]);
+  });
+
+  it('dos pedidos: cada uno con su cierre y «Total de la semana» suma los totales con descuento', async () => {
+    const f2 = sinDescuento(50);
+    f2.folio = 'B-2';
+    const lineas = [
+      lista({ entregaId: 'e1', unidades: 10, precio: 12 }),
+      lista({ folio: 'B-2', entregaId: 'e9', producto: 'Pan', unidades: 5, precio: 10 }),
+    ];
+    const t = texto((await leer([fila(), f2], lineas)).getWorksheet('Entregas')!);
+    expect(t).toContain('Pedido 1|||');
+    expect(t).toContain('Pedido 2|||');
+    expect(t.slice(-5)).toEqual(['Pan|5|10|50', '|||', 'Total del pedido|5||50', '|||', 'Total de la semana|15||158']);
+    expect(t.filter((x) => x.startsWith('Subtotal del pedido'))).toHaveLength(1);
+  });
+
+  it('un pedido heredado inconsistente conserva su Total y el bloque cuadra (descuento = subtotal − total)', async () => {
+    const f = fila({ subtotal: 120, descuentoPorcentaje: 0, descuentoTotal: 0, total: 100 });
+    const t = texto((await leer([f], [lista({ unidades: 10, precio: 12 })])).getWorksheet('Entregas')!);
+    expect(t).toContain('Descuento (16.67%)|||20');
+    expect(t[t.length - 1]).toBe('Total del pedido|10||100');
   });
 
   it('ni folio ni «Aelika» ni estados en ninguna celda ni propiedad', async () => {

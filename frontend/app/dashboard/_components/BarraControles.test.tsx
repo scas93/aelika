@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { useState } from "react";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/x" }));
@@ -74,5 +75,78 @@ describe("barra de controles", () => {
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     expect(screen.getByRole("menuitem", { name: "Filtros" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Nuevo pedido" })).toBeTruthy();
+  });
+
+  it("el panel de filtros abierto (y aplicar un filtro) NO cambia la barra: Filtros y exportar siguen visibles, sin «⋯», y el panel sigue abierto", () => {
+    simular();
+    disponible = 450; // la barra cabe (4 botones = 400); si el panel colgara de la fila, sus botones la desbordarían
+    function Pantalla() {
+      const [marcados, setMarcados] = useState<string[]>([]);
+      return (
+        <Barra
+          placeholder="Buscar…"
+          onBuscar={() => {}}
+          filtros={[
+            {
+              key: "a",
+              label: "Estado",
+              valueLabel: marcados.length ? marcados.join(",") : null,
+              onClear: () => setMarcados([]),
+              render: () => (
+                <div>
+                  <button type="button" onClick={() => setMarcados((m) => [...m, "x"])}>marcar uno</button>
+                  <button type="button" onClick={() => setMarcados((m) => [...m, "y"])}>marcar otro</button>
+                </div>
+              ),
+            },
+          ]}
+          acciones={[
+            { key: "exportar", label: "Exportar Excel", icon: <i />, tipo: "exportar", onClick: () => {} },
+            { key: "imprimir", label: "Imprimir todo", icon: <i />, onClick: () => {} },
+          ]}
+          crear={{ label: "Nuevo pedido", onClick: () => {} }}
+        />
+      );
+    }
+    render(<Pantalla />);
+    fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Estado/ }));
+    const fila = document.querySelector(".flex-nowrap")!;
+    // El panel vive fuera de la fila (portal): no puede contar como desborde de la barra.
+    expect(fila.contains(screen.getByRole("button", { name: "marcar uno" }))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "marcar uno" }));
+    fireEvent.click(screen.getByRole("button", { name: "marcar otro" }));
+    expect(screen.getByRole("button", { name: "Filtros" }).textContent).toContain("Filtros"); // con texto: nivel 0
+    expect(screen.getByRole("button", { name: "Exportar Excel" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+    // Sigue abierto para marcar más opciones.
+    expect(screen.getByRole("button", { name: "marcar uno" })).toBeTruthy();
+  });
+
+  it("con la barra compactada, abrir y cerrar «Filtros» desde el «⋯» varias veces abre el panel cada vez, y marcar opciones no lo cierra", () => {
+    simular();
+    disponible = 0;
+    function Pantalla() {
+      const [n, setN] = useState(0);
+      return (
+        <Barra
+          placeholder="Buscar…"
+          onBuscar={() => {}}
+          filtros={[{ key: "a", label: "Estado", valueLabel: n ? String(n) : null, onClear: () => setN(0), render: () => <button type="button" onClick={() => setN(n + 1)}>marcar</button> }]}
+          acciones={[{ key: "exportar", label: "Exportar Excel", icon: <i />, tipo: "exportar", onClick: () => {} }]}
+        />
+      );
+    }
+    render(<Pantalla />);
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Filtros/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Estado/ }));
+      fireEvent.click(screen.getByRole("button", { name: "marcar" }));
+      fireEvent.click(screen.getByRole("button", { name: "marcar" }));
+      expect(screen.getByRole("button", { name: "marcar" })).toBeTruthy(); // sigue abierto tras marcar
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(screen.queryByRole("button", { name: "marcar" })).toBeNull();
+    }
   });
 });
