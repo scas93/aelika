@@ -24,6 +24,11 @@ import {
   type FilaPedidoExcel,
 } from './pedidos-b2b-excel';
 import { filasExcelDePedidos, type PedidoExport } from './pedidos-b2b-export';
+import {
+  bloquesDePedido,
+  etiquetaDescuento,
+  type BloqueMonto,
+} from './pedidos-b2b-bloque-descuento';
 
 /**
  * Excel de Históricos del panel con bloques por negocio, pedido y entrega (hojas «Pedidos» y «Entregas»), más las dos tablas
@@ -273,6 +278,52 @@ function hojaPedidos(
 
 // ---------- Hoja «Entregas» ----------
 
+/**
+ * Bloque Subtotal / Descuento (con %) / Total bajo una entrega o un pedido; el importe va en la columna E («Importe / Monto»).
+ * Sin descuento solo sale el Total del pedido (el de la entrega ya está en su renglón). `pedido` = cierre del pedido.
+ */
+function filasBloque(
+  hoja: ExcelJS.Worksheet,
+  b: BloqueMonto,
+  porcentaje: number,
+  etiquetas: { subtotal: string; total: string },
+  pedido: boolean,
+  cancelado = false,
+) {
+  const conDescuento = b.descuento > 0;
+  if (!conDescuento && !pedido) return;
+  const filas: [string, number][] = [];
+  if (conDescuento) {
+    filas.push([etiquetas.subtotal, b.subtotal]);
+    filas.push([etiquetaDescuento(porcentaje), b.descuento]);
+  }
+  filas.push([cancelado ? `${etiquetas.total} (cancelado)` : etiquetas.total, b.total]);
+  filas.forEach(([etiqueta, valor], i) => {
+    const r = hoja.addRow([etiqueta, null, null, null, valor]);
+    r.getCell(5).numFmt = FORMATO_XLSX.moneda;
+    r.getCell(1).alignment = { indent: pedido ? 0 : 1 };
+    const esTotal = i === filas.length - 1;
+    r.font = pedido
+      ? { bold: true }
+      : esTotal
+        ? { bold: true }
+        : { italic: true, color: { argb: 'FF595959' } };
+    if (pedido) {
+      rellenar(
+        r,
+        COLUMNAS_ENTREGAS,
+        FONDO_ENCABEZADO,
+        i === 0
+          ? { top: { style: 'medium', color: { argb: 'FF7F7F7F' } }, bottom: BORDE }
+          : { top: BORDE, bottom: BORDE },
+      );
+    } else if (esTotal) {
+      for (let c = 1; c <= COLUMNAS_ENTREGAS; c++)
+        r.getCell(c).border = { top: BORDE };
+    }
+  });
+}
+
 const COLUMNAS_ENTREGAS = 6;
 
 function hojaEntregas(
@@ -323,6 +374,18 @@ function hojaEntregas(
         semana.font = { bold: true };
         rellenar(semana, COLUMNAS_ENTREGAS, FONDO_ENCABEZADO);
       }
+      const bloque =
+        pedido.entregas.length > 0
+          ? bloquesDePedido({
+              entregas: pedido.entregas.map((x) => ({
+                importe: x.fila.importe,
+                fecha: x.fila.fecha,
+              })),
+              descuentoTotal: pedido.fila.descuentoTotal,
+              total: pedido.fila.total,
+              porcentaje: pedido.fila.descuentoPorcentaje,
+            })
+          : null;
       pedido.entregas.forEach((entrega, e) => {
         if (e > 0 || (!variasSemanas && p > 0)) hoja.addRow([]); // separación entre entregas
         const f = entrega.fila;
@@ -357,7 +420,24 @@ function hojaEntregas(
           r.getCell(4).numFmt = FORMATO_XLSX.moneda;
           r.getCell(5).numFmt = FORMATO_XLSX.moneda;
         }
+        if (bloque)
+          filasBloque(
+            hoja,
+            bloque.entregas[e],
+            bloque.porcentaje,
+            { subtotal: 'Subtotal', total: 'Total de la entrega' },
+            false,
+          );
       });
+      if (bloque)
+        filasBloque(
+          hoja,
+          bloque,
+          bloque.porcentaje,
+          { subtotal: 'Subtotal del pedido', total: 'Total del pedido' },
+          true,
+          pedido.fila.cancelado,
+        );
     });
   });
   configurarImpresion(hoja);

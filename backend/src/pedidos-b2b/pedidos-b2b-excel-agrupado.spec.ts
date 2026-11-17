@@ -12,14 +12,14 @@ const pedido = {
   estadoPedido: 'COMPLETADO',
   estadoPago: 'PENDIENTE',
   cancelado: false,
-  total: '200.00',
+  total: '218.20',
   descuentoTotal: '0',
   createdAt: new Date('2026-10-26T15:00:00.000Z'),
   cliente: { codigo: 'C-1' },
   detalleB2b: {
     negocioNombre: 'Café Sol',
     semanaInicio: new Date('2026-10-26T00:00:00.000Z'),
-    subtotal: '200.00',
+    subtotal: '218.20',
     descuentoPorcentajeAplicado: null,
     pagadoAt: null,
     notaCliente: null,
@@ -109,5 +109,87 @@ describe('libroPedidosAgrupado: Precio unitario', () => {
     const libro = await leer();
     expect((libro.getWorksheet('Datos entregas')!.getRow(1).values as string[]).slice(1)).not.toContain('Precio unitario');
     expect((libro.getWorksheet('Datos pedidos')!.getRow(1).values as string[]).slice(1)).not.toContain('Precio unitario');
+  });
+});
+
+describe('libroPedidosAgrupado: bloque Subtotal / Descuento / Total en «Entregas»', () => {
+  const conDescuento = (extra: Record<string, unknown>) => ({ ...pedido, ...extra }) as unknown as PedidoExport;
+  const texto = (h: ExcelJS.Worksheet) => {
+    const r: string[] = [];
+    h.eachRow({ includeEmpty: true }, (row) =>
+      r.push([1, 2, 3, 4, 5, 6].map((c) => String(row.getCell(c).value ?? '')).join('|')),
+    );
+    return r;
+  };
+  const libro = async (p: PedidoExport) => {
+    const l = new ExcelJS.Workbook();
+    await l.xlsx.load((await libroPedidosAgrupado([p])) as any);
+    return l;
+  };
+
+  // Lista del pedido de prueba: entrega 1 = 91.20 + 70 + 38 = 199.20 ; entrega 2 = 19.00 ; subtotal 218.20.
+  it('con 10%: bloque por entrega y por pedido; Σ descuentos = descuento del pedido y Σ totales = Total (sin cambiarlo)', async () => {
+    const p = conDescuento({
+      total: '196.38',
+      descuentoTotal: '21.82',
+      detalleB2b: { ...(pedido as any).detalleB2b, subtotal: '218.20', descuentoPorcentajeAplicado: '10' },
+    });
+    const h = (await libro(p)).getWorksheet('Entregas')!;
+    const t = texto(h);
+    const i = t.findIndex((x) => x.startsWith('Martes'));
+    expect(t.slice(i + 4, i + 7).map((x) => x.split('|')[0] + '|' + x.split('|')[4])).toEqual([
+      'Subtotal|199.2',
+      'Descuento (10%)|19.92',
+      'Total de la entrega|179.28',
+    ]);
+    expect(t.slice(-3).map((x) => x.split('|')[0] + '|' + x.split('|')[4])).toEqual([
+      'Subtotal del pedido|218.2',
+      'Descuento (10%)|21.82',
+      'Total del pedido|196.38',
+    ]);
+    const descuentos = t.filter((x) => x.startsWith('Descuento')).map((x) => Number(x.split('|')[4]));
+    // dos entregas (19.92 + 1.90) + el del pedido
+    expect(Math.round((descuentos[0] + descuentos[1]) * 100)).toBe(2182);
+  });
+
+  it('sin descuento: solo «Total del pedido», sin Subtotal ni Descuento', async () => {
+    const t = texto((await libro(pedido)).getWorksheet('Entregas')!);
+    expect(t.join('\n')).not.toMatch(/Subtotal|Descuento/);
+    expect(t[t.length - 1].split('|')[0]).toBe('Total del pedido');
+  });
+
+  it('descuento por monto fijo: muestra el porcentaje efectivo', async () => {
+    const p = conDescuento({
+      total: '168.20',
+      descuentoTotal: '50',
+      detalleB2b: { ...(pedido as any).detalleB2b, subtotal: '218.20', descuentoPorcentajeAplicado: null },
+    });
+    const t = texto((await libro(p)).getWorksheet('Entregas')!);
+    expect(t.join('\n')).toContain('Descuento (22.91%)');
+  });
+
+  it('pedido cancelado con entregas cerradas: el cierre lo marca «(cancelado)» y conserva su Total; una entrega cancelada no sale', async () => {
+    const p = {
+      ...pedido,
+      cancelado: true,
+      entregas: [
+        (pedido as any).entregas[0],
+        { ...(pedido as any).entregas[1], estado: 'CANCELADA' },
+      ],
+    } as unknown as PedidoExport;
+    const t = texto((await libro(p)).getWorksheet('Entregas')!);
+    expect(t[t.length - 1].split('|')[0]).toBe('Total del pedido (cancelado)');
+    expect(t.filter((x) => x.startsWith('Jueves'))).toHaveLength(0);
+  });
+
+  it('pedido sin entregas vivas: no genera bloque', async () => {
+    const p = {
+      ...pedido,
+      cancelado: true,
+      total: '0',
+      entregas: (pedido as any).entregas.map((e: any) => ({ ...e, estado: 'CANCELADA' })),
+    } as unknown as PedidoExport;
+    const t = texto((await libro(p)).getWorksheet('Entregas')!);
+    expect(t.join('\n')).not.toMatch(/Total del pedido/);
   });
 });
