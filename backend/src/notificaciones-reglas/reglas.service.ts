@@ -6,6 +6,7 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { validarFiltroReserva, validarTriggerConfigReserva } from './reserva-trigger';
 import { validarTriggerConfigRecordatorio } from './recordatorio-semanal';
+import { BOTON_URL_FOLIO_RESERVA } from './boton-url';
 import {
   EstadoPedido,
   PedidoB2bEstado,
@@ -50,9 +51,16 @@ export interface ResumenDisparoManual {
  * Valor del botón de URL dinámica: solo la parte dinámica (el dominio va fijo en la plantilla de Meta), sin esquema, sin «/»
  * inicial ni espacios. null / vacío = sin botón.
  */
-export function validarBotonUrlValor(valor: string | null | undefined): string | null {
+export function validarBotonUrlValor(valor: string | null | undefined, trigger?: ReglaTriggerTipo): string | null {
   const limpio = (valor ?? '').trim();
   if (limpio === '') return null;
+  // Marcador del número de reserva: solo en reglas de reservas; el resto de valores sigue la validación del texto fijo.
+  if (limpio === BOTON_URL_FOLIO_RESERVA) {
+    if (trigger !== ReglaTriggerTipo.RESERVA_AUTOMATICA) {
+      throw new BadRequestException('El valor «{numeroReserva}» del botón solo se puede usar en reglas de reservas (RESERVA_AUTOMATICA).');
+    }
+    return limpio;
+  }
   if (limpio.length > 200 || /\s/.test(limpio) || limpio.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(limpio)) {
     throw new BadRequestException(
       'El valor del botón debe ser solo la parte dinámica de la URL (por ejemplo el slug del negocio): sin dominio, sin «/» inicial y sin espacios.',
@@ -117,7 +125,7 @@ export class ReglasService {
       plantillaVariablesRaw: dto.plantillaVariables ?? [],
       plantillaCategoria: dto.plantillaCategoria,
     });
-    const botonUrlValor = validarBotonUrlValor(dto.botonUrlValor);
+    const botonUrlValor = validarBotonUrlValor(dto.botonUrlValor, dto.trigger);
 
     return this.tenantPrisma.client.regla.create({
       data: {
@@ -168,7 +176,13 @@ export class ReglasService {
       plantillaCategoria: dto.plantillaCategoria ?? existente.plantillaCategoria,
     });
     // undefined = no tocar el botón; null o cadena vacía = quitarlo.
-    const botonUrlValor = dto.botonUrlValor === undefined ? undefined : validarBotonUrlValor(dto.botonUrlValor);
+    // Si el trigger cambia a uno que no es de reservas, un botón con el marcador del folio ya no tiene sentido: se quita.
+    const botonUrlValor =
+      dto.botonUrlValor !== undefined
+        ? validarBotonUrlValor(dto.botonUrlValor, trigger)
+        : cambioDeTrigger && trigger !== ReglaTriggerTipo.RESERVA_AUTOMATICA && existente.botonUrlValor === BOTON_URL_FOLIO_RESERVA
+          ? null
+          : undefined;
 
     // Caso borde declarado explícitamente en el prompt: una FECHA_PROGRAMADA
     // que ya se disparó (`disparadaEn` no nulo) se vuelve a armar (se

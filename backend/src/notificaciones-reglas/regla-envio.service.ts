@@ -20,6 +20,7 @@ import {
   disponibleParaContexto,
 } from './plantilla-variable-catalogo';
 import { sanitizarParaMeta } from './plantilla-variable-formato';
+import { resolverBotonUrlValor } from './boton-url';
 import { telefonoDestino } from '../clientes/cliente-b2b';
 import { telefonoParaEnvio } from '../common/telefono-internacional';
 
@@ -85,6 +86,10 @@ export class ReglaEnvioService {
       regla.plantillaIdioma,
     );
 
+    // Valor del botón de ESTE envío (fijo o folio de la reserva): se resuelve antes del registro, así un valor inválido no deja
+    // registro ni envía, igual que una variable inválida.
+    const botonValor = regla.botonUrlValor ? resolverBotonUrlValor(regla.botonUrlValor, contexto) : null;
+
     // Se crea ANTES del POST (estado EN_CURSO por default, ver schema.prisma)
     // para poder correlacionar la respuesta asíncrona de Botpress — su id
     // viaja en el payload como `correlacionId` y debe volver tal cual en el
@@ -116,7 +121,7 @@ export class ReglaEnvioService {
       },
       variables,
       // Solo las reglas con botón de URL dinámica lo mandan (mismo contrato que los avisos internos); el resto, idéntico a antes.
-      ...(regla.botonUrlValor ? { boton: { tipo: 'URL_DINAMICA', indice: 0, valor: regla.botonUrlValor } } : {}),
+      ...(botonValor ? { boton: { tipo: 'URL_DINAMICA', indice: 0, valor: botonValor } } : {}),
     };
 
     try {

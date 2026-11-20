@@ -206,6 +206,55 @@ describe('ReglaEnvioService.enviar · payload hacia Botpress', () => {
     });
   });
 
+  describe('botón con el número de reserva ({numeroReserva})', () => {
+    const reservaCtx = (folio: string) =>
+      ({
+        origen: 'RESERVA',
+        folio,
+        total: '0',
+        estatus: '',
+        createdAt: new Date(),
+        items: [],
+        checkIn: new Date('2026-10-11T00:00:00.000Z'),
+        checkOut: new Date('2026-10-12T00:00:00.000Z'),
+        adultos: 1,
+        ninos: 0,
+        habitaciones: null,
+        enlaceCheckin: null,
+      }) as any;
+    const reglaFolio = { ...reglaBase, botonUrlValor: '{numeroReserva}' };
+
+    it('cada reserva manda su propio folio como valor del botón', async () => {
+      const a = servicioConFetch();
+      await a.service.enviar(tenantEnvio, clienteB2c, reglaFolio, reservaCtx('9641816459'), 'orden-1');
+      expect(a.cuerpo().boton).toEqual({ tipo: 'URL_DINAMICA', indice: 0, valor: '9641816459' });
+      jest.restoreAllMocks();
+      const b = servicioConFetch();
+      await b.service.enviar(tenantEnvio, clienteB2c, reglaFolio, reservaCtx('819461410'), 'orden-2');
+      expect(b.cuerpo().boton).toEqual({ tipo: 'URL_DINAMICA', indice: 0, valor: '819461410' });
+    });
+
+    it('un folio con caracteres especiales viaja codificado', async () => {
+      const { service, cuerpo } = servicioConFetch();
+      await service.enviar(tenantEnvio, clienteB2c, reglaFolio, reservaCtx('A B/1'), 'orden-1');
+      expect(cuerpo().boton.valor).toBe('A%20B%2F1');
+    });
+
+    it('folio vacío o sin reserva de contexto: no crea registro ni hace POST', async () => {
+      const { service, crear, fetchMock } = servicioConFetch();
+      await expect(service.enviar(tenantEnvio, clienteB2c, reglaFolio, reservaCtx('  '), 'orden-1')).rejects.toThrow();
+      await expect(service.enviar(tenantEnvio, clienteB2c, reglaFolio)).rejects.toThrow();
+      expect(crear).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('el botón fijo en una reserva sigue mandando el mismo texto de siempre', async () => {
+      const { service, cuerpo } = servicioConFetch();
+      await service.enviar(tenantEnvio, clienteB2c, { ...reglaBase, botonUrlValor: 'encuesta-xyz' }, reservaCtx('123'), 'orden-1');
+      expect(cuerpo().boton).toEqual({ tipo: 'URL_DINAMICA', indice: 0, valor: 'encuesta-xyz' });
+    });
+  });
+
   it('la semana del recordatorio viaja al registro del envío (reserva por índice único) y solo ahí', async () => {
     const { service, crear } = servicioConFetch();
     const semana = new Date('2026-11-09T00:00:00.000Z');
